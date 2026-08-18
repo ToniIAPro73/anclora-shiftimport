@@ -6,7 +6,7 @@ const SHIFTS_API_URL = '/api/shifts';
 // enabled, until authenticated sync with per-user isolation exists.
 const REMOTE_STORAGE_ENABLED = import.meta.env.VITE_ENABLE_REMOTE_STORAGE === 'true';
 
-const normalizeShiftDate = (value: string): string => {
+export const normalizeShiftDate = (value: string): string => {
   const trimmed = value.trim();
   const match = trimmed.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (!match) {
@@ -17,7 +17,7 @@ const normalizeShiftDate = (value: string): string => {
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 };
 
-const normalizeShift = (shift: Shift): Shift => ({
+export const normalizeShift = (shift: Shift): Shift => ({
   ...shift,
   date: normalizeShiftDate(shift.date),
   startTime: shift.startTime.trim(),

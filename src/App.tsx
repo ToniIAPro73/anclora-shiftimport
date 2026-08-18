@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Shift } from './lib/types';
 import { getMonthDaysISO, getDaysInMonth } from './lib/week';
-import { loadShifts, syncShiftChanges } from './lib/storage';
+import { loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
+import { findShiftConflict } from './lib/shift-conflicts';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
@@ -15,120 +16,6 @@ import { LegalPage } from './components/LegalPage';
 import { CalendarImportContext } from './lib/import-types';
 
 type ThemeMode = 'system' | 'light' | 'dark';
-
-function normalizeShiftDate(value: string): string {
-  const trimmed = value.trim();
-  const match = trimmed.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (!match) {
-    return trimmed;
-  }
-
-  const [, year, month, day] = match;
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-}
-
-function normalizeShift(shift: Shift): Shift {
-  return {
-    ...shift,
-    date: normalizeShiftDate(shift.date),
-    startTime: shift.startTime.trim(),
-    endTime: shift.endTime.trim(),
-    location: shift.location.trim(),
-    origin: shift.origin === 'PDF' ? 'PDF' : 'MAN',
-  };
-}
-
-function parseTimeToMinutes(value: string): number {
-  const [hours, minutes] = value.split(':').map(Number);
-  return (hours * 60) + minutes;
-}
-
-function timeRangesOverlap(left: Shift, right: Shift): boolean {
-  if (!hasShiftTimes(left) || !hasShiftTimes(right)) {
-    return false;
-  }
-
-  const leftStart = parseTimeToMinutes(left.startTime);
-  const leftEnd = parseTimeToMinutes(left.endTime) <= leftStart
-    ? parseTimeToMinutes(left.endTime) + (24 * 60)
-    : parseTimeToMinutes(left.endTime);
-  const rightStart = parseTimeToMinutes(right.startTime);
-  const rightEnd = parseTimeToMinutes(right.endTime) <= rightStart
-    ? parseTimeToMinutes(right.endTime) + (24 * 60)
-    : parseTimeToMinutes(right.endTime);
-
-  const intervals: Array<[number, number]> = [
-    [leftStart, leftEnd],
-    [leftStart + (24 * 60), leftEnd + (24 * 60)],
-  ];
-  const candidates: Array<[number, number]> = [
-    [rightStart, rightEnd],
-    [rightStart + (24 * 60), rightEnd + (24 * 60)],
-  ];
-
-  return intervals.some(([aStart, aEnd]) =>
-    candidates.some(([bStart, bEnd]) => aStart < bEnd && bStart < aEnd));
-}
-
-function findShiftConflict(current: Shift[], incoming: Shift): string | null {
-  const normalizedIncoming = normalizeShift(incoming);
-  const incomingType = getShiftType(normalizedIncoming);
-  const incomingOrigin = getShiftOrigin(normalizedIncoming);
-  const comparable = current.filter(
-    (shift) =>
-      shift.id !== normalizedIncoming.id &&
-      shift.date === normalizedIncoming.date &&
-      getShiftOrigin(shift) === incomingOrigin,
-  );
-
-  const existingVacation = comparable.find((shift) => getShiftType(shift) === 'Vacaciones');
-  if (existingVacation && incomingType !== 'Vacaciones') {
-    return `No puedes añadir un turno ${incomingType} en ${normalizedIncoming.date} porque ya existe un turno de Vacaciones.`;
-  }
-
-  const sameType = comparable.find(
-    (shift) => getShiftType(shift) === incomingType && incomingType !== 'Extras',
-  );
-  if (sameType) {
-    return `Ya existe un turno de tipo ${incomingType} en ${normalizedIncoming.date}. Puedes modificar manualmente el turno existente.`;
-  }
-
-  if (incomingType === 'Libre') {
-    const incompatible = comparable.find((shift) => {
-      const existingType = getShiftType(shift);
-      return existingType === 'Regular' || existingType === 'JT' || existingType === 'Libre';
-    });
-
-    if (incompatible) {
-      return `No puedes añadir Libre si ya existe un turno ${getShiftType(incompatible)} en ${normalizedIncoming.date}.`;
-    }
-  }
-
-  if (incomingType === 'Regular' || incomingType === 'JT') {
-    const incompatible = comparable.find((shift) => getShiftType(shift) === 'Libre');
-
-    if (incompatible) {
-      return `No puedes combinar ${incomingType} con Libre en ${normalizedIncoming.date}.`;
-    }
-  }
-
-  if (incomingType === 'Extras' && hasShiftTimes(normalizedIncoming)) {
-    const overlapping = comparable.find((shift) => {
-      const existingType = getShiftType(shift);
-      if (existingType !== 'Regular' && existingType !== 'Extras') {
-        return false;
-      }
-
-      return hasShiftTimes(shift) && timeRangesOverlap(shift, normalizedIncoming);
-    });
-
-    if (overlapping) {
-      return `El turno Extras se solapa con el turno ${getShiftType(overlapping)} de ${normalizedIncoming.date}. Corrigelo antes de añadirlo.`;
-    }
-  }
-
-  return null;
-}
 
 function insertShift(current: Shift[], incoming: Shift): Shift[] {
   return [...current.filter((shift) => shift.id !== incoming.id), normalizeShift(incoming)];
