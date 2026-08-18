@@ -15,12 +15,16 @@
  */
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { IngestionError } from '../../lib/ingestion-errors';
+import { computeImportResult, ImportResult, QualitySignals } from '../../lib/import-quality';
+import { UserFormatProfile } from '../../lib/format-profiles';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
-import { EmployeeSelector } from '../core/row-detection';
+import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
 import { detectCalendarContextFromItems, parseShiftsFromItems } from './parse-items';
 import { extractPdfTextItems } from './pdf';
 import { resolveShiftTypeId } from '../../lib/shift-types';
+import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
+import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
 
 export type DocumentKind = 'pdf' | 'image' | 'excel' | 'csv' | 'text' | 'unknown';
 
@@ -512,4 +516,183 @@ export async function parseEmployeeShiftsFromFile(
     );
   }
   return shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
+}
+
+/* ------------------------------------------------------------------------
+ * Phase 1A (wave 2): analysis-driven document import.
+ * analyzeDocumentFile wraps the existing pipelines with quality signals
+ * (src/ingestion/analysis.ts) and assistant questions (src/ingestion/
+ * assistant.ts). It never throws for unrecognized/ambiguous content —
+ * those become UNRECOGNIZED/REVIEW states with questions for the UI.
+ * --------------------------------------------------------------------- */
+
+export interface DocumentAnalysisResult {
+  kind: DocumentKind;
+  context: CalendarImportContext;
+  shifts: ParsedCalendarShift[];
+  quality: ImportResult;
+  /** null for the roster-CSV fast path (no positioned layout to fingerprint) */
+  structure: DocumentStructureAnalysis | null;
+  /** empty when quality.state === 'CORRECT' */
+  questions: AssistantQuestion[];
+}
+
+/** Header alias lookup used by the roster quality signals. */
+function findRosterColumnIndex(headers: string[], field: keyof typeof ROSTER_HEADER_ALIASES): number | undefined {
+  const aliasSet = new Set(ROSTER_HEADER_ALIASES[field].map(normalizeHeader));
+  const index = headers.findIndex((header) => aliasSet.has(normalizeHeader(header)));
+  return index >= 0 ? index : undefined;
+}
+
+const ROSTER_WEEKDAY_SLOT = /^(mon|tue|wed|thu|fri|sat|sun)\s+\d{1,2}-\d{1,2}$/i;
+const ROSTER_TIME_LIKE = /\d{1,2}:\d{2}/;
+
+/**
+ * Quality signals for the roster-CSV fast path. employeeMatch is 'strong'
+ * only when an employee/employee-id column exists AND some row matches the
+ * selector (id digits or name tokens); otherwise 'none'. Token stats scan
+ * the value/type columns: recognized = resolvable via the shift-type
+ * registry, a time range or a weekday slot; time-ish failures count as
+ * invalidTimes; anything else is an unknown token.
+ */
+function analyzeRosterDocument(
+  text: string,
+  roster: ParsedCalendarShift[],
+  selector: EmployeeSelector,
+): DocumentAnalysisResult {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const headers = splitRosterLine(lines[0] ?? '');
+  const rows = lines.slice(1);
+
+  const employeeCol = findRosterColumnIndex(headers, 'employee');
+  const employeeIdCol = findRosterColumnIndex(headers, 'employeeId');
+  const valueCol = findRosterColumnIndex(headers, 'value');
+  const typeCol = findRosterColumnIndex(headers, 'type');
+
+  let employeeMatch: 'strong' | 'none' = 'none';
+  if (employeeCol !== undefined || employeeIdCol !== undefined) {
+    const targetIds = selector.employeeIdentifiers.map((value) => value.replace(/\D/g, '')).filter(Boolean);
+    const nameTokens = normalizeText(selector.employeeName).split(' ').filter((token) => token.length >= 3);
+    for (const line of rows) {
+      const cells = splitRosterLine(line);
+      const idCell = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').replace(/\D/g, '') : '';
+      const nameCell = employeeCol !== undefined ? (cells[employeeCol] ?? '') : '';
+      const idHit = idCell.length > 0 && targetIds.includes(idCell);
+      const nameHit = nameTokens.length > 0 && nameCell.length > 0 && matchesNameTokens(nameCell, nameTokens);
+      if (idHit || nameHit) {
+        employeeMatch = 'strong';
+        break;
+      }
+    }
+  }
+
+  let totalTokens = 0;
+  let recognizedTokens = 0;
+  let invalidTimes = 0;
+  const unknownTokens = new Set<string>();
+  for (const line of rows) {
+    const cells = splitRosterLine(line);
+    for (const column of [valueCol, typeCol]) {
+      if (column === undefined) {
+        continue;
+      }
+      const cell = (cells[column] ?? '').trim();
+      if (!cell) {
+        continue;
+      }
+      totalTokens += 1;
+      if (resolveShiftTypeId(cell) || ROSTER_TIME_LIKE.test(cell) || ROSTER_WEEKDAY_SLOT.test(cell)) {
+        recognizedTokens += 1;
+        continue;
+      }
+      if (cell.includes(':')) {
+        invalidTimes += 1;
+        continue;
+      }
+      unknownTokens.add(cell);
+    }
+  }
+
+  const datedShifts = roster.filter((shift) => shift.date);
+  const context: CalendarImportContext = datedShifts.length > 0
+    ? (() => {
+      const [year, month] = datedShifts[0].date.split('-').map(Number);
+      return { month: month - 1, year };
+    })()
+    : { month: new Date().getMonth(), year: new Date().getFullYear() };
+
+  const mappedDays = new Set(datedShifts.map((shift) => shift.date)).size;
+  const signals: QualitySignals = {
+    knownProfileMatched: false,
+    profileDrift: false,
+    periodDetected: true,
+    employeeMatch,
+    expectedDays: mappedDays,
+    mappedDays,
+    totalTokens,
+    recognizedTokens,
+    unknownTokens: [...unknownTokens],
+    invalidTimes,
+    incompleteAssignments: roster.filter((shift) => !shift.isValid).length,
+  };
+
+  const shifts = roster.map((shift) => ({ ...shift, sourceFormat: 'csv' }));
+  let quality = computeImportResult(shifts, signals);
+  if (shifts.length === 0 && !quality.warnings.some((warning) => warning.code === 'PARTIAL_EXTRACTION')) {
+    quality = { ...quality, warnings: [...quality.warnings, { code: 'PARTIAL_EXTRACTION' as const }] };
+  }
+
+  const questions: AssistantQuestion[] = quality.state === 'CORRECT'
+    ? []
+    : [...unknownTokens].slice(0, 6).map((token) => ({ kind: 'token-meaning' as const, token }));
+
+  return { kind: 'csv', context, shifts, quality, structure: null, questions };
+}
+
+/**
+ * Analysis-driven import entry point: classifies the file, extracts shifts
+ * and composes quality signals + assistant questions.
+ *
+ * - Roster CSV fast path: canonical roster parsing (no positioned layout,
+ *   so structure is null); MALFORMED_INPUT from the CSV parser rethrows.
+ * - Everything else: positioned items → context detection →
+ *   analyzeShiftsFromItems; questions are generated unless the result is
+ *   already CORRECT.
+ *
+ * savedProfilesHint is an optional performance hint: when provided, profile
+ * matching runs against that list instead of reading storage again (same
+ * scoring as matchFormatProfile).
+ */
+export async function analyzeDocumentFile(
+  file: File,
+  selector: EmployeeSelector,
+  savedProfilesHint?: UserFormatProfile[],
+): Promise<DocumentAnalysisResult> {
+  const kind = classifyDocument(file);
+  if (kind === 'unknown' || kind === 'text') {
+    throw new IngestionError(
+      'UNSUPPORTED_FORMAT',
+      'Formato de documento no soportado. Formatos admitidos: PDF, PNG/JPG/WebP, CSV y XLSX.',
+    );
+  }
+
+  if (kind === 'csv') {
+    const text = await file.text();
+    const roster = parseRosterCsv(text);
+    if (roster !== null) {
+      return analyzeRosterDocument(text, roster, selector);
+    }
+    // Not a canonical roster: fall through to the tabular item path.
+  }
+
+  const items = await extractDocumentItems(file);
+  const context = detectCalendarContextFromItems(items);
+  const parsed = analyzeShiftsFromItems(items, context, selector, savedProfilesHint);
+  const shifts = parsed.shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
+  const quality: ImportResult = { ...parsed.quality, shifts };
+  const questions = quality.state === 'CORRECT'
+    ? []
+    : generateAssistantQuestions(items, context, parsed.analysis);
+
+  return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions };
 }
