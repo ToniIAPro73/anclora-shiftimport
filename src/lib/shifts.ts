@@ -1,23 +1,19 @@
 import { Shift, ShiftCategory, ShiftOrigin, ShiftWithDerived, WeeklyStats } from './types';
 import { durationMinutes, parseHHMM } from './time';
+import { DEFAULT_SHIFT_TYPES, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
 
 const isEmptyTime = (value: string): boolean => value.trim() === '';
 
 export const normalizeShiftTypeLabel = (value: string): string => {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return '';
-  if (normalized === 'jt') return 'JT';
-  if (normalized === 'libre' || normalized === 'dl' || normalized === 'aj') return 'Libre';
-  if (normalized === 'extras') return 'Extras';
-  if (normalized === 'vacaciones' || normalized === 'vac.' || normalized === 'vac') return 'Vacaciones';
-  if (normalized === 'regular') return 'Regular';
 
   const importedMatch = normalized.match(/^importado\s*\(([^)]+)\)$/i);
   if (importedMatch) {
     return normalizeShiftTypeLabel(importedMatch[1]);
   }
 
-  return 'Regular';
+  return resolveShiftTypeId(normalized) ?? 'Regular';
 };
 
 export const getShiftType = (shift: Shift): string => {
@@ -37,10 +33,7 @@ export const hasShiftTimes = (shift: Shift): boolean =>
   !isEmptyTime(shift.startTime) && !isEmptyTime(shift.endTime);
 
 export const isFreeShift = (shift: Shift): boolean => getShiftType(shift) === 'Libre';
-export const isZeroDurationShift = (shift: Shift): boolean => {
-  const type = getShiftType(shift);
-  return type === 'Libre' || type === 'Vacaciones';
-};
+export const isZeroDurationShift = (shift: Shift): boolean => !shiftTypeCountsAsWork(getShiftType(shift));
 export const getShiftOrigin = (shift: Shift): ShiftOrigin => shift.origin === 'PDF' ? 'PDF' : 'MAN';
 
 /**
@@ -156,20 +149,15 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
   const explicitFreeDaySet = new Set(shifts.filter(isFreeShift).map((shift) => shift.date));
   const workedDaySet = new Set(shifts.filter((shift) => !isZeroDurationShift(shift)).map((shift) => shift.date));
   const freeDays = explicitFreeDaySet.size + Math.max(0, totalDays - explicitFreeDaySet.size - workedDaySet.size);
-  const hoursByType = {
-    Regular: 0,
-    JT: 0,
-    Extras: 0,
-    Libre: 0,
-    Vacaciones: 0,
-  };
-  const daysByType = {
-    Regular: new Set<string>(),
-    JT: new Set<string>(),
-    Extras: new Set<string>(),
-    Libre: new Set<string>(),
-    Vacaciones: new Set<string>(),
-  };
+  const hoursByType: Record<string, number> = {};
+  const daysByTypeSets: Record<string, Set<string>> = {};
+  const knownTypeIds = new Set<string>();
+
+  for (const type of DEFAULT_SHIFT_TYPES) {
+    hoursByType[type.id] = 0;
+    daysByTypeSets[type.id] = new Set<string>();
+    knownTypeIds.add(type.id);
+  }
 
   const intervalsByDate = new Map<string, Array<[number, number]>>();
 
@@ -177,9 +165,9 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
     const type = getShiftType(shift);
     const enriched = enrichShift(shift);
 
-    if (type === 'Regular' || type === 'JT' || type === 'Extras' || type === 'Libre' || type === 'Vacaciones') {
+    if (knownTypeIds.has(type)) {
       hoursByType[type] += enriched.duration;
-      daysByType[type].add(shift.date);
+      daysByTypeSets[type].add(shift.date);
     }
 
     if (!isZeroDurationShift(shift)) {
@@ -194,23 +182,19 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
     0,
   );
 
+  const daysByType: Record<string, number> = {};
+  let totalWorkedDays = 0;
+  for (const type of DEFAULT_SHIFT_TYPES) {
+    daysByType[type.id] = daysByTypeSets[type.id].size;
+    totalWorkedDays += daysByTypeSets[type.id].size;
+  }
+
   return {
     totalWorkedHours: totalWorkedMinutes / 60,
-    totalWorkedDays:
-      daysByType.Regular.size
-      + daysByType.JT.size
-      + daysByType.Extras.size
-      + daysByType.Libre.size
-      + daysByType.Vacaciones.size,
+    totalWorkedDays,
     freeDays,
     hoursByType,
-    daysByType: {
-      Regular: daysByType.Regular.size,
-      JT: daysByType.JT.size,
-      Extras: daysByType.Extras.size,
-      Libre: daysByType.Libre.size,
-      Vacaciones: daysByType.Vacaciones.size,
-    },
+    daysByType,
   };
 };
 

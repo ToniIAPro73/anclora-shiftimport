@@ -1,14 +1,7 @@
 import { Shift } from '../../lib/types';
 import { enrichShift, getShiftType, hasShiftTimes, isZeroDurationShift } from '../../lib/shifts';
+import { getShiftTypeColor } from '../../lib/shift-types';
 import { MapPin, ArrowRight } from 'lucide-react';
-
-const typeColor: Record<string, string> = {
-  'Regular': '#3b82f6',
-  'JT': '#a78bfa',
-  'Extras': '#D4AF37',
-  'Libre': '#ef4444',
-  'Vacaciones': '#16a34a',
-};
 
 interface ShiftCardProps {
   shift: Shift;
@@ -18,7 +11,7 @@ interface ShiftCardProps {
 export const ShiftCard = ({ shift, onClick }: ShiftCardProps) => {
   const shiftType = getShiftType(shift);
   const shiftIsFree = isZeroDurationShift(shift);
-  const accentColor = typeColor[shiftType] || '#3b82f6';
+  const accentColor = getShiftTypeColor(shiftType);
   if (shiftIsFree) {
     return (
       <div

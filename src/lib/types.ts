@@ -19,18 +19,7 @@ export interface WeeklyStats {
   totalWorkedHours: number;
   totalWorkedDays: number;
   freeDays: number;
-  hoursByType: {
-    Regular: number;
-    JT: number;
-    Extras: number;
-    Libre: number;
-    Vacaciones: number;
-  };
-  daysByType: {
-    Regular: number;
-    JT: number;
-    Extras: number;
-    Libre: number;
-    Vacaciones: number;
-  };
+  // Keyed by shift type id from the registry in shift-types.ts
+  hoursByType: Record<string, number>;
+  daysByType: Record<string, number>;
 }

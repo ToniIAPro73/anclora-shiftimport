@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Shift } from '../../lib/types';
 import { getDaysInMonth, getFirstWeekdayOfMonth, toISODate } from '../../lib/week';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
+import { getShiftTypeColor } from '../../lib/shift-types';
 import { Plus } from 'lucide-react';
 
 interface MonthGridProps {
@@ -13,14 +14,6 @@ interface MonthGridProps {
 }
 
 const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-
-const typeColor: Record<string, string> = {
-  Regular: '#3b82f6',
-  JT: '#a78bfa',
-  Extras: '#D4AF37',
-  Libre: '#ef4444',
-  Vacaciones: '#16a34a',
-};
 
 export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: MonthGridProps) => {
   const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
@@ -80,7 +73,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
   const renderShiftBadge = (shift: Shift) => {
     const shiftType = getShiftType(shift);
     const shiftOrigin = getShiftOrigin(shift);
-    const accentColor = typeColor[shiftType] || '#3b82f6';
+    const accentColor = getShiftTypeColor(shiftType);
     const hasTimes = hasShiftTimes(shift);
     const originPrefix = shiftOrigin === 'PDF' ? '(E)' : '(P)';
     const isExpanded = expandedShiftId === shift.id;

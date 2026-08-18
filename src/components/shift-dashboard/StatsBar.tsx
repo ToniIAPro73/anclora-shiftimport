@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Shift, ShiftOrigin, WeeklyStats } from '../../lib/types';
 import { aggregateWeeklyStats, filterShiftsByOrigin } from '../../lib/shifts';
+import { DEFAULT_SHIFT_TYPES } from '../../lib/shift-types';
 
 interface StatsBarProps {
   currentMonthShifts: Shift[];
@@ -41,22 +42,23 @@ function formatTokenValue(hours: number, days: number): string {
   return `${hours.toFixed(1)}h / ${days}d`;
 }
 
+function buildTypeCells(stats: WeeklyStats): StatsCell[] {
+  return DEFAULT_SHIFT_TYPES.map((type) => ({
+    kind: 'token' as const,
+    label: type.shortLabel,
+    value: formatTokenValue(stats.hoursByType[type.id] ?? 0, stats.daysByType[type.id] ?? 0),
+    className: `type-${type.id.toLowerCase()}`,
+  }));
+}
+
 function buildSummaryCells(monthStats: WeeklyStats, yearStats: WeeklyStats): StatsCell[] {
   return [
     { kind: 'section', label: 'Tot. M.' },
     { kind: 'token', label: 'Mes', value: formatTokenValue(monthStats.totalWorkedHours, monthStats.totalWorkedDays) },
-    { kind: 'token', label: 'Regular', value: formatTokenValue(monthStats.hoursByType.Regular, monthStats.daysByType.Regular), className: 'type-regular' },
-    { kind: 'token', label: 'JT', value: formatTokenValue(monthStats.hoursByType.JT, monthStats.daysByType.JT), className: 'type-jt' },
-    { kind: 'token', label: 'Libres', value: formatTokenValue(monthStats.hoursByType.Libre, monthStats.daysByType.Libre), className: 'type-libre' },
-    { kind: 'token', label: 'Extras', value: formatTokenValue(monthStats.hoursByType.Extras, monthStats.daysByType.Extras), className: 'type-extras' },
-    { kind: 'token', label: 'VAC.', value: formatTokenValue(monthStats.hoursByType.Vacaciones, monthStats.daysByType.Vacaciones), className: 'type-vacaciones' },
+    ...buildTypeCells(monthStats),
     { kind: 'section', label: 'Tot. A.' },
     { kind: 'token', label: 'Año', value: formatTokenValue(yearStats.totalWorkedHours, yearStats.totalWorkedDays) },
-    { kind: 'token', label: 'Regular', value: formatTokenValue(yearStats.hoursByType.Regular, yearStats.daysByType.Regular), className: 'type-regular' },
-    { kind: 'token', label: 'JT', value: formatTokenValue(yearStats.hoursByType.JT, yearStats.daysByType.JT), className: 'type-jt' },
-    { kind: 'token', label: 'Libres', value: formatTokenValue(yearStats.hoursByType.Libre, yearStats.daysByType.Libre), className: 'type-libre' },
-    { kind: 'token', label: 'Extras', value: formatTokenValue(yearStats.hoursByType.Extras, yearStats.daysByType.Extras), className: 'type-extras' },
-    { kind: 'token', label: 'VAC.', value: formatTokenValue(yearStats.hoursByType.Vacaciones, yearStats.daysByType.Vacaciones), className: 'type-vacaciones' },
+    ...buildTypeCells(yearStats),
   ];
 }
 

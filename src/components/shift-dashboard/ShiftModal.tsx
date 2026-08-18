@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shift } from '../../lib/types';
 import { getShiftType, normalizeShiftTypeLabel } from '../../lib/shifts';
+import { DEFAULT_SHIFT_TYPES, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { X, Trash2, Save, Calendar } from 'lucide-react';
 
 interface ShiftModalProps {
@@ -13,7 +14,11 @@ interface ShiftModalProps {
 }
 
 export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, onSave, onDelete }: ShiftModalProps) => {
-  const shiftTypeOptions = ['JT', 'Regular', 'Libre', 'Extras', 'Vacaciones'];
+  // Keep JT first to preserve the previous option order
+  const shiftTypeOptions = [
+    ...DEFAULT_SHIFT_TYPES.filter((type) => type.id === 'JT'),
+    ...DEFAULT_SHIFT_TYPES.filter((type) => type.id !== 'JT'),
+  ].map((type) => type.label);
   const [formData, setFormData] = useState<Shift>({
     id: '',
     date: new Date().toISOString().split('T')[0],
@@ -104,7 +109,7 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
               value={formData.location}
               onChange={e => {
                 const nextType = normalizeShiftTypeLabel(e.target.value) || 'Regular';
-                const isZeroDurationType = nextType === 'Libre' || nextType === 'Vacaciones';
+                const isZeroDurationType = !shiftTypeCountsAsWork(nextType);
                 setFormData({
                   ...formData,
                   location: nextType,

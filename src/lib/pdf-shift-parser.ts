@@ -1,6 +1,7 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { CalendarImportContext, ParsedCalendarShift, PdfDocumentType } from './import-types';
+import { resolveShiftTypeId } from './shift-types';
 import { getDaysInMonth } from './week';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -67,8 +68,8 @@ function isTimeToken(value: string): boolean {
 }
 
 function isOffToken(value: string): boolean {
-  const normalized = normalizeText(value);
-  return normalized === 'off' || normalized === 'dl' || normalized === 'aj';
+  // "Off" tokens are aliases that resolve to the Libre shift type
+  return resolveShiftTypeId(value) === 'Libre';
 }
 
 function isSeparatorToken(value: string): boolean {
