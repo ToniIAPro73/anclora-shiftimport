@@ -34,3 +34,6 @@ dist-ssr
 .next/
 out/
 build/
+
+# acceptance corpus run artifact
+corpus-report.json
