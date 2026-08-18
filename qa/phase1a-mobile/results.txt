@@ -1,0 +1,20 @@
+PASS es-dark onboarding visible
+PASS es-dark onboarding no overflow-x — scrollWidth=390
+PASS es-dark onboarding X inside card
+PASS es-dark upload step no overflow-x — scrollWidth=390
+PASS es-dark preview no overflow-x — scrollWidth=390
+PASS es-dark import modal X inside card
+PASS es-dark quality chip visible
+PASS es-dark calendar no overflow-x — scrollWidth=390
+PASS es-dark no clipped internal overflow
+PASS es-dark theme applied — theme=dark
+PASS en-light onboarding visible
+PASS en-light onboarding no overflow-x — scrollWidth=390
+PASS en-light onboarding X inside card
+PASS en-light upload step no overflow-x — scrollWidth=390
+PASS en-light preview no overflow-x — scrollWidth=390
+PASS en-light import modal X inside card
+PASS en-light quality chip visible
+PASS en-light calendar no overflow-x — scrollWidth=390
+PASS en-light no clipped internal overflow
+PASS en-light theme applied — theme=light

@@ -755,6 +755,8 @@ button:hover {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  overflow-y: auto;
+  padding: var(--space-md);
 }
 
 .modal-content {
@@ -766,6 +768,11 @@ button:hover {
   max-width: 440px;
   padding: var(--space-xl);
   box-shadow: var(--shadow-hover);
+  /* Tall content (import preview + assistant) must scroll inside the card on
+     short viewports (mobile 390x844); otherwise confirm is unreachable. */
+  max-height: calc(100vh - var(--space-md) * 2);
+  max-height: calc(100dvh - var(--space-md) * 2);
+  overflow-y: auto;
 }
 
 .modal-input {
