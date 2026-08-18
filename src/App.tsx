@@ -6,11 +6,14 @@ import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
+import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
+import { trackTtfvEvent } from './lib/ttfv';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal } from './components/shift-dashboard/ImportModal';
+import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
@@ -60,6 +63,8 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [onboardingFile, setOnboardingFile] = useState<File | null>(null);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
@@ -74,6 +79,11 @@ function App() {
       }
 
       setShifts(nextShifts);
+      // First-run guide: only for genuinely new users (shouldShowOnboarding
+      // silently completes the record for pre-existing users with shifts).
+      if (shouldShowOnboarding(nextShifts.length)) {
+        setIsOnboardingOpen(true);
+      }
     };
 
     void hydrateShifts();
@@ -243,6 +253,12 @@ function App() {
       setCurrentYear(targetPeriod.year);
       setCurrentMonth(targetPeriod.month);
       setIsImportOpen(false);
+      setOnboardingFile(null);
+      // TTFV funnel endpoint + onboarding completion on the first real import.
+      trackTtfvEvent('import_confirmed');
+      if (!loadOnboarding().completed) {
+        completeOnboarding();
+      }
       return true;
     } catch (error) {
       console.error('Failed to persist imported shifts', error);
@@ -308,14 +324,36 @@ function App() {
         onDelete={handleDeleteShift}
       />
 
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onRestartOnboarding={() => {
+          resetOnboarding();
+          setIsSettingsOpen(false);
+          setIsOnboardingOpen(true);
+        }}
+      />
+
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={() => setIsOnboardingOpen(false)}
+        onFileChosen={(chosen) => {
+          setIsOnboardingOpen(false);
+          setOnboardingFile(chosen);
+          setIsImportOpen(true);
+        }}
+      />
 
       <ImportModal
         isOpen={isImportOpen}
-        onClose={() => setIsImportOpen(false)}
+        onClose={() => {
+          setIsImportOpen(false);
+          setOnboardingFile(null);
+        }}
         onConfirmImport={handleConfirmImport}
         initialContext={{ month: currentMonth, year: currentYear }}
         existingShifts={shifts}
+        initialFile={onboardingFile}
       />
 
       {importConflictState && (

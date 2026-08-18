@@ -1409,3 +1409,34 @@ button:hover {
 }
 
 
+
+/* Onboarding wizard (Phase 1A) — mobile-first: the card scrolls instead of
+   overflowing, and actions go full-width on narrow screens. */
+.onboarding-modal-content {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.onboarding-source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.onboarding-source-option {
+  min-height: 48px;
+  font-weight: 700;
+  white-space: normal;
+}
+
+.onboarding-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .onboarding-modal-actions .btn-outline,
+  .onboarding-modal-actions .btn-gold {
+    width: 100%;
+  }
+}

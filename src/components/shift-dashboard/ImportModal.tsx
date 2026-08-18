@@ -1,20 +1,26 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
-import { classifyDocument } from '../../ingestion/parsers/file';
+import { analyzeDocumentFile, classifyDocument, DocumentAnalysisResult, extractDocumentItems } from '../../ingestion/parsers/file';
 import {
   getImportFormatLabel,
   importAcceptAttribute,
   importFormatsDisplayLine,
 } from '../../ingestion/formats';
-import { detectCalendarContext, parseEmployeeShiftsFromFile } from '../../ingestion/parsers/file';
+import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
+import { EmployeeSelector } from '../../ingestion/core/row-detection';
+import { PdfTextItem } from '../../ingestion/core/text-items';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
+import { touchFormatProfile } from '../../lib/format-profiles';
+import { ImportQualityState, ImportResult, ImportWarningCode } from '../../lib/import-quality';
+import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { IngestionError, IngestionErrorCode } from '../../lib/ingestion-errors';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
+import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -23,7 +29,35 @@ interface ImportModalProps {
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
   existingShifts?: Shift[];
+  /** File pre-selected by the onboarding wizard; analysis starts automatically on open. */
+  initialFile?: File | null;
 }
+
+/** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
+const WARNING_I18N_KEYS: Record<ImportWarningCode, string> = {
+  UNKNOWN_SHIFT_TOKEN: 'quality.warnings.unknownShiftToken',
+  EMPLOYEE_MATCH_WEAK: 'quality.warnings.employeeMatchWeak',
+  MULTIPLE_EMPLOYEE_MATCHES: 'quality.warnings.multipleEmployeeMatches',
+  DATE_MAPPING_UNCERTAIN: 'quality.warnings.dateMappingUncertain',
+  PROFILE_DRIFT: 'quality.warnings.profileDrift',
+  PARTIAL_EXTRACTION: 'quality.warnings.partialExtraction',
+  UNKNOWN_CELL: 'quality.warnings.unknownCell',
+  UNSUPPORTED_SECTION: 'quality.warnings.unsupportedSection',
+};
+
+const STATE_I18N_KEYS: Record<ImportQualityState, string> = {
+  CORRECT: 'quality.stateCorrect',
+  REVIEW: 'quality.stateReview',
+  UNRECOGNIZED: 'quality.stateUnrecognized',
+};
+
+const STATE_CHIP_STYLES: Record<ImportQualityState, React.CSSProperties> = {
+  CORRECT: { background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--color-accent)' },
+  REVIEW: { background: 'var(--gold-tint-bg)', border: '1px solid var(--color-gold)', color: 'var(--color-gold)' },
+  UNRECOGNIZED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
+};
+
+const MAX_VISIBLE_WARNINGS = 4;
 
 interface ModalSelectOption {
   value: string;
@@ -160,7 +194,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [] }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -175,7 +209,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [selectedYear, setSelectedYear] = useState(String(initialContext.year));
   const [canStartFreshImport, setCanStartFreshImport] = useState(false);
   const [detectedFormat, setDetectedFormat] = useState<string | null>(null);
+  // Phase 1A: analysis-driven quality state + inline assistant session.
+  const [analysis, setAnalysis] = useState<DocumentAnalysisResult | null>(null);
+  const [qualityOverride, setQualityOverride] = useState<ImportResult | null>(null);
+  const [assistantSession, setAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
+  const [assistantDismissed, setAssistantDismissed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialFileHandledRef = useRef<File | null>(null);
+  const previewTrackedRef = useRef(false);
 
   const availableYears = Array.from({ length: 7 }, (_, index) => String(now.getFullYear() - 2 + index));
   const monthSelectOptions = useMemo(
@@ -198,11 +239,109 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     if (!isOpen) {
       return;
     }
-
     setCanStartFreshImport(parsedShifts.length > 0);
+  }, [isOpen, parsedShifts.length]);
+
+  // Sync the period selects from the visible calendar month only on open /
+  // navigation — NOT after an analysis completes, so the detected document
+  // period (set in runAnalysis) survives.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
     setSelectedMonth(String(initialContext.month));
     setSelectedYear(String(initialContext.year));
-  }, [initialContext.month, initialContext.year, isOpen, parsedShifts.length]);
+  }, [initialContext.month, initialContext.year, isOpen]);
+
+  const buildSelector = useCallback((): EmployeeSelector => {
+    const storedIdentifiers = loadUserProfile().employeeIdentifiers;
+    return {
+      employeeName,
+      employeeIdentifiers: [...new Set([employeeId.trim(), ...storedIdentifiers].filter(Boolean))],
+    };
+  }, [employeeName, employeeId]);
+
+  const runAnalysis = useCallback(async (target: File) => {
+    setLoading(true);
+    setError(null);
+    setScanTime(null);
+    setAnalysis(null);
+    setQualityOverride(null);
+    setAssistantSession(null);
+    setAssistantDismissed(false);
+    setDetectedFormat(getImportFormatLabel(classifyDocument(target)));
+
+    const startedAt = Date.now();
+    try {
+      const result = await analyzeDocumentFile(target, buildSelector());
+      setAnalysis(result);
+      setDetectedFormat(getImportFormatLabel(result.kind));
+      setSelectedMonth(String(result.context.month));
+      setSelectedYear(String(result.context.year));
+      setParsedShifts(result.shifts);
+      setScanTime(((Date.now() - startedAt) / 1000).toFixed(1));
+    } catch (importError: unknown) {
+      console.error('[ImportModal] Error:', importError);
+      const message = importError instanceof IngestionError
+        ? t(`errors.${importError.code as IngestionErrorCode}`)
+        : importError instanceof Error ? importError.message : t('importModal.unknownError');
+      setError(t('importModal.errorPrefix', { message }));
+    } finally {
+      setLoading(false);
+    }
+  }, [buildSelector, t]);
+
+  // Onboarding handoff: a pre-selected file auto-starts the pipeline once.
+  useEffect(() => {
+    if (!isOpen) {
+      initialFileHandledRef.current = null;
+      return;
+    }
+    if (!initialFile || initialFileHandledRef.current === initialFile) {
+      return;
+    }
+    initialFileHandledRef.current = initialFile;
+    setFile(initialFile);
+    setParsedShifts([]);
+    setError(null);
+    setScanTime(null);
+    void runAnalysis(initialFile);
+  }, [isOpen, initialFile, runAnalysis]);
+
+  // The assistant needs the positioned items + item-level analysis, which
+  // DocumentAnalysisResult intentionally does not carry; derive them lazily
+  // only when there are questions worth asking.
+  useEffect(() => {
+    if (!isOpen || !analysis || !file || assistantDismissed) {
+      return;
+    }
+    if (analysis.questions.length === 0 || analysis.structure === null) {
+      return;
+    }
+    let cancelled = false;
+    void extractDocumentItems(file).then((items) => {
+      if (cancelled) {
+        return;
+      }
+      setAssistantSession({
+        items,
+        itemAnalysis: analyzeItemsForImport(items, analysis.context, buildSelector()),
+      });
+    }).catch((extractError: unknown) => {
+      console.error('[ImportModal] Assistant item extraction failed:', extractError);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, analysis, file, assistantDismissed, buildSelector]);
+
+  // TTFV funnel: first preview with shifts of this import session.
+  useEffect(() => {
+    if (!previewTrackedRef.current && parsedShifts.length > 0) {
+      previewTrackedRef.current = true;
+      trackTtfvEvent('preview_ready');
+    }
+  }, [parsedShifts.length]);
 
   const resetImportState = () => {
     setFile(null);
@@ -210,7 +349,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setError(null);
     setScanTime(null);
     setDetectedFormat(null);
+    setAnalysis(null);
+    setQualityOverride(null);
+    setAssistantSession(null);
+    setAssistantDismissed(false);
     setCanStartFreshImport(false);
+    previewTrackedRef.current = false;
+    initialFileHandledRef.current = null;
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -226,46 +371,19 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setParsedShifts([]);
     setError(null);
     setScanTime(null);
+    setAnalysis(null);
+    setQualityOverride(null);
+    setAssistantSession(null);
+    setAssistantDismissed(false);
+    previewTrackedRef.current = false;
   };
 
   const handleStartImport = async () => {
     if (!file) {
       return;
     }
-
-    setLoading(true);
-    setError(null);
-    setScanTime(null);
-    setDetectedFormat(getImportFormatLabel(classifyDocument(file)));
-
-    const startedAt = Date.now();
-    try {
-      const importContext = await detectCalendarContext(file);
-      setSelectedMonth(String(importContext.month));
-      setSelectedYear(String(importContext.year));
-
-      const storedIdentifiers = loadUserProfile().employeeIdentifiers;
-      const employeeIdentifiers = [...new Set([employeeId.trim(), ...storedIdentifiers].filter(Boolean))];
-      const shifts = await parseEmployeeShiftsFromFile(file, importContext, {
-        employeeName,
-        employeeIdentifiers,
-      });
-
-      setParsedShifts(shifts);
-      setScanTime(((Date.now() - startedAt) / 1000).toFixed(1));
-
-      if (shifts.length === 0) {
-        setError(t('importModal.noShiftsFound'));
-      }
-    } catch (importError: unknown) {
-      console.error('[ImportModal] Error:', importError);
-      const message = importError instanceof IngestionError
-        ? t(`errors.${importError.code as IngestionErrorCode}`)
-        : importError instanceof Error ? importError.message : t('importModal.unknownError');
-      setError(t('importModal.errorPrefix', { message }));
-    } finally {
-      setLoading(false);
-    }
+    previewTrackedRef.current = false;
+    await runAnalysis(file);
   };
 
   const handleUpdateShift = (index: number, field: keyof ParsedCalendarShift, value: string) => {
@@ -276,6 +394,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
   const handleRemoveShift = (index: number) => {
     setParsedShifts(parsedShifts.filter((_, currentIndex) => currentIndex !== index));
+  };
+
+  const handleAssistantComplete = (result: AssistantCompletion) => {
+    const kind = analysis?.kind;
+    setParsedShifts(result.shifts.map((shift) => ({ ...shift, sourceFormat: shift.sourceFormat ?? kind })));
+    setQualityOverride(result.quality);
+    setAssistantDismissed(true);
   };
 
   const handleConfirm = async () => {
@@ -291,6 +416,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       employeeIdentifiers: employeeId.trim() ? [employeeId.trim()] : profile.employeeIdentifiers,
     });
 
+    // A successful import through a recognized format counts as a profile use.
+    const matchedProfileId = quality?.profileId ?? analysis?.structure?.matchedProfile?.profile.id;
+    if (matchedProfileId) {
+      touchFormatProfile(matchedProfileId);
+    }
+
     const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
 
     onConfirmImport(finalShifts, importContext);
@@ -302,6 +433,34 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   }
 
   const readyShifts = parsedShifts.filter(hasImportableShiftData);
+  const quality = qualityOverride ?? analysis?.quality ?? null;
+
+  // REVIEW row highlighting: rows already flagged incomplete (??:?? / invalid)
+  // plus rows linked to a warning — a warning context date, or a row whose
+  // rawText carries a token flagged UNKNOWN_SHIFT_TOKEN.
+  const warningDates = new Set(
+    (quality?.warnings ?? [])
+      .map((warning) => warning.context?.date)
+      .filter((value): value is string => typeof value === 'string'),
+  );
+  const unknownTokens = (quality?.warnings ?? [])
+    .filter((warning) => warning.code === 'UNKNOWN_SHIFT_TOKEN')
+    .map((warning) => String(warning.context?.token ?? ''))
+    .filter(Boolean);
+  const isWarningLinkedRow = (shift: ParsedCalendarShift): boolean =>
+    warningDates.has(shift.date)
+    || unknownTokens.some((token) => shift.rawText.includes(token));
+
+  const showAssistant = !assistantDismissed
+    && assistantSession !== null
+    && analysis !== null
+    && analysis.questions.length > 0
+    && (quality?.state === 'UNRECOGNIZED'
+      || assistantSession.itemAnalysis.employeeMatch === 'none'
+      || assistantSession.itemAnalysis.employeeMatch === 'multiple');
+
+  const visibleWarnings = quality?.warnings.slice(0, MAX_VISIBLE_WARNINGS) ?? [];
+  const hiddenWarningCount = Math.max(0, (quality?.warnings.length ?? 0) - MAX_VISIBLE_WARNINGS);
 
   return (
     <div className="modal-overlay">
@@ -458,12 +617,71 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           </div>
 
           <div className="import-modal-right" style={{ display: 'flex', flexDirection: 'column', background: 'var(--panel-muted-bg)', borderRadius: '16px', padding: '16px', overflow: 'hidden', minWidth: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--color-accent)' }}>{t('importModal.detected')}</h3>
               <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
                 {scanTime ? t('importModal.foundWithTime', { count: parsedShifts.length, seconds: scanTime }) : t('importModal.found', { count: parsedShifts.length })}
               </span>
             </div>
+
+            {quality && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                <span
+                  data-testid="import-quality-state"
+                  style={{
+                    ...STATE_CHIP_STYLES[quality.state],
+                    borderRadius: '999px',
+                    padding: '4px 12px',
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                  }}
+                >
+                  {t(STATE_I18N_KEYS[quality.state])}
+                </span>
+                {analysis?.structure?.matchedProfile && (
+                  <span
+                    style={{
+                      background: 'var(--info-bg)',
+                      border: '1px solid var(--info-border)',
+                      color: 'var(--text-muted)',
+                      borderRadius: '999px',
+                      padding: '4px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {t('quality.profileRecognized', { label: analysis.structure.matchedProfile.profile.label })}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {visibleWarnings.length > 0 && (
+              <ul style={{ margin: '0 0 10px', padding: '0 0 0 18px', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                {visibleWarnings.map((warning, warningIndex) => (
+                  <li key={`${warning.code}-${warningIndex}`}>
+                    {t(WARNING_I18N_KEYS[warning.code], warning.context)}
+                  </li>
+                ))}
+                {hiddenWarningCount > 0 && (
+                  <li>{t('quality.moreWarnings', { count: hiddenWarningCount })}</li>
+                )}
+              </ul>
+            )}
+
+            {showAssistant && assistantSession && analysis && (
+              <div style={{ overflowY: 'auto', minHeight: 0 }}>
+                <ProfileAssistantPanel
+                  questions={analysis.questions}
+                  items={assistantSession.items}
+                  context={analysis.context}
+                  analysis={assistantSession.itemAnalysis}
+                  selector={buildSelector()}
+                  onComplete={handleAssistantComplete}
+                  onCancel={() => setAssistantDismissed(true)}
+                />
+              </div>
+            )}
 
             <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '12px', minHeight: 0 }}>
               {parsedShifts.length > 0 ? (
@@ -482,8 +700,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                     {parsedShifts.map((shift, index) => {
                       const isLibre = isFreeShift(shift);
                       const incomplete = !isLibre && (shift.startTime === '??:??' || shift.endTime === '??:??');
+                      // Under REVIEW, also highlight rows tied to a warning
+                      // (warning date context / unknown token in the raw cell).
+                      const needsAttention = incomplete || (quality?.state === 'REVIEW' && isWarningLinkedRow(shift));
                       return (
-                        <tr key={index} style={{ borderBottom: '1px solid var(--border-soft)', background: incomplete ? 'var(--danger-row-bg)' : 'transparent' }}>
+                        <tr key={index} style={{ borderBottom: '1px solid var(--border-soft)', background: needsAttention ? 'var(--danger-row-bg)' : 'transparent' }}>
                           <td style={{ padding: '8px' }}>
                             <input type="text" className="modal-input" value={shift.date} onChange={(event) => handleUpdateShift(index, 'date', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
                           </td>
@@ -528,9 +749,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   </tbody>
                 </table>
               ) : (
-                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
+                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3, padding: '16px', textAlign: 'center' }}>
                   <FileText size={40} />
-                  <p style={{ marginTop: '12px' }}>{t('importModal.emptyStateHint')}</p>
+                  {/* UNRECOGNIZED never fabricates shifts: the hint replaces
+                      the neutral empty state so the user knows what to do. */}
+                  <p style={{ marginTop: '12px' }}>
+                    {quality?.state === 'UNRECOGNIZED' ? t('quality.confidenceHint') : t('importModal.emptyStateHint')}
+                  </p>
                 </div>
               )}
             </div>

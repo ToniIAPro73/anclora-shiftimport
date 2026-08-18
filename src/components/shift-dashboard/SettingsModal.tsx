@@ -17,6 +17,8 @@ import { useEscapeClose } from '../../lib/use-escape-close';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Replays the first-run guide (resets the onboarding record and opens it). */
+  onRestartOnboarding?: () => void;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -30,7 +32,7 @@ const labelStyle: React.CSSProperties = {
 
 const NEW_TYPE_DRAFT = { id: '', label: '', shortLabel: '', color: '#3b82f6', countsAsWork: true };
 
-function ProfileSection() {
+function ProfileSection({ onRestartOnboarding }: { onRestartOnboarding?: () => void }) {
   const { locale, t } = useI18n();
   const [profile, setProfile] = useState<UserProfile>(() => loadUserProfile());
   const [identifiersText, setIdentifiersText] = useState(() => loadUserProfile().employeeIdentifiers.join(', '));
@@ -95,6 +97,13 @@ function ProfileSection() {
       <button className="btn-gold" style={{ alignSelf: 'flex-start' }} onClick={handleSave}>
         {saved ? t('settings.saved') : t('settings.saveProfile')}
       </button>
+      {onRestartOnboarding && (
+        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+          <button className="btn-outline" style={{ padding: '8px 14px', minHeight: 'auto' }} onClick={onRestartOnboarding}>
+            {t('onboarding.restart')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -263,7 +272,7 @@ function ShiftTypesSection() {
   );
 }
 
-export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
+export const SettingsModal = ({ isOpen, onClose, onRestartOnboarding }: SettingsModalProps) => {
   const { t } = useI18n();
   const [tab, setTab] = useState<'profile' | 'shiftTypes'>('profile');
 
@@ -296,7 +305,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
           </button>
         </div>
 
-        {tab === 'profile' ? <ProfileSection /> : <ShiftTypesSection />}
+        {tab === 'profile' ? <ProfileSection onRestartOnboarding={onRestartOnboarding} /> : <ShiftTypesSection />}
       </div>
     </div>
   );
