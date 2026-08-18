@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://anclora.local/schemas/expected-assignment.schema.json",
+  "title": "Anclora ShiftImport Expected Assignment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "employee_id",
+    "employee_name",
+    "date",
+    "shift_code",
+    "start_time",
+    "end_time",
+    "crosses_midnight",
+    "segments",
+    "team",
+    "role",
+    "area",
+    "status",
+    "raw_value"
+  ],
+  "properties": {
+    "employee_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "employee_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "shift_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "start_time": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^([01]\\d|2[0-4]):[0-5]\\d$"
+    },
+    "end_time": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^([01]\\d|2[0-4]):[0-5]\\d$"
+    },
+    "crosses_midnight": {
+      "type": "boolean"
+    },
+    "segments": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "start_time",
+          "end_time"
+        ],
+        "properties": {
+          "start_time": {
+            "type": "string"
+          },
+          "end_time": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "team": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "role": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "area": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "work",
+        "free",
+        "vacation",
+        "sick_leave",
+        "absence",
+        "unknown_code"
+      ]
+    },
+    "raw_value": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}

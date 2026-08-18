@@ -1,0 +1,14 @@
+{
+  "dataset_name": "Anclora ShiftImport Unified Test Dataset",
+  "version": "1.0",
+  "sections": {
+    "acceptance-corpus": {
+      "source": "Anclora_ShiftImport_Synthetic_Test_Corpus_v1(1).zip",
+      "purpose": "M0 acceptance, CI and regression"
+    },
+    "adversarial-dataset": {
+      "source": "dataset_turnos_prueba.zip",
+      "purpose": "Exploratory, adversarial and robustness testing"
+    }
+  }
+}

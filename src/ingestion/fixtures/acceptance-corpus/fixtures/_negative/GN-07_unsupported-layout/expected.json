@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "GN-07",
+  "expected_behavior": "error",
+  "expected_result": "UNSUPPORTED_LAYOUT",
+  "calendar_context": null,
+  "assignments": [],
+  "notes": null
+}

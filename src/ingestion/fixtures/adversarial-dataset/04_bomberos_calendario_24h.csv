@@ -1,0 +1,9 @@
+Dia_Mes,Equipo_Alfa,Equipo_Bravo,Equipo_Charlie
+01-Ago,24h,OFF,OFF
+02-Ago,OFF,24h,OFF
+03-Ago,OFF,OFF,24h
+04-Ago,24h,OFF,OFF
+05-Ago,OFF,24h,OFF
+06-Ago,OFF,OFF,24h
+# FALLO INTENCIONAL: Turno de 24h asignado dos días seguidos al Equipo Alfa (viola descanso)
+07-Ago,24h,OFF,OFF

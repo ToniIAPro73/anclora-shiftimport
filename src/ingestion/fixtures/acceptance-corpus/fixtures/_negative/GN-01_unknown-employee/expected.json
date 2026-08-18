@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "GN-01",
+  "expected_behavior": "error",
+  "expected_result": "UNKNOWN_EMPLOYEE",
+  "calendar_context": {
+    "source_fixture": "GS-03"
+  },
+  "assignments": [],
+  "notes": null
+}

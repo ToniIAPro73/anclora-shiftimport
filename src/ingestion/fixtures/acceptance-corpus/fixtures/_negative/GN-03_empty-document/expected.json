@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "GN-03",
+  "expected_behavior": "error",
+  "expected_result": "EMPTY_DOCUMENT",
+  "calendar_context": null,
+  "assignments": [],
+  "notes": null
+}

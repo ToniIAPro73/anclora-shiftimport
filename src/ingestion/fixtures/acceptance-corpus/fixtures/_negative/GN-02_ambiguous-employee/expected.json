@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "GN-02",
+  "expected_behavior": "error",
+  "expected_result": "AMBIGUOUS_EMPLOYEE",
+  "calendar_context": {
+    "month": "2026-10"
+  },
+  "assignments": [],
+  "notes": "Query profile intentionally lacks employee_id and uses ambiguous name Ana López."
+}

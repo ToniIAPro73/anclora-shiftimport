@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "GN-06",
+  "expected_behavior": "error",
+  "expected_result": "NO_SHIFTS_FOUND",
+  "calendar_context": {
+    "month": "2026-10"
+  },
+  "assignments": [],
+  "notes": null
+}

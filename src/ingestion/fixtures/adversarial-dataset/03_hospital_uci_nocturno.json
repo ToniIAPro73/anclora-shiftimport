@@ -1,0 +1,20 @@
+{
+  "departamento": "UCI - Planta 4",
+  "turnos_asignados": [
+    {
+      "id_empleado": "ENF-882",
+      "nombre": "Marta Vidal",
+      "inicio": "2026-08-18T22:00:00",
+      "fin": "2026-08-19T10:00:00",
+      "tipo": "Nocturno"
+    },
+    {
+      "id_empleado": "ENF-104",
+      "nombre": "Pedro Sanz",
+      "inicio": "2026-08-18T08:00:00",
+      "fin": "2026-08-18T20:00:00",
+      "tipo": "Diurno"
+    }
+  ],
+  "notas": "FALLO INTENCIONAL: Falta campo 'rol' en el segundo empleado para probar validación de esquema JSON."
+}

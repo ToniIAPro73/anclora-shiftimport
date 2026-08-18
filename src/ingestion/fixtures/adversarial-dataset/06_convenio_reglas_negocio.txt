@@ -1,0 +1,7 @@
+CONVENIO COLECTIVO ESTATAL DE LOGÍSTICA
+ARTÍCULO 34. JORNADA Y DESCANSOS.
+34.1. Jornada máxima anual: 1.800 horas.
+34.2. Entre el final de una jornada y el comienzo de la siguiente mediarán, como mínimo, doce (12) horas.
+34.3. Trabajo nocturno (22:00 a 06:00) se retribuirá con +25%.
+34.4. Prohibido programar turnos de noche consecutivos durante más de 5 días.
+# FALLO INTENCIONAL: Texto con caracteres especiales raros para probar encoding: à é î õ ü ñ ¿

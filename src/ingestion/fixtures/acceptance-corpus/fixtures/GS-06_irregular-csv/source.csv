@@ -1,0 +1,6 @@
+worker_id,slots
+OP-001,Mon 00-04,Mon 04-08,Tue 20-24
+OP-002,Mon 08-12
+OP-003,Wed 12-16,Wed 16-20,Thu 00-04,Fri 20-24
+OP-004,Sat 00-04,Sat 04-08
+OP-005,Sun 20-24,Mon 00-04,Tue 00-04

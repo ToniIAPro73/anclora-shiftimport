@@ -1,0 +1,172 @@
+{
+  "schema_version": "1.0",
+  "fixture_id": "GS-10",
+  "expected_behavior": "success",
+  "expected_result": "SUCCESS",
+  "calendar_context": {
+    "period_start": "2026-10-01",
+    "period_end": "2026-10-10"
+  },
+  "assignments": [
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-01",
+      "shift_code": "WORK",
+      "start_time": "22:00",
+      "end_time": "06:00",
+      "crosses_midnight": true,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "work",
+      "raw_value": "22:00-06:00"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-02",
+      "shift_code": "WORK",
+      "start_time": "00:00",
+      "end_time": "08:00",
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "work",
+      "raw_value": "00:00-08:00"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-03",
+      "shift_code": "WORK",
+      "start_time": "16:00",
+      "end_time": "24:00",
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "work",
+      "raw_value": "16:00-24:00"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-04",
+      "shift_code": "SPLIT",
+      "start_time": "09:00",
+      "end_time": "21:00",
+      "crosses_midnight": false,
+      "segments": [
+        {
+          "start_time": "09:00",
+          "end_time": "13:00"
+        },
+        {
+          "start_time": "17:00",
+          "end_time": "21:00"
+        }
+      ],
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "work",
+      "raw_value": "09:00-13:00 + 17:00-21:00"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-05",
+      "shift_code": "VAC",
+      "start_time": null,
+      "end_time": null,
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "vacation",
+      "raw_value": "VAC"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-06",
+      "shift_code": "BAJA",
+      "start_time": null,
+      "end_time": null,
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "sick_leave",
+      "raw_value": "BAJA"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-07",
+      "shift_code": "AUS",
+      "start_time": null,
+      "end_time": null,
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "absence",
+      "raw_value": "AUS"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-08",
+      "shift_code": "L",
+      "start_time": null,
+      "end_time": null,
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "free",
+      "raw_value": "L"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-09",
+      "shift_code": "XYZ",
+      "start_time": null,
+      "end_time": null,
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "unknown_code",
+      "raw_value": "XYZ"
+    },
+    {
+      "employee_id": "EDGE-01",
+      "employee_name": "Eva Test",
+      "date": "2026-10-10",
+      "shift_code": null,
+      "start_time": null,
+      "end_time": null,
+      "crosses_midnight": false,
+      "segments": null,
+      "team": null,
+      "role": null,
+      "area": null,
+      "status": "free",
+      "raw_value": ""
+    }
+  ],
+  "notes": "Domain edge cases including 24:00, split shift, absence states and unknown code."
+}

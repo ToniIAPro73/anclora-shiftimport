@@ -1,0 +1,479 @@
+{
+  "schema_version": "1.0",
+  "corpus": "anclora-shiftimport-synthetic",
+  "corpus_version": "1.0",
+  "product": "Anclora ShiftImport",
+  "purpose": "M0 acceptance and regression corpus for format detection, extraction, user selection and robustness.",
+  "canonical_test_levels": {
+    "L1_FORMAT": "Detect supported/unsupported formats and fail explicitly.",
+    "L2_EXTRACTION": "Extract all assignments and compare with golden expected.json.",
+    "L3_PRODUCT": "Apply UserProfile and return only the selected worker/team assignments for review."
+  },
+  "canonical_errors": [
+    "UNKNOWN_EMPLOYEE",
+    "AMBIGUOUS_EMPLOYEE",
+    "EMPTY_DOCUMENT",
+    "MALFORMED_INPUT",
+    "UNSUPPORTED_FORMAT",
+    "NO_SHIFTS_FOUND",
+    "UNSUPPORTED_LAYOUT"
+  ],
+  "suggested_m0_thresholds": {
+    "clean_assignment_accuracy_min": 0.99,
+    "degraded_assignment_accuracy_min": 0.95,
+    "wrong_employee_assignments_tolerated": 0,
+    "silent_corruption_tolerated": 0
+  },
+  "fixtures": [
+    {
+      "id": "GS-01",
+      "name": "multi-month",
+      "format": "pdf",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "employee-rows-day-columns-multi-month",
+      "requires_ocr": false,
+      "employee_count": 4,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.pdf"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "EMP-101",
+          "employee_name": "Lucía Martín",
+          "month": "2026-09",
+          "expected_assignment_count": 30
+        },
+        {
+          "employee_id": "EMP-101",
+          "employee_name": "Lucía Martín",
+          "month": "2026-10",
+          "expected_assignment_count": 31
+        },
+        {
+          "employee_id": "EMP-104",
+          "employee_name": "Jorge Vidal",
+          "month": "2026-10",
+          "expected_assignment_count": 31
+        }
+      ]
+    },
+    {
+      "id": "GS-02",
+      "name": "rotating-scan",
+      "format": "pdf",
+      "support_status": "supported",
+      "difficulty": "high",
+      "layout": "team-rows-rotating-codes",
+      "requires_ocr": true,
+      "employee_count": 4,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product",
+        "robustness"
+      ],
+      "sources": [
+        "clean.pdf",
+        "degraded.pdf"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "TEAM-A",
+          "employee_name": null,
+          "month": "2026-10",
+          "expected_assignment_count": 31
+        }
+      ]
+    },
+    {
+      "id": "GS-03",
+      "name": "hospitality",
+      "format": "pdf",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "hybrid-text-plus-grid",
+      "requires_ocr": false,
+      "employee_count": 3,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.pdf"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "H-201",
+          "employee_name": "Ana López",
+          "expected_assignment_count": 14
+        },
+        {
+          "employee_id": "H-301",
+          "employee_name": "Nora Gil",
+          "expected_assignment_count": 14
+        }
+      ]
+    },
+    {
+      "id": "GS-04",
+      "name": "restaurant-xlsx",
+      "format": "xlsx",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "weekly-employee-rows",
+      "requires_ocr": false,
+      "employee_count": 4,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.xlsx"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "R-002",
+          "employee_name": "Miguel Cano",
+          "expected_assignment_count": 7
+        }
+      ]
+    },
+    {
+      "id": "GS-05",
+      "name": "hospital-xlsx",
+      "format": "xlsx",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "monthly-healthcare-grid",
+      "requires_ocr": false,
+      "employee_count": 4,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.xlsx"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "N-12",
+          "employee_name": "Sara Vidal",
+          "expected_assignment_count": 31
+        }
+      ]
+    },
+    {
+      "id": "GS-06",
+      "name": "irregular-csv",
+      "format": "csv",
+      "support_status": "supported",
+      "difficulty": "high",
+      "layout": "ragged-row-variable-slots",
+      "requires_ocr": false,
+      "employee_count": 5,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.csv"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "OP-001",
+          "employee_name": null,
+          "expected_assignment_count": 3
+        }
+      ]
+    },
+    {
+      "id": "GS-07",
+      "name": "docx-unsupported",
+      "format": "docx",
+      "support_status": "unsupported",
+      "difficulty": "low",
+      "layout": "weekly-table",
+      "requires_ocr": false,
+      "employee_count": 2,
+      "expected_behavior": "error",
+      "test_levels": [
+        "format"
+      ],
+      "sources": [
+        "source.docx"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": []
+    },
+    {
+      "id": "GS-08",
+      "name": "dense-image",
+      "format": "image",
+      "support_status": "supported",
+      "difficulty": "high",
+      "layout": "dense-grid",
+      "requires_ocr": true,
+      "employee_count": 48,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product",
+        "robustness"
+      ],
+      "sources": [
+        "clean.png",
+        "low-resolution.jpg",
+        "skewed.jpg",
+        "low-contrast.jpg",
+        "perspective.jpg"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "AP-017",
+          "employee_name": null,
+          "expected_assignment_count": 7
+        },
+        {
+          "employee_id": "AP-048",
+          "employee_name": null,
+          "expected_assignment_count": 7
+        }
+      ]
+    },
+    {
+      "id": "GS-09",
+      "name": "mobile-calendar",
+      "format": "image",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "single-user-mobile-calendar",
+      "requires_ocr": true,
+      "employee_count": 1,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product",
+        "robustness"
+      ],
+      "sources": [
+        "clean.jpg",
+        "cropped.jpg",
+        "compressed.jpg"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "EMP-778",
+          "employee_name": null,
+          "expected_assignment_count": 31
+        }
+      ]
+    },
+    {
+      "id": "GS-10",
+      "name": "domain-edge-cases",
+      "format": "csv",
+      "support_status": "supported",
+      "difficulty": "high",
+      "layout": "row-per-day",
+      "requires_ocr": false,
+      "employee_count": 1,
+      "expected_behavior": "success",
+      "test_levels": [
+        "format",
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.csv"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "EDGE-01",
+          "employee_name": "Eva Test",
+          "expected_assignment_count": 10
+        }
+      ]
+    },
+    {
+      "id": "GN-01",
+      "name": "unknown-employee",
+      "format": "pdf",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "reuse-GS-03",
+      "requires_ocr": false,
+      "employee_count": 3,
+      "expected_behavior": "error",
+      "test_levels": [
+        "product"
+      ],
+      "sources": [
+        "../GS-03_hospitality/source.pdf"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "H-999",
+          "employee_name": "Persona Inexistente",
+          "expected_assignment_count": 0
+        }
+      ]
+    },
+    {
+      "id": "GN-02",
+      "name": "ambiguous-employee",
+      "format": "pdf",
+      "support_status": "supported",
+      "difficulty": "high",
+      "layout": "similar-names",
+      "requires_ocr": false,
+      "employee_count": 2,
+      "expected_behavior": "error",
+      "test_levels": [
+        "product"
+      ],
+      "sources": [
+        "source.pdf"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": null,
+          "employee_name": "Ana López",
+          "expected_assignment_count": 0
+        }
+      ]
+    },
+    {
+      "id": "GN-03",
+      "name": "empty-document",
+      "format": "pdf",
+      "support_status": "supported",
+      "difficulty": "low",
+      "layout": "empty",
+      "requires_ocr": false,
+      "employee_count": 0,
+      "expected_behavior": "error",
+      "test_levels": [
+        "format",
+        "extraction"
+      ],
+      "sources": [
+        "source.pdf"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": []
+    },
+    {
+      "id": "GN-04",
+      "name": "malformed-csv",
+      "format": "csv",
+      "support_status": "supported",
+      "difficulty": "medium",
+      "layout": "malformed",
+      "requires_ocr": false,
+      "employee_count": null,
+      "expected_behavior": "error",
+      "test_levels": [
+        "format",
+        "extraction"
+      ],
+      "sources": [
+        "source.csv"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": []
+    },
+    {
+      "id": "GN-05",
+      "name": "unsupported-format",
+      "format": "txt",
+      "support_status": "unsupported",
+      "difficulty": "low",
+      "layout": "plain-text",
+      "requires_ocr": false,
+      "employee_count": 1,
+      "expected_behavior": "error",
+      "test_levels": [
+        "format"
+      ],
+      "sources": [
+        "source.txt"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": []
+    },
+    {
+      "id": "GN-06",
+      "name": "no-shifts-found",
+      "format": "csv",
+      "support_status": "supported",
+      "difficulty": "low",
+      "layout": "empty-shift-cells",
+      "requires_ocr": false,
+      "employee_count": 1,
+      "expected_behavior": "error",
+      "test_levels": [
+        "extraction",
+        "product"
+      ],
+      "sources": [
+        "source.csv"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": [
+        {
+          "employee_id": "NS-01",
+          "employee_name": "No Shift",
+          "expected_assignment_count": 0
+        }
+      ]
+    },
+    {
+      "id": "GN-07",
+      "name": "unsupported-layout",
+      "format": "png",
+      "support_status": "supported",
+      "difficulty": "high",
+      "layout": "freeform-notes",
+      "requires_ocr": true,
+      "employee_count": null,
+      "expected_behavior": "error",
+      "test_levels": [
+        "extraction"
+      ],
+      "sources": [
+        "source.png"
+      ],
+      "expected_file": "expected.json",
+      "test_profiles": []
+    }
+  ]
+}

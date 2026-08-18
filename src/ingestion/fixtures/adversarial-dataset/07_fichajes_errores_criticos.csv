@@ -1,0 +1,7 @@
+ID_Emp,Nombre,Fecha,Entrada,Salida,Notas
+101,Elena R.,2026-08-15,08:00:00,16:00:00,Normal
+102,David M.,2026-08-15,22:00:00,06:00:00,Turno noche OK
+103,Sofia L.,2026-08-15,09:00:00,,FALLO: Olvidó fichar salida
+104,Jorge P.,2026-08-15,08:00:00,16:30:00,FALLO: 30 min extra no autorizados
+105,Marta V.,2026-08-15,17:00:00,08:00:00,FALLO CRÍTICO: Salió antes de entrar (horas negativas)
+106,Luis P.,2026-08-15,08:00:00,16:00:00,FALLO: Duplicado, mismo empleado fichó dos veces a la misma hora

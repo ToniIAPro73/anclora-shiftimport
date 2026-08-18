@@ -1,0 +1,7 @@
+18/08/26 09:14 - Supervisor: Cuadrante subido.
+18/08/26 09:16 - Laura: Jefe, el jueves tengo médico a las 17:00. ¿Puedo salir a las 16:00 y vuelvo a las 19:00?
+18/08/26 09:20 - Supervisor: Ok Laura, ficha la salida y entrada.
+18/08/26 10:05 - Marcos: Yo me cambio con Laura el viernes noche (20:00-02:00) si ella me cubre el sábado mañana.
+18/08/26 10:10 - Laura: Trato hecho @Marcos.
+# FALLO INTENCIONAL: Formato de fecha/hora inconsistente en la última línea para probar parser de NLP.
+19/08 10:15 - Laura: Confirmado jefe.

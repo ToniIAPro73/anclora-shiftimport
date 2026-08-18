@@ -1,0 +1,6 @@
+ID_Empleado,Nombre,Rol,Lunes,Martes,Miercoles,Jueves,Viernes
+E01,Ana García,Chef,08:00-16:00,08:00-16:00,OFF,08:00-16:00,16:00-23:00
+E02,Luis Pérez,Camarero,10:00-15:00 / 19:00-23:00,OFF,10:00-15:00 / 19:00-23:00,10:00-15:00 / 19:00-23:00,10:00-15:00 / 19:00-23:00
+E03,Sara Ruiz,Ayudante,OFF,18:00-23:30,18:00-23:30,18:00-23:30,18:00-01:00
+# FALLO INTENCIONAL: Fila con comas mal puestas para probar tolerancia a errores de CSV
+E04,Pedro Malo,Cocinero,09:00-17:00,09:00-17:00,OFF,09:00-17:00,09:00-17:00,EXTRA_FIELD

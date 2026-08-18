@@ -1,0 +1,6 @@
+Este archivo simula un Excel (.xls) exportado a texto plano sin formato.
+Nombre | Turno | Horas
+Ana    | Mañana| 8
+Luis   | Tarde | 8
+       | Noche | 7.5
+FALLO: Faltan nombres, delimitadores inconsistentes (mezcla de | y espacios), para probar la robustez del parser de la app.
