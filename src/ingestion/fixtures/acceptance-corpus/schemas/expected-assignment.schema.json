@@ -46,19 +46,19 @@
       ]
     },
     "start_time": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "pattern": "^([01]\\d|2[0-4]):[0-5]\\d$"
-    },
-    "end_time": {
-      "type": [
-        "string",
-        "null"
-      ],
-      "pattern": "^([01]\\d|2[0-4]):[0-5]\\d$"
-    },
+        "type": [
+          "string",
+          "null"
+        ],
+        "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
+      },
+      "end_time": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "pattern": "^(([01]\\d|2[0-3]):[0-5]\\d|24:00)$"
+      },
     "crosses_midnight": {
       "type": "boolean"
     },
