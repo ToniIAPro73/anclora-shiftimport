@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { detectPdfCalendarContext, parseEmployeeShiftsFromPdf } from '../../lib/pdf-shift-parser';
+import { loadUserProfile, saveUserProfile } from '../../lib/profile';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
 
@@ -155,8 +156,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
   const [error, setError] = useState<string | null>(null);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
   const [scanTime, setScanTime] = useState<string | null>(null);
-  const [employeeName, setEmployeeName] = useState('Sebastian Pozo Mendoza');
-  const [employeeId, setEmployeeId] = useState('84881');
+  const [employeeName, setEmployeeName] = useState(() => loadUserProfile().displayName);
+  const [employeeId, setEmployeeId] = useState(() => loadUserProfile().employeeIdentifiers[0] ?? '');
   const [selectedMonth, setSelectedMonth] = useState(String(initialContext.month));
   const [selectedYear, setSelectedYear] = useState(String(initialContext.year));
   const [canStartFreshImport, setCanStartFreshImport] = useState(false);
@@ -256,6 +257,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
       year: Number.parseInt(selectedYear, 10),
     };
 
+    const profile = loadUserProfile();
+    saveUserProfile({
+      ...profile,
+      displayName: employeeName.trim() || profile.displayName,
+      employeeIdentifiers: employeeId.trim() ? [employeeId.trim()] : profile.employeeIdentifiers,
+    });
+
     const finalShifts: Shift[] = parsedShifts
       .filter(hasImportableShiftData)
       .map((shift) => {
@@ -306,12 +314,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 <span>Nombre</span>
-                <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} style={{ padding: '10px 12px' }} />
+                <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder="Nombre del empleado" style={{ padding: '10px 12px' }} />
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 <span>ID</span>
-                <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} style={{ padding: '10px 12px' }} />
+                <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder="ID de empleado" style={{ padding: '10px 12px' }} />
               </label>
 
               <ModalSelect label="Mes del calendario" value={selectedMonth} options={monthSelectOptions} onChange={setSelectedMonth} />

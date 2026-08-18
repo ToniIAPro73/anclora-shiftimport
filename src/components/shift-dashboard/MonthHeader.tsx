@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
+import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
 import { TurnosLogo } from '../branding/TurnosLogo';
 
 const MONTH_NAMES = [
@@ -19,6 +20,7 @@ interface MonthHeaderProps {
 
 export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onOpenJTCounter, themeMode, onToggleTheme }: MonthHeaderProps) => {
   const themeEmoji = themeMode === 'light' ? '☀️' : themeMode === 'dark' ? '🌙' : '🖥️';
+  const identity = formatProfileIdentity(loadUserProfile());
 
   return (
     <div className="dashboard-header">
@@ -32,7 +34,7 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
             Anclora ShiftImport
           </h1>
           <p className="dashboard-subtitle">by Anclora Group</p>
-          <p className="dashboard-identity">Sebastian Pozo Mendoza · ID 84881</p>
+          {identity && <p className="dashboard-identity">{identity}</p>}
         </div>
       </div>
 

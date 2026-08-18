@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
 import { addWeeks } from '../../lib/week';
+import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
 import { TurnosLogo } from '../branding/TurnosLogo';
 
 interface WeekHeaderProps {
@@ -13,6 +14,7 @@ interface WeekHeaderProps {
 
 export const WeekHeader = ({ currentWeekStart, onNavigate, onAddShift, onImport, themeMode, onToggleTheme }: WeekHeaderProps) => {
   const themeEmoji = themeMode === 'light' ? '☀️' : themeMode === 'dark' ? '🌙' : '🖥️';
+  const identity = formatProfileIdentity(loadUserProfile());
 
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -23,9 +25,11 @@ export const WeekHeader = ({ currentWeekStart, onNavigate, onAddShift, onImport,
             Anclora ShiftImport
           </h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: '2px' }}>by Anclora Group</p>
-          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Sebastian Pozo Mendoza · ID 84881
-          </p>
+          {identity && (
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+              {identity}
+            </p>
+          )}
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--toolbar-bg)', borderRadius: '12px', padding: '4px' }}>
