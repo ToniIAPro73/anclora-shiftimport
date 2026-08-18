@@ -22,7 +22,7 @@ const T_KEYS = [
   'importModal.detected', 'importModal.colDate', 'importModal.colOrigin', 'importModal.colType',
   'importModal.colStart', 'importModal.colEnd', 'importModal.emptyStateHint',
   'settings.title', 'settings.tabProfile', 'settings.tabShiftTypes', 'settings.displayName',
-  'settings.identifiers', 'settings.employer', 'settings.timezone', 'settings.language',
+  'settings.identifiers', 'settings.employer', 'settings.timezone',
   'settings.saveProfile', 'settings.archive', 'settings.restore', 'settings.newType',
   'privacy.resetTitle', 'privacy.resetButton',
   'legalFooter.terms', 'legalFooter.privacy', 'legalFooter.legal', 'legalFooter.cookies',

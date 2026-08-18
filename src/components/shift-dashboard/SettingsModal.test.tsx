@@ -9,17 +9,18 @@ setupLocalStorageMock();
 afterEach(cleanup);
 
 describe('SettingsModal', () => {
-  it('does not show a duplicate ES/EN language selector (locale changes only via the global toggle)', () => {
+  it('has no language control at all — locale is only ever changed via the global header toggle', () => {
     render(
       <I18nProvider>
         <SettingsModal isOpen onClose={() => {}} />
       </I18nProvider>,
     );
-    // The old duplicate control was a <select> with 'Español'/'English' options.
+    // The old duplicate controls: a <select> with 'Español'/'English' options,
+    // and later a read-only "current locale" row. Neither should exist.
     expect(screen.queryByText('Español')).toBeNull();
     expect(screen.queryByRole('option', { name: 'English' })).toBeNull();
-    // The current locale is still shown, read-only, alongside a hint.
-    expect(screen.getByText('ES')).toBeTruthy();
+    expect(screen.queryByText('Idioma')).toBeNull();
+    expect(screen.queryByText('Language')).toBeNull();
   });
 
   it('offers a curated IANA timezone dropdown with localized labels', () => {

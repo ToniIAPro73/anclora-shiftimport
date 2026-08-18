@@ -1,9 +1,23 @@
 import { useState } from 'react';
 import { LegalFooter } from './LegalFooter';
 import { resetAllLocalData } from '../lib/privacy';
+import { Locale } from '../lib/i18n';
 import { useI18n } from '../lib/use-i18n';
 
 type Kind = 'privacy' | 'terms' | 'legal';
+
+/**
+ * Legal body content: explicit ES/EN variants, one function per document
+ * kind. Spanish is the canonical source (drafted first, source of legal
+ * meaning); each English section is a structural, section-by-section
+ * translation of the matching Spanish section — same numbering, same
+ * headings, same obligations, nothing added or removed. This 1:1 layout is
+ * deliberate so a legal reviewer can diff es vs en section by section.
+ *
+ * These English sections are a working translation, not legal advice —
+ * flag LEGAL_EN_REVIEW_REQUIRED for professional legal sign-off before
+ * treating them as an authoritative bilingual policy.
+ */
 
 /* ─── helpers ──────────────────────────────────────────────────────────── */
 
@@ -31,18 +45,21 @@ const ulStyle: React.CSSProperties = {
   lineHeight: 1.85,
 };
 
+const strongStyle: React.CSSProperties = { color: 'var(--text)' };
+const linkStyle: React.CSSProperties = { color: 'var(--accent-gold)' };
+
 /* ─── Privacy sections ──────────────────────────────────────────────────── */
 
-function PrivacySections() {
+function PrivacySectionsEs() {
   return (
     <>
       <section style={sectionStyle}>
         <h2 style={h2Style}>1. Responsable del tratamiento</h2>
         <p style={pStyle}>
           El responsable del tratamiento de los datos personales recogidos a través de Anclora ShiftImport
-          es <strong style={{ color: 'var(--text)' }}>Anclora Group</strong>.
+          es <strong style={strongStyle}>Anclora Group</strong>.
           Puedes contactarnos en cualquier momento mediante el correo electrónico{' '}
-          <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
         </p>
       </section>
 
@@ -50,10 +67,10 @@ function PrivacySections() {
         <h2 style={h2Style}>2. Datos que tratamos</h2>
         <p style={pStyle}>Anclora ShiftImport puede tratar las siguientes categorías de datos:</p>
         <ul style={ulStyle}>
-          <li><strong style={{ color: 'var(--text)' }}>Datos de turnos:</strong> fecha, hora de inicio y fin, tipo de turno, ubicación o centro de trabajo, notas asociadas.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Preferencias de uso:</strong> configuración de tema visual y opciones de visualización del calendario, almacenadas en <code>localStorage</code>.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Logs operativos mínimos:</strong> registros técnicos de sincronización necesarios para el correcto funcionamiento del servicio backend (Neon DB).</li>
-          <li><strong style={{ color: 'var(--text)' }}>Datos importados de PDF:</strong> información de turnos extraída mediante reconocimiento de texto de documentos aportados por el propio usuario.</li>
+          <li><strong style={strongStyle}>Datos de turnos:</strong> fecha, hora de inicio y fin, tipo de turno, ubicación o centro de trabajo, notas asociadas.</li>
+          <li><strong style={strongStyle}>Preferencias de uso:</strong> configuración de tema visual y opciones de visualización del calendario, almacenadas en <code>localStorage</code>.</li>
+          <li><strong style={strongStyle}>Logs operativos mínimos:</strong> registros técnicos de sincronización necesarios para el correcto funcionamiento del servicio backend (Neon DB).</li>
+          <li><strong style={strongStyle}>Datos importados de PDF:</strong> información de turnos extraída mediante reconocimiento de texto de documentos aportados por el propio usuario.</li>
         </ul>
         <p style={{ ...pStyle, marginTop: '0.75rem' }}>
           No se recogen datos especialmente protegidos ni datos de menores. No se realiza elaboración de perfiles automatizada con efectos jurídicos.
@@ -74,9 +91,9 @@ function PrivacySections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>4. Base jurídica</h2>
         <p style={pStyle}>
-          El tratamiento se basa en el <strong style={{ color: 'var(--text)' }}>interés legítimo</strong> del responsable
+          El tratamiento se basa en el <strong style={strongStyle}>interés legítimo</strong> del responsable
           para operar el servicio solicitado por el usuario (art. 6.1.f RGPD), y en el{' '}
-          <strong style={{ color: 'var(--text)' }}>consentimiento</strong> del usuario para el uso de cookies opcionales
+          <strong style={strongStyle}>consentimiento</strong> del usuario para el uso de cookies opcionales
           o funcionalidades de sincronización (art. 6.1.a RGPD).
         </p>
       </section>
@@ -84,9 +101,9 @@ function PrivacySections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>5. Conservación de los datos</h2>
         <ul style={ulStyle}>
-          <li><strong style={{ color: 'var(--text)' }}>Datos locales (localStorage):</strong> persisten en el dispositivo del usuario hasta que este los elimina manualmente o borra los datos del navegador.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Datos de sincronización:</strong> se conservan mientras el servicio esté activo y el usuario mantenga su cuenta, o hasta que solicite su supresión.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Logs operativos:</strong> se eliminan de forma automática transcurrido el período mínimo necesario para garantizar la seguridad del sistema.</li>
+          <li><strong style={strongStyle}>Datos locales (localStorage):</strong> persisten en el dispositivo del usuario hasta que este los elimina manualmente o borra los datos del navegador.</li>
+          <li><strong style={strongStyle}>Datos de sincronización:</strong> se conservan mientras el servicio esté activo y el usuario mantenga su cuenta, o hasta que solicite su supresión.</li>
+          <li><strong style={strongStyle}>Logs operativos:</strong> se eliminan de forma automática transcurrido el período mínimo necesario para garantizar la seguridad del sistema.</li>
         </ul>
       </section>
 
@@ -104,9 +121,9 @@ function PrivacySections() {
         <h2 style={h2Style}>6bis. Proveedores y subencargados</h2>
         <p style={pStyle}>Inventario mínimo de los terceros que pueden intervenir en el procesamiento técnico del servicio:</p>
         <ul style={ulStyle}>
-          <li><strong style={{ color: 'var(--text)' }}>Vercel:</strong> alojamiento de la aplicación (hosting estático y funciones de sincronización).</li>
-          <li><strong style={{ color: 'var(--text)' }}>Neon DB:</strong> base de datos de sincronización entre dispositivos. Solo se contacta si el usuario activa explícitamente la sincronización; por defecto la aplicación funciona en modo local (<code>localStorage</code>) y no la contacta.</li>
-          <li><strong style={{ color: 'var(--text)' }}>tesseract.js (OCR local):</strong> el reconocimiento de texto en imágenes se ejecuta en el propio navegador del usuario. Solo los binarios del motor OCR (no el documento del usuario) pueden descargarse desde una CDN pública en el primer uso.</li>
+          <li><strong style={strongStyle}>Vercel:</strong> alojamiento de la aplicación (hosting estático y funciones de sincronización).</li>
+          <li><strong style={strongStyle}>Neon DB:</strong> base de datos de sincronización entre dispositivos. Solo se contacta si el usuario activa explícitamente la sincronización; por defecto la aplicación funciona en modo local (<code>localStorage</code>) y no la contacta.</li>
+          <li><strong style={strongStyle}>tesseract.js (OCR local):</strong> el reconocimiento de texto en imágenes se ejecuta en el propio navegador del usuario. Solo los binarios del motor OCR (no el documento del usuario) pueden descargarse desde una CDN pública en el primer uso.</li>
         </ul>
         <p style={{ ...pStyle, marginTop: '0.75rem' }}>
           Ningún documento o imagen de cuadrante de turnos importado por el usuario se sube ni se conserva en ningún servidor:
@@ -131,17 +148,17 @@ function PrivacySections() {
           De acuerdo con el RGPD (UE) 2016/679 y la LOPDGDD, el usuario puede ejercer los siguientes derechos:
         </p>
         <ul style={ulStyle}>
-          <li><strong style={{ color: 'var(--text)' }}>Acceso:</strong> obtener confirmación sobre si se tratan sus datos y acceder a ellos.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Rectificación:</strong> corregir datos inexactos o incompletos.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Supresión:</strong> solicitar la eliminación de sus datos cuando ya no sean necesarios.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Portabilidad:</strong> recibir sus datos en un formato estructurado y de uso común.</li>
-          <li><strong style={{ color: 'var(--text)' }}>Oposición y limitación:</strong> oponerse al tratamiento o solicitar su limitación en los casos previstos por la normativa.</li>
+          <li><strong style={strongStyle}>Acceso:</strong> obtener confirmación sobre si se tratan sus datos y acceder a ellos.</li>
+          <li><strong style={strongStyle}>Rectificación:</strong> corregir datos inexactos o incompletos.</li>
+          <li><strong style={strongStyle}>Supresión:</strong> solicitar la eliminación de sus datos cuando ya no sean necesarios.</li>
+          <li><strong style={strongStyle}>Portabilidad:</strong> recibir sus datos en un formato estructurado y de uso común.</li>
+          <li><strong style={strongStyle}>Oposición y limitación:</strong> oponerse al tratamiento o solicitar su limitación en los casos previstos por la normativa.</li>
         </ul>
         <p style={{ ...pStyle, marginTop: '0.75rem' }}>
           Para ejercer cualquiera de estos derechos, envía tu solicitud a{' '}
-          <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
           También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (AEPD) en{' '}
-          <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-gold)' }}>www.aepd.es</a>.
+          <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer" style={linkStyle}>www.aepd.es</a>.
         </p>
       </section>
 
@@ -159,7 +176,7 @@ function PrivacySections() {
         <h2 style={h2Style}>10. Contacto y actualizaciones</h2>
         <p style={pStyle}>
           Para cualquier consulta sobre esta política, contacta con nosotros en{' '}
-          <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
           Nos reservamos el derecho a actualizar esta política cuando sea necesario. Los cambios relevantes
           serán comunicados dentro de la propia aplicación.
         </p>
@@ -168,15 +185,154 @@ function PrivacySections() {
   );
 }
 
+function PrivacySectionsEn() {
+  return (
+    <>
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>1. Data controller</h2>
+        <p style={pStyle}>
+          The controller responsible for the personal data collected through Anclora ShiftImport
+          is <strong style={strongStyle}>Anclora Group</strong>.
+          You can contact us at any time by email at{' '}
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>2. Data we process</h2>
+        <p style={pStyle}>Anclora ShiftImport may process the following categories of data:</p>
+        <ul style={ulStyle}>
+          <li><strong style={strongStyle}>Shift data:</strong> date, start and end time, shift type, location or work center, associated notes.</li>
+          <li><strong style={strongStyle}>Usage preferences:</strong> visual theme configuration and calendar display options, stored in <code>localStorage</code>.</li>
+          <li><strong style={strongStyle}>Minimal operational logs:</strong> technical synchronization records required for the correct operation of the backend service (Neon DB).</li>
+          <li><strong style={strongStyle}>Data imported from PDF:</strong> shift information extracted through text recognition of documents provided by the user.</li>
+        </ul>
+        <p style={{ ...pStyle, marginTop: '0.75rem' }}>
+          No specially protected categories of data or data from minors are collected. No automated profiling with legal effects is performed.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>3. Purposes of processing</h2>
+        <ul style={ulStyle}>
+          <li>Managing and displaying the user's work shifts.</li>
+          <li>Synchronizing data across devices when the user enables that feature.</li>
+          <li>Enabling the import and recognition of shifts from PDF files.</li>
+          <li>Maintaining the application's personalization preferences.</li>
+          <li>Ensuring the correct technical operation and operational security of the service.</li>
+        </ul>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>4. Legal basis</h2>
+        <p style={pStyle}>
+          Processing is based on the controller's <strong style={strongStyle}>legitimate interest</strong> in
+          operating the service requested by the user (Art. 6.1.f GDPR), and on the user's{' '}
+          <strong style={strongStyle}>consent</strong> for the use of optional cookies
+          or synchronization features (Art. 6.1.a GDPR).
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>5. Data retention</h2>
+        <ul style={ulStyle}>
+          <li><strong style={strongStyle}>Local data (localStorage):</strong> persists on the user's device until the user manually deletes it or clears their browser data.</li>
+          <li><strong style={strongStyle}>Synchronization data:</strong> retained while the service is active and the user keeps their account, or until deletion is requested.</li>
+          <li><strong style={strongStyle}>Operational logs:</strong> automatically deleted after the minimum period required to ensure system security.</li>
+        </ul>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>6. Recipients and disclosures</h2>
+        <p style={pStyle}>
+          Data is not disclosed to third parties except where legally required. Synchronization data is processed
+          by the database infrastructure provider (Neon DB), acting as a data processor
+          under the relevant contractual and technical safeguards. No international data transfers
+          outside the European Economic Area are knowingly made.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>6bis. Providers and sub-processors</h2>
+        <p style={pStyle}>Minimum inventory of third parties that may be involved in the service's technical processing:</p>
+        <ul style={ulStyle}>
+          <li><strong style={strongStyle}>Vercel:</strong> application hosting (static hosting and synchronization functions).</li>
+          <li><strong style={strongStyle}>Neon DB:</strong> cross-device synchronization database. Only contacted if the user explicitly enables synchronization; by default the application runs in local mode (<code>localStorage</code>) and does not contact it.</li>
+          <li><strong style={strongStyle}>tesseract.js (local OCR):</strong> text recognition in images runs in the user's own browser. Only the OCR engine binaries (never the user's document) may be downloaded from a public CDN on first use.</li>
+        </ul>
+        <p style={{ ...pStyle, marginTop: '0.75rem' }}>
+          No shift roster document or image imported by the user is uploaded to or retained on any server:
+          the file is processed in browser memory and discarded once the import completes. No analytics or
+          advertising provider receives shift data or employee identifiers.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>7. Security</h2>
+        <p style={pStyle}>
+          Anclora ShiftImport applies technical and organizational measures appropriate to the risk of processing,
+          including encrypted communications via HTTPS, database access controls, and
+          environment separation. Data stored locally on the user's device is
+          subject to the security measures of the operating system and browser used.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>8. Data subject rights</h2>
+        <p style={pStyle}>
+          In accordance with the GDPR (EU) 2016/679 and Spain's LOPDGDD, the user may exercise the following rights:
+        </p>
+        <ul style={ulStyle}>
+          <li><strong style={strongStyle}>Access:</strong> obtain confirmation of whether their data is being processed and access it.</li>
+          <li><strong style={strongStyle}>Rectification:</strong> correct inaccurate or incomplete data.</li>
+          <li><strong style={strongStyle}>Erasure:</strong> request deletion of their data when it is no longer necessary.</li>
+          <li><strong style={strongStyle}>Portability:</strong> receive their data in a structured, commonly used format.</li>
+          <li><strong style={strongStyle}>Objection and restriction:</strong> object to processing or request its restriction in the cases provided by law.</li>
+        </ul>
+        <p style={{ ...pStyle, marginTop: '0.75rem' }}>
+          To exercise any of these rights, send your request to{' '}
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
+          You may also file a complaint with the Spanish Data Protection Agency (AEPD) at{' '}
+          <a href="https://www.aepd.es" target="_blank" rel="noopener noreferrer" style={linkStyle}>www.aepd.es</a>.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>9. Cookies</h2>
+        <p style={pStyle}>
+          Anclora ShiftImport uses cookies strictly necessary for the application to function
+          (session, theme preferences) and may use optional cookies for usage analysis, always
+          subject to the user's prior consent. Cookie preferences can be managed
+          from the settings panel available in the application's footer.
+        </p>
+      </section>
+
+      <section style={{ paddingBottom: '0.25rem' }}>
+        <h2 style={h2Style}>10. Contact and updates</h2>
+        <p style={pStyle}>
+          For any questions about this policy, contact us at{' '}
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
+          We reserve the right to update this policy when necessary. Material changes
+          will be communicated within the application itself.
+        </p>
+      </section>
+    </>
+  );
+}
+
+function PrivacySections({ locale }: { locale: Locale }) {
+  return locale === 'en' ? <PrivacySectionsEn /> : <PrivacySectionsEs />;
+}
+
 /* ─── Terms sections ────────────────────────────────────────────────────── */
 
-function TermsSections() {
+function TermsSectionsEs() {
   return (
     <>
       <section style={sectionStyle}>
         <h2 style={h2Style}>1. Objeto</h2>
         <p style={pStyle}>
-          Las presentes condiciones regulan el acceso y uso de <strong style={{ color: 'var(--text)' }}>Anclora ShiftImport</strong>,
+          Las presentes condiciones regulan el acceso y uso de <strong style={strongStyle}>Anclora ShiftImport</strong>,
           un producto del ecosistema Anclora Group que convierte cuadrantes de trabajo en PDF, imagen o formatos
           compatibles en un calendario personal estructurado, revisable y exportable.
         </p>
@@ -205,7 +361,7 @@ function TermsSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>4. Limitaciones de uso</h2>
         <p style={pStyle}>
-          Anclora ShiftImport es una herramienta de apoyo a la gestión personal. <strong style={{ color: 'var(--text)' }}>No sustituye</strong>{' '}
+          Anclora ShiftImport es una herramienta de apoyo a la gestión personal. <strong style={strongStyle}>No sustituye</strong>{' '}
           en ningún caso la documentación laboral oficial, convenios colectivos, contratos de trabajo,
           registros legales de jornada exigidos por la normativa vigente ni el asesoramiento de profesionales
           del ámbito laboral o jurídico.
@@ -265,24 +421,130 @@ function TermsSections() {
         <h2 style={h2Style}>10. Contacto</h2>
         <p style={pStyle}>
           Para cualquier consulta relacionada con estos términos, contacta con nosotros en{' '}
-          <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
         </p>
       </section>
     </>
   );
 }
 
+function TermsSectionsEn() {
+  return (
+    <>
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>1. Purpose</h2>
+        <p style={pStyle}>
+          These terms govern access to and use of <strong style={strongStyle}>Anclora ShiftImport</strong>,
+          a product of the Anclora Group ecosystem that converts work schedules in PDF, image, or compatible
+          formats into a structured, reviewable, and exportable personal calendar.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>2. Terms of use</h2>
+        <p style={pStyle}>
+          Access to Anclora ShiftImport implies full acceptance of these terms. The user
+          agrees to use the application lawfully, responsibly, and in accordance with its purpose.
+          Any use of the tool for purposes other than personal shift management is prohibited,
+          as is any attempt at unauthorized access to the underlying systems.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>3. User responsibilities</h2>
+        <ul style={ulStyle}>
+          <li>Verify the accuracy of the data entered or imported into the application.</li>
+          <li>Ensure that imported PDF documents are their own property or that they have authorization to use them.</li>
+          <li>Adequately safeguard access to their device and the data stored locally.</li>
+          <li>Not share third parties' data without their consent.</li>
+        </ul>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>4. Limitations of use</h2>
+        <p style={pStyle}>
+          Anclora ShiftImport is a personal-management support tool. <strong style={strongStyle}>It does not replace</strong>{' '}
+          in any case official labor documentation, collective bargaining agreements, employment contracts,
+          legal working-time records required by applicable regulations, or the advice of
+          labor or legal professionals.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>5. Service availability</h2>
+        <p style={pStyle}>
+          Anclora Group does not guarantee continuous, uninterrupted availability of the synchronization backend.
+          Offline functionality based on <code>localStorage</code> will remain operational regardless
+          of the status of the synchronization service. We reserve the right to perform maintenance,
+          updates, or temporary service interruptions, notifying users when possible.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>6. Intellectual property</h2>
+        <p style={pStyle}>
+          All intellectual property rights over Anclora ShiftImport —including source code,
+          design, logos, text, and functionality— belong to Anclora Group or its licensors.
+          Reproduction, distribution, modification, or exploitation of any element
+          of the application without the express written authorization of Anclora Group is prohibited.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>7. Disclaimer of warranties</h2>
+        <p style={pStyle}>
+          The application is provided "as is" (<em>as is</em>). Anclora Group does not warrant that the
+          tool is free of errors, that PDF import is accurate in all cases,
+          or that extracted data accurately reflects the original document. The user assumes
+          responsibility for reviewing and validating all information managed through the application.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>8. Limitation of liability</h2>
+        <p style={pStyle}>
+          To the maximum extent permitted by applicable law, Anclora Group shall not be liable
+          for direct, indirect, incidental, or consequential damages arising from the use or inability
+          to use the application, including errors in data import, loss of information
+          stored locally, or interruptions of the synchronization service.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>9. Changes to these terms</h2>
+        <p style={pStyle}>
+          Anclora Group reserves the right to modify these terms at any time.
+          Material changes will be notified within the application itself. Continued use of
+          Anclora ShiftImport after new terms are published constitutes acceptance of them.
+        </p>
+      </section>
+
+      <section style={{ paddingBottom: '0.25rem' }}>
+        <h2 style={h2Style}>10. Contact</h2>
+        <p style={pStyle}>
+          For any questions related to these terms, contact us at{' '}
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
+        </p>
+      </section>
+    </>
+  );
+}
+
+function TermsSections({ locale }: { locale: Locale }) {
+  return locale === 'en' ? <TermsSectionsEn /> : <TermsSectionsEs />;
+}
+
 /* ─── Legal notice sections ─────────────────────────────────────────────── */
 
-function LegalSections() {
+function LegalSectionsEs() {
   return (
     <>
       <section style={sectionStyle}>
         <h2 style={h2Style}>1. Titularidad</h2>
         <p style={pStyle}>
-          El titular y operador de Anclora ShiftImport es <strong style={{ color: 'var(--text)' }}>Anclora Group</strong>.
+          El titular y operador de Anclora ShiftImport es <strong style={strongStyle}>Anclora Group</strong>.
           Para cualquier comunicación relacionada con el presente aviso legal, puedes dirigirte a{' '}
-          <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
         </p>
       </section>
 
@@ -347,11 +609,95 @@ function LegalSections() {
         <h2 style={h2Style}>8. Contacto</h2>
         <p style={pStyle}>
           Para cualquier consulta relacionada con este aviso legal, puedes contactarnos en{' '}
-          <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
         </p>
       </section>
     </>
   );
+}
+
+function LegalSectionsEn() {
+  return (
+    <>
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>1. Ownership</h2>
+        <p style={pStyle}>
+          The owner and operator of Anclora ShiftImport is <strong style={strongStyle}>Anclora Group</strong>.
+          For any communication related to this legal notice, you can reach us at{' '}
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>2. Nature of the service</h2>
+        <p style={pStyle}>
+          Anclora ShiftImport is a product of the Anclora Group ecosystem, designed to import
+          work schedules into a personal calendar. Its use is auxiliary in nature and does not constitute in any
+          way a labor, legal, or administrative advisory service.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>3. Permitted use</h2>
+        <p style={pStyle}>
+          Access to and use of Anclora ShiftImport is permitted exclusively for lawful purposes consistent
+          with its operational purpose. Any use that violates applicable law,
+          third-party rights, or these terms of use is prohibited.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>4. Intellectual property</h2>
+        <p style={pStyle}>
+          All elements that make up Anclora ShiftImport —including, without limitation, the source code,
+          the interface, text, graphics, and logos— are the property of Anclora Group or its
+          collaborators and are protected by applicable intellectual and industrial property law.
+          Their full or partial reproduction without express authorization is expressly prohibited.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>5. Responsibility for data</h2>
+        <p style={pStyle}>
+          The information and data entered into Anclora ShiftImport are the sole responsibility of the
+          user. Anclora Group does not verify the accuracy of data entered or extracted
+          via PDF import, and assumes no responsibility for decisions made based
+          on that information.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>6. Trademark</h2>
+        <p style={pStyle}>
+          "Anclora ShiftImport" and "Anclora Group" are trade names used in commerce
+          by their owners. No claim of a granted trademark registration is made. Any unauthorized use of
+          these names is prohibited.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>7. Applicable law</h2>
+        <p style={pStyle}>
+          This legal notice is governed by Spanish law and, where applicable,
+          European Union regulations. For the resolution of any dispute arising from
+          access to or use of Anclora ShiftImport, the parties submit to the competent courts and tribunals
+          in accordance with applicable regulations.
+        </p>
+      </section>
+
+      <section style={{ paddingBottom: '0.25rem' }}>
+        <h2 style={h2Style}>8. Contact</h2>
+        <p style={pStyle}>
+          For any questions related to this legal notice, you can contact us at{' '}
+          <a href="mailto:hola@anclora.com" style={linkStyle}>hola@anclora.com</a>.
+        </p>
+      </section>
+    </>
+  );
+}
+
+function LegalSections({ locale }: { locale: Locale }) {
+  return locale === 'en' ? <LegalSectionsEn /> : <LegalSectionsEs />;
 }
 
 /* ─── Local data reset (privacy-only) ───────────────────────────────────── */
@@ -400,13 +746,14 @@ function LocalDataReset() {
 /* ─── Main component ────────────────────────────────────────────────────── */
 
 export function LegalPage({ kind }: { kind: Kind }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const title =
     kind === 'privacy'
       ? t('legalPage.titlePrivacy')
       : kind === 'terms'
       ? t('legalPage.titleTerms')
       : t('legalPage.titleLegal');
+  const lastUpdated = locale === 'en' ? 'Last updated: May 2026' : 'Última actualización: mayo de 2026';
 
   return (
     <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', zIndex: 100, background: 'var(--bg)', color: 'var(--text-primary)' }}>
@@ -448,7 +795,7 @@ export function LegalPage({ kind }: { kind: Kind }) {
                 fontSize: '0.875rem',
               }}
             >
-              Última actualización: mayo de 2026
+              {lastUpdated}
             </p>
             <hr
               style={{
@@ -468,9 +815,9 @@ export function LegalPage({ kind }: { kind: Kind }) {
               color: 'var(--text-muted)',
             }}
           >
-            {kind === 'privacy' && <PrivacySections />}
-            {kind === 'terms' && <TermsSections />}
-            {kind === 'legal' && <LegalSections />}
+            {kind === 'privacy' && <PrivacySections locale={locale} />}
+            {kind === 'terms' && <TermsSections locale={locale} />}
+            {kind === 'legal' && <LegalSections locale={locale} />}
           </div>
 
           {/* Contact block */}

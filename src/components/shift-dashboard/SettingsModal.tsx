@@ -78,30 +78,19 @@ function ProfileSection() {
           onChange={(e) => setProfile({ ...profile, employerName: e.target.value })}
         />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
-        <div>
-          <label style={labelStyle}>{t('settings.timezone')}</label>
-          <select
-            className="modal-input"
-            value={profile.timezone}
-            onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
-          >
-            {TIMEZONE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {getTimezoneLabel(option.id, locale)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>{t('settings.language')}</label>
-          <div className="modal-input" style={{ display: 'flex', alignItems: 'center', opacity: 0.85 }}>
-            {locale.toUpperCase()}
-          </div>
-          <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-            {t('settings.languageHint')}
-          </p>
-        </div>
+      <div>
+        <label style={labelStyle}>{t('settings.timezone')}</label>
+        <select
+          className="modal-input"
+          value={profile.timezone}
+          onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
+        >
+          {TIMEZONE_OPTIONS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {getTimezoneLabel(option.id, locale)}
+            </option>
+          ))}
+        </select>
       </div>
       <button className="btn-gold" style={{ alignSelf: 'flex-start' }} onClick={handleSave}>
         {saved ? t('settings.saved') : t('settings.saveProfile')}
