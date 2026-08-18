@@ -62,10 +62,13 @@ describe('no-mixed-language: translation completeness', () => {
     expect(monthsEn).toContain('January');
     expect(monthsEn).not.toContain('Enero');
 
+    // Raw dictionary order is Sunday-first canonical (index 0 = Sunday);
+    // display order (Monday-first) is derived via orderWeekdayLabels, see
+    // src/lib/week.test.ts and MonthGrid.test.tsx.
     const weekdaysEs = translateList('es', 'calendar.weekdays');
     const weekdaysEn = translateList('en', 'calendar.weekdays');
-    expect(weekdaysEs).toEqual(['L', 'M', 'X', 'J', 'V', 'S', 'D']);
-    expect(weekdaysEn).toEqual(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
+    expect(weekdaysEs).toEqual(['D', 'L', 'M', 'X', 'J', 'V', 'S']);
+    expect(weekdaysEn).toEqual(['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']);
   });
 });
 

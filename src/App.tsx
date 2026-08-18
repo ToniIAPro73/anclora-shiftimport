@@ -315,6 +315,7 @@ function App() {
         onClose={() => setIsImportOpen(false)}
         onConfirmImport={handleConfirmImport}
         initialContext={{ month: currentMonth, year: currentYear }}
+        existingShifts={shifts}
       />
 
       {importConflictState && (

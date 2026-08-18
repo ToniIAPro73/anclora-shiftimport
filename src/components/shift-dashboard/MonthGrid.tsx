@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Shift } from '../../lib/types';
-import { getDaysInMonth, getFirstWeekdayOfMonth, toISODate } from '../../lib/week';
+import { getDaysInMonth, getFirstWeekdayOfMonth, orderWeekdayLabels, toISODate } from '../../lib/week';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getShiftTypeColor } from '../../lib/shift-types';
-import { translateShiftTypeLabel } from '../../lib/i18n';
+import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { Plus } from 'lucide-react';
 
@@ -17,7 +17,8 @@ interface MonthGridProps {
 
 export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
-  const weekdayLabels = tl('calendar.weekdays');
+  const weekStartsOn = getWeekStartsOn(locale);
+  const weekdayLabels = orderWeekdayLabels(tl('calendar.weekdays'), weekStartsOn);
   const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
   const [isTouchUi, setIsTouchUi] = useState(false);
 
@@ -44,7 +45,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
   }, [month, year, shifts.length]);
 
   const daysInMonth = getDaysInMonth(year, month);
-  const firstWeekday = getFirstWeekdayOfMonth(year, month);
+  const firstWeekday = getFirstWeekdayOfMonth(year, month, weekStartsOn);
   const todayISO = toISODate(new Date());
 
   const cells: Array<number | null> = [];

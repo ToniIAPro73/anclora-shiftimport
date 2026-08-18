@@ -14,12 +14,15 @@ import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { IngestionError, IngestionErrorCode } from '../../lib/ingestion-errors';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
+import { classifyImportChanges } from '../../lib/import-dedup';
 
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmImport: (shifts: Shift[], targetPeriod: CalendarImportContext) => Promise<boolean>;
   initialContext: CalendarImportContext;
+  /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
+  existingShifts?: Shift[];
 }
 
 interface ModalSelectOption {
@@ -33,6 +36,20 @@ function isFreeShift(shift: Pick<ParsedCalendarShift, 'shiftType'>): boolean {
 
 function hasImportableShiftData(shift: ParsedCalendarShift): boolean {
   return Boolean((shift.shiftType ?? '').trim()) || shift.startTime !== '??:??' || shift.endTime !== '??:??';
+}
+
+/** Maps a reviewed parsed row to the domain Shift the app persists. */
+function toDomainShift(shift: ParsedCalendarShift): Shift {
+  const normalizedType = normalizeShiftTypeLabel(shift.shiftType ?? '');
+  return {
+    id: crypto.randomUUID(),
+    date: shift.date,
+    startTime: shift.startTime === '??:??' ? '' : shift.startTime,
+    endTime: shift.endTime === '??:??' ? '' : shift.endTime,
+    location: normalizedType === 'Vacaciones' ? 'Regular' : (normalizedType || 'Regular'),
+    origin: 'IMP',
+    sourceFormat: shift.sourceFormat ?? undefined,
+  };
 }
 
 function ModalSelect({
@@ -143,7 +160,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [] }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -169,6 +186,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
     () => availableYears.map((yearOption) => ({ value: yearOption, label: yearOption })),
     [availableYears],
   );
+
+  const importDiff = useMemo(() => {
+    const readyForDiff = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
+    return classifyImportChanges(existingShifts, readyForDiff);
+  }, [parsedShifts, existingShifts]);
 
   useEscapeClose(isOpen, onClose);
 
@@ -269,21 +291,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
       employeeIdentifiers: employeeId.trim() ? [employeeId.trim()] : profile.employeeIdentifiers,
     });
 
-    const finalShifts: Shift[] = parsedShifts
-      .filter(hasImportableShiftData)
-      .map((shift) => {
-        const normalizedType = normalizeShiftTypeLabel(shift.shiftType ?? '');
-
-        return {
-          id: crypto.randomUUID(),
-          date: shift.date,
-          startTime: shift.startTime === '??:??' ? '' : shift.startTime,
-          endTime: shift.endTime === '??:??' ? '' : shift.endTime,
-          location: normalizedType === 'Vacaciones' ? 'Regular' : (normalizedType || 'Regular'),
-          origin: 'IMP',
-          sourceFormat: shift.sourceFormat ?? undefined,
-        };
-      });
+    const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
 
     onConfirmImport(finalShifts, importContext);
     onClose();
@@ -526,6 +534,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                 </div>
               )}
             </div>
+
+            {readyShifts.length > 0 && (
+              <div style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-subtle)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {importDiff.new.length > 0 && <span>{t('importModal.diffNew', { count: importDiff.new.length })}</span>}
+                {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
+                {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
+              </div>
+            )}
 
             <div style={{ marginTop: '16px' }}>
               <button className="btn-gold import-process-button" style={{ width: '100%', height: '48px', fontSize: '1rem' }} disabled={readyShifts.length === 0 || loading} onClick={handleConfirm}>

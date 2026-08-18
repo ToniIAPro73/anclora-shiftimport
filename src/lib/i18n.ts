@@ -20,6 +20,20 @@ export const saveLocale = (locale: Locale): void => {
   localStorage.setItem(LOCALE_STORAGE_KEY, locale);
 };
 
+/**
+ * Calendar week-start policy, derived from locale — never from the UI
+ * language string, timezone, or any other proxy. The current `en` locale
+ * is British English (en-GB), which — like es-ES — starts the week on
+ * Monday. A future en-US locale would be keyed here with 0 (Sunday);
+ * nothing else in the calendar rendering path would need to change.
+ */
+const WEEK_STARTS_ON: Record<Locale, 0 | 1> = {
+  es: 1,
+  en: 1, // en-GB
+};
+
+export const getWeekStartsOn = (locale: Locale): 0 | 1 => WEEK_STARTS_ON[locale];
+
 type TranslationTree = { [key: string]: string | string[] | TranslationTree };
 
 /**
@@ -61,7 +75,10 @@ const translations: Record<Locale, TranslationTree> = {
       year: 'Año',
     },
     calendar: {
-      weekdays: ['L', 'M', 'X', 'J', 'V', 'S', 'D'],
+      // Sunday-first canonical order (index 0 = Sunday, matches
+      // Date.getDay()) — reordered for display via orderWeekdayLabels()
+      // using the locale's week-start policy (see getWeekStartsOn).
+      weekdays: ['D', 'L', 'M', 'X', 'J', 'V', 'S'],
       addShiftAria: 'Añadir turno el {{date}}',
       addShiftBlockedAria: 'No se pueden añadir turnos el {{date}} porque hay vacaciones',
       addShiftTitle: 'Añadir turno',
@@ -121,6 +138,9 @@ const translations: Record<Locale, TranslationTree> = {
       colEnd: 'Fin',
       emptyStateHint: 'Pulsa "Procesar archivo" para detectar turnos',
       confirmImport: 'Confirmar Importación ({{ready}}/{{total}} listos)',
+      diffNew: '{{count}} nuevos',
+      diffChanged: '{{count}} modificados',
+      diffUnchanged: '{{count}} sin cambios',
       noShiftsFound: 'No se detectaron turnos para el empleado indicado en el archivo.',
       unknownError: 'Error desconocido',
       errorPrefix: 'Error: {{message}}',
@@ -240,7 +260,9 @@ const translations: Record<Locale, TranslationTree> = {
       year: 'Year',
     },
     calendar: {
-      weekdays: ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'],
+      // Sunday-first canonical order — see the es block for why.
+      // en is British English (en-GB): week still starts on Monday.
+      weekdays: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
       addShiftAria: 'Add shift on {{date}}',
       addShiftBlockedAria: 'Shifts cannot be added on {{date}} because there is vacation',
       addShiftTitle: 'Add shift',
@@ -300,6 +322,9 @@ const translations: Record<Locale, TranslationTree> = {
       colEnd: 'End',
       emptyStateHint: 'Click "Process file" to detect shifts',
       confirmImport: 'Confirm Import ({{ready}}/{{total}} ready)',
+      diffNew: '{{count}} new',
+      diffChanged: '{{count}} changed',
+      diffUnchanged: '{{count}} unchanged',
       noShiftsFound: 'No shifts were detected for the given employee in the file.',
       unknownError: 'Unknown error',
       errorPrefix: 'Error: {{message}}',

@@ -73,11 +73,15 @@ export const getDaysInMonth = (year: number, month: number): number =>
   new Date(year, month + 1, 0).getDate();
 
 /**
- * Returns the weekday index (0=Mon, 6=Sun) for the 1st of the month.
+ * Returns the weekday index of the 1st of the month, relative to
+ * `weekStartsOn` (JS Date.getDay() convention: 0=Sunday..6=Saturday).
+ * Defaults to 1 (Monday) — the calendar's week-start policy is a locale
+ * property (see lib/i18n.ts getWeekStartsOn), never inferred from the UI
+ * language or timezone.
  */
-export const getFirstWeekdayOfMonth = (year: number, month: number): number => {
+export const getFirstWeekdayOfMonth = (year: number, month: number, weekStartsOn: 0 | 1 = 1): number => {
   const day = new Date(year, month, 1).getDay();
-  return day === 0 ? 6 : day - 1; // Convert Sunday=0 to Monday-start
+  return (day - weekStartsOn + 7) % 7;
 };
 
 /**
@@ -98,3 +102,13 @@ export const addMonths = (year: number, month: number, delta: number): { year: n
   const d = new Date(year, month + delta, 1);
   return { year: d.getFullYear(), month: d.getMonth() };
 };
+
+/**
+ * Reorders a 7-item Sunday-first label list (index 0 = Sunday, matching
+ * Date.getDay()) to start at `weekStartsOn`, so weekday headers stay in
+ * sync with getFirstWeekdayOfMonth for any week-start policy.
+ */
+export const orderWeekdayLabels = (sundayFirstLabels: string[], weekStartsOn: 0 | 1 = 1): string[] => [
+  ...sundayFirstLabels.slice(weekStartsOn),
+  ...sundayFirstLabels.slice(0, weekStartsOn),
+];
