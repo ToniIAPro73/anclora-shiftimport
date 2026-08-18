@@ -1,5 +1,13 @@
 export type ShiftCategory = 'Mañana' | 'Tarde' | 'Noche';
-export type ShiftOrigin = 'MAN' | 'PDF';
+
+/**
+ * How the shift entered the app (what the user did), NOT the file format.
+ * 'PDF' from legacy persisted data is normalized to 'IMP' on load.
+ */
+export type ShiftOrigin = 'MAN' | 'IMP';
+
+/** Source file format of an imported shift (undefined for manual entries). */
+export type ShiftSourceFormat = 'pdf' | 'png' | 'jpg' | 'jpeg' | 'webp' | 'csv' | 'xlsx' | 'xls' | 'text' | string;
 
 export interface Shift {
   id: string;
@@ -8,6 +16,7 @@ export interface Shift {
   endTime: string; // HH:mm
   location: string;
   origin: ShiftOrigin;
+  sourceFormat?: ShiftSourceFormat;
 }
 
 export interface ShiftWithDerived extends Shift {

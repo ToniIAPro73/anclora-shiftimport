@@ -44,6 +44,9 @@ async function extractPdfTextItems(file: File): Promise<PdfTextItem[]> {
   return items;
 }
 
+/** Exported so the multi-format router reuses the same PDF extraction. */
+export { extractPdfTextItems };
+
 export async function detectPdfDocumentType(file: File): Promise<PdfDocumentType> {
   const items = await extractPdfTextItems(file);
   return detectPdfDocumentTypeFromItems(items);

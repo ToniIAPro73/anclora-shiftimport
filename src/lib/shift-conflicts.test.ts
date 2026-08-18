@@ -60,7 +60,7 @@ describe('findShiftConflict', () => {
   });
 
   it('ignores shifts of a different origin on the same day', () => {
-    const existing = [baseShift({ id: 'a', origin: 'PDF', startTime: '08:00', endTime: '14:00' })];
+    const existing = [baseShift({ id: 'a', origin: 'IMP', startTime: '08:00', endTime: '14:00' })];
     const incoming = baseShift({ id: 'b', origin: 'MAN', startTime: '16:00', endTime: '22:00' });
     expect(findShiftConflict(existing, incoming)).toBeNull();
   });

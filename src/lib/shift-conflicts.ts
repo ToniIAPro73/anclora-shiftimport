@@ -4,6 +4,7 @@
  * the same date and origin, honoring the configurable shift-type registry.
  */
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './shifts';
+import { shiftTypeCountsAsWork } from './shift-types';
 import { normalizeShift } from './storage';
 import { parseHHMM } from './time';
 import { Shift } from './types';
@@ -65,7 +66,9 @@ export function findShiftConflict(current: Shift[], incoming: Shift): string | n
   if (incomingType === 'Libre') {
     const incompatible = comparable.find((shift) => {
       const existingType = getShiftType(shift);
-      return existingType === 'Regular' || existingType === 'JT' || existingType === 'Libre';
+      // Generic: Libre conflicts with any type that counts as work plus
+      // explicit Libre entries. No company-specific type is hardcoded.
+      return shiftTypeCountsAsWork(existingType) || existingType === 'Libre';
     });
 
     if (incompatible) {
@@ -73,7 +76,7 @@ export function findShiftConflict(current: Shift[], incoming: Shift): string | n
     }
   }
 
-  if (incomingType === 'Regular' || incomingType === 'JT') {
+  if (shiftTypeCountsAsWork(incomingType) && incomingType !== 'Extras') {
     const incompatible = comparable.find((shift) => getShiftType(shift) === 'Libre');
 
     if (incompatible) {

@@ -10,6 +10,7 @@ import {
   isZeroDurationShift,
 } from './shifts';
 import { mergeShiftTypeOverrides, SHIFT_TYPE_PRESET_EXAMPLE } from './shift-types';
+import { normalizeShift } from './storage';
 import { Shift } from './types';
 
 setupLocalStorageMock();
@@ -75,10 +76,16 @@ describe('hasShiftTimes / isZeroDurationShift / getShiftOrigin', () => {
     expect(hasShiftTimes(shift({ startTime: '', endTime: '' }))).toBe(false);
   });
 
-  it('treats Libre as zero duration and PDF origin as PDF', () => {
+  it('treats Libre as zero duration and imported origin as IMP', () => {
     expect(isZeroDurationShift(shift({ startTime: '', endTime: '', location: 'Libre' }))).toBe(true);
-    expect(getShiftOrigin(shift({ origin: 'PDF' }))).toBe('PDF');
     expect(getShiftOrigin(shift({ origin: 'MAN' }))).toBe('MAN');
+    expect(getShiftOrigin(shift({ origin: 'IMP' }))).toBe('IMP');
+  });
+
+  it('normalizes legacy persisted PDF origin to the generic import origin', () => {
+    const legacy = { ...shift({}), origin: 'PDF' } as unknown as Shift;
+    expect(getShiftOrigin(legacy)).toBe('IMP');
+    expect(normalizeShift(legacy).origin).toBe('IMP');
   });
 });
 

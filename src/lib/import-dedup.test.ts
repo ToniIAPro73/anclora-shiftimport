@@ -15,7 +15,7 @@ const shift = (overrides: Partial<Shift> = {}): Shift => ({
   startTime: '08:00',
   endTime: '14:00',
   location: '',
-  origin: 'PDF',
+  origin: 'IMP',
   ...overrides,
 });
 
@@ -84,8 +84,8 @@ describe('classifyImportChanges', () => {
   });
 
   it('classifies a shift whose type changed at the same slot as CHANGED', () => {
-    const existing = [shift({ id: 'a', location: 'Libre', startTime: '08:00', endTime: '14:00', origin: 'PDF' })];
-    const incoming = [shift({ id: 'b', startTime: '08:00', endTime: '14:00', origin: 'PDF' })];
+    const existing = [shift({ id: 'a', location: 'Libre', startTime: '08:00', endTime: '14:00', origin: 'IMP' })];
+    const incoming = [shift({ id: 'b', startTime: '08:00', endTime: '14:00', origin: 'IMP' })];
     const report = classifyImportChanges(existing, incoming);
     expect(report.changed.length).toBe(1);
     expect(report.new.length).toBe(0);

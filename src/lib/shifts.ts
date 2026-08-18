@@ -34,7 +34,7 @@ export const hasShiftTimes = (shift: Shift): boolean =>
 
 export const isFreeShift = (shift: Shift): boolean => getShiftType(shift) === 'Libre';
 export const isZeroDurationShift = (shift: Shift): boolean => !shiftTypeCountsAsWork(getShiftType(shift));
-export const getShiftOrigin = (shift: Shift): ShiftOrigin => shift.origin === 'PDF' ? 'PDF' : 'MAN';
+export const getShiftOrigin = (shift: Shift): ShiftOrigin => shift.origin === 'MAN' ? 'MAN' : 'IMP';
 
 /**
  * Pure functions for shift business logic.

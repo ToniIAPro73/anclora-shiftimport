@@ -23,7 +23,9 @@ export const normalizeShift = (shift: Shift): Shift => ({
   startTime: shift.startTime.trim(),
   endTime: shift.endTime.trim(),
   location: shift.location.trim(),
-  origin: shift.origin === 'PDF' ? 'PDF' : 'MAN',
+  // Legacy 'PDF' origin (persisted by the old importer) normalizes to the
+  // generic import origin; the file format lives in sourceFormat.
+  origin: shift.origin === 'MAN' ? 'MAN' : 'IMP',
 });
 
 const writeLocalShifts = (shifts: Shift[]): void => {
