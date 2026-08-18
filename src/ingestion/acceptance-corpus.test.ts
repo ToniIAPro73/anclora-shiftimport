@@ -329,7 +329,12 @@ async function runFixture(fx: Fixture): Promise<void> {
 }
 
 describe('Phase 0 M0 acceptance corpus (manifest-driven)', () => {
-  it('executes the full corpus and enforces integrity invariants', async () => {
+  // Timeout 20s: this single test parses the whole fixture corpus with the
+  // real pipeline. The first getDocument call loads the pdfjs fake worker
+  // (pdf.worker.min.mjs, ~1MB) in-process — Node has no DOM Worker — and the
+  // exceljs graph is imported lazily per worker. Under full-suite parallel
+  // load that one-time initialization can exceed the 5s default.
+  it('executes the full corpus and enforces integrity invariants', { timeout: 20000 }, async () => {
     const manifest = JSON.parse(readFileSync(join(CORPUS_ROOT, 'manifest.json'), 'utf-8'));
     const fixtures: Fixture[] = manifest.fixtures;
     expect(fixtures.length).toBeGreaterThanOrEqual(17);

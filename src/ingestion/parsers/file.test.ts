@@ -113,7 +113,10 @@ describe('parseEmployeeShiftsFromFile — CSV TYPE_A', () => {
 });
 
 describe('extractExcelItems', () => {
-  it('reads an in-memory workbook as positioned items', async () => {
+  // Timeout 20s: exceljs is a large module graph imported dynamically inside
+  // the test body (here and in extractExcelItems). The first import in a cold
+  // worker under full-suite CPU contention can exceed the 5s default.
+  it('reads an in-memory workbook as positioned items', { timeout: 20000 }, async () => {
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Cuadrante');
