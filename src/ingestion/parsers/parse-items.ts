@@ -5,11 +5,16 @@
  * synthetic fixtures.
  */
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
+import { IngestionError } from '../../lib/ingestion-errors';
 import { getDaysInMonth } from '../../lib/week';
 import { detectCalendarContext } from '../core/calendar-context';
 import { clusterByX, mapColumnGroupsToDays } from '../core/clustering';
 import { getDayColumnsForPage } from '../core/day-columns';
-import { EmployeeSelector, findEmployeeRowItems } from '../core/row-detection';
+import {
+  countEmployeeNameCandidates,
+  EmployeeSelector,
+  findEmployeeRowItems,
+} from '../core/row-detection';
 import { buildShiftEntriesForDay } from '../core/shift-builder';
 import { deduceYearFromItems, PdfTextItem } from '../core/text-items';
 import { getIngestionProfile } from '../profiles';
@@ -32,33 +37,66 @@ export function parseShiftsFromItems(
   context: CalendarImportContext,
   selector: EmployeeSelector,
 ): ParsedCalendarShift[] {
+  if (allItems.length === 0) {
+    throw new IngestionError('EMPTY_DOCUMENT', 'El documento no contiene texto extraíble.');
+  }
+
   const profile = getIngestionProfile(detectPdfDocumentTypeFromItems(allItems));
   if (!profile) {
-    throw new Error('No se ha podido identificar el formato del PDF para procesarlo correctamente.');
+    throw new IngestionError(
+      'UNSUPPORTED_LAYOUT',
+      'No se ha podido identificar el formato del documento para procesarlo correctamente.',
+    );
+  }
+
+  const targetIds = selector.employeeIdentifiers
+    .map((value) => value.replace(/\D/g, ''))
+    .filter((value) => value.length > 0);
+
+  // Without a disambiguating id, an unambiguous name match is required:
+  // zero candidates = UNKNOWN_EMPLOYEE, several candidates = we must not
+  // auto-pick one silently (corpus GN-01/GN-02).
+  if (targetIds.length === 0) {
+    const nameCandidates = countEmployeeNameCandidates(allItems, selector.employeeName, profile.rowWindow.markerMaxX);
+    if (nameCandidates === 0) {
+      throw new IngestionError(
+        'UNKNOWN_EMPLOYEE',
+        profile.errors.employeeNotFound
+          .replace('{name}', selector.employeeName)
+          .replace('{id}', ''),
+      );
+    }
+    if (nameCandidates > 1) {
+      throw new IngestionError(
+        'AMBIGUOUS_EMPLOYEE',
+        `El nombre ${selector.employeeName} coincide con varias filas del documento. Indica el identificador de empleado para desambiguar.`,
+      );
+    }
   }
 
   const row = findEmployeeRowItems(allItems, selector, profile.rowWindow);
   if (!row) {
-    throw new Error(
+    throw new IngestionError(
+      'UNKNOWN_EMPLOYEE',
       profile.errors.employeeNotFound
         .replace('{name}', selector.employeeName)
-        .replace('{id}', selector.employeeIdentifiers[0] ?? ''),
+        .replace('{id}', targetIds[0] ?? ''),
     );
   }
 
   const columnGroups = clusterByX(row.rowItems, profile.clusterTolerance);
   if (profile.errors.noColumnGroups && columnGroups.length === 0) {
-    throw new Error(profile.errors.noColumnGroups);
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noColumnGroups);
   }
 
   const dayColumns = getDayColumnsForPage(allItems, row.page, context, profile.dayHeader);
   if (dayColumns.length === 0) {
-    throw new Error(profile.errors.noDayHeaders);
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noDayHeaders);
   }
 
   const mappedColumns = mapColumnGroupsToDays(columnGroups, dayColumns, profile.columnMatchMaxDistance);
   if (profile.errors.noMappedColumns && mappedColumns.length === 0) {
-    throw new Error(profile.errors.noMappedColumns);
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noMappedColumns);
   }
 
   let shifts: ParsedCalendarShift[] = [];

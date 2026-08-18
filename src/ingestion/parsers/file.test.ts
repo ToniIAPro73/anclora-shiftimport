@@ -9,6 +9,7 @@ import {
   extractExcelItems,
   extractTabularItems,
   parseEmployeeShiftsFromFile,
+  parseRosterCsv,
 } from './file';
 
 setupLocalStorageMock();
@@ -42,7 +43,7 @@ describe('classifyDocument', () => {
     expect(classifyDocument(makeFile('foto.JPG', ''))).toBe('image');
     expect(classifyDocument(makeFile('turnos.xlsx', ''))).toBe('excel');
     expect(classifyDocument(makeFile('turnos.csv', ''))).toBe('csv');
-    expect(classifyDocument(makeFile('turnos.txt', ''))).toBe('text');
+    expect(classifyDocument(makeFile('turnos.txt', ''))).toBe('unknown');
     expect(classifyDocument(makeFile('turnos.odt', ''))).toBe('unknown');
   });
 
@@ -98,10 +99,16 @@ describe('parseEmployeeShiftsFromFile — CSV TYPE_A', () => {
     });
   });
 
-  it('throws for an unsupported document kind', async () => {
+  it('rejects plain text files as UNSUPPORTED_FORMAT (corpus GN-05)', async () => {
+    const file = makeFile('turnos.txt', 'EMP-01 2026-10-01 08:00-16:00', 'text/plain');
+    await expect(parseEmployeeShiftsFromFile(file, { month: 9, year: 2026 }, ANA_SELECTOR))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_FORMAT' });
+  });
+
+  it('throws UNSUPPORTED_FORMAT for an unsupported document kind', async () => {
     const file = makeFile('turnos.odt', 'hola', 'application/vnd.oasis.opendocument.text');
     await expect(parseEmployeeShiftsFromFile(file, { month: 7, year: 2026 }, ANA_SELECTOR))
-      .rejects.toThrow(/no soportado/i);
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_FORMAT' });
   });
 });
 
@@ -160,12 +167,22 @@ describe('parseEmployeeShiftsFromFile — canonical roster CSV', () => {
     ]);
   });
 
+  it('resolves weekday slots against the explicit weekStart (corpus GS-06 style)', () => {
+    const csv = [
+      'worker_id,slots',
+      'OP-100,Mon 00-04,Tue 20-24',
+    ].join('\n');
+    const shifts = parseRosterCsv(csv, { weekStart: '2026-10-05' }) ?? [];
+    expect(shifts.map((s) => ({ date: s.date, startTime: s.startTime, endTime: s.endTime }))).toEqual([
+      { date: '2026-10-05', startTime: '00:00', endTime: '04:00' },
+      { date: '2026-10-06', startTime: '20:00', endTime: '24:00' },
+    ]);
+  });
+
   it('is independent of the file extension: same roster via .txt works', async () => {
     const file = makeFile('roster.txt', ROSTER_CSV, 'text/plain');
-    const context = await detectCalendarContext(file);
-    const shifts = await parseEmployeeShiftsFromFile(file, context, ANA_SELECTOR);
-    expect(shifts[0]?.sourceFormat).toBe('text');
-    expect(shifts.length).toBe(4);
+    await expect(parseEmployeeShiftsFromFile(file, { month: 9, year: 2026 }, ANA_SELECTOR))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_FORMAT' });
   });
 
   it('accepts English and accented header aliases', async () => {

@@ -14,6 +14,7 @@
  * PDF implementation. Capability metadata lives in ../formats.ts.
  */
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
+import { IngestionError } from '../../lib/ingestion-errors';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
 import { EmployeeSelector } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
@@ -23,6 +24,9 @@ import { resolveShiftTypeId } from '../../lib/shift-types';
 
 export type DocumentKind = 'pdf' | 'image' | 'excel' | 'csv' | 'text' | 'unknown';
 
+// Text files are intentionally NOT a supported import kind: a .txt roster is
+// rejected as UNSUPPORTED_FORMAT (corpus GN-05). CSV is the supported
+// tabular text format.
 const KIND_BY_EXTENSION: Record<string, DocumentKind> = {
   pdf: 'pdf',
   png: 'image',
@@ -32,7 +36,6 @@ const KIND_BY_EXTENSION: Record<string, DocumentKind> = {
   xlsx: 'excel',
   xls: 'excel',
   csv: 'csv',
-  txt: 'text',
 };
 
 export function classifyDocument(file: File): DocumentKind {
@@ -171,11 +174,13 @@ export const ROSTER_HEADER_ALIASES: Record<string, string[]> = {
   end: ['fin', 'hora fin', 'salida', 'hasta', 'end'],
   type: ['tipo', 'turno', 'tipo turno', 'tipo de turno', 'shift type', 'type'],
   employee: ['empleado', 'nombre', 'trabajador', 'employee'],
-  employeeId: ['id', 'legajo', 'identificador', 'employee id'],
+  employeeId: ['id', 'legajo', 'identificador', 'employee id', 'worker id', 'member id'],
+  value: ['value', 'registro', 'detalle', 'turnos', 'slots', 'allotment'],
 };
 
 function normalizeHeader(value: string): string {
-  return normalizeText(value);
+  // underscores become spaces so worker_id matches the alias "worker id"
+  return normalizeText(value).replace(/_/g, ' ');
 }
 
 /** Parses dd/mm/yyyy, d/m/yyyy, dd-mm-yyyy and ISO yyyy-mm-dd. */
@@ -204,15 +209,97 @@ function parseRosterDate(value: string): string | null {
 
 const splitRosterLine = (line: string): string[] => line.split(/[,;\t]/).map((cell) => cell.trim());
 
+const WEEKDAY_OFFSET: Record<string, number> = {
+  mon: 0, lunes: 0, lun: 0,
+  tue: 1, martes: 1, mar: 1,
+  wed: 2, miercoles: 2, mie: 2, mié: 2,
+  thu: 3, jueves: 3, jue: 3,
+  fri: 4, viernes: 4, vie: 4,
+  sat: 5, sabado: 5, sab: 5, sábado: 5,
+  sun: 6, domingo: 6, dom: 6,
+};
+
+/** Parses a slot cell like "Mon 00-04", "Tue 20-24" or "22:00-06:00". */
+function parseRosterSlot(
+  cell: string,
+  rowDate: string | null,
+  weekStart: string | null,
+): Array<{ date: string; start: string; end: string }> | null {
+  const trimmed = cell.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  // Free/absence/unknown codes (VAC, BAJA, AUS, L, XYZ, ...) produce an
+  // untimed shift resolved by the caller against the type registry.
+  if (!/\d/.test(trimmed)) {
+    return null;
+  }
+
+  const weekday = trimmed.match(/^(mon|tue|wed|thu|fri|sat|sun)\s+(\d{1,2})-(\d{1,2})$/i);
+  if (weekday) {
+    if (!weekStart) {
+      return null;
+    }
+    const [year, month, day] = weekStart.split('-').map(Number);
+    const offset = WEEKDAY_OFFSET[weekday[1].toLowerCase()];
+    const date = new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10);
+    return [{
+      date,
+      start: normalizeTimeToken(`${weekday[2]}:00`),
+      end: normalizeTimeToken(`${weekday[3]}:00`),
+    }];
+  }
+
+  // Split ranges: "09:00-13:00 + 17:00-21:00"
+  const split = trimmed.split(/\s*\+\s*/).map((part) => part.trim()).filter(Boolean);
+  if (split.length > 1) {
+    const out: Array<{ date: string; start: string; end: string }> = [];
+    for (const part of split) {
+      const parsed = parseRosterSlot(part, rowDate, weekStart);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        return [];
+      }
+      out.push(...parsed);
+    }
+    return out;
+  }
+
+  const range = trimmed.match(/^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/);
+  if (range && rowDate) {
+    return [{
+      date: rowDate,
+      start: normalizeTimeToken(`${range[1]}:${range[2]}`),
+      end: normalizeTimeToken(`${range[3]}:${range[4]}`),
+    }];
+  }
+
+  return null;
+}
+
+export interface RosterParseOptions {
+  /** ISO date (YYYY-MM-DD) of the week start; required for weekday slots. */
+  weekStart?: string;
+}
+
 /**
  * Parses a canonical roster CSV into shifts. Flexible header aliases;
- * only the date column is required. Produces shifts directly (no positioned
- * items needed) and marks sourceFormat by the caller.
+ * a date column (or weekday slots with weekStart) is required. Produces
+ * shifts directly (no positioned items needed) and marks sourceFormat by
+ * the caller.
  */
-export function parseRosterCsv(text: string): ParsedCalendarShift[] | null {
+export function parseRosterCsv(text: string, options: RosterParseOptions = {}): ParsedCalendarShift[] | null {
   const rows = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (rows.length < 2) {
     return null;
+  }
+
+  // A quoted field means the simple CSV parser cannot trust the structure.
+  if (text.includes('"')) {
+    throw new IngestionError(
+      'MALFORMED_INPUT',
+      'El CSV contiene campos entre comillas no soportados por el importador simple.',
+    );
   }
 
   const headers = splitRosterLine(rows[0]);
@@ -225,47 +312,123 @@ export function parseRosterCsv(text: string): ParsedCalendarShift[] | null {
     }
   }
 
-  // Roster detected only when a date column exists; otherwise the document
-  // is treated as a tabular grid.
-  if (!columnByField.has('date')) {
+  const hasDate = columnByField.has('date');
+  const hasValue = columnByField.has('value');
+  const hasStructured = columnByField.has('start') || columnByField.has('end') || columnByField.has('type');
+
+  // Slot-mode rosters (e.g. `worker_id,slots`) have no date column.
+  if (!hasDate && !(hasValue && !hasStructured)) {
     return null;
   }
 
-  const dateCol = columnByField.get('date') as number;
+  const dateCol = columnByField.get('date');
   const startCol = columnByField.get('start');
   const endCol = columnByField.get('end');
   const typeCol = columnByField.get('type');
+  const valueCol = columnByField.get('value');
+  const employeeIdCol = columnByField.get('employeeId');
 
   const shifts: ParsedCalendarShift[] = [];
   for (const line of rows.slice(1)) {
     const cells = splitRosterLine(line);
-    const date = parseRosterDate(cells[dateCol] ?? '');
-    if (!date) {
+    const rowDate = dateCol !== undefined ? parseRosterDate(cells[dateCol] ?? '') : null;
+    const workerId = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').trim() : '';
+
+    // Slot-mode: every value cell beyond the marker may hold one or more slots.
+    if (valueCol !== undefined && !rowDate) {
+      for (let col = valueCol; col < cells.length; col += 1) {
+        const cell = cells[col] ?? '';
+        const slots = parseRosterSlot(cell, null, options.weekStart ?? null);
+        const base = {
+          notes: workerId || null,
+          isValid: true,
+        };
+        if (slots === null) {
+          // Untimed code for this worker on this slot position.
+          const typeId = cell ? resolveShiftTypeId(cell) : null;
+          shifts.push({
+            date: '',
+            startTime: '',
+            endTime: '',
+            origin: 'IMP',
+            confidence: 0.8,
+            rawText: cell,
+            shiftType: typeId,
+            ...base,
+            color: null,
+          });
+          continue;
+        }
+        for (const slot of slots) {
+          shifts.push({
+            date: slot.date,
+            startTime: slot.start,
+            endTime: slot.end,
+            origin: 'IMP',
+            confidence: 0.9,
+            rawText: cell,
+            shiftType: 'Regular',
+            ...base,
+            color: null,
+          });
+        }
+      }
+      continue;
+    }
+
+    if (!rowDate) {
       continue;
     }
 
     const rawStart = startCol !== undefined ? (cells[startCol] ?? '') : '';
     const rawEnd = endCol !== undefined ? (cells[endCol] ?? '') : '';
+    const valueRaw = valueCol !== undefined ? (cells[valueCol] ?? '') : '';
     const startTime = rawStart ? normalizeTimeToken(rawStart) : '';
     const endTime = rawEnd ? normalizeTimeToken(rawEnd) : '';
     const hasTime = Boolean(startTime && endTime);
-
     const rawType = typeCol !== undefined ? (cells[typeCol] ?? '') : '';
-    const typeId = rawType ? resolveShiftTypeId(rawType) : null;
+    const effectiveValue = valueRaw || rawType;
 
-    if (!hasTime && !typeId) {
+    // value cell may hold "22:00-06:00", "(split) + (split)" or a code.
+    let slots: Array<{ date: string; start: string; end: string }> | null | undefined;
+    if (effectiveValue && !hasTime) {
+      slots = parseRosterSlot(effectiveValue, rowDate, options.weekStart ?? null);
+    }
+
+    if (Array.isArray(slots) && slots.length > 0 && !hasTime) {
+      for (const slot of slots) {
+        shifts.push({
+          date: slot.date,
+          startTime: slot.start,
+          endTime: slot.end,
+          origin: 'IMP',
+          isValid: true,
+          confidence: 0.9,
+          rawText: line,
+          shiftType: 'Regular',
+          notes: null,
+          color: null,
+        });
+      }
+      continue;
+    }
+
+    const typeId = rawType ? resolveShiftTypeId(rawType) : null;
+    if (!hasTime && !typeId && !effectiveValue) {
       continue;
     }
 
     const isAbsence = typeId === 'Libre' || typeId === 'Vacaciones';
     shifts.push({
-      date,
+      date: rowDate,
       startTime: isAbsence && !hasTime ? '' : startTime,
       endTime: isAbsence && !hasTime ? '' : endTime,
       origin: 'IMP',
       isValid: true,
-      confidence: 1.0,
-      rawText: line,
+      confidence: hasTime ? 1.0 : 0.8,
+      // For value-based rows the rawText is the value cell itself so callers
+      // can classify VAC/BAJA/AUS/L/XYZ codes without scanning the line.
+      rawText: hasTime || !effectiveValue ? line : effectiveValue,
       shiftType: typeId ?? (hasTime ? 'Regular' : null),
       notes: null,
       color: null,
@@ -285,25 +448,31 @@ export async function extractDocumentItems(file: File): Promise<PdfTextItem[]> {
     case 'excel':
       return extractExcelItems(file);
     case 'csv':
-    case 'text':
       return extractTabularItems(await file.text());
     default:
-      throw new Error(
-        'Formato de documento no soportado. Usa PDF, Excel, CSV, texto o una imagen.',
+      throw new IngestionError(
+        'UNSUPPORTED_FORMAT',
+        'Formato de documento no soportado. Formatos admitidos: PDF, PNG/JPG/WebP, CSV y XLSX.',
       );
   }
 }
 
 async function rosterShiftsFor(file: File): Promise<ParsedCalendarShift[] | null> {
   const kind = classifyDocument(file);
-  if (kind !== 'csv' && kind !== 'text') {
+  if (kind !== 'csv') {
     return null;
   }
   const roster = parseRosterCsv(await file.text());
-  if (!roster || roster.length === 0) {
-    return null;
+  if (roster === null) {
+    return null; // not a roster → tabular grid path
   }
-  return roster.map((shift) => ({ ...shift, sourceFormat: kind }));
+  if (roster.length === 0) {
+    throw new IngestionError(
+      'NO_SHIFTS_FOUND',
+      'No se detectaron turnos para el empleado indicado dentro del documento.',
+    );
+  }
+  return roster.map((shift) => ({ ...shift, sourceFormat: 'csv' }));
 }
 
 export async function detectCalendarContext(file: File): Promise<CalendarImportContext> {
@@ -322,6 +491,12 @@ export async function parseEmployeeShiftsFromFile(
   selector: EmployeeSelector,
 ): Promise<ParsedCalendarShift[]> {
   const kind = classifyDocument(file);
+  if (kind === 'unknown' || kind === 'text') {
+    throw new IngestionError(
+      'UNSUPPORTED_FORMAT',
+      'Formato de documento no soportado. Formatos admitidos: PDF, PNG/JPG/WebP, CSV y XLSX.',
+    );
+  }
 
   const roster = await rosterShiftsFor(file);
   if (roster) {
@@ -329,6 +504,12 @@ export async function parseEmployeeShiftsFromFile(
   }
 
   const allItems = await extractDocumentItems(file);
-  return parseShiftsFromItems(allItems, context, selector)
-    .map((shift) => ({ ...shift, sourceFormat: kind }));
+  const shifts = parseShiftsFromItems(allItems, context, selector);
+  if (shifts.length === 0) {
+    throw new IngestionError(
+      'NO_SHIFTS_FOUND',
+      'No se detectaron turnos para el empleado indicado dentro del documento.',
+    );
+  }
+  return shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
 }

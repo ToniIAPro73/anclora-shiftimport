@@ -60,18 +60,51 @@ export interface EmployeeRow {
   category: string;
 }
 
-function findNameMarkerIndex(pageItems: PdfTextItem[], nameTokens: string[], markerMaxX: number): number {
+export function findNameMarkerIndex(pageItems: PdfTextItem[], nameTokens: string[], markerMaxX: number): number {
   return pageItems.findIndex((item) => {
     if (item.x >= markerMaxX || !isEmployeeNameLabel(item.text)) {
       return false;
     }
-    const normalized = normalizeText(item.text);
-    const words = normalized.split(' ');
-    const matchingTokens = nameTokens.filter((token) =>
-      words.some((word) => word.startsWith(token) || token.startsWith(word)),
-    );
-    return matchingTokens.length >= Math.min(2, nameTokens.length);
+    return matchesNameTokens(item.text, nameTokens);
   });
+}
+
+/** True when the item text prefix-matches at least min(2, tokens) name tokens. */
+export function matchesNameTokens(text: string, nameTokens: string[]): boolean {
+  const normalized = normalizeText(text);
+  const words = normalized.split(' ');
+  const matchingTokens = nameTokens.filter((token) =>
+    words.some((word) => word.startsWith(token) || token.startsWith(word)),
+  );
+  return matchingTokens.length >= Math.min(2, nameTokens.length);
+}
+
+/**
+ * Counts distinct employee-name label items that match the selector name
+ * across all pages (same matching rule as findNameMarkerIndex). Used to
+ * detect AMBIGUOUS_EMPLOYEE before any row is selected: more than one
+ * candidate with no disambiguating id means we must not auto-pick.
+ */
+export function countEmployeeNameCandidates(
+  items: PdfTextItem[],
+  employeeName: string,
+  markerMaxX: number,
+): number {
+  const nameTokens = normalizeText(employeeName).split(' ').filter((token) => token.length >= 3);
+  if (nameTokens.length === 0) {
+    return 0;
+  }
+  const pages = Array.from(new Set(items.map((item) => item.page)));
+  let candidates = 0;
+  for (const page of pages) {
+    const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
+    for (const item of pageItems) {
+      if (item.x < markerMaxX && isEmployeeNameLabel(item.text) && matchesNameTokens(item.text, nameTokens)) {
+        candidates += 1;
+      }
+    }
+  }
+  return candidates;
 }
 
 function resolveCeiling(
