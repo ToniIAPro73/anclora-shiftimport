@@ -12,7 +12,7 @@
 - `src/components/shift-dashboard/`: UI del calendario, métricas e importación.
 - `src/lib/types.ts`: tipos `Shift` y derivados.
 - `src/lib/profile.ts`: `UserProfile` configurable (identidad del usuario, sin PII por defecto).
-- `src/lib/shift-types.ts`: registro `ShiftTypeDefinition` + resolver de alias del parser.
+- `src/lib/shift-types.ts`: registro `ShiftTypeDefinition` neutro + overrides de usuario (localStorage `anclora_shiftimport_shift_types_v1`) + resolver de alias del parser.
 - `src/lib/storage.ts`: persistencia en `localStorage` (sync remoto opt-in vía `VITE_ENABLE_REMOTE_STORAGE`).
 - `src/lib/week.ts`, `src/lib/time.ts`: cálculos de calendario, fechas y horas.
 - `src/lib/shifts.ts`: lógica de negocio de turnos y métricas.
@@ -37,6 +37,12 @@
 - Mantener el flujo: detectar, previsualizar, editar y confirmar.
 - Nada de PII hardcodeada: identidad de usuario vive en `UserProfile` configurable (Phase 0).
 - Tipos de turno configurables vía `ShiftTypeDefinition`; JT no es feature especial.
+
+## Tipos de turno configurables
+- El registro efectivo es `DEFAULT_SHIFT_TYPES` (neutro: Regular, Libre, Vacaciones, Extras) + overrides del usuario en localStorage (`anclora_shiftimport_shift_types_v1`).
+- API en `src/lib/shift-types.ts`: `getShiftTypes()` (registro efectivo), `loadShiftTypeOverrides`/`saveShiftTypeOverrides`, `mergeShiftTypeOverrides`, `upsertShiftType`, `setShiftTypeAlias`, `resolveShiftTypeId` (alias personalizados → alias por defecto → match por id/label).
+- Los tipos/alias específicos de empresa heredados de GroundSync (JT, `dl`, `aj`, `td`) NO son defaults del producto: viven en `SHIFT_TYPE_PRESET_EXAMPLE`. Para restaurar el comportamiento heredado: `mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE)`.
+- No hay UI de gestión de tipos todavía (no existe lugar natural en los modales actuales); la capacidad está disponible vía API + persistencia.
 - Fixtures de tests siempre sintéticos; nunca cuadrantes reales.
 - Evitar dependencias nuevas sin razón clara; el repo es ligero y mayormente frontend.
 - No renombrar ni referenciar GroundSync salvo como provenance histórica.

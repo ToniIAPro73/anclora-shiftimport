@@ -1,6 +1,6 @@
 import { Shift, ShiftCategory, ShiftOrigin, ShiftWithDerived, WeeklyStats } from './types';
 import { durationMinutes, parseHHMM } from './time';
-import { DEFAULT_SHIFT_TYPES, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
+import { getShiftTypes, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
 
 const isEmptyTime = (value: string): boolean => value.trim() === '';
 
@@ -152,8 +152,9 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
   const hoursByType: Record<string, number> = {};
   const daysByTypeSets: Record<string, Set<string>> = {};
   const knownTypeIds = new Set<string>();
+  const shiftTypes = getShiftTypes();
 
-  for (const type of DEFAULT_SHIFT_TYPES) {
+  for (const type of shiftTypes) {
     hoursByType[type.id] = 0;
     daysByTypeSets[type.id] = new Set<string>();
     knownTypeIds.add(type.id);
@@ -184,7 +185,7 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
 
   const daysByType: Record<string, number> = {};
   let totalWorkedDays = 0;
-  for (const type of DEFAULT_SHIFT_TYPES) {
+  for (const type of shiftTypes) {
     daysByType[type.id] = daysByTypeSets[type.id].size;
     totalWorkedDays += daysByTypeSets[type.id].size;
   }

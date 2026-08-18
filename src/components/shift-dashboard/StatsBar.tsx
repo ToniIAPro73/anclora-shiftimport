@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Shift, ShiftOrigin, WeeklyStats } from '../../lib/types';
 import { aggregateWeeklyStats, filterShiftsByOrigin } from '../../lib/shifts';
-import { DEFAULT_SHIFT_TYPES } from '../../lib/shift-types';
+import { getShiftTypes } from '../../lib/shift-types';
 
 interface StatsBarProps {
   currentMonthShifts: Shift[];
@@ -43,7 +43,7 @@ function formatTokenValue(hours: number, days: number): string {
 }
 
 function buildTypeCells(stats: WeeklyStats): StatsCell[] {
-  return DEFAULT_SHIFT_TYPES.map((type) => ({
+  return getShiftTypes().map((type) => ({
     kind: 'token' as const,
     label: type.shortLabel,
     value: formatTokenValue(stats.hoursByType[type.id] ?? 0, stats.daysByType[type.id] ?? 0),
