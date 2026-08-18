@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
-import { detectPdfCalendarContext, parseEmployeeShiftsFromPdf } from '../../lib/pdf-shift-parser';
+import { detectPdfCalendarContext, parseEmployeeShiftsFromPdf } from '../../ingestion/parsers/pdf';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
