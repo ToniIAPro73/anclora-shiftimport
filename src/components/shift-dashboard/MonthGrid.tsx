@@ -3,6 +3,8 @@ import { Shift } from '../../lib/types';
 import { getDaysInMonth, getFirstWeekdayOfMonth, toISODate } from '../../lib/week';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getShiftTypeColor } from '../../lib/shift-types';
+import { translateShiftTypeLabel } from '../../lib/i18n';
+import { useI18n } from '../../lib/use-i18n';
 import { Plus } from 'lucide-react';
 
 interface MonthGridProps {
@@ -13,9 +15,9 @@ interface MonthGridProps {
   onCreateShift: (date: string) => void;
 }
 
-const WEEKDAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-
 export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: MonthGridProps) => {
+  const { locale, t, tl } = useI18n();
+  const weekdayLabels = tl('calendar.weekdays');
   const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
   const [isTouchUi, setIsTouchUi] = useState(false);
 
@@ -71,11 +73,12 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
   };
 
   const renderShiftBadge = (shift: Shift) => {
-    const shiftType = getShiftType(shift);
+    const shiftTypeId = getShiftType(shift);
+    const shiftType = translateShiftTypeLabel(shiftTypeId, locale, shiftTypeId);
     const shiftOrigin = getShiftOrigin(shift);
-    const accentColor = getShiftTypeColor(shiftType);
+    const accentColor = getShiftTypeColor(shiftTypeId);
     const hasTimes = hasShiftTimes(shift);
-    const originPrefix = shiftOrigin === 'IMP' ? '(I)' : '(M)';
+    const originPrefix = shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
     const isExpanded = expandedShiftId === shift.id;
 
     return (
@@ -113,7 +116,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
     <div className="month-grid-shell">
       <div className="month-grid-root">
         <div className="month-weekdays-row">
-          {WEEKDAY_LABELS.map((label, index) => (
+          {weekdayLabels.map((label, index) => (
             <div
               key={label}
               className="month-weekday-cell"
@@ -173,8 +176,8 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
                       }
                     }}
                     disabled={hasVacationShift}
-                    aria-label={hasVacationShift ? `No se pueden añadir turnos el ${iso} porque hay vacaciones` : `Añadir turno el ${iso}`}
-                    title={hasVacationShift ? 'No se pueden añadir más turnos si hay Vacaciones' : 'Añadir turno'}
+                    aria-label={hasVacationShift ? t('calendar.addShiftBlockedAria', { date: iso }) : t('calendar.addShiftAria', { date: iso })}
+                    title={hasVacationShift ? t('calendar.addShiftBlockedTitle') : t('calendar.addShiftTitle')}
                   >
                     <Plus size={14} strokeWidth={2.2} />
                   </button>

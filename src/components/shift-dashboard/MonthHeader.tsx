@@ -1,11 +1,7 @@
 import { ChevronLeft, ChevronRight, PlusCircle, Settings } from 'lucide-react';
 import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
+import { useI18n } from '../../lib/use-i18n';
 import { TurnosLogo } from '../branding/TurnosLogo';
-
-const MONTH_NAMES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-];
 
 interface MonthHeaderProps {
   year: number;
@@ -19,8 +15,11 @@ interface MonthHeaderProps {
 }
 
 export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onOpenSettings, themeMode, onToggleTheme }: MonthHeaderProps) => {
+  const { locale, toggleLocale, t, tl } = useI18n();
   const themeEmoji = themeMode === 'light' ? '☀️' : themeMode === 'dark' ? '🌙' : '🖥️';
+  const themeLabel = themeMode === 'light' ? t('header.themeLight') : themeMode === 'dark' ? t('header.themeDark') : t('header.themeSystem');
   const identity = formatProfileIdentity(loadUserProfile());
+  const monthNames = tl('calendar.months');
 
   return (
     <div className="dashboard-header">
@@ -33,7 +32,7 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
           >
             Anclora ShiftImport
           </h1>
-          <p className="dashboard-subtitle">by Anclora Group</p>
+          <p className="dashboard-subtitle">{t('header.subtitle')}</p>
           {identity && <p className="dashboard-identity">{identity}</p>}
         </div>
       </div>
@@ -44,7 +43,7 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
             <ChevronLeft size={20} />
           </button>
           <div className="month-nav-label">
-            {MONTH_NAMES[month]} {year}
+            {monthNames[month]} {year}
           </div>
           <button className="month-nav-button" onClick={() => onNavigate(1)}>
             <ChevronRight size={20} />
@@ -56,19 +55,28 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
         <button
           onClick={onToggleTheme}
           className="theme-toggle"
-          title={`Tema: ${themeMode}`}
-          aria-label={`Cambiar tema. Actual: ${themeMode}`}
+          title={t('header.themeLabel', { mode: themeLabel })}
+          aria-label={t('header.themeToggleAria', { mode: themeLabel })}
         >
           <span>{themeEmoji}</span>
         </button>
-        <button onClick={onOpenSettings} className="theme-toggle" title="Ajustes" aria-label="Abrir ajustes">
+        <button
+          onClick={toggleLocale}
+          className="theme-toggle lang-toggle"
+          title={locale.toUpperCase()}
+          aria-label={t('header.languageToggleAria', { locale: locale.toUpperCase() })}
+        >
+          <span aria-hidden="true">{locale === 'es' ? '🇪🇸' : '🇬🇧'}</span>
+          <span>{locale.toUpperCase()}</span>
+        </button>
+        <button onClick={onOpenSettings} className="theme-toggle" title={t('settings.title')} aria-label={t('header.settingsAria')}>
           <Settings size={18} />
         </button>
         <button onClick={onImport} className="btn-outline dashboard-action-button">
-                  Importar
+                  {t('header.import')}
                 </button>
                 <button className="btn-gold dashboard-action-button dashboard-add-button" onClick={onAddShift}>
-          <PlusCircle size={18} /> <span>Añadir</span>
+          <PlusCircle size={18} /> <span>{t('header.add')}</span>
         </button>
       </div>
     </div>

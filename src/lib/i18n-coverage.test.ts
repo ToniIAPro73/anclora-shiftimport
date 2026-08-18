@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { translate, translateList } from './i18n';
+
+// Flat key inventory pulled straight from the components: every key actually
+// used via t()/tl() must resolve to a *different* string in es vs en (no
+// silent fallback to the Spanish default, no untranslated key echoed back).
+// header.subtitle ("by Anclora Group") is intentionally identical in both
+// locales — it's the product's brand line, not a translatable sentence.
+const T_KEYS = [
+  'header.themeDark', 'header.themeLight', 'header.themeSystem',
+  'header.settingsAria', 'header.import', 'header.add',
+  'stats.own', 'stats.company', 'stats.totalMonth', 'stats.totalYear', 'stats.month', 'stats.year',
+  'calendar.addShiftTitle', 'calendar.addShiftBlockedTitle',
+  'shiftModal.titleNew', 'shiftModal.titleEdit', 'shiftModal.dateLabel', 'shiftModal.startLabel',
+  'shiftModal.endLabel', 'shiftModal.typeLabel', 'shiftModal.confirm',
+  'importConflict.title', 'importConflict.description', 'importConflict.existing', 'importConflict.incoming',
+  'importConflict.skip', 'importConflict.abort', 'importConflict.replace',
+  'importModal.title', 'importModal.newImport', 'importModal.nameLabel', 'importModal.idLabel',
+  'importModal.monthLabel', 'importModal.yearLabel', 'importModal.uploadTitle', 'importModal.process',
+  'importModal.detected', 'importModal.colDate', 'importModal.colOrigin', 'importModal.colType',
+  'importModal.colStart', 'importModal.colEnd', 'importModal.emptyStateHint',
+  'settings.title', 'settings.tabProfile', 'settings.tabShiftTypes', 'settings.displayName',
+  'settings.identifiers', 'settings.employer', 'settings.timezone', 'settings.language',
+  'settings.saveProfile', 'settings.archive', 'settings.restore', 'settings.newType',
+  'privacy.resetTitle', 'privacy.resetButton',
+  'legalFooter.terms', 'legalFooter.privacy', 'legalFooter.legal', 'legalFooter.cookies',
+  'legalPage.titlePrivacy', 'legalPage.titleTerms', 'legalPage.titleLegal', 'legalPage.backHome',
+  'cookies.titleBanner', 'cookies.acceptAll', 'cookies.configure', 'cookies.rejectOptional',
+  'errors.UNKNOWN_EMPLOYEE', 'errors.NO_SHIFTS_FOUND', 'errors.UNSUPPORTED_FORMAT',
+];
+
+// A subset of T_KEYS that are full words/sentences and must read differently
+// per locale. Short technical tokens (ID, UTC, brand line) are excluded —
+// those are legitimately identical in both languages.
+const SAME_BY_DESIGN_KEYS = ['importModal.idLabel', 'legalFooter.cookies' /* loanwords/abbreviations, identical in es and en */];
+const MUST_DIFFER_KEYS = T_KEYS.filter((key) => !SAME_BY_DESIGN_KEYS.includes(key));
+
+describe('no-mixed-language: translation completeness', () => {
+  it('every referenced key resolves to a real (non-key-echoing) string in both locales', () => {
+    for (const key of T_KEYS) {
+      const es = translate('es', key);
+      const en = translate('en', key);
+      expect(es, `es:${key}`).not.toBe(key);
+      expect(en, `en:${key}`).not.toBe(key);
+    }
+  });
+
+  it('sentence/word-level keys read differently in es vs en (not silently sharing the Spanish default)', () => {
+    for (const key of MUST_DIFFER_KEYS) {
+      const es = translate('es', key);
+      const en = translate('en', key);
+      expect(es, `es === en for ${key}`).not.toBe(en);
+    }
+  });
+
+  it('the month and weekday lists are fully translated (no Spanish leaking into English)', () => {
+    const monthsEs = translateList('es', 'calendar.months');
+    const monthsEn = translateList('en', 'calendar.months');
+    expect(monthsEs).not.toEqual(monthsEn);
+    expect(monthsEn).toContain('January');
+    expect(monthsEn).not.toContain('Enero');
+
+    const weekdaysEs = translateList('es', 'calendar.weekdays');
+    const weekdaysEn = translateList('en', 'calendar.weekdays');
+    expect(weekdaysEs).toEqual(['L', 'M', 'X', 'J', 'V', 'S', 'D']);
+    expect(weekdaysEn).toEqual(['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']);
+  });
+});
+
+const SOURCE_ROOT = join(process.cwd(), 'src');
+
+function collectSourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stats = statSync(full);
+    if (stats.isDirectory()) {
+      collectSourceFiles(full, out);
+    } else if (/\.(tsx?|ts)$/.test(entry) && !entry.endsWith('.test.ts') && !entry.endsWith('.test.tsx')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+describe('no-mixed-language: residual PDF-only copy', () => {
+  it('no component hardcodes "Procesar PDF" (import is format-neutral, not PDF-only)', () => {
+    const offenders: string[] = [];
+    for (const file of collectSourceFiles(SOURCE_ROOT)) {
+      const content = readFileSync(file, 'utf-8');
+      if (/Procesar PDF|Process PDF/i.test(content)) {
+        offenders.push(file);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { Shift } from '../../lib/types';
 import { getShiftType, normalizeShiftTypeLabel } from '../../lib/shifts';
 import { getShiftTypes, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { translateShiftTypeLabel } from '../../lib/i18n';
+import { useI18n } from '../../lib/use-i18n';
+import { useEscapeClose } from '../../lib/use-escape-close';
 import { X, Trash2, Save, Calendar } from 'lucide-react';
 
 interface ShiftModalProps {
@@ -14,7 +17,8 @@ interface ShiftModalProps {
 }
 
 export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, onSave, onDelete }: ShiftModalProps) => {
-  const shiftTypeOptions = getShiftTypes().map((type) => type.label);
+  const { locale, t } = useI18n();
+  const shiftTypeOptions = getShiftTypes().map((type) => ({ value: type.label, label: translateShiftTypeLabel(type.id, locale, type.label) }));
   const [formData, setFormData] = useState<Shift>({
     id: '',
     date: new Date().toISOString().split('T')[0],
@@ -23,6 +27,8 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
     location: 'Regular',
     origin: 'MAN',
   });
+
+  useEscapeClose(isOpen, onClose);
 
   useEffect(() => {
     if (editingShift) {
@@ -47,24 +53,28 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
   return (
     <div className="modal-overlay">
       <div className="modal-content">
-        <button onClick={onClose} style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}>
+        <button
+          onClick={onClose}
+          aria-label={t('common.close')}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
+        >
           <X size={24} />
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-xl)' }}>
           <Calendar className="text-gold" size={24} />
           <h2 style={{ fontSize: '1.5rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
-            {editingShift ? 'Actualizar Turno' : 'Programar Turno'}
+            {editingShift ? t('shiftModal.titleEdit') : t('shiftModal.titleNew')}
           </h2>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
-              Fecha de Servicio
+              {t('shiftModal.dateLabel')}
             </label>
-            <input 
-              type="date" 
+            <input
+              type="date"
               className="modal-input"
               value={formData.date}
               onChange={e => setFormData({...formData, date: e.target.value})}
@@ -74,10 +84,10 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
-                Hora Inicio
+                {t('shiftModal.startLabel')}
               </label>
-              <input 
-                type="time" 
+              <input
+                type="time"
                 className="modal-input"
                 value={formData.startTime}
                 onChange={e => setFormData({...formData, startTime: e.target.value})}
@@ -85,10 +95,10 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
-                Hora Fin
+                {t('shiftModal.endLabel')}
               </label>
-              <input 
-                type="time" 
+              <input
+                type="time"
                 className="modal-input"
                 value={formData.endTime}
                 onChange={e => setFormData({...formData, endTime: e.target.value})}
@@ -98,7 +108,7 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
 
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
-              Tipo
+              {t('shiftModal.typeLabel')}
             </label>
             <select
               className="modal-input"
@@ -115,8 +125,8 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
               }}
             >
               {shiftTypeOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -124,17 +134,18 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
 
           <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
             <button className="btn-gold" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={() => onSave(formData)}>
-              <Save size={18} /> Confirmar
+              <Save size={18} /> {t('shiftModal.confirm')}
             </button>
             {editingShift && onDelete && (
-              <button 
+              <button
                 onClick={() => onDelete(formData.id)}
-                style={{ 
-                  padding: 'var(--space-sm) var(--space-md)', 
-                  color: 'var(--danger)', 
-                  border: '1px solid var(--danger-border)', 
-                  borderRadius: '12px', 
-                  background: 'var(--danger-bg)', 
+                aria-label={t('common.delete')}
+                style={{
+                  padding: 'var(--space-sm) var(--space-md)',
+                  color: 'var(--danger)',
+                  border: '1px solid var(--danger-border)',
+                  borderRadius: '12px',
+                  background: 'var(--danger-bg)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',

@@ -9,6 +9,10 @@ import {
   setShiftTypeArchived,
   upsertShiftType,
 } from '../../lib/shift-types';
+import { translateShiftTypeLabel } from '../../lib/i18n';
+import { useI18n } from '../../lib/use-i18n';
+import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
+import { useEscapeClose } from '../../lib/use-escape-close';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -27,6 +31,7 @@ const labelStyle: React.CSSProperties = {
 const NEW_TYPE_DRAFT = { id: '', label: '', shortLabel: '', color: '#3b82f6', countsAsWork: true };
 
 function ProfileSection() {
+  const { locale, t } = useI18n();
   const [profile, setProfile] = useState<UserProfile>(() => loadUserProfile());
   const [identifiersText, setIdentifiersText] = useState(() => loadUserProfile().employeeIdentifiers.join(', '));
   const [saved, setSaved] = useState(false);
@@ -45,28 +50,28 @@ function ProfileSection() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
       <div>
-        <label style={labelStyle}>Nombre para mostrar</label>
+        <label style={labelStyle}>{t('settings.displayName')}</label>
         <input
           className="modal-input"
           value={profile.displayName}
-          placeholder={DEFAULT_USER_PROFILE.displayName || 'Tu nombre'}
+          placeholder={DEFAULT_USER_PROFILE.displayName || t('settings.displayNamePlaceholder')}
           onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
         />
       </div>
       <div>
-        <label style={labelStyle}>Identificadores de empleado</label>
+        <label style={labelStyle}>{t('settings.identifiers')}</label>
         <input
           className="modal-input"
           value={identifiersText}
-          placeholder="EMP-101, 101"
+          placeholder={t('settings.identifiersPlaceholder')}
           onChange={(e) => setIdentifiersText(e.target.value)}
         />
         <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-          Separados por comas. Se usan para seleccionar tu fila al importar un documento.
+          {t('settings.identifiersHint')}
         </p>
       </div>
       <div>
-        <label style={labelStyle}>Empresa (opcional)</label>
+        <label style={labelStyle}>{t('settings.employer')}</label>
         <input
           className="modal-input"
           value={profile.employerName ?? ''}
@@ -75,33 +80,38 @@ function ProfileSection() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-md)' }}>
         <div>
-          <label style={labelStyle}>Zona horaria</label>
-          <input
+          <label style={labelStyle}>{t('settings.timezone')}</label>
+          <select
             className="modal-input"
             value={profile.timezone}
             onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
-          />
+          >
+            {TIMEZONE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {getTimezoneLabel(option.id, locale)}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
-          <label style={labelStyle}>Idioma</label>
-          <select
-            className="modal-input"
-            value={profile.locale}
-            onChange={(e) => setProfile({ ...profile, locale: e.target.value })}
-          >
-            <option value="es">Español</option>
-            <option value="en">English</option>
-          </select>
+          <label style={labelStyle}>{t('settings.language')}</label>
+          <div className="modal-input" style={{ display: 'flex', alignItems: 'center', opacity: 0.85 }}>
+            {locale.toUpperCase()}
+          </div>
+          <p style={{ margin: '6px 0 0', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+            {t('settings.languageHint')}
+          </p>
         </div>
       </div>
       <button className="btn-gold" style={{ alignSelf: 'flex-start' }} onClick={handleSave}>
-        {saved ? 'Guardado ✓' : 'Guardar perfil'}
+        {saved ? t('settings.saved') : t('settings.saveProfile')}
       </button>
     </div>
   );
 }
 
 function ShiftTypesSection() {
+  const { locale, t } = useI18n();
   const [types, setTypes] = useState<ShiftTypeDefinition[]>(() => getAllShiftTypesForManagement());
   const [draft, setDraft] = useState(NEW_TYPE_DRAFT);
   const [error, setError] = useState('');
@@ -119,7 +129,8 @@ function ShiftTypesSection() {
   };
 
   const handleDelete = (type: ShiftTypeDefinition) => {
-    if (!window.confirm(`Eliminar el tipo de turno "${type.label}"? Los turnos ya guardados con este tipo conservarán su color/etiqueta.`)) {
+    const displayLabel = translateShiftTypeLabel(type.id, locale, type.label);
+    if (!window.confirm(t('settings.deleteConfirm', { label: displayLabel }))) {
       return;
     }
     deleteCustomShiftType(type.id);
@@ -129,11 +140,11 @@ function ShiftTypesSection() {
   const handleAdd = () => {
     const id = draft.id.trim();
     if (!id) {
-      setError('El identificador es obligatorio.');
+      setError(t('settings.errorIdRequired'));
       return;
     }
     if (types.some((type) => type.id.toLowerCase() === id.toLowerCase())) {
-      setError('Ya existe un tipo de turno con ese identificador.');
+      setError(t('settings.errorIdDuplicate'));
       return;
     }
     upsertShiftType({
@@ -151,13 +162,13 @@ function ShiftTypesSection() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
       <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-        JT es solo un ejemplo de preset opcional — no es un tipo especial del producto. Crea, edita o archiva
-        los tipos que necesites; el selector de turnos y las estadísticas usan siempre esta configuración.
+        {t('settings.shiftTypesHint')}
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
         {types.map((type) => {
           const isDefault = DEFAULT_SHIFT_TYPES.some((d) => d.id === type.id);
+          const displayLabel = translateShiftTypeLabel(type.id, locale, type.label);
           return (
             <div
               key={type.id}
@@ -177,7 +188,7 @@ function ShiftTypesSection() {
                 value={type.color}
                 onChange={(e) => handleUpdate(type, { color: e.target.value })}
                 style={{ width: 32, height: 32, padding: 0, border: 'none', background: 'none' }}
-                aria-label={`Color de ${type.label}`}
+                aria-label={t('settings.colorAria', { label: displayLabel })}
               />
               <input
                 className="modal-input"
@@ -197,10 +208,10 @@ function ShiftTypesSection() {
                   checked={type.countsAsWork}
                   onChange={(e) => handleUpdate(type, { countsAsWork: e.target.checked })}
                 />
-                Cuenta como trabajo
+                {t('settings.countsAsWork')}
               </label>
               <button className="btn-outline" style={{ padding: '6px 10px', minHeight: 'auto' }} onClick={() => handleArchiveToggle(type)}>
-                {type.archived ? 'Restaurar' : 'Archivar'}
+                {type.archived ? t('settings.restore') : t('settings.archive')}
               </button>
               {!isDefault && (
                 <button
@@ -208,7 +219,7 @@ function ShiftTypesSection() {
                   style={{ padding: '6px 10px', minHeight: 'auto', borderColor: 'var(--danger-border)', color: 'var(--danger)' }}
                   onClick={() => handleDelete(type)}
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               )}
             </div>
@@ -217,33 +228,33 @@ function ShiftTypesSection() {
       </div>
 
       <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
-        <label style={labelStyle}>Nuevo tipo de turno</label>
+        <label style={labelStyle}>{t('settings.newType')}</label>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="color"
             value={draft.color}
             onChange={(e) => setDraft({ ...draft, color: e.target.value })}
             style={{ width: 32, height: 32, padding: 0, border: 'none', background: 'none' }}
-            aria-label="Color del nuevo tipo"
+            aria-label={t('settings.newColorAria')}
           />
           <input
             className="modal-input"
             style={{ flex: '1 1 90px', minWidth: 80 }}
-            placeholder="Identificador"
+            placeholder={t('settings.identifierPlaceholder')}
             value={draft.id}
             onChange={(e) => setDraft({ ...draft, id: e.target.value })}
           />
           <input
             className="modal-input"
             style={{ flex: '1 1 90px', minWidth: 80 }}
-            placeholder="Etiqueta"
+            placeholder={t('settings.labelPlaceholder')}
             value={draft.label}
             onChange={(e) => setDraft({ ...draft, label: e.target.value })}
           />
           <input
             className="modal-input"
             style={{ flex: '1 1 90px', minWidth: 80 }}
-            placeholder="Etiqueta corta"
+            placeholder={t('settings.shortLabelPlaceholder')}
             value={draft.shortLabel}
             onChange={(e) => setDraft({ ...draft, shortLabel: e.target.value })}
           />
@@ -253,9 +264,9 @@ function ShiftTypesSection() {
               checked={draft.countsAsWork}
               onChange={(e) => setDraft({ ...draft, countsAsWork: e.target.checked })}
             />
-            Cuenta como trabajo
+            {t('settings.countsAsWork')}
           </label>
-          <button className="btn-gold" onClick={handleAdd}>Añadir</button>
+          <button className="btn-gold" onClick={handleAdd}>{t('common.add')}</button>
         </div>
         {error && <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--danger)' }}>{error}</p>}
       </div>
@@ -264,7 +275,10 @@ function ShiftTypesSection() {
 }
 
 export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
+  const { t } = useI18n();
   const [tab, setTab] = useState<'profile' | 'shiftTypes'>('profile');
+
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -274,22 +288,22 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
         <button
           onClick={onClose}
           style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
-          aria-label="Cerrar ajustes"
+          aria-label={t('settings.closeAria')}
         >
           <X size={24} />
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
           <Settings className="text-gold" size={24} />
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em' }}>Ajustes</h2>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em' }}>{t('settings.title')}</h2>
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
           <button className={tab === 'profile' ? 'btn-gold' : 'btn-outline'} onClick={() => setTab('profile')}>
-            Perfil
+            {t('settings.tabProfile')}
           </button>
           <button className={tab === 'shiftTypes' ? 'btn-gold' : 'btn-outline'} onClick={() => setTab('shiftTypes')}>
-            Tipos de turno
+            {t('settings.tabShiftTypes')}
           </button>
         </div>
 

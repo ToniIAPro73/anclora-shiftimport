@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { LegalFooter } from './LegalFooter';
 import { resetAllLocalData } from '../lib/privacy';
+import { useI18n } from '../lib/use-i18n';
 
 type Kind = 'privacy' | 'terms' | 'legal';
 
@@ -356,12 +357,11 @@ function LegalSections() {
 /* ─── Local data reset (privacy-only) ───────────────────────────────────── */
 
 function LocalDataReset() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<'idle' | 'done'>('idle');
 
   const handleReset = () => {
-    const confirmed = window.confirm(
-      'Esto eliminará permanentemente tus turnos, tipos de turno personalizados, perfil y preferencias guardadas en este dispositivo. ¿Continuar?',
-    );
+    const confirmed = window.confirm(t('privacy.resetConfirm'));
     if (!confirmed) return;
     resetAllLocalData();
     setStatus('done');
@@ -377,21 +377,20 @@ function LocalDataReset() {
         background: 'var(--danger-bg)',
       }}
     >
-      <p style={{ margin: 0, fontWeight: 700, color: 'var(--text)' }}>Borrar mis datos locales</p>
+      <p style={{ margin: 0, fontWeight: 700, color: 'var(--text)' }}>{t('privacy.resetTitle')}</p>
       <p style={{ margin: '0.5rem 0 1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-        Elimina de este dispositivo tus turnos, tipos de turno personalizados, perfil y preferencias. Esta acción
-        no se puede deshacer.
+        {t('privacy.resetDescription')}
       </p>
       <button
         type="button"
         onClick={handleReset}
         style={{ padding: '10px 16px', fontWeight: 800, borderRadius: 12, border: '1px solid var(--danger-border)', color: 'var(--danger)', background: 'transparent', cursor: 'pointer' }}
       >
-        Borrar todos mis datos locales
+        {t('privacy.resetButton')}
       </button>
       {status === 'done' && (
         <p style={{ margin: '0.75rem 0 0', color: 'var(--text)', fontSize: '0.85rem' }}>
-          Datos locales eliminados. Recarga la aplicación para empezar de nuevo.
+          {t('privacy.resetDone')}
         </p>
       )}
     </div>
@@ -401,12 +400,13 @@ function LocalDataReset() {
 /* ─── Main component ────────────────────────────────────────────────────── */
 
 export function LegalPage({ kind }: { kind: Kind }) {
+  const { t } = useI18n();
   const title =
     kind === 'privacy'
-      ? 'Política de privacidad'
+      ? t('legalPage.titlePrivacy')
       : kind === 'terms'
-      ? 'Términos del servicio'
-      : 'Aviso legal';
+      ? t('legalPage.titleTerms')
+      : t('legalPage.titleLegal');
 
   return (
     <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', zIndex: 100, background: 'var(--bg)', color: 'var(--text-primary)' }}>
@@ -484,7 +484,7 @@ export function LegalPage({ kind }: { kind: Kind }) {
             }}
           >
             <p style={{ margin: 0, fontWeight: 700, color: 'var(--text)' }}>
-              Contacto legal
+              {t('legalPage.contactTitle')}
             </p>
             <p style={{ margin: '0.5rem 0 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
               Anclora Group &mdash;{' '}
@@ -496,8 +496,7 @@ export function LegalPage({ kind }: { kind: Kind }) {
               </a>
             </p>
             <p style={{ margin: '0.35rem 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              Para ejercer tus derechos o resolver cualquier consulta legal, escríbenos y te responderemos
-              en el menor tiempo posible.
+              {t('legalPage.contactDescription')}
             </p>
           </div>
 
@@ -506,7 +505,7 @@ export function LegalPage({ kind }: { kind: Kind }) {
           {/* Back button */}
           <div style={{ marginTop: '2rem' }}>
             <a className="btn-gold" href="/">
-              Volver al inicio
+              {t('legalPage.backHome')}
             </a>
           </div>
         </article>

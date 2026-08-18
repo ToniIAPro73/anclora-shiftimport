@@ -16,6 +16,8 @@ import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
 import { LegalPage } from './components/LegalPage';
 import { CalendarImportContext } from './lib/import-types';
+import { translateShiftTypeLabel } from './lib/i18n';
+import { useI18n } from './lib/use-i18n';
 
 type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -29,26 +31,28 @@ interface ImportConflictState {
   resolve: (action: 'replace' | 'skip' | 'abort') => void;
 }
 
-function describeShift(shift: Shift): string {
-  const type = getShiftType(shift);
-  const origin = getShiftOrigin(shift) === 'IMP' ? '(I)' : '(M)';
+function describeShift(shift: Shift, locale: 'es' | 'en', t: (key: string) => string): string {
+  const type = translateShiftTypeLabel(getShiftType(shift), locale, getShiftType(shift));
+  const origin = getShiftOrigin(shift) === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
+  const on = t('importConflict.on');
   if (!hasShiftTimes(shift)) {
-    return `${origin} ${type} en ${shift.date}`;
+    return `${origin} ${type} ${on} ${shift.date}`;
   }
-  return `${origin} ${type} ${shift.startTime}-${shift.endTime} en ${shift.date}`;
+  return `${origin} ${type} ${shift.startTime}-${shift.endTime} ${on} ${shift.date}`;
 }
 function App() {
+  const { locale, t } = useI18n();
   const legalPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+/, '') : '';
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') {
-      return 'system';
+      return 'dark';
     }
 
     const savedTheme = window.localStorage.getItem('anclora_theme_mode');
     return savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system'
       ? savedTheme
-      : 'system';
+      : 'dark';
   });
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -127,7 +131,7 @@ function App() {
   };
 
   const handleSaveShift = async (shift: Shift) => {
-    const conflict = findShiftConflict(shifts, shift);
+    const conflict = findShiftConflict(shifts, shift, locale);
     if (conflict) {
       window.alert(conflict);
       return;
@@ -143,7 +147,7 @@ function App() {
       setDraftShiftDate(null);
     } catch (error) {
       console.error('Failed to persist shift', error);
-      window.alert('No se pudo guardar el turno en la base de datos. Inténtalo de nuevo.');
+      window.alert(t('importConflict.saveShiftFailed'));
     }
   };
 
@@ -158,7 +162,7 @@ function App() {
       setDraftShiftDate(null);
     } catch (error) {
       console.error('Failed to delete shift', error);
-      window.alert('No se pudo eliminar el turno de la base de datos. Inténtalo de nuevo.');
+      window.alert(t('importConflict.deleteShiftFailed'));
     }
   };
 
@@ -242,7 +246,7 @@ function App() {
       return true;
     } catch (error) {
       console.error('Failed to persist imported shifts', error);
-      window.alert('No se pudieron guardar los turnos importados en la base de datos. Inténtalo de nuevo.');
+      window.alert(t('importConflict.importSaveFailed'));
       return false;
     }
   };
@@ -316,18 +320,18 @@ function App() {
       {importConflictState && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '520px' }}>
-            <h3 style={{ margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 800 }}>Conflicto de importación</h3>
+            <h3 style={{ margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 800 }}>{t('importConflict.title')}</h3>
             <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Ya existe un turno en este día. Elige qué hacer con el turno importado.
+              {t('importConflict.description')}
             </p>
             <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
               <div style={{ border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '12px', background: 'var(--panel-muted-bg)' }}>
-                <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>Turno existente</div>
-                <div style={{ fontWeight: 700 }}>{describeShift(importConflictState.existing)}</div>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>{t('importConflict.existing')}</div>
+                <div style={{ fontWeight: 700 }}>{describeShift(importConflictState.existing, locale, t)}</div>
               </div>
               <div style={{ border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '12px', background: 'var(--panel-muted-bg)' }}>
-                <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>Turno importado</div>
-                <div style={{ fontWeight: 700 }}>{describeShift(importConflictState.incoming)}</div>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>{t('importConflict.incoming')}</div>
+                <div style={{ fontWeight: 700 }}>{describeShift(importConflictState.incoming, locale, t)}</div>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
@@ -339,7 +343,7 @@ function App() {
                 }}
                 style={{ padding: '10px 14px', fontWeight: 700 }}
               >
-                Omitir turno
+                {t('importConflict.skip')}
               </button>
               <button
                 className="btn-outline"
@@ -349,7 +353,7 @@ function App() {
                 }}
                 style={{ padding: '10px 14px', fontWeight: 700, borderColor: 'var(--danger)', color: 'var(--danger)' }}
               >
-                Abortar proceso
+                {t('importConflict.abort')}
               </button>
               <button
                 className="btn-gold"
@@ -359,7 +363,7 @@ function App() {
                 }}
                 style={{ padding: '10px 14px', fontWeight: 800 }}
               >
-                Actualizar con el archivo importado
+                {t('importConflict.replace')}
               </button>
             </div>
           </div>

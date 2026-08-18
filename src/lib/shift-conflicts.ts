@@ -3,6 +3,7 @@
  * A conflict check compares an incoming shift against the existing shifts of
  * the same date and origin, honoring the configurable shift-type registry.
  */
+import { Locale, translate } from './i18n';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './shifts';
 import { shiftTypeCountsAsWork } from './shift-types';
 import { normalizeShift } from './storage';
@@ -38,9 +39,10 @@ export function timeRangesOverlap(left: Shift, right: Shift): boolean {
 
 /**
  * Returns a human-readable conflict reason, or null when the incoming shift
- * can be saved alongside the existing ones.
+ * can be saved alongside the existing ones. Messages are localized via the
+ * centralized i18n layer (default 'es' keeps existing callers/tests intact).
  */
-export function findShiftConflict(current: Shift[], incoming: Shift): string | null {
+export function findShiftConflict(current: Shift[], incoming: Shift, locale: Locale = 'es'): string | null {
   const normalizedIncoming = normalizeShift(incoming);
   const incomingType = getShiftType(normalizedIncoming);
   const incomingOrigin = getShiftOrigin(normalizedIncoming);
@@ -53,14 +55,14 @@ export function findShiftConflict(current: Shift[], incoming: Shift): string | n
 
   const existingVacation = comparable.find((shift) => getShiftType(shift) === 'Vacaciones');
   if (existingVacation && incomingType !== 'Vacaciones') {
-    return `No puedes añadir un turno ${incomingType} en ${normalizedIncoming.date} porque ya existe un turno de Vacaciones.`;
+    return translate(locale, 'conflicts.vacationExists', { type: incomingType, date: normalizedIncoming.date });
   }
 
   const sameType = comparable.find(
     (shift) => getShiftType(shift) === incomingType && incomingType !== 'Extras',
   );
   if (sameType) {
-    return `Ya existe un turno de tipo ${incomingType} en ${normalizedIncoming.date}. Puedes modificar manualmente el turno existente.`;
+    return translate(locale, 'conflicts.duplicateType', { type: incomingType, date: normalizedIncoming.date });
   }
 
   if (incomingType === 'Libre') {
@@ -72,7 +74,7 @@ export function findShiftConflict(current: Shift[], incoming: Shift): string | n
     });
 
     if (incompatible) {
-      return `No puedes añadir Libre si ya existe un turno ${getShiftType(incompatible)} en ${normalizedIncoming.date}.`;
+      return translate(locale, 'conflicts.libreConflict', { type: getShiftType(incompatible), date: normalizedIncoming.date });
     }
   }
 
@@ -80,7 +82,7 @@ export function findShiftConflict(current: Shift[], incoming: Shift): string | n
     const incompatible = comparable.find((shift) => getShiftType(shift) === 'Libre');
 
     if (incompatible) {
-      return `No puedes combinar ${incomingType} con Libre en ${normalizedIncoming.date}.`;
+      return translate(locale, 'conflicts.workConflictsWithLibre', { type: incomingType, date: normalizedIncoming.date });
     }
   }
 
@@ -95,7 +97,7 @@ export function findShiftConflict(current: Shift[], incoming: Shift): string | n
     });
 
     if (overlapping) {
-      return `El turno Extras se solapa con el turno ${getShiftType(overlapping)} de ${normalizedIncoming.date}. Corrigelo antes de añadirlo.`;
+      return translate(locale, 'conflicts.extrasOverlap', { type: getShiftType(overlapping), date: normalizedIncoming.date });
     }
   }
 

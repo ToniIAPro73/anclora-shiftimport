@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { Shift, ShiftOrigin, WeeklyStats } from '../../lib/types';
 import { aggregateWeeklyStats, filterShiftsByOrigin } from '../../lib/shifts';
 import { getShiftTypes } from '../../lib/shift-types';
+import { Locale, translateShiftTypeLabel } from '../../lib/i18n';
+import { useI18n } from '../../lib/use-i18n';
 
 interface StatsBarProps {
   currentMonthShifts: Shift[];
@@ -42,23 +44,23 @@ function formatTokenValue(hours: number, days: number): string {
   return `${hours.toFixed(1)}h / ${days}d`;
 }
 
-function buildTypeCells(stats: WeeklyStats): StatsCell[] {
+function buildTypeCells(stats: WeeklyStats, locale: Locale): StatsCell[] {
   return getShiftTypes().map((type) => ({
     kind: 'token' as const,
-    label: type.shortLabel,
+    label: translateShiftTypeLabel(type.id, locale, type.shortLabel),
     value: formatTokenValue(stats.hoursByType[type.id] ?? 0, stats.daysByType[type.id] ?? 0),
     className: `type-${type.id.toLowerCase()}`,
   }));
 }
 
-function buildSummaryCells(monthStats: WeeklyStats, yearStats: WeeklyStats): StatsCell[] {
+function buildSummaryCells(monthStats: WeeklyStats, yearStats: WeeklyStats, locale: Locale, t: (key: string) => string): StatsCell[] {
   return [
-    { kind: 'section', label: 'Tot. M.' },
-    { kind: 'token', label: 'Mes', value: formatTokenValue(monthStats.totalWorkedHours, monthStats.totalWorkedDays) },
-    ...buildTypeCells(monthStats),
-    { kind: 'section', label: 'Tot. A.' },
-    { kind: 'token', label: 'Año', value: formatTokenValue(yearStats.totalWorkedHours, yearStats.totalWorkedDays) },
-    ...buildTypeCells(yearStats),
+    { kind: 'section', label: t('stats.totalMonth') },
+    { kind: 'token', label: t('stats.month'), value: formatTokenValue(monthStats.totalWorkedHours, monthStats.totalWorkedDays) },
+    ...buildTypeCells(monthStats, locale),
+    { kind: 'section', label: t('stats.totalYear') },
+    { kind: 'token', label: t('stats.year'), value: formatTokenValue(yearStats.totalWorkedHours, yearStats.totalWorkedDays) },
+    ...buildTypeCells(yearStats, locale),
   ];
 }
 
@@ -153,21 +155,24 @@ function SummaryLine({
 }
 
 export const StatsBar = ({ currentMonthShifts, daysInMonth, currentYearShifts, daysInYear }: StatsBarProps) => {
+  const { locale, t } = useI18n();
   const ownMonthStats = useMemo(() => buildOriginStats(currentMonthShifts, daysInMonth, 'MAN'), [currentMonthShifts, daysInMonth]);
   const ownYearStats = useMemo(() => buildOriginStats(currentYearShifts, daysInYear, 'MAN'), [currentYearShifts, daysInYear]);
   const companyMonthStats = useMemo(() => buildOriginStats(currentMonthShifts, daysInMonth, 'IMP'), [currentMonthShifts, daysInMonth]);
   const companyYearStats = useMemo(() => buildOriginStats(currentYearShifts, daysInYear, 'IMP'), [currentYearShifts, daysInYear]);
-  const ownCells = useMemo(() => buildSummaryCells(ownMonthStats, ownYearStats), [ownMonthStats, ownYearStats]);
-  const companyCells = useMemo(() => buildSummaryCells(companyMonthStats, companyYearStats), [companyMonthStats, companyYearStats]);
+  const ownCells = useMemo(() => buildSummaryCells(ownMonthStats, ownYearStats, locale, t), [ownMonthStats, ownYearStats, locale, t]);
+  const companyCells = useMemo(() => buildSummaryCells(companyMonthStats, companyYearStats, locale, t), [companyMonthStats, companyYearStats, locale, t]);
+  const ownTitle = t('stats.own');
+  const companyTitle = t('stats.company');
   const { titleColumnWidth, gridTemplateColumns } = useMemo(
-    () => buildSharedColumnWidths(['Propios', 'Empresa'], [ownCells, companyCells]),
-    [ownCells, companyCells],
+    () => buildSharedColumnWidths([ownTitle, companyTitle], [ownCells, companyCells]),
+    [ownTitle, companyTitle, ownCells, companyCells],
   );
 
   return (
     <div className="totals-ribbon">
-      <SummaryLine title="Propios" cells={ownCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
-      <SummaryLine title="Empresa" cells={companyCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
+      <SummaryLine title={ownTitle} cells={ownCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
+      <SummaryLine title={companyTitle} cells={companyCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
     </div>
   );
 };

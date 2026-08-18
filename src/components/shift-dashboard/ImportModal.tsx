@@ -11,6 +11,9 @@ import { detectCalendarContext, parseEmployeeShiftsFromFile } from '../../ingest
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
+import { IngestionError, IngestionErrorCode } from '../../lib/ingestion-errors';
+import { useI18n } from '../../lib/use-i18n';
+import { useEscapeClose } from '../../lib/use-escape-close';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -23,21 +26,6 @@ interface ModalSelectOption {
   value: string;
   label: string;
 }
-
-const MONTH_OPTIONS = [
-  'Enero',
-  'Febrero',
-  'Marzo',
-  'Abril',
-  'Mayo',
-  'Junio',
-  'Julio',
-  'Agosto',
-  'Septiembre',
-  'Octubre',
-  'Noviembre',
-  'Diciembre',
-];
 
 function isFreeShift(shift: Pick<ParsedCalendarShift, 'shiftType'>): boolean {
   return (shift.shiftType ?? '').trim().toLowerCase() === 'libre';
@@ -156,6 +144,8 @@ function ModalSelect({
 }
 
 export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }: ImportModalProps) => {
+  const { t, tl } = useI18n();
+  const monthOptions = tl('calendar.months');
   const now = new Date();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -172,13 +162,15 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
 
   const availableYears = Array.from({ length: 7 }, (_, index) => String(now.getFullYear() - 2 + index));
   const monthSelectOptions = useMemo(
-    () => MONTH_OPTIONS.map((label, index) => ({ value: String(index), label })),
-    [],
+    () => monthOptions.map((label, index) => ({ value: String(index), label })),
+    [monthOptions],
   );
   const yearSelectOptions = useMemo(
     () => availableYears.map((yearOption) => ({ value: yearOption, label: yearOption })),
     [availableYears],
   );
+
+  useEscapeClose(isOpen, onClose);
 
   useEffect(() => {
     if (!isOpen) {
@@ -241,12 +233,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
       setScanTime(((Date.now() - startedAt) / 1000).toFixed(1));
 
       if (shifts.length === 0) {
-        setError('No se detectaron turnos para el empleado indicado dentro del PDF.');
+        setError(t('importModal.noShiftsFound'));
       }
     } catch (importError: unknown) {
-      console.error('[ImportModal][PDF] Error:', importError);
-      const message = importError instanceof Error ? importError.message : 'Error desconocido';
-      setError(`Error: ${message}`);
+      console.error('[ImportModal] Error:', importError);
+      const message = importError instanceof IngestionError
+        ? t(`errors.${importError.code as IngestionErrorCode}`)
+        : importError instanceof Error ? importError.message : t('importModal.unknownError');
+      setError(t('importModal.errorPrefix', { message }));
     } finally {
       setLoading(false);
     }
@@ -304,8 +298,16 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
   return (
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '1380px', width: '96vw', height: '88vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px' }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>Importar cuadrante</h2>
+        <button
+          onClick={onClose}
+          aria-label={t('importModal.closeAria')}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
+        >
+          <X size={24} />
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px', paddingRight: '36px' }}>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>{t('importModal.title')}</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               className="btn-outline modal-reset-button"
@@ -313,10 +315,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
               disabled={!canStartFreshImport}
               style={{ padding: '8px 12px', fontWeight: 700 }}
             >
-              Nueva Importación
-            </button>
-            <button onClick={onClose} style={{ color: 'var(--text-subtle)' }}>
-              <X size={24} />
+              {t('importModal.newImport')}
             </button>
           </div>
         </div>
@@ -325,18 +324,18 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
           <div className="import-modal-left" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                <span>Nombre</span>
-                <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder="Nombre del empleado" style={{ padding: '10px 12px' }} />
+                <span>{t('importModal.nameLabel')}</span>
+                <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder={t('importModal.namePlaceholder')} style={{ padding: '10px 12px' }} />
               </label>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                <span>ID</span>
-                <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder="ID de empleado" style={{ padding: '10px 12px' }} />
+                <span>{t('importModal.idLabel')}</span>
+                <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder={t('importModal.idPlaceholder')} style={{ padding: '10px 12px' }} />
               </label>
 
-              <ModalSelect label="Mes del calendario" value={selectedMonth} options={monthSelectOptions} onChange={setSelectedMonth} />
+              <ModalSelect label={t('importModal.monthLabel')} value={selectedMonth} options={monthSelectOptions} onChange={setSelectedMonth} />
 
-              <ModalSelect label="Año del calendario" value={selectedYear} options={yearSelectOptions} onChange={setSelectedYear} />
+              <ModalSelect label={t('importModal.yearLabel')} value={selectedYear} options={yearSelectOptions} onChange={setSelectedYear} />
             </div>
 
             <button
@@ -365,7 +364,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                 <Upload size={28} color="var(--color-accent)" />
               </div>
               <div style={{ textAlign: 'center', minWidth: 0 }}>
-                <p style={{ fontWeight: '700', margin: 0 }}>Subir archivo</p>
+                <p style={{ fontWeight: '700', margin: 0 }}>{t('importModal.uploadTitle')}</p>
                 <p style={{ fontSize: '0.78rem', opacity: 0.6, margin: '4px 0 0', overflowWrap: 'anywhere' }}>
                   {importFormatsDisplayLine()}
                 </p>
@@ -396,7 +395,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                     {file.name}
                   </div>
                   <div style={{ fontSize: '0.72rem', opacity: 0.64 }}>
-                    Se extraerán los turnos del empleado{detectedFormat ? ` · Formato: ${detectedFormat}` : ''}
+                    {t('importModal.fileSummary')}{detectedFormat ? t('importModal.formatSuffix', { format: detectedFormat }) : ''}
                   </div>
                 </div>
                 <button
@@ -443,18 +442,18 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                 {loading ? (
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                     <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                    {detectedFormat ? `Procesando archivo (${detectedFormat})...` : 'Procesando archivo...'}
+                    {detectedFormat ? t('importModal.processingFormat', { format: detectedFormat }) : t('importModal.processing')}
                   </span>
-                ) : 'Procesar archivo'}
+                ) : t('importModal.process')}
               </button>
             </div>
           </div>
 
           <div className="import-modal-right" style={{ display: 'flex', flexDirection: 'column', background: 'var(--panel-muted-bg)', borderRadius: '16px', padding: '16px', overflow: 'hidden', minWidth: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--color-accent)' }}>Turnos Detectados</h3>
+              <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--color-accent)' }}>{t('importModal.detected')}</h3>
               <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
-                {parsedShifts.length} encontrados{scanTime ? ` (${scanTime}s)` : ''}
+                {scanTime ? t('importModal.foundWithTime', { count: parsedShifts.length, seconds: scanTime }) : t('importModal.found', { count: parsedShifts.length })}
               </span>
             </div>
 
@@ -463,11 +462,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--table-head-bg)', zIndex: 10 }}>
                     <tr>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>Fecha</th>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>Origen</th>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>Tipo</th>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>Inicio</th>
-                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>Fin</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colDate')}</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colOrigin')}</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colType')}</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colStart')}</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colEnd')}</th>
                       <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid var(--glass-border)' }} />
                     </tr>
                   </thead>
@@ -481,7 +480,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                             <input type="text" className="modal-input" value={shift.date} onChange={(event) => handleUpdateShift(index, 'date', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
                           </td>
                           <td style={{ padding: '8px' }}>
-                            <input type="text" className="modal-input" value="PDF" readOnly style={{ padding: '6px', fontSize: '0.8rem', opacity: 0.85 }} />
+                            <input
+                              type="text"
+                              className="modal-input"
+                              value={shift.sourceFormat ? getImportFormatLabel(shift.sourceFormat) : (detectedFormat ?? '')}
+                              readOnly
+                              style={{ padding: '6px', fontSize: '0.8rem', opacity: 0.85 }}
+                            />
                           </td>
                           <td style={{ padding: '8px' }}>
                             <input type="text" className="modal-input" value={shift.shiftType ?? ''} onChange={(event) => handleUpdateShift(index, 'shiftType', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
@@ -517,14 +522,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
               ) : (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3 }}>
                   <FileText size={40} />
-                  <p style={{ marginTop: '12px' }}>Pulsa "Procesar PDF" para detectar turnos</p>
+                  <p style={{ marginTop: '12px' }}>{t('importModal.emptyStateHint')}</p>
                 </div>
               )}
             </div>
 
             <div style={{ marginTop: '16px' }}>
               <button className="btn-gold import-process-button" style={{ width: '100%', height: '48px', fontSize: '1rem' }} disabled={readyShifts.length === 0 || loading} onClick={handleConfirm}>
-                Confirmar Importación ({readyShifts.length}/{parsedShifts.length} listos)
+                {t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
               </button>
             </div>
           </div>

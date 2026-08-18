@@ -1,0 +1,54 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { setupLocalStorageMock } from './test-utils/local-storage';
+import { I18nProvider } from './lib/i18n-react';
+import App from './App';
+
+setupLocalStorageMock();
+afterEach(cleanup);
+
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+});
+
+function renderApp() {
+  return render(
+    <I18nProvider>
+      <App />
+    </I18nProvider>,
+  );
+}
+
+describe('App theme + locale defaults', () => {
+  it('defaults the theme to dark on first visit', async () => {
+    renderApp();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
+    expect(localStorage.getItem('anclora_theme_mode')).toBe('dark');
+  });
+
+  it('persists an explicit theme choice across remounts', async () => {
+    localStorage.setItem('anclora_theme_mode', 'light');
+    renderApp();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
+  });
+
+  it('keeps theme and locale on independent storage keys (toggling one leaves the other untouched)', async () => {
+    renderApp();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
+    expect(localStorage.getItem('anclora_shiftimport_locale_v1')).toBe('es');
+
+    localStorage.setItem('anclora_shiftimport_locale_v1', 'en');
+    cleanup();
+    renderApp();
+    // Locale changed to English, but the persisted theme choice (dark) is untouched.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Import/ })).toBeTruthy());
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(localStorage.getItem('anclora_theme_mode')).toBe('dark');
+  });
+});
