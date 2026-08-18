@@ -155,8 +155,8 @@ function SummaryLine({
 export const StatsBar = ({ currentMonthShifts, daysInMonth, currentYearShifts, daysInYear }: StatsBarProps) => {
   const ownMonthStats = useMemo(() => buildOriginStats(currentMonthShifts, daysInMonth, 'MAN'), [currentMonthShifts, daysInMonth]);
   const ownYearStats = useMemo(() => buildOriginStats(currentYearShifts, daysInYear, 'MAN'), [currentYearShifts, daysInYear]);
-  const companyMonthStats = useMemo(() => buildOriginStats(currentMonthShifts, daysInMonth, 'PDF'), [currentMonthShifts, daysInMonth]);
-  const companyYearStats = useMemo(() => buildOriginStats(currentYearShifts, daysInYear, 'PDF'), [currentYearShifts, daysInYear]);
+  const companyMonthStats = useMemo(() => buildOriginStats(currentMonthShifts, daysInMonth, 'IMP'), [currentMonthShifts, daysInMonth]);
+  const companyYearStats = useMemo(() => buildOriginStats(currentYearShifts, daysInYear, 'IMP'), [currentYearShifts, daysInYear]);
   const ownCells = useMemo(() => buildSummaryCells(ownMonthStats, ownYearStats), [ownMonthStats, ownYearStats]);
   const companyCells = useMemo(() => buildSummaryCells(companyMonthStats, companyYearStats), [companyMonthStats, companyYearStats]);
   const { titleColumnWidth, gridTemplateColumns } = useMemo(

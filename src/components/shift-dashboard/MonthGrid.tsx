@@ -75,7 +75,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
     const shiftOrigin = getShiftOrigin(shift);
     const accentColor = getShiftTypeColor(shiftType);
     const hasTimes = hasShiftTimes(shift);
-    const originPrefix = shiftOrigin === 'PDF' ? '(E)' : '(P)';
+    const originPrefix = shiftOrigin === 'IMP' ? '(I)' : '(M)';
     const isExpanded = expandedShiftId === shift.id;
 
     return (
@@ -133,7 +133,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
             const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const dayShifts = getShiftsForDay(day);
             const ownShifts = dayShifts.filter((shift) => getShiftOrigin(shift) === 'MAN');
-            const companyShifts = dayShifts.filter((shift) => getShiftOrigin(shift) === 'PDF');
+            const companyShifts = dayShifts.filter((shift) => getShiftOrigin(shift) === 'IMP');
             const visibleShifts = [...ownShifts, ...companyShifts];
             const isToday = iso === todayISO;
             const isWeekend = index % 7 >= 5;

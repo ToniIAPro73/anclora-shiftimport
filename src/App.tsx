@@ -11,7 +11,6 @@ import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal } from './components/shift-dashboard/ImportModal';
-import { JTCounterModal } from './components/shift-dashboard/JTCounterModal';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
 import { LegalPage } from './components/LegalPage';
@@ -31,7 +30,7 @@ interface ImportConflictState {
 
 function describeShift(shift: Shift): string {
   const type = getShiftType(shift);
-  const origin = getShiftOrigin(shift) === 'PDF' ? '(E)' : '(P)';
+  const origin = getShiftOrigin(shift) === 'IMP' ? '(I)' : '(M)';
   if (!hasShiftTimes(shift)) {
     return `${origin} ${type} en ${shift.date}`;
   }
@@ -55,7 +54,6 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isJTCounterOpen, setIsJTCounterOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
@@ -186,33 +184,33 @@ function App() {
     const snapshot = [...shifts];
     const normalizedIncoming = newShifts.map(normalizeShift);
     let working = [...snapshot];
-    const pendingExistingPdfByDate = new Map<string, Shift[]>();
+    const pendingImportedByDate = new Map<string, Shift[]>();
     const upserts: Shift[] = [];
     const deleteIds: string[] = [];
 
     for (const shift of normalizedIncoming) {
-      const existingPdfShifts = pendingExistingPdfByDate.get(shift.date)
-        ?? snapshot.filter((existing) => existing.date === shift.date && getShiftOrigin(existing) === 'PDF');
+      const existingImportedShifts = pendingImportedByDate.get(shift.date)
+        ?? snapshot.filter((existing) => existing.date === shift.date && getShiftOrigin(existing) === 'IMP');
 
-      pendingExistingPdfByDate.set(shift.date, existingPdfShifts);
+      pendingImportedByDate.set(shift.date, existingImportedShifts);
 
-      if (existingPdfShifts.length === 0) {
+      if (existingImportedShifts.length === 0) {
         working.push(shift);
         upserts.push(shift);
         continue;
       }
 
-      const matchingExisting = existingPdfShifts.find((existing) => getShiftType(existing) === getShiftType(shift));
+      const matchingExisting = existingImportedShifts.find((existing) => getShiftType(existing) === getShiftType(shift));
       // Idempotent re-import: an identical semantic shift is left untouched
       // (no id churn, no replace/skip prompt). Identity is the deterministic
       // fingerprint, never the random UUID.
-      const identicalExisting = existingPdfShifts.find(
+      const identicalExisting = existingImportedShifts.find(
         (existing) => fingerprintShift(existing).full === fingerprintShift(shift).full,
       );
       if (identicalExisting) {
         continue;
       }
-      const existingShift = matchingExisting ?? existingPdfShifts[0];
+      const existingShift = matchingExisting ?? existingImportedShifts[0];
       const decision = await requestImportDecision(existingShift, shift);
 
       if (decision === 'abort') {
@@ -227,9 +225,9 @@ function App() {
       working = [...working.filter((existing) => existing.id !== existingShift.id), shift];
       upserts.push(shift);
       deleteIds.push(existingShift.id);
-      pendingExistingPdfByDate.set(
+      pendingImportedByDate.set(
         shift.date,
-        existingPdfShifts.filter((existing) => existing.id !== existingShift.id),
+        existingImportedShifts.filter((existing) => existing.id !== existingShift.id),
       );
     }
 
@@ -264,7 +262,6 @@ function App() {
         onNavigate={handleNavigate}
         themeMode={themeMode}
         onToggleTheme={handleToggleTheme}
-        onOpenJTCounter={() => setIsJTCounterOpen(true)}
         onAddShift={() => {
           setEditingShiftId(null);
           setDraftShiftDate(null);
@@ -311,18 +308,12 @@ function App() {
         initialContext={{ month: currentMonth, year: currentYear }}
       />
 
-      <JTCounterModal
-        isOpen={isJTCounterOpen}
-        onClose={() => setIsJTCounterOpen(false)}
-        shifts={shifts}
-      />
-
       {importConflictState && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '520px' }}>
-            <h3 style={{ margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 800 }}>Conflicto en importación PDF</h3>
+            <h3 style={{ margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 800 }}>Conflicto de importación</h3>
             <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Ya existe un turno de empresa en este día. Elige qué hacer con el turno importado.
+              Ya existe un turno en este día. Elige qué hacer con el turno importado.
             </p>
             <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
               <div style={{ border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '12px', background: 'var(--panel-muted-bg)' }}>
@@ -330,7 +321,7 @@ function App() {
                 <div style={{ fontWeight: 700 }}>{describeShift(importConflictState.existing)}</div>
               </div>
               <div style={{ border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '12px', background: 'var(--panel-muted-bg)' }}>
-                <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>Turno del PDF</div>
+                <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>Turno importado</div>
                 <div style={{ fontWeight: 700 }}>{describeShift(importConflictState.incoming)}</div>
               </div>
             </div>
@@ -363,7 +354,7 @@ function App() {
                 }}
                 style={{ padding: '10px 14px', fontWeight: 800 }}
               >
-                Actualizar con PDF
+                Actualizar con el archivo importado
               </button>
             </div>
           </div>

@@ -1,7 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
-import { detectPdfCalendarContext, parseEmployeeShiftsFromPdf } from '../../ingestion/parsers/pdf';
+import { classifyDocument } from '../../ingestion/parsers/file';
+import {
+  getImportFormatLabel,
+  importAcceptAttribute,
+  importFormatsDisplayLine,
+} from '../../ingestion/formats';
+import { detectCalendarContext, parseEmployeeShiftsFromFile } from '../../ingestion/parsers/file';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
@@ -161,6 +167,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
   const [selectedMonth, setSelectedMonth] = useState(String(initialContext.month));
   const [selectedYear, setSelectedYear] = useState(String(initialContext.year));
   const [canStartFreshImport, setCanStartFreshImport] = useState(false);
+  const [detectedFormat, setDetectedFormat] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const availableYears = Array.from({ length: 7 }, (_, index) => String(now.getFullYear() - 2 + index));
@@ -188,6 +195,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
     setParsedShifts([]);
     setError(null);
     setScanTime(null);
+    setDetectedFormat(null);
     setCanStartFreshImport(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -214,16 +222,17 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
     setLoading(true);
     setError(null);
     setScanTime(null);
+    setDetectedFormat(getImportFormatLabel(classifyDocument(file)));
 
     const startedAt = Date.now();
     try {
-      const importContext = await detectPdfCalendarContext(file);
+      const importContext = await detectCalendarContext(file);
       setSelectedMonth(String(importContext.month));
       setSelectedYear(String(importContext.year));
 
       const storedIdentifiers = loadUserProfile().employeeIdentifiers;
       const employeeIdentifiers = [...new Set([employeeId.trim(), ...storedIdentifiers].filter(Boolean))];
-      const shifts = await parseEmployeeShiftsFromPdf(file, importContext, {
+      const shifts = await parseEmployeeShiftsFromFile(file, importContext, {
         employeeName,
         employeeIdentifiers,
       });
@@ -277,7 +286,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
           startTime: shift.startTime === '??:??' ? '' : shift.startTime,
           endTime: shift.endTime === '??:??' ? '' : shift.endTime,
           location: normalizedType === 'Vacaciones' ? 'Regular' : (normalizedType || 'Regular'),
-          origin: 'PDF',
+          origin: 'IMP',
+          sourceFormat: shift.sourceFormat ?? undefined,
         };
       });
 
@@ -295,7 +305,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '1380px', width: '96vw', height: '88vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px' }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>Importador PDF</h2>
+          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>Importar cuadrante</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               className="btn-outline modal-reset-button"
@@ -355,9 +365,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                 <Upload size={28} color="var(--color-accent)" />
               </div>
               <div style={{ textAlign: 'center', minWidth: 0 }}>
-                <p style={{ fontWeight: '700', margin: 0 }}>Subir documento PDF</p>
+                <p style={{ fontWeight: '700', margin: 0 }}>Subir archivo</p>
                 <p style={{ fontSize: '0.78rem', opacity: 0.6, margin: '4px 0 0', overflowWrap: 'anywhere' }}>
-                  Selecciona el PDF para extraer los turnos del empleado indicado
+                  {importFormatsDisplayLine()}
                 </p>
               </div>
             </button>
@@ -386,7 +396,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                     {file.name}
                   </div>
                   <div style={{ fontSize: '0.72rem', opacity: 0.64 }}>
-                    Se extraerá la fila del empleado
+                    Se extraerán los turnos del empleado{detectedFormat ? ` · Formato: ${detectedFormat}` : ''}
                   </div>
                 </div>
                 <button
@@ -413,7 +423,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
               </div>
             )}
 
-            <input ref={fileInputRef} type="file" hidden accept=".pdf,application/pdf" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" hidden accept={importAcceptAttribute()} onChange={handleFileChange} />
 
             <div style={{ minWidth: 0, width: '100%', flexShrink: 0 }}>
               <button
@@ -433,9 +443,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
                 {loading ? (
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                     <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                    Procesando PDF...
+                    {detectedFormat ? `Procesando archivo (${detectedFormat})...` : 'Procesando archivo...'}
                   </span>
-                ) : 'Procesar PDF'}
+                ) : 'Procesar archivo'}
               </button>
             </div>
           </div>
