@@ -2,13 +2,13 @@
 
 <div align="center">
 
-<img src="./public/brand/anclora-groundsync.png" alt="Anclora GroundSync" width="132" />
+<img src="./public/brand/anclora-shiftimport.png" alt="Anclora ShiftImport" width="132" />
 
-# Anclora GroundSync
+# Anclora ShiftImport
 
-### Gestión y sincronización de turnos de trabajo
+### Importador inteligente de cuadrantes para trabajadores por turnos
 
-Aplicación operativa interna, gobernada como producto independiente, para planificar turnos, importar datos desde Excel y generar informes.
+Convierte cuadrantes de trabajo en PDF, imagen o formatos compatibles en un calendario personal estructurado, revisable y exportable.
 
 **Español** · [English](./README.en.md)
 
@@ -16,18 +16,30 @@ Aplicación operativa interna, gobernada como producto independiente, para plani
 
 ![Anclora](https://img.shields.io/badge/Anclora-ecosystem-111827)
 ![Categoría](https://img.shields.io/badge/categoría-Premium-C07860)
-![Idiomas](https://img.shields.io/badge/idioma%20producto-ES-047857)
+![Estado](https://img.shields.io/badge/estado-Phase%200-6AAD49)
 
 </div>
 
 ---
 
 > [!IMPORTANT]
-> Repositorio interno del ecosistema Anclora. No publicar detalles operativos, credenciales ni lógica sensible fuera de canales autorizados.
+> Repositorio privado del ecosistema Anclora. Código comercial: no publicar detalles operativos, credenciales ni lógica sensible fuera de canales autorizados.
 
 ## Qué es
 
-Anclora GroundSync es una herramienta operativa interna de planificación y sincronización de turnos de trabajo. Aunque es de uso interno, se gobierna en el ecosistema de marca como producto independiente, comparable a `anclora-impulso`.
+Anclora ShiftImport resuelve un problema concreto: el trabajador por turnos recibe un cuadrante creado por otra persona (PDF, imagen u otro formato compatible) y quiere incorporarlo a su calendario personal sin volver a teclear cada turno.
+
+El flujo del producto es:
+
+```text
+Importar cuadrante → revisar → calendario
+```
+
+La importación es el producto: detecta turnos, los muestra en una vista previa editable y solo escribe en el calendario tras confirmación del usuario.
+
+## Qué no es
+
+ShiftImport no es un HRIS, ni un generador de cuadrantes, ni control horario legal, ni nómina, ni planificación empresarial. Es una herramienta personal (B2C / prosumer) de productividad para trabajadores por turnos.
 
 ## Categoría en el ecosistema
 
@@ -35,25 +47,29 @@ Anclora GroundSync es una herramienta operativa interna de planificación y sinc
 |---|---|
 | Categoría | Premium |
 | Acento de marca | `#6AAD49` |
-| Repositorio canónico | `anclora-groundsync` |
+| Repositorio canónico | `anclora-shiftimport` |
+| Tipo de producto | B2C / Prosumer |
+| Dominio | Shift work / productividad personal |
+| Origen técnico | Derivado de `anclora-groundsync` (historia Git preservada) |
+
+`anclora-groundsync` permanece operativo como producto independiente; ShiftImport es su derivado comercial.
 
 ## Funcionalidades principales
 
-- Panel mensual de turnos con navegación por mes
-- Importación de turnos desde Excel (ExcelJS)
-- Extracción de datos por OCR (Tesseract.js)
-- Generación de informes en PDF (jsPDF)
-- Base de datos serverless (Neon)
+- Importación de cuadrantes desde PDF (PDF.js) con vista previa editable
+- Extracción por OCR (Tesseract.js) y Excel (ExcelJS)
+- Panel mensual de turnos con alta manual
+- Estadísticas e informes en PDF (jsPDF)
+- Persistencia local-first (`localStorage`); sincronización cloud desactivada por defecto
 
 ## Stack tecnológico
 
 | Área | Tecnología |
 |---|---|
-| Frontend | React, Vite |
-| Backend | Express |
-| Base de datos | Neon (PostgreSQL serverless) |
-| Datos | ExcelJS, PDF.js, Tesseract.js |
+| Frontend | React, Vite, TypeScript |
+| Datos | PDF.js, ExcelJS, Tesseract.js |
 | PDF | jsPDF |
+| Persistencia | local-first; backend Express/Neon en saneamiento (Phase 0) |
 
 ## Arranque local
 
@@ -62,14 +78,22 @@ npm install
 npm run dev
 ```
 
+Validación: `npm run lint && npm run build`.
+
+## Privacidad
+
+- Persistencia local-first: los turnos viven en el navegador del usuario por defecto.
+- El archivo original importado no se persiste.
+- Los fixtures de pruebas son sintéticos; no se commitean cuadrantes reales.
+
 ## Idiomas soportados
 
-El producto opera únicamente en español (`lang="es"`, sin selector de idioma). Esta documentación se ofrece también en inglés como cortesía para lectores no hispanohablantes.
+El producto opera únicamente en español (`lang="es"`, sin selector de idioma). Esta documentación se ofrece también en inglés como cortesía.
 
 ## Documentación y gobernanza
 
 - Contratos de marca y gobernanza: [`docs/standards/`](./docs/standards/)
-- Bóveda Anclora (fuente de verdad): `contracts/` y `docs/governance/`
+- Registro canónico del ecosistema: `anclora-vault/00-governance/registry/ecosystem-repos.json`
 
 ---
 
@@ -77,6 +101,6 @@ El producto opera únicamente en español (`lang="es"`, sin selector de idioma).
 
 ### Anclora Group
 
-Uso interno.
+Producto comercial del ecosistema Anclora.
 
 </div>
