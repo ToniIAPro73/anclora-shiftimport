@@ -13,7 +13,11 @@ import { PdfTextItem, sortPdfItemsForReading } from './text-items';
 
 export interface EmployeeSelector {
   employeeName: string;
-  employeeId: string;
+  /**
+   * Candidate employee identifiers (from UserProfile.employeeIdentifiers),
+   * in priority order. The first identifier matching a row marker wins.
+   */
+  employeeIdentifiers: string[];
 }
 
 export interface RowBoundaryScan {
@@ -137,16 +141,18 @@ export function findEmployeeRowItems(
   selector: EmployeeSelector,
   rules: RowWindowRules,
 ): EmployeeRow | null {
-  const targetId = normalizeEmployeeId(selector.employeeId);
+  const targetIds = selector.employeeIdentifiers
+    .map((value) => normalizeEmployeeId(value))
+    .filter((value) => value.length > 0);
   const normalizedName = normalizeText(selector.employeeName);
   const nameTokens = normalizedName.split(' ').filter((token) => token.length >= 3);
-  const hasTargetId = targetId.length > 0;
+  const hasTargetId = targetIds.length > 0;
 
   const pages = Array.from(new Set(items.map((item) => item.page))).sort((left, right) => left - right);
   for (const page of pages) {
     const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
     const idIndex = pageItems.findIndex(
-      (item) => hasTargetId && normalizeEmployeeId(item.text) === targetId && item.x < rules.markerMaxX,
+      (item) => hasTargetId && targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
     );
     const nameIndex = rules.nameMatching
       ? findNameMarkerIndex(pageItems, nameTokens, rules.markerMaxX)

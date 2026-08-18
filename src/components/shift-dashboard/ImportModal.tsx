@@ -221,9 +221,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext }
       setSelectedMonth(String(importContext.month));
       setSelectedYear(String(importContext.year));
 
+      const storedIdentifiers = loadUserProfile().employeeIdentifiers;
+      const employeeIdentifiers = [...new Set([employeeId.trim(), ...storedIdentifiers].filter(Boolean))];
       const shifts = await parseEmployeeShiftsFromPdf(file, importContext, {
         employeeName,
-        employeeId,
+        employeeIdentifiers,
       });
 
       setParsedShifts(shifts);

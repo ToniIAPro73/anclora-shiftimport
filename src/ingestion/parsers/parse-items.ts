@@ -42,7 +42,7 @@ export function parseShiftsFromItems(
     throw new Error(
       profile.errors.employeeNotFound
         .replace('{name}', selector.employeeName)
-        .replace('{id}', selector.employeeId),
+        .replace('{id}', selector.employeeIdentifiers[0] ?? ''),
     );
   }
 
