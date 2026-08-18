@@ -8,6 +8,7 @@
  */
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { isSeparatorToken, isTimeToken, normalizeTimeToken } from './normalize';
+import { resolveCode, ShiftCodeMapping } from './shift-code-profile';
 
 export function isOffToken(value: string): boolean {
   return resolveShiftTypeId(value) === 'Libre';
@@ -16,8 +17,14 @@ export function isOffToken(value: string): boolean {
 /**
  * Expands a raw cell text into an ordered token stream of
  * times (`HH:mm`), `OFF` markers and `--` segment separators.
+ *
+ * `codeProfile`, when provided, resolves declarative source shift codes
+ * (M/T/N/L or a document's own legend) into their mapped times/OFF marker
+ * before falling back to the literal time/off parsing below. It only
+ * applies to profiles that opt in (see IngestionProfile.useShiftCodeProfile)
+ * so existing literal-time profiles are unaffected.
  */
-export function expandShiftTokens(value: string): string[] {
+export function expandShiftTokens(value: string, codeProfile?: Map<string, ShiftCodeMapping>): string[] {
   const trimmed = value.trim();
   if (!trimmed) {
     return [];
@@ -29,6 +36,13 @@ export function expandShiftTokens(value: string): string[] {
 
   if (isSeparatorToken(trimmed)) {
     return ['--'];
+  }
+
+  if (codeProfile) {
+    const mapped = resolveCode(trimmed, codeProfile);
+    if (mapped) {
+      return mapped.status === 'free' ? ['OFF'] : [mapped.startTime as string, mapped.endTime as string];
+    }
   }
 
   const segments = trimmed.split(/(--+)/).filter(Boolean);
@@ -63,7 +77,7 @@ export function looksLikeEmployeeLabel(value: string): boolean {
   if (!trimmed) return false;
   if (isTimeToken(trimmed) || isOffToken(trimmed) || isSeparatorToken(trimmed)) return false;
   if (isEmployeeIdToken(trimmed)) return true;
-  return /^[A-Za-zÁÉÍÓÚÜÑ.,' -]+$/.test(trimmed);
+  return /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ.,' -]+$/.test(trimmed);
 }
 
 export function isEmployeeNameLabel(value: string): boolean {

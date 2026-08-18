@@ -11,6 +11,7 @@ import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal } from './components/shift-dashboard/ImportModal';
+import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
 import { LegalPage } from './components/LegalPage';
@@ -54,6 +55,7 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
@@ -268,6 +270,7 @@ function App() {
           setIsModalOpen(true);
         }}
         onImport={() => setIsImportOpen(true)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       <div className="dashboard-body">
@@ -300,6 +303,8 @@ function App() {
         onSave={handleSaveShift}
         onDelete={handleDeleteShift}
       />
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       <ImportModal
         isOpen={isImportOpen}

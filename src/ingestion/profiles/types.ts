@@ -31,6 +31,13 @@ export interface IngestionProfile {
   sortResult: boolean;
   /** Drop incomplete shifts with no type and `??:??` times. */
   dropIncompleteShifts: boolean;
+  /**
+   * Resolve cell tokens through the declarative shift-code profile
+   * (src/ingestion/core/shift-code-profile.ts) — generic M/T/N/L codes plus
+   * any legend the document itself carries. Off by default so literal-time
+   * profiles (TYPE_A/TYPE_B/TYPE_TAB) are unaffected.
+   */
+  useShiftCodeProfile?: boolean;
   errors: {
     /** Supports `{name}` and `{id}` placeholders. */
     employeeNotFound: string;

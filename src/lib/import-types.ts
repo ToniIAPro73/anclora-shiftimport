@@ -3,7 +3,7 @@ export interface CalendarImportContext {
   year: number;
 }
 
-export type PdfDocumentType = 'TYPE_A' | 'TYPE_B' | 'TYPE_TAB' | 'UNKNOWN';
+export type PdfDocumentType = 'TYPE_A' | 'TYPE_B' | 'TYPE_TAB' | 'TYPE_LEGEND' | 'TYPE_MULTI' | 'UNKNOWN';
 
 export interface ParsedCalendarShift {
   date: string;

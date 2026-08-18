@@ -11,6 +11,7 @@
  */
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { isTimeToken, normalizeTimeToken } from './normalize';
+import { ShiftCodeMapping } from './shift-code-profile';
 import { expandShiftTokens, isOffToken } from './tokens';
 
 function buildLibreShift(date: string, rawText: string): ParsedCalendarShift {
@@ -28,8 +29,12 @@ function buildLibreShift(date: string, rawText: string): ParsedCalendarShift {
   };
 }
 
-export function buildShiftEntriesForDay(date: string, tokens: string[]): ParsedCalendarShift[] {
-  const meaningful = tokens.flatMap((token) => expandShiftTokens(token)).map((token) => token.trim()).filter(Boolean);
+export function buildShiftEntriesForDay(
+  date: string,
+  tokens: string[],
+  codeProfile?: Map<string, ShiftCodeMapping>,
+): ParsedCalendarShift[] {
+  const meaningful = tokens.flatMap((token) => expandShiftTokens(token, codeProfile)).map((token) => token.trim()).filter(Boolean);
   if (meaningful.length === 0) {
     return [];
   }

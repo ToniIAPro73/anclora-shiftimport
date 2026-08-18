@@ -16,9 +16,11 @@ import {
   findEmployeeRowItems,
 } from '../core/row-detection';
 import { buildShiftEntriesForDay } from '../core/shift-builder';
+import { buildCodeProfile } from '../core/shift-code-profile';
 import { deduceYearFromItems, PdfTextItem } from '../core/text-items';
 import { getIngestionProfile } from '../profiles';
 import { detectPdfDocumentTypeFromItems } from './detect';
+import { parseMultiSectionShifts } from './multi-section';
 
 export function detectCalendarContextFromItems(items: PdfTextItem[]): CalendarImportContext {
   const profile = getIngestionProfile(detectPdfDocumentTypeFromItems(items));
@@ -47,6 +49,13 @@ export function parseShiftsFromItems(
       'UNSUPPORTED_LAYOUT',
       'No se ha podido identificar el formato del documento para procesarlo correctamente.',
     );
+  }
+
+  // Multi-month documents (one section per "Month YYYY" table) have no
+  // single calendar context to gate on — the section-aware walker returns
+  // shifts spanning every section where the employee appears.
+  if (profile.id === 'TYPE_MULTI') {
+    return parseMultiSectionShifts(allItems, selector, profile);
   }
 
   const targetIds = selector.employeeIdentifiers
@@ -99,6 +108,8 @@ export function parseShiftsFromItems(
     throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noMappedColumns);
   }
 
+  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(allItems) : undefined;
+
   let shifts: ParsedCalendarShift[] = [];
   for (const { day, items } of mappedColumns) {
     if (profile.validateDayInMonth && (day < 1 || day > getDaysInMonth(context.year, context.month))) {
@@ -111,7 +122,7 @@ export function parseShiftsFromItems(
       .map((item) => item.text.trim())
       .filter(Boolean);
 
-    shifts.push(...buildShiftEntriesForDay(date, tokens));
+    shifts.push(...buildShiftEntriesForDay(date, tokens, codeProfile));
   }
 
   if (profile.dropIncompleteShifts) {

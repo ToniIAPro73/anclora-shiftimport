@@ -19,6 +19,9 @@ export interface ShiftTypeDefinition {
   color: string;
   countsAsWork: boolean;
   category?: string;
+  /** Archived types are hidden from AddShiftModal/StatsBar but kept for
+   * existing shifts and can be restored; they are never hard-deleted. */
+  archived?: boolean;
 }
 
 export interface ShiftTypeOverrides {
@@ -67,6 +70,13 @@ export const SHIFT_TYPE_PRESET_EXAMPLE: ShiftTypeOverrides = {
 
 const EMPTY_OVERRIDES: ShiftTypeOverrides = { types: [], aliases: {} };
 
+/**
+ * The pure ingestion core (src/ingestion/core) calls into this registry
+ * from node-environment tests with no `localStorage` global. Overrides are
+ * a no-op there — the generic default registry still applies.
+ */
+const hasLocalStorage = (): boolean => typeof localStorage !== 'undefined';
+
 const normalizeTypeDefinition = (raw: Partial<ShiftTypeDefinition> | null | undefined): ShiftTypeDefinition | null => {
   const id = typeof raw?.id === 'string' ? raw.id.trim() : '';
   if (!id) {
@@ -80,6 +90,7 @@ const normalizeTypeDefinition = (raw: Partial<ShiftTypeDefinition> | null | unde
     color: typeof raw?.color === 'string' && raw.color.trim() ? raw.color.trim() : FALLBACK_SHIFT_TYPE_COLOR,
     countsAsWork: typeof raw?.countsAsWork === 'boolean' ? raw.countsAsWork : true,
     category: typeof raw?.category === 'string' && raw.category.trim() ? raw.category.trim() : undefined,
+    archived: raw?.archived === true,
   };
 };
 
@@ -97,6 +108,9 @@ const normalizeOverrides = (raw: Partial<ShiftTypeOverrides> | null | undefined)
 });
 
 export const loadShiftTypeOverrides = (): ShiftTypeOverrides => {
+  if (!hasLocalStorage()) {
+    return { ...EMPTY_OVERRIDES, types: [], aliases: {} };
+  }
   const data = localStorage.getItem(SHIFT_TYPES_STORAGE_KEY);
   if (!data) {
     return { ...EMPTY_OVERRIDES, types: [], aliases: {} };
@@ -111,6 +125,9 @@ export const loadShiftTypeOverrides = (): ShiftTypeOverrides => {
 };
 
 export const saveShiftTypeOverrides = (overrides: ShiftTypeOverrides): void => {
+  if (!hasLocalStorage()) {
+    return;
+  }
   localStorage.setItem(SHIFT_TYPES_STORAGE_KEY, JSON.stringify(normalizeOverrides(overrides)));
 };
 
@@ -143,16 +160,51 @@ export const setShiftTypeAlias = (token: string, typeId: string): ShiftTypeOverr
   mergeShiftTypeOverrides({ types: [], aliases: { [token]: typeId } });
 
 /**
- * Effective registry: neutral defaults merged with user overrides
- * (overrides replace defaults by id, and can add new types).
+ * Full effective registry: neutral defaults merged with user overrides
+ * (overrides replace defaults by id, and can add new types), including
+ * archived types. Used by the shift-type management UI.
  */
-export const getShiftTypes = (): ShiftTypeDefinition[] => {
+export const getAllShiftTypesForManagement = (): ShiftTypeDefinition[] => {
   const overrides = loadShiftTypeOverrides();
   const typesById = new Map(DEFAULT_SHIFT_TYPES.map((type) => [type.id, type]));
   for (const type of overrides.types) {
     typesById.set(type.id, type);
   }
   return [...typesById.values()];
+};
+
+/**
+ * Effective registry for shift entry/reporting: same as above minus
+ * archived types.
+ */
+export const getShiftTypes = (): ShiftTypeDefinition[] =>
+  getAllShiftTypesForManagement().filter((type) => !type.archived);
+
+/** Archives or restores a type in place (id, and all other fields, unchanged). */
+export const setShiftTypeArchived = (typeId: string, archived: boolean): ShiftTypeOverrides => {
+  const current = getAllShiftTypesForManagement().find((type) => type.id === typeId);
+  if (!current) {
+    return loadShiftTypeOverrides();
+  }
+  return mergeShiftTypeOverrides({ types: [{ ...current, archived }], aliases: {} });
+};
+
+/**
+ * Permanently removes a custom (non-default) type from the overrides.
+ * Default types (DEFAULT_SHIFT_TYPES) can only be archived, never deleted,
+ * since resolveShiftTypeId/shift history must keep resolving them.
+ */
+export const deleteCustomShiftType = (typeId: string): ShiftTypeOverrides => {
+  if (DEFAULT_SHIFT_TYPES.some((type) => type.id === typeId)) {
+    return loadShiftTypeOverrides();
+  }
+  const current = loadShiftTypeOverrides();
+  const next = normalizeOverrides({
+    types: current.types.filter((type) => type.id !== typeId),
+    aliases: Object.fromEntries(Object.entries(current.aliases).filter(([, target]) => target !== typeId)),
+  });
+  saveShiftTypeOverrides(next);
+  return next;
 };
 
 /**
@@ -166,7 +218,7 @@ export const resolveShiftTypeId = (token: string): string | null => {
     return null;
   }
 
-  const types = getShiftTypes();
+  const types = getAllShiftTypesForManagement();
   const isKnownTypeId = (typeId: string): boolean => types.some((type) => type.id === typeId);
 
   const customTarget = loadShiftTypeOverrides().aliases[normalized];
@@ -184,8 +236,10 @@ export const resolveShiftTypeId = (token: string): string | null => {
   )?.id ?? null;
 };
 
+// Includes archived types so shifts already recorded under an archived type
+// still render with their correct color/countsAsWork.
 export const getShiftTypeDefinition = (typeId: string): ShiftTypeDefinition | undefined =>
-  getShiftTypes().find((type) => type.id === typeId);
+  getAllShiftTypesForManagement().find((type) => type.id === typeId);
 
 export const getShiftTypeColor = (typeId: string): string =>
   getShiftTypeDefinition(typeId)?.color ?? FALLBACK_SHIFT_TYPE_COLOR;

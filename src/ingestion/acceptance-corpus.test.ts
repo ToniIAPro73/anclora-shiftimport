@@ -349,10 +349,12 @@ describe('Phase 0 M0 acceptance corpus (manifest-driven)', () => {
     expect(silent).toHaveLength(0);
 
     // Negative fixtures runnable on the current engine must produce their
-    // canonical error (no silent fallback import). GN-01/02/03 yield the
-    // stricter UNSUPPORTED_LAYOUT before employee selection because their
-    // documents use the company shift-code model — still zero import; the
-    // integrity invariant (wrongEmployee/silent) below is what gates them.
+    // canonical error (no silent fallback import). GN-01 (reuses the GS-03
+    // legend layout) now correctly resolves to UNKNOWN_EMPLOYEE. GN-02/03
+    // use layouts outside the declarative profiles registered so far and
+    // still surface UNSUPPORTED_LAYOUT before employee selection — still
+    // zero import; the integrity invariant (wrongEmployee/silent) below is
+    // what gates them.
     const negative = results.filter((r) => ['GN-04', 'GN-05', 'GN-06'].includes(r.id));
     const negativeFailures = negative.filter((r) => r.status !== 'EXPECTED_ERROR_PASS');
     expect(negativeFailures).toHaveLength(0);

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { LegalFooter } from './LegalFooter';
+import { resetAllLocalData } from '../lib/privacy';
 
 type Kind = 'privacy' | 'terms' | 'legal';
 
@@ -94,6 +96,21 @@ function PrivacySections() {
           por el proveedor de infraestructura de base de datos (Neon DB), actuando como encargado del tratamiento
           bajo las garantías contractuales y técnicas pertinentes. No se realizan transferencias internacionales
           de datos conocidas fuera del Espacio Económico Europeo.
+        </p>
+      </section>
+
+      <section style={sectionStyle}>
+        <h2 style={h2Style}>6bis. Proveedores y subencargados</h2>
+        <p style={pStyle}>Inventario mínimo de los terceros que pueden intervenir en el procesamiento técnico del servicio:</p>
+        <ul style={ulStyle}>
+          <li><strong style={{ color: 'var(--text)' }}>Vercel:</strong> alojamiento de la aplicación (hosting estático y funciones de sincronización).</li>
+          <li><strong style={{ color: 'var(--text)' }}>Neon DB:</strong> base de datos de sincronización entre dispositivos. Solo se contacta si el usuario activa explícitamente la sincronización; por defecto la aplicación funciona en modo local (<code>localStorage</code>) y no la contacta.</li>
+          <li><strong style={{ color: 'var(--text)' }}>tesseract.js (OCR local):</strong> el reconocimiento de texto en imágenes se ejecuta en el propio navegador del usuario. Solo los binarios del motor OCR (no el documento del usuario) pueden descargarse desde una CDN pública en el primer uso.</li>
+        </ul>
+        <p style={{ ...pStyle, marginTop: '0.75rem' }}>
+          Ningún documento o imagen de cuadrante de turnos importado por el usuario se sube ni se conserva en ningún servidor:
+          el archivo se procesa en memoria en el navegador y se descarta al finalizar la importación. Ningún proveedor de
+          analítica o publicidad recibe datos de turnos ni identificadores de empleado.
         </p>
       </section>
 
@@ -336,6 +353,51 @@ function LegalSections() {
   );
 }
 
+/* ─── Local data reset (privacy-only) ───────────────────────────────────── */
+
+function LocalDataReset() {
+  const [status, setStatus] = useState<'idle' | 'done'>('idle');
+
+  const handleReset = () => {
+    const confirmed = window.confirm(
+      'Esto eliminará permanentemente tus turnos, tipos de turno personalizados, perfil y preferencias guardadas en este dispositivo. ¿Continuar?',
+    );
+    if (!confirmed) return;
+    resetAllLocalData();
+    setStatus('done');
+  };
+
+  return (
+    <div
+      style={{
+        marginTop: '2rem',
+        padding: '1.25rem 1.5rem',
+        border: '1px solid var(--danger-border)',
+        borderRadius: 12,
+        background: 'var(--danger-bg)',
+      }}
+    >
+      <p style={{ margin: 0, fontWeight: 700, color: 'var(--text)' }}>Borrar mis datos locales</p>
+      <p style={{ margin: '0.5rem 0 1rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+        Elimina de este dispositivo tus turnos, tipos de turno personalizados, perfil y preferencias. Esta acción
+        no se puede deshacer.
+      </p>
+      <button
+        type="button"
+        onClick={handleReset}
+        style={{ padding: '10px 16px', fontWeight: 800, borderRadius: 12, border: '1px solid var(--danger-border)', color: 'var(--danger)', background: 'transparent', cursor: 'pointer' }}
+      >
+        Borrar todos mis datos locales
+      </button>
+      {status === 'done' && (
+        <p style={{ margin: '0.75rem 0 0', color: 'var(--text)', fontSize: '0.85rem' }}>
+          Datos locales eliminados. Recarga la aplicación para empezar de nuevo.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main component ────────────────────────────────────────────────────── */
 
 export function LegalPage({ kind }: { kind: Kind }) {
@@ -438,6 +500,8 @@ export function LegalPage({ kind }: { kind: Kind }) {
               en el menor tiempo posible.
             </p>
           </div>
+
+          {kind === 'privacy' && <LocalDataReset />}
 
           {/* Back button */}
           <div style={{ marginTop: '2rem' }}>

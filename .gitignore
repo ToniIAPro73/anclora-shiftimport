@@ -37,3 +37,6 @@ build/
 
 # acceptance corpus run artifact
 corpus-report.json
+
+# vitest coverage run artifact
+coverage/

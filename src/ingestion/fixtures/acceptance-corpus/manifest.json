@@ -63,7 +63,8 @@
           "month": "2026-10",
           "expected_assignment_count": 31
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GS-02",
@@ -93,7 +94,8 @@
           "month": "2026-10",
           "expected_assignment_count": 31
         }
-      ]
+      ],
+      "m0_status": "m0_deferred_ocr"
     },
     {
       "id": "GS-03",
@@ -125,7 +127,8 @@
           "employee_name": "Nora Gil",
           "expected_assignment_count": 14
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GS-04",
@@ -152,7 +155,8 @@
           "employee_name": "Miguel Cano",
           "expected_assignment_count": 7
         }
-      ]
+      ],
+      "m0_status": "m0_partial"
     },
     {
       "id": "GS-05",
@@ -179,7 +183,8 @@
           "employee_name": "Sara Vidal",
           "expected_assignment_count": 31
         }
-      ]
+      ],
+      "m0_status": "m0_partial"
     },
     {
       "id": "GS-06",
@@ -206,7 +211,8 @@
           "employee_name": null,
           "expected_assignment_count": 3
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GS-07",
@@ -225,7 +231,8 @@
         "source.docx"
       ],
       "expected_file": "expected.json",
-      "test_profiles": []
+      "test_profiles": [],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GS-08",
@@ -262,7 +269,8 @@
           "employee_name": null,
           "expected_assignment_count": 7
         }
-      ]
+      ],
+      "m0_status": "m0_deferred_ocr"
     },
     {
       "id": "GS-09",
@@ -292,7 +300,8 @@
           "employee_name": null,
           "expected_assignment_count": 31
         }
-      ]
+      ],
+      "m0_status": "m0_deferred_ocr"
     },
     {
       "id": "GS-10",
@@ -319,7 +328,8 @@
           "employee_name": "Eva Test",
           "expected_assignment_count": 10
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-01",
@@ -344,7 +354,8 @@
           "employee_name": "Persona Inexistente",
           "expected_assignment_count": 0
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-02",
@@ -369,7 +380,8 @@
           "employee_name": "Ana López",
           "expected_assignment_count": 0
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-03",
@@ -389,7 +401,8 @@
         "source.pdf"
       ],
       "expected_file": "expected.json",
-      "test_profiles": []
+      "test_profiles": [],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-04",
@@ -409,7 +422,8 @@
         "source.csv"
       ],
       "expected_file": "expected.json",
-      "test_profiles": []
+      "test_profiles": [],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-05",
@@ -428,7 +442,8 @@
         "source.txt"
       ],
       "expected_file": "expected.json",
-      "test_profiles": []
+      "test_profiles": [],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-06",
@@ -454,7 +469,8 @@
           "employee_name": "No Shift",
           "expected_assignment_count": 0
         }
-      ]
+      ],
+      "m0_status": "m0_blocking"
     },
     {
       "id": "GN-07",
@@ -473,7 +489,13 @@
         "source.png"
       ],
       "expected_file": "expected.json",
-      "test_profiles": []
+      "test_profiles": [],
+      "m0_status": "m0_blocking"
     }
-  ]
+  ],
+  "m0_status_legend": {
+    "m0_blocking": "Required to pass for M0 sign-off.",
+    "m0_deferred_ocr": "OCR-dependent (rotated scans, dense/skewed/low-quality images, mobile calendar photos). The OCR extraction path exists (extractImageItems, Tesseract spa) but its accuracy validation is deferred to a later phase / browser E2E; do not treat as an M0 blocking guarantee.",
+    "m0_partial": "XLSX layout support is partial for M0 (only the tabular/roster shapes covered by the current profiles); these fixtures are not treated as fully-supported blocking guarantees."
+  }
 }

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, PlusCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PlusCircle, Settings } from 'lucide-react';
 import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
 import { TurnosLogo } from '../branding/TurnosLogo';
 
@@ -13,11 +13,12 @@ interface MonthHeaderProps {
   onNavigate: (delta: number) => void;
   onAddShift: () => void;
   onImport: () => void;
+  onOpenSettings: () => void;
   themeMode: 'system' | 'light' | 'dark';
   onToggleTheme: () => void;
 }
 
-export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, themeMode, onToggleTheme }: MonthHeaderProps) => {
+export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onOpenSettings, themeMode, onToggleTheme }: MonthHeaderProps) => {
   const themeEmoji = themeMode === 'light' ? '☀️' : themeMode === 'dark' ? '🌙' : '🖥️';
   const identity = formatProfileIdentity(loadUserProfile());
 
@@ -59,6 +60,9 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, the
           aria-label={`Cambiar tema. Actual: ${themeMode}`}
         >
           <span>{themeEmoji}</span>
+        </button>
+        <button onClick={onOpenSettings} className="theme-toggle" title="Ajustes" aria-label="Abrir ajustes">
+          <Settings size={18} />
         </button>
         <button onClick={onImport} className="btn-outline dashboard-action-button">
                   Importar
