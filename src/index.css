@@ -1018,9 +1018,11 @@ button:hover {
   white-space: nowrap;
 }
 
-.lang-toggle span:first-child {
-  font-size: 1rem;
-  line-height: 1;
+.lang-toggle-flag {
+  display: block;
+  flex-shrink: 0;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 
 .brand-mark {

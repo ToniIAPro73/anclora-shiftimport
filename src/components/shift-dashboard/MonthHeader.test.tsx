@@ -26,18 +26,24 @@ function renderHeader(onToggleTheme = vi.fn()) {
 }
 
 describe('MonthHeader language toggle', () => {
-  it('shows a compact flag + ES/EN control, not a redundant label', () => {
+  it('shows a compact SVG flag + ES text label, not a redundant country-code label', () => {
     renderHeader();
     const toggle = screen.getByRole('button', { name: /Cambiar idioma/i });
-    expect(toggle.textContent).toBe('🇪🇸ES');
+    // Text label is exactly "ES" — the flag is a decorative SVG, not text.
+    expect(toggle.textContent).toBe('ES');
+    const flag = toggle.querySelector('svg');
+    expect(flag).toBeTruthy();
+    expect(flag?.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('toggles the locale on click and updates month names', () => {
+  it('toggles the locale on click, swaps the flag, and updates month names', () => {
     renderHeader();
     expect(screen.getByText('Enero 2026')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Cambiar idioma/i }));
     expect(screen.getByText('January 2026')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Change language/i }).textContent).toBe('🇬🇧EN');
+    const toggle = screen.getByRole('button', { name: /Change language/i });
+    expect(toggle.textContent).toBe('EN');
+    expect(toggle.querySelector('svg')).toBeTruthy();
   });
 
   it('toggling the language does not touch the theme toggle state', () => {

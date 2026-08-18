@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight, PlusCircle, Settings } from 'lucide-react';
 import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
 import { useI18n } from '../../lib/use-i18n';
 import { TurnosLogo } from '../branding/TurnosLogo';
+import { SpainFlagIcon, UkFlagIcon } from '../branding/FlagIcon';
 
 interface MonthHeaderProps {
   year: number;
@@ -66,7 +67,7 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
           title={locale.toUpperCase()}
           aria-label={t('header.languageToggleAria', { locale: locale.toUpperCase() })}
         >
-          <span aria-hidden="true">{locale === 'es' ? '🇪🇸' : '🇬🇧'}</span>
+          {locale === 'es' ? <SpainFlagIcon className="lang-toggle-flag" /> : <UkFlagIcon className="lang-toggle-flag" />}
           <span>{locale.toUpperCase()}</span>
         </button>
         <button onClick={onOpenSettings} className="theme-toggle" title={t('settings.title')} aria-label={t('header.settingsAria')}>
