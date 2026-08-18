@@ -3,7 +3,7 @@ export function LegalFooter() {
   return (
     <footer className="legal-footer">
       <span className="legal-footer__copy">© {year} Anclora Group — Todos los derechos reservados.</span>
-      <span className="legal-footer__brand">Anclora GroundSync es una herramienta operativa del ecosistema Anclora Group.</span>
+      <span className="legal-footer__brand">Anclora ShiftImport es un producto del ecosistema Anclora Group.</span>
       <nav className="legal-footer__nav">
         <a href="/terms" className="legal-footer__link">Términos</a>
         <a href="/privacy" className="legal-footer__link">Privacidad</a>

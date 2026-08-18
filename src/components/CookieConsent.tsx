@@ -36,9 +36,9 @@ export function CookieConsent() {
   return (
     <>
       {open ? (
-        <div role="dialog" aria-modal="true" aria-labelledby="groundsync-cookie-title" className="modal-overlay">
+        <div role="dialog" aria-modal="true" aria-labelledby="shiftimport-cookie-title" className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: 520 }}>
-            <h3 id="groundsync-cookie-title" style={{ margin: 0 }}>{settings ? 'Gestionar cookies' : 'Preferencias de cookies'}</h3>
+            <h3 id="shiftimport-cookie-title" style={{ margin: 0 }}>{settings ? 'Gestionar cookies' : 'Preferencias de cookies'}</h3>
             <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>Esta app utiliza cookies necesarias para operación local y puede guardar preferencias opcionales de análisis o marketing si las autorizas.</p>
             {settings ? (
               <div style={{ display: 'grid', gap: 10 }}>

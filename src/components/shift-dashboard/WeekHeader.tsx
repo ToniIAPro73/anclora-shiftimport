@@ -20,7 +20,7 @@ export const WeekHeader = ({ currentWeekStart, onNavigate, onAddShift, onImport,
         <TurnosLogo />
         <div>
           <h1 style={{ fontSize: '1.35rem', fontWeight: '800', background: 'var(--gradient-accent)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em', lineHeight: 1 }}>
-            Anclora GroundSync
+            Anclora ShiftImport
           </h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', marginTop: '2px' }}>by Anclora Group</p>
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>

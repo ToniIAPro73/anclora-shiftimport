@@ -4,7 +4,7 @@ export const TurnosLogo = () => {
       aria-hidden="true"
       className="brand-mark"
     >
-      <img src="/brand/anclora-groundsync.webp" alt="Anclora GroundSync" className="brand-mark-image" />
+      <img src="/brand/anclora-shiftimport.webp" alt="Anclora ShiftImport" className="brand-mark-image" />
     </div>
   );
 };

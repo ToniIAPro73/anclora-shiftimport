@@ -29,7 +29,7 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
             className="dashboard-title"
             style={{ background: 'var(--gradient-accent)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}
           >
-            Anclora GroundSync
+            Anclora ShiftImport
           </h1>
           <p className="dashboard-subtitle">by Anclora Group</p>
           <p className="dashboard-identity">Sebastian Pozo Mendoza · ID 84881</p>

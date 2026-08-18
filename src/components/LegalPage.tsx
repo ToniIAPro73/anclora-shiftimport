@@ -36,7 +36,7 @@ function PrivacySections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>1. Responsable del tratamiento</h2>
         <p style={pStyle}>
-          El responsable del tratamiento de los datos personales recogidos a través de Anclora GroundSync
+          El responsable del tratamiento de los datos personales recogidos a través de Anclora ShiftImport
           es <strong style={{ color: 'var(--text)' }}>Anclora Group</strong>.
           Puedes contactarnos en cualquier momento mediante el correo electrónico{' '}
           <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
@@ -45,7 +45,7 @@ function PrivacySections() {
 
       <section style={sectionStyle}>
         <h2 style={h2Style}>2. Datos que tratamos</h2>
-        <p style={pStyle}>Anclora GroundSync puede tratar las siguientes categorías de datos:</p>
+        <p style={pStyle}>Anclora ShiftImport puede tratar las siguientes categorías de datos:</p>
         <ul style={ulStyle}>
           <li><strong style={{ color: 'var(--text)' }}>Datos de turnos:</strong> fecha, hora de inicio y fin, tipo de turno, ubicación o centro de trabajo, notas asociadas.</li>
           <li><strong style={{ color: 'var(--text)' }}>Preferencias de uso:</strong> configuración de tema visual y opciones de visualización del calendario, almacenadas en <code>localStorage</code>.</li>
@@ -100,7 +100,7 @@ function PrivacySections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>7. Seguridad</h2>
         <p style={pStyle}>
-          Anclora GroundSync aplica medidas técnicas y organizativas adecuadas al riesgo del tratamiento,
+          Anclora ShiftImport aplica medidas técnicas y organizativas adecuadas al riesgo del tratamiento,
           incluyendo comunicaciones cifradas mediante HTTPS, controles de acceso a la base de datos y
           separación de entornos. Los datos almacenados localmente en el dispositivo del usuario están
           sujetos a las medidas de seguridad propias del sistema operativo y navegador empleados.
@@ -130,7 +130,7 @@ function PrivacySections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>9. Cookies</h2>
         <p style={pStyle}>
-          Anclora GroundSync utiliza cookies estrictamente necesarias para el funcionamiento de la aplicación
+          Anclora ShiftImport utiliza cookies estrictamente necesarias para el funcionamiento de la aplicación
           (sesión, preferencias de tema) y puede utilizar cookies opcionales para análisis de uso, siempre
           previa obtención del consentimiento del usuario. Las preferencias de cookies pueden gestionarse
           desde el panel de configuración disponible en el pie de página de la aplicación.
@@ -158,16 +158,16 @@ function TermsSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>1. Objeto</h2>
         <p style={pStyle}>
-          Las presentes condiciones regulan el acceso y uso de <strong style={{ color: 'var(--text)' }}>Anclora GroundSync</strong>,
-          una herramienta operativa del ecosistema Anclora Group destinada a la gestión personal de turnos de trabajo,
-          horarios, estadísticas de jornada e importación de datos desde documentos PDF.
+          Las presentes condiciones regulan el acceso y uso de <strong style={{ color: 'var(--text)' }}>Anclora ShiftImport</strong>,
+          un producto del ecosistema Anclora Group que convierte cuadrantes de trabajo en PDF, imagen o formatos
+          compatibles en un calendario personal estructurado, revisable y exportable.
         </p>
       </section>
 
       <section style={sectionStyle}>
         <h2 style={h2Style}>2. Condiciones de uso</h2>
         <p style={pStyle}>
-          El acceso a Anclora GroundSync implica la aceptación plena de las presentes condiciones. El usuario
+          El acceso a Anclora ShiftImport implica la aceptación plena de las presentes condiciones. El usuario
           se compromete a utilizar la aplicación de forma lícita, responsable y conforme a su finalidad.
           Queda prohibido el uso de la herramienta para fines distintos a la gestión personal de turnos,
           así como cualquier intento de acceso no autorizado a los sistemas subyacentes.
@@ -187,7 +187,7 @@ function TermsSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>4. Limitaciones de uso</h2>
         <p style={pStyle}>
-          Anclora GroundSync es una herramienta de apoyo a la gestión personal. <strong style={{ color: 'var(--text)' }}>No sustituye</strong>{' '}
+          Anclora ShiftImport es una herramienta de apoyo a la gestión personal. <strong style={{ color: 'var(--text)' }}>No sustituye</strong>{' '}
           en ningún caso la documentación laboral oficial, convenios colectivos, contratos de trabajo,
           registros legales de jornada exigidos por la normativa vigente ni el asesoramiento de profesionales
           del ámbito laboral o jurídico.
@@ -207,7 +207,7 @@ function TermsSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>6. Propiedad intelectual</h2>
         <p style={pStyle}>
-          Todos los derechos de propiedad intelectual sobre Anclora GroundSync —incluyendo código fuente,
+          Todos los derechos de propiedad intelectual sobre Anclora ShiftImport —incluyendo código fuente,
           diseño, logotipos, textos y funcionalidades— pertenecen a Anclora Group o a sus licenciantes.
           Queda prohibida la reproducción, distribución, modificación o explotación de cualquier elemento
           de la aplicación sin autorización expresa y escrita de Anclora Group.
@@ -239,7 +239,7 @@ function TermsSections() {
         <p style={pStyle}>
           Anclora Group se reserva el derecho a modificar las presentes condiciones en cualquier momento.
           Los cambios relevantes serán notificados dentro de la propia aplicación. El uso continuado de
-          Anclora GroundSync tras la publicación de las nuevas condiciones implica su aceptación.
+          Anclora ShiftImport tras la publicación de las nuevas condiciones implica su aceptación.
         </p>
       </section>
 
@@ -262,7 +262,7 @@ function LegalSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>1. Titularidad</h2>
         <p style={pStyle}>
-          El titular y operador de Anclora GroundSync es <strong style={{ color: 'var(--text)' }}>Anclora Group</strong>.
+          El titular y operador de Anclora ShiftImport es <strong style={{ color: 'var(--text)' }}>Anclora Group</strong>.
           Para cualquier comunicación relacionada con el presente aviso legal, puedes dirigirte a{' '}
           <a href="mailto:hola@anclora.com" style={{ color: 'var(--accent-gold)' }}>hola@anclora.com</a>.
         </p>
@@ -271,8 +271,8 @@ function LegalSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>2. Naturaleza del servicio</h2>
         <p style={pStyle}>
-          Anclora GroundSync es una herramienta operativa del ecosistema Anclora Group, diseñada para la
-          gestión personal de turnos de trabajo. Su uso tiene carácter auxiliar y no constituye en ningún
+          Anclora ShiftImport es un producto del ecosistema Anclora Group, diseñado para importar
+          cuadrantes de trabajo a un calendario personal. Su uso tiene carácter auxiliar y no constituye en ningún
           caso un servicio de asesoramiento laboral, jurídico ni administrativo.
         </p>
       </section>
@@ -280,7 +280,7 @@ function LegalSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>3. Uso permitido</h2>
         <p style={pStyle}>
-          El acceso y uso de Anclora GroundSync está permitido exclusivamente para fines lícitos y acordes
+          El acceso y uso de Anclora ShiftImport está permitido exclusivamente para fines lícitos y acordes
           con su finalidad operativa. Queda prohibido cualquier uso que vulnere la legislación vigente,
           los derechos de terceros o las presentes condiciones de uso.
         </p>
@@ -289,7 +289,7 @@ function LegalSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>4. Propiedad intelectual</h2>
         <p style={pStyle}>
-          Todos los elementos que integran Anclora GroundSync —incluyendo, sin limitación, el código fuente,
+          Todos los elementos que integran Anclora ShiftImport —incluyendo, sin limitación, el código fuente,
           la interfaz, los textos, los gráficos y los logotipos— son propiedad de Anclora Group o de sus
           colaboradores y están protegidos por la normativa de propiedad intelectual e industrial aplicable.
           Su reproducción total o parcial sin autorización expresa queda expresamente prohibida.
@@ -299,7 +299,7 @@ function LegalSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>5. Responsabilidad sobre los datos</h2>
         <p style={pStyle}>
-          La información y los datos introducidos en Anclora GroundSync son responsabilidad exclusiva del
+          La información y los datos introducidos en Anclora ShiftImport son responsabilidad exclusiva del
           usuario. Anclora Group no verifica la exactitud de los datos introducidos ni de los extraídos
           mediante importación de PDF, y no asume responsabilidad alguna por decisiones adoptadas en base
           a dicha información.
@@ -309,7 +309,7 @@ function LegalSections() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>6. Marca</h2>
         <p style={pStyle}>
-          «Anclora GroundSync» y «Anclora Group» son nombres comerciales utilizados en el tráfico mercantil
+          «Anclora ShiftImport» y «Anclora Group» son nombres comerciales utilizados en el tráfico mercantil
           por sus titulares. No se afirma el registro de marca concedido. Cualquier uso no autorizado de
           estas denominaciones queda prohibido.
         </p>
@@ -320,7 +320,7 @@ function LegalSections() {
         <p style={pStyle}>
           El presente aviso legal se rige por la legislación española y, en lo que resulte de aplicación,
           por la normativa de la Unión Europea. Para la resolución de cualquier controversia derivada del
-          acceso o uso de Anclora GroundSync, las partes se someten a los juzgados y tribunales competentes
+          acceso o uso de Anclora ShiftImport, las partes se someten a los juzgados y tribunales competentes
           conforme a la normativa vigente.
         </p>
       </section>
