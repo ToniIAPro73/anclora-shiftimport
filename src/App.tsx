@@ -3,6 +3,8 @@ import { Shift } from './lib/types';
 import { getMonthDaysISO, getDaysInMonth } from './lib/week';
 import { loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
 import { findShiftConflict } from './lib/shift-conflicts';
+
+import { fingerprintShift } from './lib/import-dedup';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
@@ -201,6 +203,15 @@ function App() {
       }
 
       const matchingExisting = existingPdfShifts.find((existing) => getShiftType(existing) === getShiftType(shift));
+      // Idempotent re-import: an identical semantic shift is left untouched
+      // (no id churn, no replace/skip prompt). Identity is the deterministic
+      // fingerprint, never the random UUID.
+      const identicalExisting = existingPdfShifts.find(
+        (existing) => fingerprintShift(existing).full === fingerprintShift(shift).full,
+      );
+      if (identicalExisting) {
+        continue;
+      }
       const existingShift = matchingExisting ?? existingPdfShifts[0];
       const decision = await requestImportDecision(existingShift, shift);
 
