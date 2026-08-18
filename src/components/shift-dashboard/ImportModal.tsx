@@ -310,12 +310,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
   // The assistant needs the positioned items + item-level analysis, which
   // DocumentAnalysisResult intentionally does not carry; derive them lazily
-  // only when there are questions worth asking.
+  // only when there are questions worth asking. Tabular (CSV) results carry
+  // a parsed table instead of a positional structure — the panel works off
+  // it directly.
   useEffect(() => {
     if (!isOpen || !analysis || !file || assistantDismissed) {
       return;
     }
-    if (analysis.questions.length === 0 || analysis.structure === null) {
+    if (analysis.questions.length === 0 || (analysis.structure === null && !analysis.table)) {
       return;
     }
     let cancelled = false;
@@ -675,7 +677,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   questions={analysis.questions}
                   items={assistantSession.items}
                   context={analysis.context}
-                  analysis={assistantSession.itemAnalysis}
+                  analysis={analysis.structure !== null ? assistantSession.itemAnalysis : null}
+                  table={analysis.table ?? null}
                   selector={buildSelector()}
                   onComplete={handleAssistantComplete}
                   onCancel={() => setAssistantDismissed(true)}

@@ -17,13 +17,20 @@
 import { FORMAT_PROFILE_VERSION, UserFormatProfile } from '../lib/format-profiles';
 import { CalendarImportContext, ParsedCalendarShift, PdfDocumentType } from '../lib/import-types';
 import { mergeShiftTypeOverrides, ShiftTypeOverrides } from '../lib/shift-types';
-import { EmployeeSelector } from './core/row-detection';
+import { getDaysInMonth } from '../lib/week';
+import { mapColumnGroupsToDays } from './core/clustering';
+import { EmployeeRow, EmployeeSelector } from './core/row-detection';
+import { buildCodeProfile } from './core/shift-code-profile';
 import { isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
-import { buildShiftsFromEmployeeRow } from './parsers/parse-items';
-import { ItemAnalysis } from './analysis';
+import {
+  buildShiftsFromEmployeeRow,
+  buildShiftsFromMappedColumns,
+  resolveColumnDayMapping,
+} from './parsers/parse-items';
+import { DayMappingDiagnostic, ItemAnalysis } from './analysis';
 
 export type AssistantQuestion =
   | { kind: 'row-selection'; candidates: EmployeeRowCandidate[] }
@@ -41,7 +48,11 @@ export interface EmployeeRowCandidate {
 
 export interface AssistantAnswers {
   selectedRow?: EmployeeRowCandidate;
-  dayMappingConfirmed?: boolean;
+  /**
+   * Day-mapping answer: confirmed accepts the proposed day; on rejection
+   * correctedDay carries the user-entered day of month for that column.
+   */
+  dayMapping?: { confirmed: boolean; correctedDay?: number };
   tokenMeanings: Record<string, {
     kind: 'work' | 'rest';
     shiftTypeId?: string;
@@ -54,7 +65,7 @@ const DEFAULT_MAX_ROWS = 8;
 const MAX_TOKEN_QUESTIONS = 6;
 
 /** User-facing profile label per document type — never a person name. */
-const DOCUMENT_TYPE_LABELS: Record<PdfDocumentType, string> = {
+export const DOCUMENT_TYPE_LABELS: Record<PdfDocumentType, string> = {
   TYPE_A: 'Cuadrante mensual',
   TYPE_B: 'Cuadrante semanal',
   TYPE_TAB: 'Cuadrante tabular',
@@ -121,18 +132,50 @@ export function findEmployeeRowCandidates(
 }
 
 /**
+ * Builds the single day-mapping question for a diagnostic: targets the first
+ * unmatched column group and proposes the nearest unmapped day header (by x
+ * distance), falling back to day 1 when no unmapped header exists. Returns
+ * null when every column group was aligned — a fully resolved mapping never
+ * produces a question.
+ */
+export function dayMappingQuestionFromDiagnostic(
+  dayMapping: DayMappingDiagnostic,
+): Extract<AssistantQuestion, { kind: 'day-mapping' }> | null {
+  const target = dayMapping.unmatchedGroups[0];
+  if (!target) {
+    return null;
+  }
+
+  let proposedDay = 1;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const header of dayMapping.unmappedHeaders) {
+    const distance = Math.abs(header.x - target.x);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      proposedDay = header.day;
+    }
+  }
+
+  return {
+    kind: 'day-mapping',
+    columnIndex: target.columnIndex,
+    sampleTokens: target.sampleTokens,
+    proposedDay,
+  };
+}
+
+/**
  * Turns an ItemAnalysis into the questions the UI should ask.
  *
  * - row-selection: only when the employee match is 'none' or 'multiple' and
  *   the document has selectable rows (capped at opts.maxRows, default 8).
+ * - day-mapping: at most one, only when the employee row was found AND the
+ *   column→day alignment left a column group unmatched (the minimum useful
+ *   question; see dayMappingQuestionFromDiagnostic).
  * - token-meaning / shift-code: one per unknown row token (cap 6). Tokens of
  *   a code-based profile (useShiftCodeProfile) that look like codes
  *   (1–4 letters) are asked as shift-code ("¿Qué turno representa M?");
  *   everything else as token-meaning ("¿Qué significa X?").
- * - day-mapping: NOT emitted in wave 2. ItemAnalysis intentionally does not
- *   retain the column→day alignment detail, and re-running clustering here
- *   just to detect "headers exist but columns unmapped" was deemed not cheap
- *   enough for this wave; the question kind is reserved in the type union.
  */
 export function generateAssistantQuestions(
   items: PdfTextItem[],
@@ -140,7 +183,7 @@ export function generateAssistantQuestions(
   analysis: ItemAnalysis,
   opts?: { maxRows?: number },
 ): AssistantQuestion[] {
-  void context; // reserved for day-mapping detection (deferred, see above)
+  void context; // day-mapping detection runs off analysis.dayMapping
   const questions: AssistantQuestion[] = [];
   const profile = getIngestionProfile(analysis.structure.documentType);
 
@@ -148,6 +191,16 @@ export function generateAssistantQuestions(
     const candidates = findEmployeeRowCandidates(items, profile, { maxRows: opts?.maxRows });
     if (candidates.length > 0) {
       questions.push({ kind: 'row-selection', candidates });
+    }
+  }
+
+  // Emission predicate: the row was located (analysis.dayMapping exists) and
+  // the alignment could not pair every column group. Unmapped headers alone
+  // (empty day cells) are NOT actionable — there is no column to ask about.
+  if (analysis.dayMapping) {
+    const dayMappingQuestion = dayMappingQuestionFromDiagnostic(analysis.dayMapping);
+    if (dayMappingQuestion) {
+      questions.push(dayMappingQuestion);
     }
   }
 
@@ -198,6 +251,23 @@ export function buildProfileFromAnswers(
     }
   }
 
+  // Learned column→day correction, stored as { columnIndex: day } so a later
+  // re-parse (parseWithDayMapping) can force the same assignment. Confirmed
+  // answers store the proposed day; rejections only store an explicit
+  // correctedDay — a bare "no" teaches nothing.
+  let dayColumnMap: Record<number, number> | undefined;
+  const dayMappingQuestion = analysis.dayMapping
+    ? dayMappingQuestionFromDiagnostic(analysis.dayMapping)
+    : null;
+  if (answers.dayMapping && dayMappingQuestion) {
+    const day = answers.dayMapping.confirmed
+      ? dayMappingQuestion.proposedDay
+      : answers.dayMapping.correctedDay;
+    if (typeof day === 'number' && Number.isInteger(day) && day >= 1) {
+      dayColumnMap = { [dayMappingQuestion.columnIndex]: day };
+    }
+  }
+
   return {
     profileVersion: FORMAT_PROFILE_VERSION,
     id: generateProfileId(),
@@ -212,6 +282,7 @@ export function buildProfileFromAnswers(
       clusterTolerance: detected?.clusterTolerance ?? 0,
       columnMatchMaxDistance: detected?.columnMatchMaxDistance ?? 0,
     },
+    ...(dayColumnMap ? { dayColumnMap } : {}),
     createdAt: now,
     updatedAt: now,
     useCount: 0,
@@ -232,20 +303,17 @@ export function selectorFromAnswers(answers: AssistantAnswers): EmployeeSelector
 }
 
 /**
- * Re-parses ONLY the manually selected row: rebuilds the row band around the
- * candidate's marker y with the profile's window offsets (manual selection
- * has no "previous label" ceiling / boundary floor, so those modes fall back
- * to a small default band) and runs the shared row→shifts pipeline
- * (buildShiftsFromEmployeeRow, the exact steps 5–10 of parseShiftsFromItems).
- * Returns [] when the band holds no data cells. Multi-section (TYPE_MULTI)
- * documents are out of scope for this helper in wave 2.
+ * Resolves the EmployeeRow for a manually picked candidate: rebuilds the row
+ * band around the candidate's marker y with the profile's window offsets
+ * (manual selection has no "previous label" ceiling / boundary floor, so
+ * those modes fall back to a small default band). Returns null when the band
+ * holds no data cells.
  */
-export function parseWithSelectedRow(
+export function resolveRowForCandidate(
   items: PdfTextItem[],
-  context: CalendarImportContext,
   candidate: EmployeeRowCandidate,
   profile: IngestionProfile,
-): ParsedCalendarShift[] {
+): EmployeeRow | null {
   const ceilingOffset = profile.rowWindow.ceiling.mode === 'offset' ? profile.rowWindow.ceiling.offset : 15;
   const inclusive = profile.rowWindow.ceiling.mode === 'offset' ? profile.rowWindow.ceiling.inclusive : false;
   const floorOffset = profile.rowWindow.floor.mode === 'offset' ? profile.rowWindow.floor.offset : -0.5;
@@ -260,15 +328,70 @@ export function parseWithSelectedRow(
       && item.y >= floorY,
   );
   if (rowItems.length === 0) {
+    return null;
+  }
+
+  return { rowItems, page: candidate.page, category: profile.rowWindow.defaultCategory };
+}
+
+/**
+ * Re-parses ONLY the manually selected row (see resolveRowForCandidate) and
+ * runs the shared row→shifts pipeline (buildShiftsFromEmployeeRow, the exact
+ * steps 5–10 of parseShiftsFromItems). Returns [] when the band holds no
+ * data cells. Multi-section (TYPE_MULTI) documents are out of scope for this
+ * helper in wave 2.
+ */
+export function parseWithSelectedRow(
+  items: PdfTextItem[],
+  context: CalendarImportContext,
+  candidate: EmployeeRowCandidate,
+  profile: IngestionProfile,
+): ParsedCalendarShift[] {
+  const row = resolveRowForCandidate(items, candidate, profile);
+  if (!row) {
     return [];
   }
 
-  return buildShiftsFromEmployeeRow(
-    items,
-    { rowItems, page: candidate.page, category: profile.rowWindow.defaultCategory },
-    context,
-    profile,
+  return buildShiftsFromEmployeeRow(items, row, context, profile);
+}
+
+/**
+ * One-shot re-parse with a corrected column→day assignment (the day-mapping
+ * answer). The corrected group is excluded from the standard alignment and
+ * forced onto the corrected day — clamped to the context month length — and
+ * the corrected day is removed from the pool available to the remaining
+ * groups, so on collision the correction wins and the displaced group is
+ * re-aligned against the other headers or left unmapped (never re-dated to
+ * an invented day). Dates are built exclusively from the context month by
+ * buildShiftsFromMappedColumns, so nothing outside it can be fabricated.
+ * Falls back to the standard alignment when the columnIndex is stale.
+ */
+export function parseWithDayMapping(
+  items: PdfTextItem[],
+  context: CalendarImportContext,
+  row: EmployeeRow,
+  profile: IngestionProfile,
+  correction: { columnIndex: number; day: number },
+): ParsedCalendarShift[] {
+  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(items) : undefined;
+  const { columnGroups, dayColumns, mappedColumns } = resolveColumnDayMapping(items, row, context, profile);
+
+  const target = columnGroups[correction.columnIndex];
+  if (!target || !Number.isInteger(correction.day)) {
+    return buildShiftsFromMappedColumns(mappedColumns, context, profile, codeProfile);
+  }
+
+  const correctedDay = Math.min(
+    Math.max(1, correction.day),
+    getDaysInMonth(context.year, context.month),
   );
+  const remainingGroups = columnGroups.filter((_, index) => index !== correction.columnIndex);
+  const remainingDayColumns = dayColumns.filter((column) => column.day !== correctedDay);
+  const realigned = mapColumnGroupsToDays(remainingGroups, remainingDayColumns, profile.columnMatchMaxDistance);
+  const mapped = [...realigned, { day: correctedDay, items: target }]
+    .sort((left, right) => left.day - right.day);
+
+  return buildShiftsFromMappedColumns(mapped, context, profile, codeProfile);
 }
 
 /**

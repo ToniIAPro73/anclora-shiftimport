@@ -8,7 +8,7 @@ import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-typ
 import { IngestionError } from '../../lib/ingestion-errors';
 import { getDaysInMonth } from '../../lib/week';
 import { detectCalendarContext } from '../core/calendar-context';
-import { clusterByX, mapColumnGroupsToDays } from '../core/clustering';
+import { clusterByX, DayColumn, mapColumnGroupsToDaysDetailed } from '../core/clustering';
 import { getDayColumnsForPage } from '../core/day-columns';
 import {
   countEmployeeNameCandidates,
@@ -17,7 +17,7 @@ import {
   findEmployeeRowItems,
 } from '../core/row-detection';
 import { buildShiftEntriesForDay } from '../core/shift-builder';
-import { buildCodeProfile } from '../core/shift-code-profile';
+import { buildCodeProfile, ShiftCodeMapping } from '../core/shift-code-profile';
 import { deduceYearFromItems, PdfTextItem } from '../core/text-items';
 import { getIngestionProfile } from '../profiles';
 import { IngestionProfile } from '../profiles/types';
@@ -99,35 +99,52 @@ export function parseShiftsFromItems(
 }
 
 /**
- * Generic row→shifts pipeline (steps 5–10 of parseShiftsFromItems): cluster
- * the located row's cells into columns, align them with the page's day
- * columns and build the normalized shifts. Extracted so the format
- * assistant's manual-row re-parse (src/ingestion/assistant.ts) reuses the
- * exact same logic instead of a copy.
+ * Runs the alignment half of the row→shifts pipeline (steps 5–7) WITHOUT the
+ * profile's error throws, returning both the inputs and the alignment result.
+ * Shared by buildShiftsFromEmployeeRow (which applies the error policy), the
+ * analysis layer (day-mapping diagnostic) and the assistant's corrected
+ * re-parse (parseWithDayMapping).
  */
-export function buildShiftsFromEmployeeRow(
+export function resolveColumnDayMapping(
   allItems: PdfTextItem[],
   row: EmployeeRow,
   context: CalendarImportContext,
   profile: IngestionProfile,
-): ParsedCalendarShift[] {
+): ColumnDayResolution {
   const columnGroups = clusterByX(row.rowItems, profile.clusterTolerance);
-  if (profile.errors.noColumnGroups && columnGroups.length === 0) {
-    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noColumnGroups);
-  }
-
   const dayColumns = getDayColumnsForPage(allItems, row.page, context, profile.dayHeader);
-  if (dayColumns.length === 0) {
-    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noDayHeaders);
-  }
+  const { mapped, unmatchedGroupIndices } = mapColumnGroupsToDaysDetailed(
+    columnGroups,
+    dayColumns,
+    profile.columnMatchMaxDistance,
+  );
+  return {
+    columnGroups,
+    dayColumns,
+    mappedColumns: mapped.map(({ day, items }) => ({ day, items })),
+    unmatchedGroupIndices,
+  };
+}
 
-  const mappedColumns = mapColumnGroupsToDays(columnGroups, dayColumns, profile.columnMatchMaxDistance);
-  if (profile.errors.noMappedColumns && mappedColumns.length === 0) {
-    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noMappedColumns);
-  }
+export interface ColumnDayResolution {
+  columnGroups: PdfTextItem[][];
+  dayColumns: DayColumn[];
+  mappedColumns: Array<{ day: number; items: PdfTextItem[] }>;
+  unmatchedGroupIndices: number[];
+}
 
-  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(allItems) : undefined;
-
+/**
+ * Turns already-aligned column→day pairs into normalized shifts (steps 8–10):
+ * context-month date building, in-month validation, incomplete-drop and
+ * result sorting per the profile. Dates are ALWAYS built from the context
+ * month — this function cannot invent dates outside it.
+ */
+export function buildShiftsFromMappedColumns(
+  mappedColumns: Array<{ day: number; items: PdfTextItem[] }>,
+  context: CalendarImportContext,
+  profile: IngestionProfile,
+  codeProfile?: Map<string, ShiftCodeMapping>,
+): ParsedCalendarShift[] {
   let shifts: ParsedCalendarShift[] = [];
   for (const { day, items } of mappedColumns) {
     if (profile.validateDayInMonth && (day < 1 || day > getDaysInMonth(context.year, context.month))) {
@@ -159,4 +176,32 @@ export function buildShiftsFromEmployeeRow(
   }
 
   return shifts;
+}
+
+/**
+ * Generic row→shifts pipeline (steps 5–10 of parseShiftsFromItems): cluster
+ * the located row's cells into columns, align them with the page's day
+ * columns and build the normalized shifts. Extracted so the format
+ * assistant's manual-row re-parse (src/ingestion/assistant.ts) reuses the
+ * exact same logic instead of a copy.
+ */
+export function buildShiftsFromEmployeeRow(
+  allItems: PdfTextItem[],
+  row: EmployeeRow,
+  context: CalendarImportContext,
+  profile: IngestionProfile,
+): ParsedCalendarShift[] {
+  const { columnGroups, dayColumns, mappedColumns } = resolveColumnDayMapping(allItems, row, context, profile);
+  if (profile.errors.noColumnGroups && columnGroups.length === 0) {
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noColumnGroups);
+  }
+  if (dayColumns.length === 0) {
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noDayHeaders);
+  }
+  if (profile.errors.noMappedColumns && mappedColumns.length === 0) {
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noMappedColumns);
+  }
+
+  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(allItems) : undefined;
+  return buildShiftsFromMappedColumns(mappedColumns, context, profile, codeProfile);
 }

@@ -5,14 +5,23 @@ import {
   AssistantQuestion,
   buildProfileFromAnswers,
   EmployeeRowCandidate,
+  parseWithDayMapping,
   parseWithSelectedRow,
+  resolveRowForCandidate,
   selectorFromAnswers,
 } from '../../ingestion/assistant';
 import { analyzeShiftsFromItems, ItemAnalysis } from '../../ingestion/analysis';
-import { EmployeeSelector } from '../../ingestion/core/row-detection';
+import { findEmployeeRowItems, EmployeeSelector } from '../../ingestion/core/row-detection';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { parseShiftsFromItems } from '../../ingestion/parsers/parse-items';
 import { getIngestionProfile } from '../../ingestion/profiles';
+import {
+  analyzeRosterTable,
+  buildTabularImportResult,
+  buildTabularProfileFromAnswers,
+  RosterTable,
+} from '../../ingestion/tabular-assistant';
+import { getDaysInMonth } from '../../lib/week';
 import { saveFormatProfile, UserFormatProfile } from '../../lib/format-profiles';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { ImportResult } from '../../lib/import-quality';
@@ -31,7 +40,10 @@ interface ProfileAssistantPanelProps {
   questions: AssistantQuestion[];
   items: PdfTextItem[];
   context: CalendarImportContext;
-  analysis: ItemAnalysis;
+  /** null in tabular (CSV) mode, where there is no positioned layout analysis */
+  analysis: ItemAnalysis | null;
+  /** parsed CSV table for the tabular assistant path (roster / UNKNOWN grids) */
+  table?: RosterTable | null;
   /** selector used for the original analysis (fallback when no row is picked) */
   selector: EmployeeSelector;
   onComplete: (result: AssistantCompletion) => void;
@@ -51,6 +63,7 @@ export const ProfileAssistantPanel = ({
   items,
   context,
   analysis,
+  table = null,
   selector,
   onComplete,
   onCancel,
@@ -58,6 +71,7 @@ export const ProfileAssistantPanel = ({
   const { locale, t } = useI18n();
   const [selectedRow, setSelectedRow] = useState<EmployeeRowCandidate | null>(null);
   const [dayMappingConfirmed, setDayMappingConfirmed] = useState<boolean | null>(null);
+  const [correctedDay, setCorrectedDay] = useState('');
   const [tokenMeanings, setTokenMeanings] = useState<Record<string, TokenMeaning>>({});
   const [saveProfile, setSaveProfile] = useState(true);
 
@@ -68,7 +82,9 @@ export const ProfileAssistantPanel = ({
     (q): q is Extract<AssistantQuestion, { kind: 'token-meaning' } | { kind: 'shift-code' }> =>
       q.kind === 'token-meaning' || q.kind === 'shift-code',
   );
-  const dayMappingQuestion = questions.find((q) => q.kind === 'day-mapping');
+  const dayMappingQuestion = questions.find(
+    (q): q is Extract<AssistantQuestion, { kind: 'day-mapping' }> => q.kind === 'day-mapping',
+  );
 
   const setTokenMeaning = (token: string, patch: Partial<TokenMeaning>) => {
     setTokenMeanings((current) => {
@@ -78,11 +94,45 @@ export const ProfileAssistantPanel = ({
   };
 
   const handleConfirm = () => {
+    const correctedDayNumber = Number.parseInt(correctedDay, 10);
+    const activeDayMapping = dayMappingConfirmed !== null ? dayMappingQuestion : undefined;
+    const dayMappingAnswer = activeDayMapping
+      ? {
+        confirmed: dayMappingConfirmed as boolean,
+        ...(!dayMappingConfirmed && Number.isInteger(correctedDayNumber)
+          ? { correctedDay: correctedDayNumber }
+          : {}),
+      }
+      : null;
+
     const answers: AssistantAnswers = {
       ...(selectedRow ? { selectedRow } : {}),
-      ...(dayMappingConfirmed !== null ? { dayMappingConfirmed } : {}),
+      ...(dayMappingAnswer ? { dayMapping: dayMappingAnswer } : {}),
       tokenMeanings,
     };
+
+    // Tabular (CSV) mode: no positioned pipeline — the profile and the
+    // re-parse are built directly from the parsed table (PII-free, see
+    // ingestion/tabular-assistant.ts).
+    if (table) {
+      const tableAnalysis = analyzeRosterTable(table, selector);
+      const profile = buildTabularProfileFromAnswers(table, tableAnalysis, answers);
+      if (saveProfile) {
+        saveFormatProfile(profile);
+        applyTokenAliasesToShiftTypes(profile);
+      }
+      const { shifts, quality } = buildTabularImportResult(table, answers, context);
+      onComplete({
+        shifts,
+        quality: { ...quality, shifts },
+        profile: saveProfile ? profile : null,
+      });
+      return;
+    }
+
+    if (!analysis) {
+      return; // positional mode requires the item analysis
+    }
 
     const profile = buildProfileFromAnswers(items, context, analysis, answers);
     if (saveProfile) {
@@ -93,10 +143,29 @@ export const ProfileAssistantPanel = ({
     const sessionSelector = selectorFromAnswers(answers) ?? selector;
     const ingestionProfile = getIngestionProfile(analysis.structure.documentType);
 
-    // Re-parse: the manually selected row when there is one, otherwise the
-    // standard pipeline (token aliases just mirrored into the registry apply).
+    // Re-parse: a day-mapping answer forces the corrected column→day
+    // assignment over the resolved row (manual selection or selector row);
+    // otherwise the manually selected row when there is one, falling back to
+    // the standard pipeline (token aliases just mirrored into the registry
+    // apply).
     let shifts: ParsedCalendarShift[] = [];
-    if (selectedRow && ingestionProfile) {
+    if (dayMappingAnswer && activeDayMapping && ingestionProfile) {
+      const corrected = dayMappingAnswer.confirmed
+        ? activeDayMapping.proposedDay
+        : dayMappingAnswer.correctedDay;
+      const row = selectedRow
+        ? resolveRowForCandidate(items, selectedRow, ingestionProfile)
+        : findEmployeeRowItems(items, sessionSelector, ingestionProfile.rowWindow);
+      if (row && corrected !== undefined) {
+        shifts = parseWithDayMapping(
+          items,
+          context,
+          row,
+          ingestionProfile,
+          { columnIndex: activeDayMapping.columnIndex, day: corrected },
+        );
+      }
+    } else if (selectedRow && ingestionProfile) {
       shifts = parseWithSelectedRow(items, context, selectedRow, ingestionProfile);
     } else {
       try {
@@ -114,7 +183,8 @@ export const ProfileAssistantPanel = ({
     });
   };
 
-  const confirmDisabled = rowQuestion !== undefined && selectedRow === null;
+  const confirmDisabled = (rowQuestion !== undefined && selectedRow === null)
+    || (dayMappingQuestion !== undefined && dayMappingConfirmed === false && !Number.isInteger(Number.parseInt(correctedDay, 10)));
 
   const segmentedButtonStyle = (active: boolean): React.CSSProperties => ({
     padding: '8px 14px',
@@ -231,12 +301,12 @@ export const ProfileAssistantPanel = ({
         );
       })}
 
-      {dayMappingQuestion?.kind === 'day-mapping' && (
+      {dayMappingQuestion && (
         <div>
           <p style={{ margin: '0 0 8px', fontSize: '0.85rem', fontWeight: 700 }}>
             {t('assistant.dayColumnQuestion', { day: dayMappingQuestion.proposedDay })}
           </p>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
               className={dayMappingConfirmed === true ? 'btn-gold' : 'btn-outline'}
@@ -253,6 +323,21 @@ export const ProfileAssistantPanel = ({
             >
               {t('common.no')}
             </button>
+            {dayMappingConfirmed === false && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                <span>{t('assistant.dayColumnCorrect')}</span>
+                <input
+                  type="number"
+                  className="modal-input"
+                  style={{ width: '72px', padding: '8px 10px' }}
+                  min={1}
+                  max={getDaysInMonth(context.year, context.month)}
+                  aria-label={t('assistant.dayColumnCorrect')}
+                  value={correctedDay}
+                  onChange={(event) => setCorrectedDay(event.target.value)}
+                />
+              </label>
+            )}
           </div>
         </div>
       )}

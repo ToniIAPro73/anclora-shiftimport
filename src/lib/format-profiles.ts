@@ -22,6 +22,24 @@ export interface UserFormatProfile {
   /** employee row rule WITHOUT identity: which row selection strategy worked */
   employeeRow: { strategy: 'identifier' | 'name' | 'manual-row'; rowIndex?: number };
   parserParams: { clusterTolerance: number; columnMatchMaxDistance: number };
+  /**
+   * Learned column→day correction from a day-mapping answer:
+   * { columnClusterIndex: dayOfMonth }. Consumed only by the assistant
+   * re-parse (parseWithDayMapping); the generic pipeline never auto-applies
+   * it, so repeat documents still surface drift instead of silently
+   * re-dating cells.
+   */
+  dayColumnMap?: Record<number, number>;
+  /**
+   * Tabular (CSV) layout memory: positional column indices of the parsed
+   * table, so a repeat document can reuse the answered mapping without
+   * re-asking. Indices only — never header text or cell content.
+   */
+  tabular?: {
+    dateColumnIndex: number | null;
+    employeeColumnIndex: number | null;
+    valueColumnIndices: number[];
+  };
   createdAt: string; // ISO
   updatedAt: string;
   useCount: number;
@@ -95,6 +113,34 @@ const normalizeSignature = (raw: Partial<LayoutSignature> | null | undefined): L
   hasLegend: raw?.hasLegend === true,
 });
 
+const normalizeDayColumnMap = (
+  raw: unknown,
+): Record<number, number> | undefined => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const entries = Object.entries(raw as Record<string, unknown>)
+    .map(([columnIndex, day]) => [Number(columnIndex), Number(day)] as const)
+    .filter(([columnIndex, day]) =>
+      Number.isInteger(columnIndex) && columnIndex >= 0 && Number.isInteger(day) && day >= 1);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
+const normalizeTabularMemory = (
+  raw: unknown,
+): UserFormatProfile['tabular'] | undefined => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const candidate = raw as Partial<NonNullable<UserFormatProfile['tabular']>>;
+  const dateColumnIndex = typeof candidate.dateColumnIndex === 'number' ? candidate.dateColumnIndex : null;
+  const employeeColumnIndex = typeof candidate.employeeColumnIndex === 'number' ? candidate.employeeColumnIndex : null;
+  const valueColumnIndices = Array.isArray(candidate.valueColumnIndices)
+    ? candidate.valueColumnIndices.filter((index): index is number => Number.isInteger(index) && index >= 0)
+    : [];
+  return { dateColumnIndex, employeeColumnIndex, valueColumnIndices };
+};
+
 const normalizeProfile = (
   raw: Partial<UserFormatProfile> | null | undefined,
   now: string,
@@ -131,6 +177,8 @@ const normalizeProfile = (
       clusterTolerance: typeof raw.parserParams?.clusterTolerance === 'number' ? raw.parserParams.clusterTolerance : 0,
       columnMatchMaxDistance: typeof raw.parserParams?.columnMatchMaxDistance === 'number' ? raw.parserParams.columnMatchMaxDistance : 0,
     },
+    ...(normalizeDayColumnMap(raw.dayColumnMap) ? { dayColumnMap: normalizeDayColumnMap(raw.dayColumnMap) } : {}),
+    ...(normalizeTabularMemory(raw.tabular) ? { tabular: normalizeTabularMemory(raw.tabular) } : {}),
     createdAt: typeof raw.createdAt === 'string' && raw.createdAt ? raw.createdAt : now,
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : now,
     useCount: typeof raw.useCount === 'number' && raw.useCount >= 0 ? raw.useCount : 0,

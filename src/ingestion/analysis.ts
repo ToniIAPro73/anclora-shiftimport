@@ -43,7 +43,7 @@ import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
 import { detectPdfDocumentTypeFromItems } from './parsers/detect';
-import { parseShiftsFromItems } from './parsers/parse-items';
+import { parseShiftsFromItems, resolveColumnDayMapping } from './parsers/parse-items';
 
 export interface DocumentStructureAnalysis {
   documentType: PdfDocumentType;
@@ -56,6 +56,22 @@ export interface DocumentStructureAnalysis {
 
 export type EmployeeMatchStrength = 'strong' | 'weak' | 'multiple' | 'none';
 
+/**
+ * Column→day alignment diagnostic for the located employee row. Captured by
+ * re-running the pipeline's shared alignment step (resolveColumnDayMapping)
+ * so the format assistant can ask a day-mapping question only when the grid
+ * could not be fully paired — never recomputed blindly in the UI layer.
+ */
+export interface DayMappingDiagnostic {
+  dayHeaderCount: number;
+  /** distinct day headers paired with a column group */
+  mappedDayCount: number;
+  /** day headers no column group aligned to (empty days included) */
+  unmappedHeaders: Array<{ day: number; x: number; page: number }>;
+  /** column groups that fell outside columnMatchMaxDistance of any header */
+  unmatchedGroups: Array<{ columnIndex: number; sampleTokens: string[]; x: number }>;
+}
+
 export interface ItemAnalysis {
   structure: DocumentStructureAnalysis;
   employeeMatch: EmployeeMatchStrength;
@@ -66,6 +82,8 @@ export interface ItemAnalysis {
   totalTokens: number;
   recognizedTokens: number;
   invalidTimes: number;
+  /** present only when the employee row was located (never for TYPE_MULTI) */
+  dayMapping?: DayMappingDiagnostic;
 }
 
 /**
@@ -225,6 +243,38 @@ const nameMatchStrength = (
 };
 
 /**
+ * Captures the column→day alignment for the located row via the pipeline's
+ * own alignment step: day headers left unpaired and column groups that fell
+ * outside columnMatchMaxDistance (with their first cell tokens as samples
+ * for the assistant's day-mapping question).
+ */
+const computeDayMappingDiagnostic = (
+  items: PdfTextItem[],
+  row: EmployeeRow,
+  context: CalendarImportContext,
+  profile: IngestionProfile,
+): DayMappingDiagnostic => {
+  const { columnGroups, dayColumns, mappedColumns, unmatchedGroupIndices } =
+    resolveColumnDayMapping(items, row, context, profile);
+  const mappedDays = new Set(mappedColumns.map((column) => column.day));
+  return {
+    dayHeaderCount: dayColumns.length,
+    mappedDayCount: mappedDays.size,
+    unmappedHeaders: dayColumns
+      .filter((column) => !mappedDays.has(column.day))
+      .map((column) => ({ day: column.day, x: column.x, page: row.page })),
+    unmatchedGroups: unmatchedGroupIndices.map((columnIndex) => {
+      const group = columnGroups[columnIndex];
+      return {
+        columnIndex,
+        sampleTokens: group.slice(0, 3).map((item) => item.text.trim()).filter(Boolean),
+        x: group.reduce((sum, item) => sum + item.x, 0) / group.length,
+      };
+    }),
+  };
+};
+
+/**
  * Full item-level analysis for one import attempt.
  *
  * Employee match strength rules:
@@ -324,6 +374,11 @@ export function analyzeItemsForImport(
     totalTokens,
     recognizedTokens,
     invalidTimes,
+    // TYPE_MULTI has no single day-column grid per page; the day-mapping
+    // assistant question does not apply to it.
+    ...(profile.id !== 'TYPE_MULTI'
+      ? { dayMapping: computeDayMappingDiagnostic(items, row, context, profile) }
+      : {}),
   };
 }
 

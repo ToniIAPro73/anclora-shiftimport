@@ -16,7 +16,7 @@
 - `src/lib/storage.ts`: persistencia en `localStorage` (sync remoto opt-in vía `VITE_ENABLE_REMOTE_STORAGE`).
 - `src/lib/week.ts`, `src/lib/time.ts`: cálculos de calendario, fechas y horas.
 - `src/lib/shifts.ts`: lógica de negocio de turnos y métricas.
-- `src/ingestion/`: ingesta de cuadrantes PDF — `core/` (primitivas puras: items de texto, normalización, tokens, clustering, detección de fila, construcción de turnos), `profiles/` (perfiles declarativos TYPE_A/TYPE_B con umbrales y tokens), `parsers/` (pipeline puro sobre items + API de fichero con PDF.js).
+- `src/ingestion/`: ingesta de cuadrantes PDF — `core/` (primitivas puras: items de texto, normalización, tokens, clustering, detección de fila, construcción de turnos), `profiles/` (perfiles declarativos TYPE_A/TYPE_B con umbrales y tokens), `parsers/` (pipeline puro sobre items + API de fichero con PDF.js), `analysis.ts` + `assistant.ts` (análisis de calidad y asistente de formato posicional, Phase 1A), `tabular-assistant.ts` (fallback del asistente para CSV roster/grid sin layout posicional).
 - `sdd/`: especificaciones de producto.
 - Backend legacy en saneamiento: `server.mjs`, `server-export.mjs`, `proxy-server.mjs`, `api/shifts` (Neon). Cloud sync desactivado en producción hasta auth + aislamiento.
 

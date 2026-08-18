@@ -20,11 +20,26 @@ import { UserFormatProfile } from '../../lib/format-profiles';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
 import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
+import {
+  analyzeRosterTable,
+  generateTabularQuestions,
+  normalizeTableHeader,
+  parseRosterTable,
+  parseTableDate,
+  ROSTER_HEADER_ALIASES,
+  RosterTable,
+  splitTableLine,
+  tabularRowSelectionQuestion,
+} from '../tabular-assistant';
 import { detectCalendarContextFromItems, parseShiftsFromItems } from './parse-items';
 import { extractPdfTextItems } from './pdf';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
 import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
+
+// The canonical alias table lives in ../tabular-assistant (shared with the
+// tabular assistant fallback); re-exported here for API compatibility.
+export { ROSTER_HEADER_ALIASES };
 
 export type DocumentKind = 'pdf' | 'image' | 'excel' | 'csv' | 'text' | 'unknown';
 
@@ -172,46 +187,6 @@ export async function extractImageItems(file: File): Promise<PdfTextItem[]> {
  * Returns null when the document does not look like a roster (the caller
  * falls back to the tabular grid path).
  */
-export const ROSTER_HEADER_ALIASES: Record<string, string[]> = {
-  date: ['fecha', 'dia', 'fecha turno', 'fecha del turno', 'fecha de trabajo', 'date', 'day'],
-  start: ['inicio', 'hora inicio', 'entrada', 'desde', 'start'],
-  end: ['fin', 'hora fin', 'salida', 'hasta', 'end'],
-  type: ['tipo', 'turno', 'tipo turno', 'tipo de turno', 'shift type', 'type'],
-  employee: ['empleado', 'nombre', 'trabajador', 'employee'],
-  employeeId: ['id', 'legajo', 'identificador', 'employee id', 'worker id', 'member id'],
-  value: ['value', 'registro', 'detalle', 'turnos', 'slots', 'allotment'],
-};
-
-function normalizeHeader(value: string): string {
-  // underscores become spaces so worker_id matches the alias "worker id"
-  return normalizeText(value).replace(/_/g, ' ');
-}
-
-/** Parses dd/mm/yyyy, d/m/yyyy, dd-mm-yyyy and ISO yyyy-mm-dd. */
-function parseRosterDate(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const iso = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (iso) {
-    const [, year, month, day] = iso;
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  const dayFirst = trimmed.match(/^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?$/);
-  if (dayFirst) {
-    const [, day, month, yearRaw] = dayFirst;
-    const now = new Date();
-    const year = yearRaw ? (yearRaw.length === 2 ? `20${yearRaw}` : yearRaw) : String(now.getFullYear());
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  return null;
-}
-
-const splitRosterLine = (line: string): string[] => line.split(/[,;\t]/).map((cell) => cell.trim());
 
 const WEEKDAY_OFFSET: Record<string, number> = {
   mon: 0, lunes: 0, lun: 0,
@@ -306,11 +281,11 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
     );
   }
 
-  const headers = splitRosterLine(rows[0]);
+  const headers = splitTableLine(rows[0]);
   const columnByField = new Map<string, number>();
   for (const [field, aliases] of Object.entries(ROSTER_HEADER_ALIASES)) {
-    const aliasSet = new Set(aliases.map(normalizeHeader));
-    const index = headers.findIndex((header) => aliasSet.has(normalizeHeader(header)));
+    const aliasSet = new Set(aliases.map(normalizeTableHeader));
+    const index = headers.findIndex((header) => aliasSet.has(normalizeTableHeader(header)));
     if (index >= 0) {
       columnByField.set(field, index);
     }
@@ -334,8 +309,8 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
 
   const shifts: ParsedCalendarShift[] = [];
   for (const line of rows.slice(1)) {
-    const cells = splitRosterLine(line);
-    const rowDate = dateCol !== undefined ? parseRosterDate(cells[dateCol] ?? '') : null;
+    const cells = splitTableLine(line);
+    const rowDate = dateCol !== undefined ? parseTableDate(cells[dateCol] ?? '') : null;
     const workerId = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').trim() : '';
 
     // Slot-mode: every value cell beyond the marker may hold one or more slots.
@@ -535,12 +510,18 @@ export interface DocumentAnalysisResult {
   structure: DocumentStructureAnalysis | null;
   /** empty when quality.state === 'CORRECT' */
   questions: AssistantQuestion[];
+  /**
+   * Parsed CSV table for the tabular assistant fallback (roster fast path and
+   * UNKNOWN-layout grids). Present only when the document is tabular text the
+   * positional pipeline could not fully handle on its own.
+   */
+  table?: RosterTable;
 }
 
 /** Header alias lookup used by the roster quality signals. */
 function findRosterColumnIndex(headers: string[], field: keyof typeof ROSTER_HEADER_ALIASES): number | undefined {
-  const aliasSet = new Set(ROSTER_HEADER_ALIASES[field].map(normalizeHeader));
-  const index = headers.findIndex((header) => aliasSet.has(normalizeHeader(header)));
+  const aliasSet = new Set(ROSTER_HEADER_ALIASES[field].map(normalizeTableHeader));
+  const index = headers.findIndex((header) => aliasSet.has(normalizeTableHeader(header)));
   return index >= 0 ? index : undefined;
 }
 
@@ -561,7 +542,7 @@ function analyzeRosterDocument(
   selector: EmployeeSelector,
 ): DocumentAnalysisResult {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const headers = splitRosterLine(lines[0] ?? '');
+  const headers = splitTableLine(lines[0] ?? '');
   const rows = lines.slice(1);
 
   const employeeCol = findRosterColumnIndex(headers, 'employee');
@@ -574,7 +555,7 @@ function analyzeRosterDocument(
     const targetIds = selector.employeeIdentifiers.map((value) => value.replace(/\D/g, '')).filter(Boolean);
     const nameTokens = normalizeText(selector.employeeName).split(' ').filter((token) => token.length >= 3);
     for (const line of rows) {
-      const cells = splitRosterLine(line);
+      const cells = splitTableLine(line);
       const idCell = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').replace(/\D/g, '') : '';
       const nameCell = employeeCol !== undefined ? (cells[employeeCol] ?? '') : '';
       const idHit = idCell.length > 0 && targetIds.includes(idCell);
@@ -591,7 +572,7 @@ function analyzeRosterDocument(
   let invalidTimes = 0;
   const unknownTokens = new Set<string>();
   for (const line of rows) {
-    const cells = splitRosterLine(line);
+    const cells = splitTableLine(line);
     for (const column of [valueCol, typeCol]) {
       if (column === undefined) {
         continue;
@@ -646,7 +627,18 @@ function analyzeRosterDocument(
     ? []
     : [...unknownTokens].slice(0, 6).map((token) => ({ kind: 'token-meaning' as const, token }));
 
-  return { kind: 'csv', context, shifts, quality, structure: null, questions };
+  // Tabular assistant (Phase 1A remediation): the roster fast path has no
+  // positioned layout, so row disambiguation is offered from the parsed
+  // table when the selector matches zero/several rows.
+  const table = parseRosterTable(text);
+  if (table && quality.state !== 'CORRECT') {
+    const rowSelection = tabularRowSelectionQuestion(table, analyzeRosterTable(table, selector));
+    if (rowSelection) {
+      questions.unshift(rowSelection);
+    }
+  }
+
+  return { kind: 'csv', context, shifts, quality, structure: null, questions, ...(table ? { table } : {}) };
 }
 
 /**
@@ -682,7 +674,30 @@ export async function analyzeDocumentFile(
     if (roster !== null) {
       return analyzeRosterDocument(text, roster, selector);
     }
-    // Not a canonical roster: fall through to the tabular item path.
+    // Not a canonical roster: positioned tabular path, with a tabular
+    // assistant fallback when the layout is UNKNOWN (no positional profile
+    // can fingerprint it, e.g. day-number grid headers).
+    const table = parseRosterTable(text);
+    const items = extractTabularItems(text);
+    const context = detectCalendarContextFromItems(items);
+    const parsed = analyzeShiftsFromItems(items, context, selector, savedProfilesHint);
+    const shifts = parsed.shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
+    const quality: ImportResult = { ...parsed.quality, shifts };
+    let questions = quality.state === 'CORRECT'
+      ? []
+      : generateAssistantQuestions(items, context, parsed.analysis);
+
+    if (table && parsed.analysis.structure.documentType === 'UNKNOWN') {
+      const tabularQuestions = generateTabularQuestions(table, analyzeRosterTable(table, selector));
+      // Safe failure: no actionable tabular structure → UNRECOGNIZED stands
+      // with no questions.
+      if (tabularQuestions.length > 0) {
+        questions = tabularQuestions;
+        return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions, table };
+      }
+    }
+
+    return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions };
   }
 
   const items = await extractDocumentItems(file);
