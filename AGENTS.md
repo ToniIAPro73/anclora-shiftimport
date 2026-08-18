@@ -11,7 +11,9 @@
 - `src/App.tsx`: estado principal, navegación por mes, modales y persistencia.
 - `src/components/shift-dashboard/`: UI del calendario, métricas e importación.
 - `src/lib/types.ts`: tipos `Shift` y derivados.
-- `src/lib/storage.ts`: persistencia en `localStorage`.
+- `src/lib/profile.ts`: `UserProfile` configurable (identidad del usuario, sin PII por defecto).
+- `src/lib/shift-types.ts`: registro `ShiftTypeDefinition` + resolver de alias del parser.
+- `src/lib/storage.ts`: persistencia en `localStorage` (sync remoto opt-in vía `VITE_ENABLE_REMOTE_STORAGE`).
 - `src/lib/week.ts`, `src/lib/time.ts`: cálculos de calendario, fechas y horas.
 - `src/lib/shifts.ts`: lógica de negocio de turnos y métricas.
 - `src/lib/pdf-shift-parser.ts`: parser de cuadrantes PDF (TYPE_A/TYPE_B).

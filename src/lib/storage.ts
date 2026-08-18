@@ -2,7 +2,9 @@ import { Shift } from './types';
 
 const STORAGE_KEY = 'anclora_shifts_v1';
 const SHIFTS_API_URL = '/api/shifts';
-const REMOTE_STORAGE_ENABLED = !import.meta.env.DEV || import.meta.env.VITE_ENABLE_REMOTE_STORAGE === 'true';
+// Local-first: remote sync stays disabled (dev and prod) unless explicitly
+// enabled, until authenticated sync with per-user isolation exists.
+const REMOTE_STORAGE_ENABLED = import.meta.env.VITE_ENABLE_REMOTE_STORAGE === 'true';
 
 const normalizeShiftDate = (value: string): string => {
   const trimmed = value.trim();
