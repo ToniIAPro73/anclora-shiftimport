@@ -62,6 +62,18 @@
           "employee_name": "Jorge Vidal",
           "month": "2026-10",
           "expected_assignment_count": 31
+        },
+        {
+          "employee_id": "EMP-102",
+          "employee_name": "Carlos Ruiz",
+          "month": "2026-09",
+          "expected_assignment_count": 30
+        },
+        {
+          "employee_id": "EMP-102",
+          "employee_name": "Carlos Ruiz",
+          "month": "2026-10",
+          "expected_assignment_count": 31
         }
       ],
       "m0_status": "m0_blocking"

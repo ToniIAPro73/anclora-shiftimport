@@ -75,6 +75,7 @@ interface CaseResult {
   accuracy: number | null;
   matched: number;
   expectedCount: number;
+  extractedCount: number | null;
   note: string;
 }
 
@@ -206,7 +207,14 @@ async function runExtraction(
   };
   try {
     const detected = await detectCalendarContext(file);
-    const context = fx.format === 'pdf' || fx.format === 'xlsx' ? detected : contextFromExpected(expected);
+    // TYPE_MULTI fixtures declare a per-profile `month` precisely to exercise
+    // month-scoped extraction against the same multi-section document
+    // (GS-01: EMP-101/2026-09, EMP-101/2026-10, EMP-104/2026-10) — honor it
+    // over the document-wide auto-detected context, which only ever resolves
+    // to the first section.
+    const context = profile.month
+      ? { month: Number(profile.month.split('-')[1]) - 1, year: Number(profile.month.split('-')[0]) }
+      : fx.format === 'pdf' || fx.format === 'xlsx' ? detected : contextFromExpected(expected);
     const shifts = await parseEmployeeShiftsFromFile(file, context, selector);
     return { shifts, errorCode: null };
   } catch (error) {
@@ -236,7 +244,7 @@ async function runFixture(fx: Fixture): Promise<void> {
     if (!existsSync(absPath)) {
       results.push({
         id: fx.id, source: sourceName, level: fx.test_levels.join('|'), expected: expectedResult,
-        actual: 'SOURCE_MISSING', status: 'FAIL', accuracy: null, matched: 0, expectedCount: 0,
+        actual: 'SOURCE_MISSING', status: 'FAIL', accuracy: null, matched: 0, expectedCount: 0, extractedCount: null,
         note: `Archivo fuente no encontrado: ${absPath}`,
       });
       continue;
@@ -253,7 +261,7 @@ async function runFixture(fx: Fixture): Promise<void> {
         });
         results.push({
           id: fx.id, source: sourceName, level: 'format', expected: expectedResult, actual: 'NO_ERROR',
-          status: 'FAIL', accuracy: null, matched: 0, expectedCount: 0,
+          status: 'FAIL', accuracy: null, matched: 0, expectedCount: 0, extractedCount: null,
           note: 'Formato no soportado importado silenciosamente (silent corruption).',
         });
       } catch (error) {
@@ -261,7 +269,7 @@ async function runFixture(fx: Fixture): Promise<void> {
         const pass = code === 'UNSUPPORTED_FORMAT';
         results.push({
           id: fx.id, source: sourceName, level: 'format', expected: expectedResult, actual: code,
-          status: pass ? 'EXPECTED_ERROR_PASS' : 'FAIL', accuracy: null, matched: 0, expectedCount: 0,
+          status: pass ? 'EXPECTED_ERROR_PASS' : 'FAIL', accuracy: null, matched: 0, expectedCount: 0, extractedCount: null,
           note: pass ? '' : `Se esperaba UNSUPPORTED_FORMAT, se obtuvo ${code}.`,
         });
       }
@@ -272,7 +280,7 @@ async function runFixture(fx: Fixture): Promise<void> {
     if (fx.requires_ocr) {
       results.push({
         id: fx.id, source: sourceName, level: fx.test_levels.join('|'), expected: expectedResult,
-        actual: 'OCR_NOT_RUN_NODE', status: 'NOT_RUN', accuracy: null, matched: 0, expectedCount: 0,
+        actual: 'OCR_NOT_RUN_NODE', status: 'NOT_RUN', accuracy: null, matched: 0, expectedCount: 0, extractedCount: null,
         note: 'Requiere OCR local (Tesseract spa). Ruta implementada en extractImageItems; ejecución en navegador/E2E.',
       });
       continue;
@@ -288,7 +296,7 @@ async function runFixture(fx: Fixture): Promise<void> {
         const pass = errorCode === expectedResult;
         results.push({
           id: fx.id, source: sourceName, level: 'product', expected: expectedResult, actual: errorCode ?? 'NO_ERROR',
-          status: pass ? 'EXPECTED_ERROR_PASS' : 'FAIL', accuracy: null, matched: 0, expectedCount,
+          status: pass ? 'EXPECTED_ERROR_PASS' : 'FAIL', accuracy: null, matched: 0, expectedCount, extractedCount: null,
           note: pass ? '' : `Se esperaba ${expectedResult}, se obtuvo ${errorCode ?? 'importación silenciosa'}.`,
         });
         continue;
@@ -297,7 +305,7 @@ async function runFixture(fx: Fixture): Promise<void> {
       if (shifts === null) {
         results.push({
           id: fx.id, source: sourceName, level: fx.test_levels.join('|'), expected: expectedResult,
-          actual: errorCode ?? 'NO_SHIFTS', status: 'FAIL', accuracy: 0, matched: 0, expectedCount,
+          actual: errorCode ?? 'NO_SHIFTS', status: 'FAIL', accuracy: 0, matched: 0, expectedCount, extractedCount: 0,
           note: errorCode
             ? `Layout/modelo no soportado por los perfiles actuales — error canónico ${errorCode} (sin importación).`
             : 'Sin turnos extraídos.',
@@ -316,13 +324,24 @@ async function runFixture(fx: Fixture): Promise<void> {
       const wrongEmployee = profile.employee_id
         ? shifts.filter((sh) => sh.notes !== null && sh.notes !== profile.employee_id).length
         : 0;
+      // Cross-month leakage (the GS-01 bug class: a multi-section document
+      // returning shifts from a section other than the one the caller
+      // selected). Accuracy alone cannot catch this — matched/expectedCount
+      // stays 1.0 even when extra out-of-month shifts are silently mixed in.
+      const wrongMonth = profile.month
+        ? actual.filter((a) => !a.date.startsWith(profile.month as string)).length
+        : 0;
+      const notes = [
+        wrongEmployee > 0 ? `ASIGNACIONES DE OTRO EMPLEADO: ${wrongEmployee}` : '',
+        wrongMonth > 0 ? `ASIGNACIONES DE OTRO MES (fuga entre secciones): ${wrongMonth}` : '',
+      ].filter(Boolean).join(' | ');
       results.push({
         id: fx.id, source: sourceName, level: fx.test_levels.join('|'),
         expected: `${expectedCount} assignments`,
         actual: `${actual.length} extracted, ${matched} matched`,
         status: accuracy >= 0.99 ? 'PASS' : 'PARTIAL',
-        accuracy, matched, expectedCount,
-        note: wrongEmployee > 0 ? `ASIGNACIONES DE OTRO EMPLEADO: ${wrongEmployee}` : '',
+        accuracy, matched, expectedCount, extractedCount: actual.length,
+        note: notes,
       });
     }
   }
@@ -349,8 +368,10 @@ describe('Phase 0 M0 acceptance corpus (manifest-driven)', () => {
 
     // Integrity invariants: zero tolerated.
     const wrongEmployee = results.filter((r) => r.note.includes('ASIGNACIONES DE OTRO EMPLEADO'));
+    const wrongMonth = results.filter((r) => r.note.includes('ASIGNACIONES DE OTRO MES'));
     const silent = results.filter((r) => r.note.includes('silenciosa'));
     expect(wrongEmployee).toHaveLength(0);
+    expect(wrongMonth).toHaveLength(0);
     expect(silent).toHaveLength(0);
 
     // Negative fixtures runnable on the current engine must produce their

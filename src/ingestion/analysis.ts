@@ -43,6 +43,7 @@ import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
 import { detectPdfDocumentTypeFromItems } from './parsers/detect';
+import { detectSections, selectSectionsForContext } from './parsers/multi-section';
 import { parseShiftsFromItems, resolveColumnDayMapping } from './parsers/parse-items';
 
 export interface DocumentStructureAnalysis {
@@ -171,8 +172,22 @@ export function analyzeDocumentStructure(
     };
   }
 
-  const pages = Array.from(new Set(items.map((item) => item.page)));
-  const dayColumns = pages.flatMap((page) => getDayColumnsForPage(items, page, context, profile.dayHeader));
+  // TYPE_MULTI documents pack several "Month YYYY" sections onto the same
+  // page(s); the day-header rule has no monthGroup to filter on (day cells
+  // are bare 1-2 digit tokens), so counting must be band-restricted to the
+  // section matching context.month/year — otherwise a document with a
+  // September (30 days) and October (31 days) section reports 61 "expected
+  // days" regardless of which one the user selected.
+  const dayCountItems = profile.id === 'TYPE_MULTI'
+    ? (() => {
+        const sections = selectSectionsForContext(detectSections(items), context);
+        return items.filter((item) => sections.some(
+          (section) => item.page === section.page && item.y <= section.topY && item.y > section.bottomY,
+        ));
+      })()
+    : items;
+  const pages = Array.from(new Set(dayCountItems.map((item) => item.page)));
+  const dayColumns = pages.flatMap((page) => getDayColumnsForPage(dayCountItems, page, context, profile.dayHeader));
 
   // Structure tokens: the raw day-header texts matched by the profile's
   // dayHeader rule plus legend codes when the profile uses a code profile.

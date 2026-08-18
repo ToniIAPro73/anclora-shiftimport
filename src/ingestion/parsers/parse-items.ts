@@ -57,7 +57,7 @@ export function parseShiftsFromItems(
   // single calendar context to gate on — the section-aware walker returns
   // shifts spanning every section where the employee appears.
   if (profile.id === 'TYPE_MULTI') {
-    return parseMultiSectionShifts(allItems, selector, profile);
+    return parseMultiSectionShifts(allItems, selector, profile, context);
   }
 
   const targetIds = selector.employeeIdentifiers

@@ -261,7 +261,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     };
   }, [employeeName, employeeId]);
 
-  const runAnalysis = useCallback(async (target: File) => {
+  const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext) => {
     setLoading(true);
     setError(null);
     setScanTime(null);
@@ -273,7 +273,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     const startedAt = Date.now();
     try {
-      const result = await analyzeDocumentFile(target, buildSelector());
+      const result = await analyzeDocumentFile(target, buildSelector(), undefined, contextOverride);
       setAnalysis(result);
       setDetectedFormat(getImportFormatLabel(result.kind));
       setSelectedMonth(String(result.context.month));
@@ -385,7 +385,15 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       return;
     }
     previewTrackedRef.current = false;
-    await runAnalysis(file);
+    // The user has had the month/year selects visible (and editable) since
+    // the modal opened — a manually started scan honors that explicit
+    // selection instead of always trusting auto-detection, which matters
+    // for multi-month documents (TYPE_MULTI) where the same file legitimately
+    // covers several months and auto-detect can only ever resolve to one.
+    await runAnalysis(file, {
+      month: Number.parseInt(selectedMonth, 10),
+      year: Number.parseInt(selectedYear, 10),
+    });
   };
 
   const handleUpdateShift = (index: number, field: keyof ParsedCalendarShift, value: string) => {

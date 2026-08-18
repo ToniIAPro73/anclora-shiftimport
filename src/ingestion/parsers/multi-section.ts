@@ -4,10 +4,13 @@
  * (parse-items.ts) assumes a single calendar context per document, which
  * does not fit a document that legitimately spans several months — this
  * walker detects every section, then reuses the same generic row/column
- * primitives band-restricted to each section's y-range, returning shifts
- * for every section where the requested employee appears.
+ * primitives band-restricted to the section matching the caller's selected
+ * month/year (the same context.month/year the user picked in the UI, or
+ * the auto-detected one). When no section matches that month/year, every
+ * detected section is used as a defensive fallback instead of silently
+ * returning nothing.
  */
-import { ParsedCalendarShift } from '../../lib/import-types';
+import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { IngestionError } from '../../lib/ingestion-errors';
 import { getDaysInMonth } from '../../lib/week';
 import { clusterByX, mapColumnGroupsToDays } from '../core/clustering';
@@ -34,7 +37,7 @@ interface Section {
   bottomY: number;
 }
 
-function detectSections(items: PdfTextItem[]): Section[] {
+export function detectSections(items: PdfTextItem[]): Section[] {
   const headers = items
     .map((item) => {
       const match = item.text.trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
@@ -51,6 +54,17 @@ function detectSections(items: PdfTextItem[]): Section[] {
     const bottomY = next && next.page === header.page ? next.y : Number.NEGATIVE_INFINITY;
     return { month: header.month, year: header.year, page: header.page, topY: header.y, bottomY };
   });
+}
+
+/**
+ * Sections matching the requested month/year. Falls back to every detected
+ * section when none matches — the auto-detected/selected context should
+ * always line up with one of the document's sections, but a mismatch must
+ * degrade to the old all-sections behavior rather than silently vanish.
+ */
+export function selectSectionsForContext(sections: Section[], context: CalendarImportContext): Section[] {
+  const matching = sections.filter((section) => section.month === context.month && section.year === context.year);
+  return matching.length > 0 ? matching : sections;
 }
 
 /** Bare 1-2 digit day headers: the y shared by the most such items is the header row. */
@@ -85,11 +99,13 @@ export function parseMultiSectionShifts(
   allItems: PdfTextItem[],
   selector: EmployeeSelector,
   profile: IngestionProfile,
+  context: CalendarImportContext,
 ): ParsedCalendarShift[] {
-  const sections = detectSections(allItems);
-  if (sections.length === 0) {
+  const allSections = detectSections(allItems);
+  if (allSections.length === 0) {
     throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noDayHeaders);
   }
+  const sections = selectSectionsForContext(allSections, context);
 
   const codeProfile = buildCodeProfile(allItems);
   const targetIds = selector.employeeIdentifiers.map((value) => value.replace(/\D/g, '')).filter(Boolean);

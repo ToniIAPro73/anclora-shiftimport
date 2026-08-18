@@ -659,6 +659,7 @@ export async function analyzeDocumentFile(
   file: File,
   selector: EmployeeSelector,
   savedProfilesHint?: UserFormatProfile[],
+  contextOverride?: CalendarImportContext,
 ): Promise<DocumentAnalysisResult> {
   const kind = classifyDocument(file);
   if (kind === 'unknown' || kind === 'text') {
@@ -679,7 +680,7 @@ export async function analyzeDocumentFile(
     // can fingerprint it, e.g. day-number grid headers).
     const table = parseRosterTable(text);
     const items = extractTabularItems(text);
-    const context = detectCalendarContextFromItems(items);
+    const context = contextOverride ?? detectCalendarContextFromItems(items);
     const parsed = analyzeShiftsFromItems(items, context, selector, savedProfilesHint);
     const shifts = parsed.shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
     const quality: ImportResult = { ...parsed.quality, shifts };
@@ -701,7 +702,7 @@ export async function analyzeDocumentFile(
   }
 
   const items = await extractDocumentItems(file);
-  const context = detectCalendarContextFromItems(items);
+  const context = contextOverride ?? detectCalendarContextFromItems(items);
   const parsed = analyzeShiftsFromItems(items, context, selector, savedProfilesHint);
   const shifts = parsed.shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
   const quality: ImportResult = { ...parsed.quality, shifts };
