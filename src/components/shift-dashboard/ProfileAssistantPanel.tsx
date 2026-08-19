@@ -54,6 +54,8 @@ interface ProfileAssistantPanelProps {
 
 type TokenMeaning = AssistantAnswers['tokenMeanings'][string];
 
+const MAX_FOLLOW_UP_QUESTIONS = 6;
+
 /**
  * Inline format assistant (Phase 1A, wave 3): renders the assistant questions
  * inside ImportModal, collects the answers and turns them into a PII-free
@@ -76,15 +78,21 @@ export const ProfileAssistantPanel = ({
   const [correctedDay, setCorrectedDay] = useState('');
   const [tokenMeanings, setTokenMeanings] = useState<Record<string, TokenMeaning>>({});
   const [saveProfile, setSaveProfile] = useState(true);
+  // Codes discovered only AFTER applying a row selection (the initial
+  // row-less analysis could not see the employee's cells) are asked as a
+  // follow-up round inside this same panel — never left as a silent
+  // post-apply exclusion note.
+  const [followUpQuestions, setFollowUpQuestions] = useState<AssistantQuestion[]>([]);
 
   const shiftTypes = useMemo(() => getShiftTypes(), []);
 
-  const rowQuestion = questions.find((q) => q.kind === 'row-selection');
-  const tokenQuestions = questions.filter(
+  const activeQuestions = followUpQuestions.length > 0 ? followUpQuestions : questions;
+  const rowQuestion = activeQuestions.find((q) => q.kind === 'row-selection');
+  const tokenQuestions = activeQuestions.filter(
     (q): q is Extract<AssistantQuestion, { kind: 'token-meaning' } | { kind: 'shift-code' }> =>
       q.kind === 'token-meaning' || q.kind === 'shift-code',
   );
-  const dayMappingQuestion = questions.find(
+  const dayMappingQuestion = activeQuestions.find(
     (q): q is Extract<AssistantQuestion, { kind: 'day-mapping' }> => q.kind === 'day-mapping',
   );
 
@@ -141,10 +149,6 @@ export const ProfileAssistantPanel = ({
     }
 
     const profile = buildProfileFromAnswers(items, context, analysis, answers);
-    if (saveProfile) {
-      saveFormatProfile(profile);
-      applyTokenAliasesToShiftTypes(profile);
-    }
 
     const ingestionProfile = getIngestionProfile(analysis.structure.documentType);
     // A manually picked row resolves through a selector enriched with the
@@ -197,7 +201,24 @@ export const ProfileAssistantPanel = ({
       }
     }
 
-    const { quality } = analyzeShiftsFromItems(items, context, sessionSelector, undefined, codeOverrides);
+    const { quality, analysis: freshAnalysis } = analyzeShiftsFromItems(items, context, sessionSelector, undefined, codeOverrides);
+    // Row selection can reveal codes the initial row-less analysis never saw
+    // (the employee's cells were not resolved yet). Ask for them in a
+    // follow-up round instead of completing with a silent exclusion.
+    const unansweredCodes = freshAnalysis.unknownTokens.filter((token) => !(token in tokenMeanings));
+    if (unansweredCodes.length > 0) {
+      setFollowUpQuestions(
+        unansweredCodes.slice(0, MAX_FOLLOW_UP_QUESTIONS).map((code) => ({ kind: 'shift-code' as const, code })),
+      );
+      return;
+    }
+    // Saved only on the completing pass: a follow-up round would otherwise
+    // persist a profile still missing the just-learned codes (and duplicate
+    // it on the next apply).
+    if (saveProfile) {
+      saveFormatProfile(profile);
+      applyTokenAliasesToShiftTypes(profile);
+    }
     onComplete({
       shifts,
       quality: { ...quality, shifts },

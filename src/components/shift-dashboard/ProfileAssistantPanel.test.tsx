@@ -69,13 +69,22 @@ describe('ProfileAssistantPanel', () => {
     expect((screen.getByText('Aplicar y continuar') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('completing with a selected row calls onComplete with re-parsed shifts', () => {
+  it('completing with a selected row asks about newly revealed codes, then completes', () => {
     const unknownSelector: EmployeeSelector = { employeeName: 'Nadie', employeeIdentifiers: [] };
     const { analysis, questions } = setup(unknownSelector);
     const onComplete = vi.fn();
     renderPanel(questions, analysis, unknownSelector, onComplete);
 
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
+    fireEvent.click(screen.getByText('Aplicar y continuar'));
+
+    // The picked row's cells reveal DL/AJ — asked now, not silently excluded.
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(screen.getByText('¿Qué turno representa DL?')).toBeTruthy();
+    expect(screen.getByText('¿Qué turno representa AJ?')).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
@@ -117,6 +126,10 @@ describe('ProfileAssistantPanel', () => {
     renderPanel(questions, analysis, unknownSelector);
 
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
+    fireEvent.click(screen.getByText('Aplicar y continuar'));
+    // Follow-up round: classify the codes revealed by the picked row.
+    fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     const profiles = loadFormatProfiles();
