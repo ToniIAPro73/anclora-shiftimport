@@ -40,3 +40,6 @@ corpus-report.json
 
 # vitest coverage run artifact
 coverage/
+
+# Playwright runner output (regenerable: videos, traces, retries)
+qa/e2e-acceptance/test-results/

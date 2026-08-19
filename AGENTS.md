@@ -16,7 +16,7 @@
 - `src/lib/storage.ts`: persistencia en `localStorage` (sync remoto opt-in vía `VITE_ENABLE_REMOTE_STORAGE`).
 - `src/lib/week.ts`, `src/lib/time.ts`: cálculos de calendario, fechas y horas.
 - `src/lib/shifts.ts`: lógica de negocio de turnos y métricas.
-- `src/ingestion/`: ingesta de cuadrantes PDF — `core/` (primitivas puras: items de texto, normalización, tokens, clustering, detección de fila, construcción de turnos), `profiles/` (perfiles declarativos TYPE_A/TYPE_B con umbrales y tokens), `parsers/` (pipeline puro sobre items + API de fichero con PDF.js), `analysis.ts` + `assistant.ts` (análisis de calidad y asistente de formato posicional, Phase 1A), `tabular-assistant.ts` (fallback del asistente para CSV roster/grid sin layout posicional).
+- `src/ingestion/`: ingesta de cuadrantes PDF — `core/` (primitivas puras: items de texto, normalización, tokens, clustering, detección de fila, construcción de turnos), `profiles/` (perfiles declarativos TYPE_A/TYPE_B con umbrales y tokens), `parsers/` (pipeline puro sobre items + API de fichero con PDF.js), `analysis.ts` + `assistant.ts` (análisis de calidad y asistente de formato posicional, Phase 1A), `tabular-assistant.ts` (fallback del asistente para CSV roster/grid sin layout posicional), `diagnostics.ts` (Phase 1B: modelo canónico de estados de importación READY/NEEDS_USER_INPUT/PARTIAL/BLOCKED/UNSUPPORTED/FAILED + diagnósticos estructurados con recuperación guiada; la UI consume esto, nunca excepciones crudas).
 - `sdd/`: especificaciones de producto.
 - Backend legacy en saneamiento: `server.mjs`, `server-export.mjs`, `proxy-server.mjs`, `api/shifts` (Neon). Cloud sync desactivado en producción hasta auth + aislamiento.
 
@@ -37,12 +37,13 @@
 - Mantener el flujo: detectar, previsualizar, editar y confirmar.
 - Nada de PII hardcodeada: identidad de usuario vive en `UserProfile` configurable (Phase 0).
 - Tipos de turno configurables vía `ShiftTypeDefinition`; JT no es feature especial.
+- La importación nunca falla en silencio: estados canónicos + diagnósticos estructurados en `src/ingestion/diagnostics.ts` (Phase 1B). Cero turnos nunca es "Correcto"; un código de turno desconocido nunca se descarta sin avisar; el mes/año seleccionado por el usuario es autoritativo (conflicto = `MONTH_MISMATCH` bloqueante con elección explícita).
 
 ## Tipos de turno configurables
 - El registro efectivo es `DEFAULT_SHIFT_TYPES` (neutro: Regular, Libre, Vacaciones, Extras) + overrides del usuario en localStorage (`anclora_shiftimport_shift_types_v1`).
 - API en `src/lib/shift-types.ts`: `getShiftTypes()` (registro efectivo), `loadShiftTypeOverrides`/`saveShiftTypeOverrides`, `mergeShiftTypeOverrides`, `upsertShiftType`, `setShiftTypeAlias`, `resolveShiftTypeId` (alias personalizados → alias por defecto → match por id/label).
 - Los tipos/alias específicos de empresa heredados de GroundSync (JT, `dl`, `aj`, `td`) NO son defaults del producto: viven en `SHIFT_TYPE_PRESET_EXAMPLE`. Para restaurar el comportamiento heredado: `mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE)`.
-- No hay UI de gestión de tipos todavía (no existe lugar natural en los modales actuales); la capacidad está disponible vía API + persistencia.
+- No hay UI de gestión de tipos todavía (no existe lugar natural en los modales actuales); la capacidad está disponible vía API + persistencia. Además, el asistente de importación (Phase 1B) aprende alias/tipos al clasificar códigos desconocidos: `codeTimes` en el `UserFormatProfile` + `applyTokenAliasesToShiftTypes`.
 - Fixtures de tests siempre sintéticos; nunca cuadrantes reales.
 - Evitar dependencias nuevas sin razón clara; el repo es ligero y mayormente frontend.
 - No renombrar ni referenciar GroundSync salvo como provenance histórica.
