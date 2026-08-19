@@ -1,22 +1,27 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
-import { analyzeDocumentFile, classifyDocument, DocumentAnalysisResult, extractDocumentItems } from '../../ingestion/parsers/file';
+import { analyzeDocumentFile, classifyDocument, DocumentAnalysisResult, extractDocumentItems, filterShiftsToContext } from '../../ingestion/parsers/file';
 import {
   getImportFormatLabel,
   importAcceptAttribute,
   importFormatsDisplayLine,
 } from '../../ingestion/formats';
 import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
+import {
+  buildImportDiagnosis,
+  diagnosisFromError,
+  ImportDiagnosis,
+  ImportState,
+} from '../../ingestion/diagnostics';
 import { EmployeeSelector } from '../../ingestion/core/row-detection';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
 import { touchFormatProfile } from '../../lib/format-profiles';
-import { ImportQualityState, ImportResult, ImportWarningCode } from '../../lib/import-quality';
+import { ImportResult, ImportWarningCode } from '../../lib/import-quality';
 import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
-import { IngestionError, IngestionErrorCode } from '../../lib/ingestion-errors';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
@@ -45,16 +50,22 @@ const WARNING_I18N_KEYS: Record<ImportWarningCode, string> = {
   UNSUPPORTED_SECTION: 'quality.warnings.unsupportedSection',
 };
 
-const STATE_I18N_KEYS: Record<ImportQualityState, string> = {
-  CORRECT: 'quality.stateCorrect',
-  REVIEW: 'quality.stateReview',
-  UNRECOGNIZED: 'quality.stateUnrecognized',
+const STATE_I18N_KEYS: Record<ImportState, string> = {
+  READY: 'diagnosis.stateReady',
+  NEEDS_USER_INPUT: 'diagnosis.stateNeedsInput',
+  PARTIAL: 'diagnosis.statePartial',
+  BLOCKED: 'diagnosis.stateBlocked',
+  UNSUPPORTED: 'diagnosis.stateUnsupported',
+  FAILED: 'diagnosis.stateFailed',
 };
 
-const STATE_CHIP_STYLES: Record<ImportQualityState, React.CSSProperties> = {
-  CORRECT: { background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--color-accent)' },
-  REVIEW: { background: 'var(--gold-tint-bg)', border: '1px solid var(--color-gold)', color: 'var(--color-gold)' },
-  UNRECOGNIZED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
+const STATE_CHIP_STYLES: Record<ImportState, React.CSSProperties> = {
+  READY: { background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--color-accent)' },
+  NEEDS_USER_INPUT: { background: 'var(--gold-tint-bg)', border: '1px solid var(--color-gold)', color: 'var(--color-gold)' },
+  PARTIAL: { background: 'var(--gold-tint-bg)', border: '1px solid var(--color-gold)', color: 'var(--color-gold)' },
+  BLOCKED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
+  UNSUPPORTED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
+  FAILED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
 };
 
 const MAX_VISIBLE_WARNINGS = 4;
@@ -200,7 +211,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const now = new Date();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorDiagnosis, setErrorDiagnosis] = useState<ImportDiagnosis | null>(null);
+  const [periodConflictResolved, setPeriodConflictResolved] = useState(false);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
   const [scanTime, setScanTime] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState(() => loadUserProfile().displayName);
@@ -233,6 +245,37 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     return classifyImportChanges(existingShifts, readyForDiff);
   }, [parsedShifts, existingShifts]);
 
+  // Canonical import diagnosis: the single source of truth for the state
+  // chip, the explanatory messages and whether confirm stays disabled.
+  const diagnosis = useMemo<ImportDiagnosis | null>(() => {
+    if (errorDiagnosis) {
+      return errorDiagnosis;
+    }
+    if (!analysis) {
+      return null;
+    }
+    const effective: DocumentAnalysisResult = {
+      ...analysis,
+      shifts: qualityOverride?.shifts ?? analysis.shifts,
+      quality: qualityOverride ?? analysis.quality,
+      questions: assistantDismissed ? [] : analysis.questions,
+    };
+    return buildImportDiagnosis(effective, {
+      itemAnalysis: assistantSession?.itemAnalysis ?? null,
+      selectedContext: {
+        month: Number.parseInt(selectedMonth, 10),
+        year: Number.parseInt(selectedYear, 10),
+      },
+      periodConflictResolved,
+      recoveryDismissed: assistantDismissed,
+    });
+  }, [errorDiagnosis, analysis, qualityOverride, assistantDismissed, assistantSession, selectedMonth, selectedYear, periodConflictResolved]);
+
+  const diagnosisBlocking = diagnosis?.diagnostics.some((diagnostic) => diagnostic.blocking) ?? false;
+  const monthMismatch = diagnosis?.diagnostics.find(
+    (diagnostic) => diagnostic.code === 'MONTH_MISMATCH' && diagnostic.blocking,
+  ) ?? null;
+
   useEscapeClose(isOpen, onClose);
 
   useEffect(() => {
@@ -263,33 +306,40 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
   const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext) => {
     setLoading(true);
-    setError(null);
+    setErrorDiagnosis(null);
     setScanTime(null);
     setAnalysis(null);
     setQualityOverride(null);
     setAssistantSession(null);
     setAssistantDismissed(false);
+    setPeriodConflictResolved(false);
     setDetectedFormat(getImportFormatLabel(classifyDocument(target)));
+
+    // The month/year selects are the authoritative user context: always
+    // analyze under them. When the document's own evidence points elsewhere,
+    // the diagnosis layer raises MONTH_MISMATCH instead of silently
+    // re-dating — the user decides explicitly.
+    const effectiveContext = contextOverride ?? {
+      month: Number.parseInt(selectedMonth, 10),
+      year: Number.parseInt(selectedYear, 10),
+    };
 
     const startedAt = Date.now();
     try {
-      const result = await analyzeDocumentFile(target, buildSelector(), undefined, contextOverride);
+      const result = await analyzeDocumentFile(target, buildSelector(), undefined, effectiveContext);
       setAnalysis(result);
       setDetectedFormat(getImportFormatLabel(result.kind));
-      setSelectedMonth(String(result.context.month));
-      setSelectedYear(String(result.context.year));
       setParsedShifts(result.shifts);
       setScanTime(((Date.now() - startedAt) / 1000).toFixed(1));
     } catch (importError: unknown) {
       console.error('[ImportModal] Error:', importError);
-      const message = importError instanceof IngestionError
-        ? t(`errors.${importError.code as IngestionErrorCode}`)
-        : importError instanceof Error ? importError.message : t('importModal.unknownError');
-      setError(t('importModal.errorPrefix', { message }));
+      // Structured diagnosis instead of a raw exception — no parser names,
+      // no stack traces (XLSX crash, OCR failure, unsupported format, ...).
+      setErrorDiagnosis(diagnosisFromError(importError));
     } finally {
       setLoading(false);
     }
-  }, [buildSelector, t]);
+  }, [buildSelector, selectedMonth, selectedYear]);
 
   // Onboarding handoff: a pre-selected file auto-starts the pipeline once.
   useEffect(() => {
@@ -303,7 +353,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     initialFileHandledRef.current = initialFile;
     setFile(initialFile);
     setParsedShifts([]);
-    setError(null);
+    setErrorDiagnosis(null);
+    setPeriodConflictResolved(false);
     setScanTime(null);
     void runAnalysis(initialFile);
   }, [isOpen, initialFile, runAnalysis]);
@@ -348,7 +399,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const resetImportState = () => {
     setFile(null);
     setParsedShifts([]);
-    setError(null);
+    setErrorDiagnosis(null);
+    setPeriodConflictResolved(false);
     setScanTime(null);
     setDetectedFormat(null);
     setAnalysis(null);
@@ -371,7 +423,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     setFile(selected);
     setParsedShifts([]);
-    setError(null);
+    setErrorDiagnosis(null);
+    setPeriodConflictResolved(false);
     setScanTime(null);
     setAnalysis(null);
     setQualityOverride(null);
@@ -411,6 +464,39 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setParsedShifts(result.shifts.map((shift) => ({ ...shift, sourceFormat: shift.sourceFormat ?? kind })));
     setQualityOverride(result.quality);
     setAssistantDismissed(true);
+  };
+
+  // MONTH_MISMATCH recovery: the user explicitly picks the document's period.
+  const handleUseDetectedPeriod = async () => {
+    const detected = analysis?.detectedContext;
+    if (!file || !detected) {
+      return;
+    }
+    setSelectedMonth(String(detected.month));
+    setSelectedYear(String(detected.year));
+    await runAnalysis(file, detected);
+  };
+
+  // MONTH_MISMATCH recovery: keep the user's selection; anything dated
+  // outside it is excluded — never imported cross-month.
+  const handleUseSelectedPeriod = () => {
+    if (!analysis) {
+      return;
+    }
+    const selected = {
+      month: Number.parseInt(selectedMonth, 10),
+      year: Number.parseInt(selectedYear, 10),
+    };
+    const filtered = filterShiftsToContext(analysis.shifts, selected);
+    setAnalysis({ ...analysis, shifts: filtered });
+    setParsedShifts(filtered);
+    setPeriodConflictResolved(true);
+  };
+
+  const handleCancelPeriodConflict = () => {
+    setAnalysis(null);
+    setParsedShifts([]);
+    setPeriodConflictResolved(false);
   };
 
   const handleConfirm = async () => {
@@ -461,16 +547,35 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     warningDates.has(shift.date)
     || unknownTokens.some((token) => shift.rawText.includes(token));
 
+  // The assistant opens whenever the diagnosis needs user input (employee
+  // row, unknown codes, day mapping) — including REVIEW-quality imports that
+  // previously dropped unknown codes silently (GS-10).
   const showAssistant = !assistantDismissed
     && assistantSession !== null
     && analysis !== null
     && analysis.questions.length > 0
-    && (quality?.state === 'UNRECOGNIZED'
-      || assistantSession.itemAnalysis.employeeMatch === 'none'
-      || assistantSession.itemAnalysis.employeeMatch === 'multiple');
+    && (diagnosis?.state === 'NEEDS_USER_INPUT'
+      || diagnosis?.state === 'BLOCKED'
+      || diagnosis?.state === 'UNSUPPORTED');
 
-  const visibleWarnings = quality?.warnings.slice(0, MAX_VISIBLE_WARNINGS) ?? [];
-  const hiddenWarningCount = Math.max(0, (quality?.warnings.length ?? 0) - MAX_VISIBLE_WARNINGS);
+  // Warnings already surfaced as structured diagnostics are not repeated.
+  const DIAGNOSTIC_COVERED_WARNINGS = new Set(['UNKNOWN_SHIFT_TOKEN', 'PARTIAL_EXTRACTION', 'MULTIPLE_EMPLOYEE_MATCHES', 'UNSUPPORTED_SECTION']);
+  const secondaryWarnings = (quality?.warnings ?? []).filter((warning) => !DIAGNOSTIC_COVERED_WARNINGS.has(warning.code));
+  const visibleWarnings = secondaryWarnings.slice(0, MAX_VISIBLE_WARNINGS);
+  const hiddenWarningCount = Math.max(0, secondaryWarnings.length - MAX_VISIBLE_WARNINGS);
+
+  const periodLabel = (period: CalendarImportContext): string =>
+    `${monthOptions[period.month] ?? String(period.month + 1)} ${period.year}`;
+
+  const diagnosticVars = (diagnostic: ImportDiagnosis['diagnostics'][number]): Record<string, string | number> => {
+    if (diagnostic.code === 'MONTH_MISMATCH' && diagnosis && analysis?.detectedContext) {
+      return {
+        selected: periodLabel({ month: Number(diagnostic.details?.selectedMonth), year: Number(diagnostic.details?.selectedYear) }),
+        detected: periodLabel(analysis.detectedContext),
+      };
+    }
+    return diagnostic.details ?? {};
+  };
 
   return (
     <div className="modal-overlay">
@@ -584,21 +689,6 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </div>
             )}
 
-            {error && (
-              <div
-                style={{
-                  background: 'var(--danger-bg)',
-                  border: '1px solid var(--danger-border)',
-                  borderRadius: '10px',
-                  padding: '12px',
-                  fontSize: '0.8rem',
-                  color: 'var(--danger)',
-                }}
-              >
-                ⚠️ {error}
-              </div>
-            )}
-
             <input ref={fileInputRef} type="file" hidden accept={importAcceptAttribute()} onChange={handleFileChange} />
 
             <div style={{ minWidth: 0, width: '100%', flexShrink: 0 }}>
@@ -634,19 +724,19 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </span>
             </div>
 
-            {quality && (
+            {diagnosis && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
                 <span
                   data-testid="import-quality-state"
                   style={{
-                    ...STATE_CHIP_STYLES[quality.state],
+                    ...STATE_CHIP_STYLES[diagnosis.state],
                     borderRadius: '999px',
                     padding: '4px 12px',
                     fontSize: '0.72rem',
                     fontWeight: 800,
                   }}
                 >
-                  {t(STATE_I18N_KEYS[quality.state])}
+                  {t(STATE_I18N_KEYS[diagnosis.state])}
                 </span>
                 {analysis?.structure?.matchedProfile && (
                   <span
@@ -662,6 +752,78 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   >
                     {t('quality.profileRecognized', { label: analysis.structure.matchedProfile.profile.label })}
                   </span>
+                )}
+              </div>
+            )}
+
+            {diagnosis && diagnosis.diagnostics.length > 0 && (
+              <div
+                data-testid="import-diagnostics"
+                style={{
+                  margin: '0 0 10px',
+                  padding: '10px 12px',
+                  borderRadius: '10px',
+                  border: `1px solid ${diagnosisBlocking ? 'var(--danger-border)' : 'var(--glass-border)'}`,
+                  background: diagnosisBlocking ? 'var(--danger-bg)' : 'var(--panel-muted-bg)',
+                  fontSize: '0.8rem',
+                  lineHeight: 1.5,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                }}
+              >
+                {diagnosis.diagnostics.map((diagnostic, diagnosticIndex) => (
+                  <div key={`${diagnostic.code}-${diagnosticIndex}`}>
+                    <p style={{ margin: 0 }}>
+                      {t(diagnostic.messageKey, diagnosticVars(diagnostic))}
+                    </p>
+                    {diagnostic.affectedDays && diagnostic.affectedDays.length > 0 && (
+                      <p style={{ margin: '2px 0 0', opacity: 0.85 }}>
+                        {t('diagnosis.unknownCodes.daysList', { days: diagnostic.affectedDays.join(', ') })}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {diagnosis.summary.unresolvedDays.length > 0 && diagnosis.state === 'PARTIAL' && (
+                  <p style={{ margin: 0 }}>
+                    {t('diagnosis.partial.daysList', {
+                      count: diagnosis.summary.unresolvedDays.length,
+                      days: diagnosis.summary.unresolvedDays.join(', '),
+                    })}
+                  </p>
+                )}
+                {diagnosisBlocking && (
+                  <p style={{ margin: 0, fontWeight: 700 }}>{t('diagnosis.nothingImported')}</p>
+                )}
+                {monthMismatch && analysis?.detectedContext && (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    <button
+                      type="button"
+                      className="btn-gold"
+                      style={{ padding: '8px 12px', minHeight: 'auto', fontWeight: 700 }}
+                      onClick={handleUseSelectedPeriod}
+                    >
+                      {t('diagnosis.monthMismatch.usePeriod', {
+                        period: periodLabel({ month: Number.parseInt(selectedMonth, 10), year: Number.parseInt(selectedYear, 10) }),
+                      })}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '8px 12px', minHeight: 'auto', fontWeight: 700 }}
+                      onClick={() => void handleUseDetectedPeriod()}
+                    >
+                      {t('diagnosis.monthMismatch.usePeriod', { period: periodLabel(analysis.detectedContext) })}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '8px 12px', minHeight: 'auto' }}
+                      onClick={handleCancelPeriodConflict}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -762,10 +924,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               ) : (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3, padding: '16px', textAlign: 'center' }}>
                   <FileText size={40} />
-                  {/* UNRECOGNIZED never fabricates shifts: the hint replaces
-                      the neutral empty state so the user knows what to do. */}
+                  {/* GN-06: zero importable shifts is an explicit state with a
+                      reason — never a silent "Correcto" 0/0. */}
                   <p style={{ marginTop: '12px' }}>
-                    {quality?.state === 'UNRECOGNIZED' ? t('quality.confidenceHint') : t('importModal.emptyStateHint')}
+                    {diagnosis?.diagnostics.some((diagnostic) => diagnostic.code === 'NO_SHIFTS_FOUND')
+                      ? t('diagnosis.noShifts.title')
+                      : diagnosis?.state === 'UNSUPPORTED' || diagnosis?.state === 'FAILED'
+                        ? t(STATE_I18N_KEYS[diagnosis.state])
+                        : t('importModal.emptyStateHint')}
                   </p>
                 </div>
               )}
@@ -780,9 +946,19 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             )}
 
             <div style={{ marginTop: '16px' }}>
-              <button className="btn-gold import-process-button" style={{ width: '100%', height: '48px', fontSize: '1rem' }} disabled={readyShifts.length === 0 || loading} onClick={handleConfirm}>
+              <button
+                className="btn-gold import-process-button"
+                style={{ width: '100%', height: '48px', fontSize: '1rem' }}
+                disabled={readyShifts.length === 0 || loading || diagnosisBlocking}
+                onClick={handleConfirm}
+              >
                 {t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
               </button>
+              {diagnosisBlocking && (
+                <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--danger)', textAlign: 'center' }}>
+                  {t('diagnosis.confirmBlocked')}
+                </p>
+              )}
             </div>
           </div>
         </div>

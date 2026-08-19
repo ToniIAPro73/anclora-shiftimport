@@ -29,6 +29,20 @@ const T_KEYS = [
   'legalPage.titlePrivacy', 'legalPage.titleTerms', 'legalPage.titleLegal', 'legalPage.backHome',
   'cookies.titleBanner', 'cookies.acceptAll', 'cookies.configure', 'cookies.rejectOptional',
   'errors.UNKNOWN_EMPLOYEE', 'errors.NO_SHIFTS_FOUND', 'errors.UNSUPPORTED_FORMAT',
+  'diagnosis.stateReady', 'diagnosis.stateNeedsInput', 'diagnosis.statePartial',
+  'diagnosis.stateBlocked', 'diagnosis.stateUnsupported', 'diagnosis.stateFailed',
+  'diagnosis.noShifts.title', 'diagnosis.noShifts.reasonNoValues',
+  'diagnosis.noShifts.reasonAllCodesUnknown', 'diagnosis.noShifts.reasonEmployeeMissing',
+  'diagnosis.noShifts.reasonNoDateAlignment', 'diagnosis.noShifts.reasonUnsupportedLayout',
+  'diagnosis.noShifts.reasonUnknown',
+  'diagnosis.unknownCodes.message', 'diagnosis.unknownCodes.excludedMessage',
+  'diagnosis.unknownCodes.daysList',
+  'diagnosis.partial.message', 'diagnosis.partial.daysList',
+  'diagnosis.monthMismatch.message', 'diagnosis.monthMismatch.usePeriod', 'diagnosis.monthMismatch.hint',
+  'diagnosis.employee.unknownMessage', 'diagnosis.employee.ambiguousMessage',
+  'diagnosis.unsupportedLayout.message', 'diagnosis.confirmBlocked', 'diagnosis.nothingImported',
+  'diagnosis.error.PARSER_FAILURE', 'diagnosis.error.MALFORMED_INPUT', 'diagnosis.error.EMPTY_DOCUMENT',
+  'assistant.vacationOption', 'assistant.otherOption', 'assistant.otherTypeLabel', 'assistant.timesRequired',
 ];
 
 // A subset of T_KEYS that are full words/sentences and must read differently

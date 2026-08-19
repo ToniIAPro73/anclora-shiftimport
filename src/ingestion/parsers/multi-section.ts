@@ -6,9 +6,9 @@
  * walker detects every section, then reuses the same generic row/column
  * primitives band-restricted to the section matching the caller's selected
  * month/year (the same context.month/year the user picked in the UI, or
- * the auto-detected one). When no section matches that month/year, every
- * detected section is used as a defensive fallback instead of silently
- * returning nothing.
+ * the auto-detected one). When no section matches that month/year, nothing
+ * is parsed — silently walking every section would leak other months'
+ * shifts into the selected period (GS-01 bug class, Phase 1B).
  */
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { IngestionError } from '../../lib/ingestion-errors';
@@ -105,7 +105,15 @@ export function parseMultiSectionShifts(
   if (allSections.length === 0) {
     throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noDayHeaders);
   }
-  const sections = selectSectionsForContext(allSections, context);
+  // No silent cross-month fallback (Phase 1B): when no section matches the
+  // caller's context, parse nothing — the diagnosis layer surfaces the
+  // conflict (MONTH_MISMATCH) instead of leaking other months' shifts.
+  const sections = allSections.filter(
+    (section) => section.month === context.month && section.year === context.year,
+  );
+  if (sections.length === 0) {
+    return [];
+  }
 
   const codeProfile = buildCodeProfile(allItems);
   const targetIds = selector.employeeIdentifiers.map((value) => value.replace(/\D/g, '')).filter(Boolean);

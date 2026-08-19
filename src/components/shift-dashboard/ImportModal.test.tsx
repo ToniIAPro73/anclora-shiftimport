@@ -171,7 +171,7 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
 
     renderImportModal('es', () => {}, { onConfirmImport, initialFile: csvFile() });
 
-    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Correcto'));
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Listo'));
     expect(screen.getByText('Formato reconocido: Cuadrante mensual')).toBeTruthy();
     expect(screen.queryByText('Asistente de formato')).toBeNull();
     expect(mockedAnalyzeItemsForImport).not.toHaveBeenCalled();
@@ -200,21 +200,23 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     renderImportModal('es', () => {}, { initialFile: csvFile() });
 
     await waitFor(() => expect(screen.getByText('Asistente de formato')).toBeTruthy());
-    expect(screen.getByTestId('import-quality-state').textContent).toBe('No reconocido');
+    expect(screen.getByTestId('import-quality-state').textContent).toBe('Necesita tu respuesta');
     expect(screen.getByText('¿Cuál de estas filas eres tú?')).toBeTruthy();
     expect(screen.getByText('Ana Martinez (1001)')).toBeTruthy();
 
     const confirmButton = screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
     expect(confirmButton.disabled).toBe(true);
 
-    // Cancelling the assistant keeps the UNRECOGNIZED empty preview with the hint.
+    // Cancelling the assistant leaves an explicit BLOCKED state: the
+    // no-shifts explanation replaces the neutral hint and confirm stays off.
     fireEvent.click(screen.getByText('Cancelar'));
     await waitFor(() => expect(screen.queryByText('Asistente de formato')).toBeNull());
-    expect(screen.getByText(/Revisar significa comprobar las filas resaltadas/)).toBeTruthy();
+    expect(screen.getByTestId('import-quality-state').textContent).toBe('Bloqueado');
+    expect(screen.getByText('No hemos encontrado turnos importables.')).toBeTruthy();
     expect((screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('REVIEW: amber chip and warning list with interpolated context', async () => {
+  it('unknown shift code is surfaced, never silently dropped (GS-10)', async () => {
     mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
       quality: {
         shifts: makeResult().shifts,
@@ -229,8 +231,9 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
 
     renderImportModal('es', () => {}, { initialFile: csvFile() });
 
-    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Revisar'));
-    expect(screen.getByText('Token de turno desconocido: DL')).toBeTruthy();
+    // No assistant questions mocked → the exclusion is explicit, not silent.
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Listo'));
+    expect(screen.getByText(/Códigos sin definir: DL/)).toBeTruthy();
     expect(screen.getByText(/La coincidencia con tu nombre es débil/)).toBeTruthy();
   });
 

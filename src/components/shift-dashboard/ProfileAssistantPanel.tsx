@@ -3,6 +3,7 @@ import {
   applyTokenAliasesToShiftTypes,
   AssistantAnswers,
   AssistantQuestion,
+  buildCodeOverridesFromAnswers,
   buildProfileFromAnswers,
   EmployeeRowCandidate,
   parseWithDayMapping,
@@ -111,6 +112,10 @@ export const ProfileAssistantPanel = ({
       tokenMeanings,
     };
 
+    // The just-classified codes apply immediately to the re-parse — no
+    // storage round-trip needed for this import to pick them up.
+    const codeOverrides = buildCodeOverridesFromAnswers(answers);
+
     // Tabular (CSV) mode: no positioned pipeline — the profile and the
     // re-parse are built directly from the parsed table (PII-free, see
     // ingestion/tabular-assistant.ts).
@@ -163,19 +168,20 @@ export const ProfileAssistantPanel = ({
           row,
           ingestionProfile,
           { columnIndex: activeDayMapping.columnIndex, day: corrected },
+          codeOverrides,
         );
       }
     } else if (selectedRow && ingestionProfile) {
-      shifts = parseWithSelectedRow(items, context, selectedRow, ingestionProfile);
+      shifts = parseWithSelectedRow(items, context, selectedRow, ingestionProfile, codeOverrides);
     } else {
       try {
-        shifts = parseShiftsFromItems(items, context, sessionSelector);
+        shifts = parseShiftsFromItems(items, context, sessionSelector, codeOverrides);
       } catch {
         shifts = [];
       }
     }
 
-    const { quality } = analyzeShiftsFromItems(items, context, sessionSelector);
+    const { quality } = analyzeShiftsFromItems(items, context, sessionSelector, undefined, codeOverrides);
     onComplete({
       shifts,
       quality: { ...quality, shifts },
@@ -183,8 +189,19 @@ export const ProfileAssistantPanel = ({
     });
   };
 
+  const unansweredToken = tokenQuestions.some((question) => {
+    const token = question.kind === 'shift-code' ? question.code : question.token;
+    const meaning = tokenMeanings[token];
+    if (!meaning) {
+      return true; // every unknown code must be classified — never dropped silently
+    }
+    // A work code without times could not rebuild its shift on re-parse.
+    return meaning.kind === 'work' && (!meaning.startTime || !meaning.endTime);
+  });
+
   const confirmDisabled = (rowQuestion !== undefined && selectedRow === null)
-    || (dayMappingQuestion !== undefined && dayMappingConfirmed === false && !Number.isInteger(Number.parseInt(correctedDay, 10)));
+    || (dayMappingQuestion !== undefined && dayMappingConfirmed === false && !Number.isInteger(Number.parseInt(correctedDay, 10)))
+    || unansweredToken;
 
   const segmentedButtonStyle = (active: boolean): React.CSSProperties => ({
     padding: '8px 14px',
@@ -238,6 +255,11 @@ export const ProfileAssistantPanel = ({
         const meaning = tokenMeanings[token];
         const titleKey = question.kind === 'shift-code' ? 'assistant.shiftCodeQuestion' : 'assistant.tokenMeaningQuestion';
         const titleVars: Record<string, string> = question.kind === 'shift-code' ? { code: token } : { token };
+        const isRest = meaning?.kind === 'rest' && meaning.shiftTypeId === 'Libre';
+        const isVacation = meaning?.kind === 'rest' && meaning.shiftTypeId === 'Vacaciones';
+        const isOther = meaning?.kind === 'rest' && meaning.shiftTypeId === undefined;
+        const showTypeSelect = meaning?.kind === 'work' || isOther;
+        const missingTimes = meaning?.kind === 'work' && (!meaning.startTime || !meaning.endTime);
         return (
           <div key={`${question.kind}-${token}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>{t(titleKey, titleVars)}</p>
@@ -252,30 +274,56 @@ export const ProfileAssistantPanel = ({
               </button>
               <button
                 type="button"
-                className={meaning?.kind === 'rest' ? 'btn-gold' : 'btn-outline'}
-                style={segmentedButtonStyle(meaning?.kind === 'rest')}
-                onClick={() => setTokenMeaning(token, { kind: 'rest', shiftTypeId: undefined, startTime: undefined, endTime: undefined })}
+                className={isRest ? 'btn-gold' : 'btn-outline'}
+                style={segmentedButtonStyle(isRest)}
+                onClick={() => setTokenMeaning(token, { kind: 'rest', shiftTypeId: 'Libre', startTime: undefined, endTime: undefined })}
               >
                 {t('assistant.restOption')}
               </button>
+              <button
+                type="button"
+                className={isVacation ? 'btn-gold' : 'btn-outline'}
+                style={segmentedButtonStyle(isVacation)}
+                onClick={() => setTokenMeaning(token, { kind: 'rest', shiftTypeId: 'Vacaciones', startTime: undefined, endTime: undefined })}
+              >
+                {t('assistant.vacationOption')}
+              </button>
+              <button
+                type="button"
+                className={isOther ? 'btn-gold' : 'btn-outline'}
+                style={segmentedButtonStyle(isOther)}
+                onClick={() => setTokenMeaning(token, { kind: 'rest', shiftTypeId: undefined, startTime: undefined, endTime: undefined })}
+              >
+                {t('assistant.otherOption')}
+              </button>
             </div>
-            {meaning?.kind === 'work' && (
+            {showTypeSelect && (
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <select
                   className="modal-input"
                   style={{ flex: '1 1 140px', minWidth: 120 }}
-                  aria-label={t('assistant.shiftTypeLabel')}
-                  value={meaning.shiftTypeId ?? ''}
-                  onChange={(event) => setTokenMeaning(token, { shiftTypeId: event.target.value || undefined })}
+                  aria-label={isOther ? t('assistant.otherTypeLabel') : t('assistant.shiftTypeLabel')}
+                  value={meaning?.shiftTypeId ?? ''}
+                  onChange={(event) => {
+                    const typeId = event.target.value || undefined;
+                    const definition = shiftTypes.find((type) => type.id === typeId);
+                    // "Otro" with a work-type pick becomes a work answer (and
+                    // asks for times); an absence type stays a rest answer.
+                    if (isOther && definition?.countsAsWork) {
+                      setTokenMeaning(token, { kind: 'work', shiftTypeId: typeId });
+                    } else {
+                      setTokenMeaning(token, { shiftTypeId: typeId });
+                    }
+                  }}
                 >
-                  <option value="">{t('assistant.shiftTypeLabel')}</option>
+                  <option value="">{isOther ? t('assistant.otherTypeLabel') : t('assistant.shiftTypeLabel')}</option>
                   {shiftTypes.map((type) => (
                     <option key={type.id} value={type.id}>
                       {translateShiftTypeLabel(type.id, locale, type.label)}
                     </option>
                   ))}
                 </select>
-                {question.kind === 'shift-code' && (
+                {meaning?.kind === 'work' && (
                   <>
                     <input
                       type="time"
@@ -296,6 +344,11 @@ export const ProfileAssistantPanel = ({
                   </>
                 )}
               </div>
+            )}
+            {missingTimes && (
+              <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-gold)' }}>
+                {t('assistant.timesRequired')}
+              </p>
             )}
           </div>
         );

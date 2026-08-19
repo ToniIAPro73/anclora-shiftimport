@@ -85,25 +85,30 @@ describe('ProfileAssistantPanel', () => {
     expect(result.profile).not.toBeNull();
   });
 
-  it('supports token-meaning work/rest answers and applies the aliases', () => {
+  it('supports shift-code work/rest answers and applies the aliases', () => {
     const { analysis, questions } = setup(TYPE_A_SELECTOR);
-    expect(questions.map((q) => q.kind)).toEqual(['token-meaning', 'token-meaning']);
+    expect(questions.map((q) => q.kind)).toEqual(['shift-code', 'shift-code']);
     const onComplete = vi.fn();
     renderPanel(questions, analysis, TYPE_A_SELECTOR, onComplete);
 
-    expect(screen.getByText('¿Qué significa DL?')).toBeTruthy();
-    expect(screen.getByText('¿Qué significa AJ?')).toBeTruthy();
+    expect(screen.getByText('¿Qué turno representa DL?')).toBeTruthy();
+    expect(screen.getByText('¿Qué turno representa AJ?')).toBeTruthy();
 
-    // DL = rest, AJ = work (defaults to the Regular type when none is chosen).
-    const restButtons = screen.getAllByText('Descanso');
-    const workButtons = screen.getAllByText('Trabajo');
-    fireEvent.click(restButtons[0]);
-    fireEvent.click(workButtons[1]);
+    // DL = rest (Libre). AJ = work: times are required before confirming.
+    fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Turno de trabajo')[1]);
+    expect((screen.getByText('Aplicar y continuar') as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Hora Inicio'), { target: { value: '08:00' } });
+    fireEvent.change(screen.getByLabelText('Hora Fin'), { target: { value: '16:00' } });
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(resolveShiftTypeId('DL')).toBe('Libre');
     expect(resolveShiftTypeId('AJ')).toBe('Regular');
+    // The learned work code rebuilt its shift on the re-parse (GS-10).
+    const result = onComplete.mock.calls[0][0] as AssistantCompletion;
+    expect(result.shifts.some((shift) => shift.rawText.includes('AJ') && shift.startTime === '08:00')).toBe(true);
   });
 
   it('persists the format profile without any PII (no candidate labels, names or ids)', () => {
@@ -131,7 +136,9 @@ describe('ProfileAssistantPanel', () => {
     renderPanel(questions, analysis, TYPE_A_SELECTOR, onComplete);
 
     fireEvent.click(screen.getByLabelText('Guardar este formato para próximos meses'));
+    // Both unknown codes must be classified before confirming.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(loadFormatProfiles()).toHaveLength(0);

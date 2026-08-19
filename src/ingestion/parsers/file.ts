@@ -32,6 +32,7 @@ import {
   tabularRowSelectionQuestion,
 } from '../tabular-assistant';
 import { detectCalendarContextFromItems, parseShiftsFromItems } from './parse-items';
+import { detectSections } from './multi-section';
 import { extractPdfTextItems } from './pdf';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
@@ -511,11 +512,37 @@ export interface DocumentAnalysisResult {
   /** empty when quality.state === 'CORRECT' */
   questions: AssistantQuestion[];
   /**
+   * The period the document itself indicates (month-name/day-header evidence
+   * or roster dates). When it conflicts with the user's explicit selection,
+   * the diagnosis layer raises MONTH_MISMATCH — the selection is never
+   * silently overridden.
+   */
+  detectedContext?: CalendarImportContext;
+  /**
+   * TYPE_MULTI only: the month/year sections the document actually covers.
+   * The diagnosis layer compares the user's selection against this list —
+   * a selection outside it is a MONTH_MISMATCH, never a silent fallback.
+   */
+  coveredPeriods?: CalendarImportContext[];
+  /**
    * Parsed CSV table for the tabular assistant fallback (roster fast path and
    * UNKNOWN-layout grids). Present only when the document is tabular text the
    * positional pipeline could not fully handle on its own.
    */
   table?: RosterTable;
+}
+
+/**
+ * Drops shifts whose explicit date falls outside the chosen month. Applied
+ * only on the user's explicit "keep my selected period" decision after a
+ * MONTH_MISMATCH — never silently, so no cross-month date can slip through.
+ */
+export function filterShiftsToContext(
+  shifts: ParsedCalendarShift[],
+  context: CalendarImportContext,
+): ParsedCalendarShift[] {
+  const prefix = `${context.year}-${String(context.month + 1).padStart(2, '0')}-`;
+  return shifts.filter((shift) => !shift.date || shift.date.startsWith(prefix));
 }
 
 /** Header alias lookup used by the roster quality signals. */
@@ -623,7 +650,7 @@ function analyzeRosterDocument(
     quality = { ...quality, warnings: [...quality.warnings, { code: 'PARTIAL_EXTRACTION' as const }] };
   }
 
-  const questions: AssistantQuestion[] = quality.state === 'CORRECT'
+  const questions: AssistantQuestion[] = quality.state === 'CORRECT' && unknownTokens.size === 0
     ? []
     : [...unknownTokens].slice(0, 6).map((token) => ({ kind: 'token-meaning' as const, token }));
 
@@ -638,7 +665,7 @@ function analyzeRosterDocument(
     }
   }
 
-  return { kind: 'csv', context, shifts, quality, structure: null, questions, ...(table ? { table } : {}) };
+  return { kind: 'csv', context, shifts, quality, structure: null, questions, detectedContext: context, ...(table ? { table } : {}) };
 }
 
 /**
@@ -680,11 +707,15 @@ export async function analyzeDocumentFile(
     // can fingerprint it, e.g. day-number grid headers).
     const table = parseRosterTable(text);
     const items = extractTabularItems(text);
-    const context = contextOverride ?? detectCalendarContextFromItems(items);
+    const detectedContext = detectCalendarContextFromItems(items);
+    const context = contextOverride ?? detectedContext;
     const parsed = analyzeShiftsFromItems(items, context, selector, savedProfilesHint);
     const shifts = parsed.shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
     const quality: ImportResult = { ...parsed.quality, shifts };
-    let questions = quality.state === 'CORRECT'
+    // Questions are generated unless the result is clean AND complete:
+    // unknown tokens under a CORRECT confidence would otherwise be dropped
+    // silently (GS-10).
+    let questions = quality.state === 'CORRECT' && parsed.analysis.unknownTokens.length === 0
       ? []
       : generateAssistantQuestions(items, context, parsed.analysis);
 
@@ -694,21 +725,38 @@ export async function analyzeDocumentFile(
       // with no questions.
       if (tabularQuestions.length > 0) {
         questions = tabularQuestions;
-        return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions, table };
+        return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions, detectedContext, table };
       }
     }
 
-    return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions };
+    return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions, detectedContext };
   }
 
   const items = await extractDocumentItems(file);
-  const context = contextOverride ?? detectCalendarContextFromItems(items);
+  const detectedContext = detectCalendarContextFromItems(items);
+  const context = contextOverride ?? detectedContext;
   const parsed = analyzeShiftsFromItems(items, context, selector, savedProfilesHint);
   const shifts = parsed.shifts.map((shift) => ({ ...shift, sourceFormat: kind }));
   const quality: ImportResult = { ...parsed.quality, shifts };
-  const questions = quality.state === 'CORRECT'
+  const questions = quality.state === 'CORRECT' && parsed.analysis.unknownTokens.length === 0
     ? []
     : generateAssistantQuestions(items, context, parsed.analysis);
 
-  return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions };
+  // TYPE_MULTI: the periods the document covers, so the diagnosis layer can
+  // tell "user picked another covered month" (fine) from "picked a month the
+  // document does not contain" (blocking MONTH_MISMATCH).
+  const coveredPeriods = parsed.analysis.structure.documentType === 'TYPE_MULTI'
+    ? detectSections(items).map((section) => ({ month: section.month, year: section.year }))
+    : undefined;
+
+  return {
+    kind,
+    context,
+    shifts,
+    quality,
+    structure: parsed.analysis.structure,
+    questions,
+    detectedContext,
+    ...(coveredPeriods && coveredPeriods.length > 0 ? { coveredPeriods } : {}),
+  };
 }
