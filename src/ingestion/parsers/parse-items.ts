@@ -12,9 +12,11 @@ import { clusterByX, DayColumn, mapColumnGroupsToDaysDetailed } from '../core/cl
 import { getDayColumnsForPage } from '../core/day-columns';
 import {
   countEmployeeNameCandidates,
+  detectIdentityMismatch,
   EmployeeRow,
   EmployeeSelector,
   findEmployeeRowItems,
+  idResolvesInDocument,
 } from '../core/row-detection';
 import { buildShiftEntriesForDay } from '../core/shift-builder';
 import { buildCodeProfile, ShiftCodeMapping } from '../core/shift-code-profile';
@@ -63,11 +65,24 @@ export function parseShiftsFromItems(
   const targetIds = selector.employeeIdentifiers
     .map((value) => value.replace(/\D/g, ''))
     .filter((value) => value.length > 0);
+  const idFound = targetIds.length > 0
+    && idResolvesInDocument(allItems, targetIds, profile.rowWindow.markerMaxX);
 
-  // Without a disambiguating id, an unambiguous name match is required:
-  // zero candidates = UNKNOWN_EMPLOYEE, several candidates = we must not
-  // auto-pick one silently (corpus GN-01/GN-02).
-  if (targetIds.length === 0) {
+  // Data-integrity guard: a typed name and a typed id resolving to DIFFERENT
+  // employees must never silently prefer the id — the user picks the row.
+  if (idFound && detectIdentityMismatch(allItems, selector, profile.rowWindow)) {
+    throw new IngestionError(
+      'IDENTITY_MISMATCH',
+      'El nombre y el identificador introducidos parecen corresponder a personas distintas. Selecciona el empleado correcto antes de continuar.',
+    );
+  }
+
+  // The name path applies when there is no disambiguating id, or when the
+  // typed id appears nowhere in the document (an absent id must not veto a
+  // valid name match). An unambiguous name match is then required: zero
+  // candidates = UNKNOWN_EMPLOYEE, several candidates = we must not auto-pick
+  // one silently (corpus GN-01/GN-02).
+  if (targetIds.length === 0 || !idFound) {
     const nameCandidates = countEmployeeNameCandidates(allItems, selector.employeeName, profile.rowWindow.markerMaxX);
     if (nameCandidates === 0) {
       throw new IngestionError(

@@ -205,8 +205,9 @@ export function dayMappingQuestionFromDiagnostic(
 /**
  * Turns an ItemAnalysis into the questions the UI should ask.
  *
- * - row-selection: only when the employee match is 'none' or 'multiple' and
- *   the document has selectable rows (capped at opts.maxRows, default 8).
+ * - row-selection: only when the employee match is 'none', 'multiple' or
+ *   'mismatch' and the document has selectable rows (capped at opts.maxRows,
+ *   default 8).
  * - day-mapping: at most one, only when the employee row was found AND the
  *   column→day alignment left a column group unmatched (the minimum useful
  *   question; see dayMappingQuestionFromDiagnostic).
@@ -226,7 +227,12 @@ export function generateAssistantQuestions(
   const questions: AssistantQuestion[] = [];
   const profile = getIngestionProfile(analysis.structure.documentType);
 
-  if ((analysis.employeeMatch === 'none' || analysis.employeeMatch === 'multiple') && profile) {
+  if (
+    (analysis.employeeMatch === 'none'
+      || analysis.employeeMatch === 'multiple'
+      || analysis.employeeMatch === 'mismatch')
+    && profile
+  ) {
     const candidates = findEmployeeRowCandidates(items, profile, { maxRows: opts?.maxRows });
     if (candidates.length > 0) {
       questions.push({ kind: 'row-selection', candidates });

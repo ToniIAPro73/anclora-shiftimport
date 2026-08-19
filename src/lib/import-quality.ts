@@ -31,7 +31,7 @@ export interface QualitySignals {
   knownProfileMatched: boolean;
   profileDrift: boolean;
   periodDetected: boolean;
-  employeeMatch: 'strong' | 'weak' | 'multiple' | 'none';
+  employeeMatch: 'strong' | 'weak' | 'multiple' | 'none' | 'mismatch';
   /** expected working rows/days the document layout implies */
   expectedDays: number;
   /** days actually mapped to a column */
@@ -63,6 +63,9 @@ export interface QualitySignals {
  *     the state is capped at REVIEW — a human must pick the row.
  *   - 'none': state forced to UNRECOGNIZED and confidence clamped to ≤ 0.2;
  *     without an employee row nothing extracted is trustworthy.
+ *   - 'mismatch': the typed name and id resolve to different employees;
+ *     same treatment as 'none' — nothing may import until the user picks
+ *     the correct row.
  * - unknown tokens: −0.05 per distinct token (cap −0.3), one
  *   UNKNOWN_SHIFT_TOKEN warning per token.
  * - mappedDays < expectedDays: PARTIAL_EXTRACTION and
@@ -104,7 +107,7 @@ const clampConfidence = (value: number): number => {
 };
 
 export function qualityStateFor(confidence: number, signals: QualitySignals): ImportQualityState {
-  if (signals.employeeMatch === 'none') {
+  if (signals.employeeMatch === 'none' || signals.employeeMatch === 'mismatch') {
     return 'UNRECOGNIZED';
   }
   const canBeCorrect = !signals.profileDrift && signals.employeeMatch !== 'multiple';
@@ -181,7 +184,7 @@ export function computeImportResult<T = ParsedCalendarShift>(
     }
   }
 
-  if (signals.employeeMatch === 'none') {
+  if (signals.employeeMatch === 'none' || signals.employeeMatch === 'mismatch') {
     confidence = Math.min(confidence, NO_MATCH_CONFIDENCE_CAP);
   }
 

@@ -216,6 +216,31 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect((screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('identity mismatch (name and id point to different employees): blocking diagnostic, confirm disabled until a row is chosen', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts: [],
+      quality: {
+        shifts: [],
+        confidence: 0.2,
+        warnings: [],
+        state: 'UNRECOGNIZED',
+      },
+      structure: makeItemAnalysis().structure,
+      questions: [{ kind: 'row-selection', candidates: [CANDIDATE] }],
+    }));
+    mockedAnalyzeItemsForImport.mockReturnValue(makeItemAnalysis({ employeeMatch: 'mismatch' }));
+
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText(/parecen corresponder a personas distintas/)).toBeTruthy());
+    expect(screen.getByTestId('import-quality-state').textContent).toBe('Necesita tu respuesta');
+    expect(screen.getByText('¿Cuál de estas filas eres tú?')).toBeTruthy();
+
+    // A mismatched identity never reaches READY/import without human selection.
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+  });
+
   it('unknown shift code is surfaced, never silently dropped (GS-10)', async () => {
     mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
       quality: {

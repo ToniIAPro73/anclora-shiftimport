@@ -120,6 +120,12 @@ function resolveCeiling(
   for (let index = firstMarkerIndex - 1; index >= 0; index -= 1) {
     const candidate = pageItems[index];
     if (candidate.x < rules.markerMaxX && looksLikeEmployeeLabel(candidate.text)) {
+      // A label sharing the marker's own line is the employee's own name
+      // (e.g. id-only selectors: the name is not among the markers), never
+      // the previous employee's boundary.
+      if (Math.abs(candidate.y - markers[0].y) <= 1) {
+        continue;
+      }
       return { ceilingY: candidate.y - 0.5, inclusive: false };
     }
   }
@@ -166,8 +172,101 @@ function resolveCategory(pageItems: PdfTextItem[], firstMarkerIndex: number, rul
 }
 
 /**
+ * True when any of the given (digit-normalized) ids appears as a marker item
+ * in the document. An id that appears nowhere cannot gate the row search —
+ * callers fall back to the name path in that case.
+ */
+export function idResolvesInDocument(
+  items: PdfTextItem[],
+  targetIds: string[],
+  markerMaxX: number,
+): boolean {
+  return items.some(
+    (item) => targetIds.includes(normalizeEmployeeId(item.text)) && item.x < markerMaxX,
+  );
+}
+
+/**
+ * Identity cross-check between the typed name and the typed id.
+ *
+ * Returns true only when BOTH resolve and they point to different employees:
+ * the id marker is found in the document, the typed name matches at least one
+ * printed row label, and the name label that owns the id marker (the nearest
+ * name label on the id's line or above it — dense layouts nudge the name a
+ * few points right of markerMaxX, so the search extends to dataMinX) does not
+ * match the typed name.
+ *
+ * An unresolvable name never blocks an id-backed match (false), and an id
+ * that appears nowhere never blocks a name-backed match (false) — those are
+ * the legitimate id-only / name-only resolutions.
+ */
+export function detectIdentityMismatch(
+  items: PdfTextItem[],
+  selector: EmployeeSelector,
+  rules: RowWindowRules,
+): boolean {
+  const targetIds = selector.employeeIdentifiers
+    .map((value) => normalizeEmployeeId(value))
+    .filter((value) => value.length > 0);
+  if (targetIds.length === 0) {
+    return false;
+  }
+  const nameTokens = normalizeText(selector.employeeName)
+    .split(' ')
+    .filter((token) => token.length >= 3);
+  if (nameTokens.length === 0) {
+    return false;
+  }
+
+  const pages = Array.from(new Set(items.map((item) => item.page))).sort((left, right) => left - right);
+  const sortedPages = pages.map((page) => sortPdfItemsForReading(items.filter((item) => item.page === page)));
+
+  const nameResolves = sortedPages.some(
+    (pageItems) => findNameMarkerIndex(pageItems, nameTokens, rules.dataMinX) >= 0,
+  );
+  if (!nameResolves) {
+    return false;
+  }
+
+  for (const pageItems of sortedPages) {
+    const idIndex = pageItems.findIndex(
+      (item) => targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
+    );
+    if (idIndex < 0) {
+      continue;
+    }
+    const idItem = pageItems[idIndex];
+    let owner: PdfTextItem | null = null;
+    for (const item of pageItems) {
+      if (item.x >= rules.dataMinX || !isEmployeeNameLabel(item.text)) {
+        continue;
+      }
+      // Owning label: nearest name label on the id's line or above it
+      // (tolerance 1, same as the reading-order line clustering).
+      if (item.y < idItem.y - 1) {
+        continue;
+      }
+      if (owner === null || item.y < owner.y) {
+        owner = item;
+      }
+    }
+    // Without a name label owning the id there is nothing to cross-check
+    // against; the id stands.
+    return owner !== null && !matchesNameTokens(owner.text, nameTokens);
+  }
+
+  return false;
+}
+
+/**
  * Locates the employee's row band on the first page where a marker matches.
  * Returns null when the employee is not found in the document.
+ *
+ * A typed id that appears nowhere in the document does not gate the search:
+ * the name path then applies (id-only gating would silently turn a valid
+ * name match into UNKNOWN_EMPLOYEE). When the id IS present and the typed
+ * name points to a different employee, callers must run
+ * detectIdentityMismatch first — this function never arbitrates conflicts.
  */
 export function findEmployeeRowItems(
   items: PdfTextItem[],
@@ -179,19 +278,19 @@ export function findEmployeeRowItems(
     .filter((value) => value.length > 0);
   const normalizedName = normalizeText(selector.employeeName);
   const nameTokens = normalizedName.split(' ').filter((token) => token.length >= 3);
-  const hasTargetId = targetIds.length > 0;
+  const idFound = targetIds.length > 0 && idResolvesInDocument(items, targetIds, rules.markerMaxX);
 
   const pages = Array.from(new Set(items.map((item) => item.page))).sort((left, right) => left - right);
   for (const page of pages) {
     const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
     const idIndex = pageItems.findIndex(
-      (item) => hasTargetId && targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
+      (item) => idFound && targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
     );
     const nameIndex = rules.nameMatching
       ? findNameMarkerIndex(pageItems, nameTokens, rules.markerMaxX)
       : -1;
 
-    if (hasTargetId && idIndex < 0) {
+    if (idFound && idIndex < 0) {
       continue;
     }
 

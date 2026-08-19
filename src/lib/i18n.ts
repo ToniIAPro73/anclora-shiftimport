@@ -328,6 +328,7 @@ const translations: Record<Locale, TranslationTree> = {
       employee: {
         unknownMessage: 'No se encontró ninguna fila que coincida de forma fiable con tu perfil.',
         ambiguousMessage: 'Varias filas podrían ser la tuya; confirma cuál para continuar.',
+        mismatchMessage: 'El nombre y el identificador introducidos parecen corresponder a personas distintas. Selecciona el empleado correcto antes de continuar.',
       },
       unsupportedLayout: {
         message: 'Este documento tiene una estructura que no podemos interpretar. Prueba con otro formato de cuadrante.',
@@ -342,6 +343,7 @@ const translations: Record<Locale, TranslationTree> = {
         NO_SHIFTS_FOUND: 'No se detectaron turnos importables en el archivo.',
         UNKNOWN_EMPLOYEE: 'No se ha encontrado a este empleado en el documento.',
         AMBIGUOUS_EMPLOYEE: 'Hay varias coincidencias para este empleado.',
+        IDENTITY_MISMATCH: 'El nombre y el identificador introducidos no corresponden a la misma persona.',
         UNKNOWN_SHIFT_CODES: 'Hay códigos de turno desconocidos.',
         DATE_AMBIGUITY: 'No se pudo determinar el período del documento con seguridad.',
         MONTH_MISMATCH: 'El período del documento no coincide con el seleccionado.',
@@ -634,6 +636,7 @@ const translations: Record<Locale, TranslationTree> = {
       employee: {
         unknownMessage: 'No row reliably matching your profile was found.',
         ambiguousMessage: 'Several rows could be yours; confirm which one to continue.',
+        mismatchMessage: 'The name and identifier you entered seem to belong to different people. Select the correct employee before continuing.',
       },
       unsupportedLayout: {
         message: 'This document has a structure we cannot interpret. Try a different roster format.',
@@ -648,6 +651,7 @@ const translations: Record<Locale, TranslationTree> = {
         NO_SHIFTS_FOUND: 'No importable shifts were detected in the file.',
         UNKNOWN_EMPLOYEE: 'This employee was not found in the document.',
         AMBIGUOUS_EMPLOYEE: 'There are several matches for this employee.',
+        IDENTITY_MISMATCH: 'The entered name and identifier do not belong to the same person.',
         UNKNOWN_SHIFT_CODES: 'There are unknown shift codes.',
         DATE_AMBIGUITY: 'The document period could not be determined reliably.',
         MONTH_MISMATCH: 'The document period does not match the selected one.',

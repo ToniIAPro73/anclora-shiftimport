@@ -296,19 +296,27 @@ export function buildImportDiagnosis(
     });
   }
 
-  // --- 3/4. Employee recovery (unknown / ambiguous) ------------------------
+  // --- 3/4. Employee recovery (unknown / ambiguous / identity mismatch) ----
   const rowQuestion = questions.find((question) => question.kind === 'row-selection');
   if (rowQuestion) {
-    const ambiguous = itemAnalysis?.employeeMatch === 'multiple'
-      || quality.warnings.some((warning) => warning.code === 'MULTIPLE_EMPLOYEE_MATCHES');
+    // A name/id mismatch is its own blocking diagnostic: the two typed
+    // identifiers point to different employees, so the user must choose the
+    // correct row explicitly — the id never silently wins.
+    const mismatch = itemAnalysis?.employeeMatch === 'mismatch';
+    const ambiguous = !mismatch && (
+      itemAnalysis?.employeeMatch === 'multiple'
+      || quality.warnings.some((warning) => warning.code === 'MULTIPLE_EMPLOYEE_MATCHES')
+    );
     diagnostics.push({
-      code: ambiguous ? 'AMBIGUOUS_EMPLOYEE' : 'UNKNOWN_EMPLOYEE',
+      code: mismatch ? 'IDENTITY_MISMATCH' : ambiguous ? 'AMBIGUOUS_EMPLOYEE' : 'UNKNOWN_EMPLOYEE',
       severity: 'error',
       blocking: true,
       recoverable: true,
-      messageKey: ambiguous
-        ? 'diagnosis.employee.ambiguousMessage'
-        : 'diagnosis.employee.unknownMessage',
+      messageKey: mismatch
+        ? 'diagnosis.employee.mismatchMessage'
+        : ambiguous
+          ? 'diagnosis.employee.ambiguousMessage'
+          : 'diagnosis.employee.unknownMessage',
       recovery: 'answer-question',
       safeToImportPartial: false,
       stage: 'analysis',

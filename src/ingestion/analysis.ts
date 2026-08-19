@@ -32,9 +32,11 @@ import { getDayColumnsForPage } from './core/day-columns';
 import { normalizeText } from './core/normalize';
 import {
   countEmployeeNameCandidates,
+  detectIdentityMismatch,
   EmployeeRow,
   EmployeeSelector,
   findEmployeeRowItems,
+  idResolvesInDocument,
   matchesNameTokens,
 } from './core/row-detection';
 import { buildCodeProfile, codeOverridesFromLearning, parseLegendCodes, ShiftCodeMapping } from './core/shift-code-profile';
@@ -55,7 +57,7 @@ export interface DocumentStructureAnalysis {
   periodDetected: boolean;
 }
 
-export type EmployeeMatchStrength = 'strong' | 'weak' | 'multiple' | 'none';
+export type EmployeeMatchStrength = 'strong' | 'weak' | 'multiple' | 'none' | 'mismatch';
 
 /**
  * Column→day alignment diagnostic for the located employee row. Captured by
@@ -292,6 +294,10 @@ const computeDayMappingDiagnostic = (
  * Full item-level analysis for one import attempt.
  *
  * Employee match strength rules:
+ * - 'mismatch': the typed name and the typed id both resolve but point to
+ *   DIFFERENT employees (detectIdentityMismatch). No row is located and no
+ *   tokens are classified — the user must pick the correct row; the id never
+ *   silently wins over a contradictory name.
  * - 'multiple': more than one name candidate and no disambiguating digit id
  *   (we must not auto-pick a row).
  * - 'none': zero candidates, or the row band could not be located.
@@ -299,6 +305,9 @@ const computeDayMappingDiagnostic = (
  *   (every name token matches the row label).
  * - 'weak': unique but partial-token name match (fuzzy — wrong-row
  *   extraction is the worst silent failure, hence the distinction).
+ *
+ * An id that appears nowhere in the document does not gate the search: the
+ * name path (candidates + strength) then applies unchanged.
  *
  * Token classification runs over the located row's data cells, excluding the
  * name/id marker items (marker column and parenthesized ids). A cell counts
@@ -333,8 +342,18 @@ export function analyzeItemsForImport(
   const targetIds = selector.employeeIdentifiers
     .map((value) => value.replace(/\D/g, ''))
     .filter((value) => value.length > 0);
+  const idFound = targetIds.length > 0
+    && idResolvesInDocument(items, targetIds, profile.rowWindow.markerMaxX);
 
-  if (targetIds.length === 0) {
+  // Data-integrity guard first: name and id both resolve but to different
+  // employees. No row is located, nothing is classified — the row-selection
+  // assistant must ask.
+  if (idFound && detectIdentityMismatch(items, selector, profile.rowWindow)) {
+    return { ...base, employeeMatch: 'mismatch' };
+  }
+
+  const useNamePath = targetIds.length === 0 || !idFound;
+  if (useNamePath) {
     const candidates = countEmployeeNameCandidates(items, selector.employeeName, profile.rowWindow.markerMaxX);
     if (candidates > 1) {
       return { ...base, employeeMatch: 'multiple' };
@@ -349,9 +368,11 @@ export function analyzeItemsForImport(
     return base;
   }
 
-  // With digit ids, findEmployeeRowItems only matches a page where the id
-  // marker is present — an id-backed row is always a strong match.
-  const employeeMatch: EmployeeMatchStrength = targetIds.length > 0
+  // With a document-present digit id, findEmployeeRowItems only matches a
+  // page where the id marker is present — an id-backed row is always a
+  // strong match. The name path (no id, or an id absent from the document)
+  // is graded by token coverage.
+  const employeeMatch: EmployeeMatchStrength = idFound
     ? 'strong'
     : nameMatchStrength(items, row.page, selector.employeeName, profile.rowWindow.markerMaxX);
 
@@ -436,6 +457,9 @@ export function analyzeItemsForImport(
  * - UNKNOWN_EMPLOYEE → employeeMatch 'none', empty shifts, no throw.
  * - AMBIGUOUS_EMPLOYEE → employeeMatch 'multiple', empty shifts, no throw.
  *   ('none'/'multiple' therefore never produce shifts — the UI must ask.)
+ * - IDENTITY_MISMATCH → employeeMatch 'mismatch', empty shifts, no throw;
+ *   the typed name and id point to different employees, so only an explicit
+ *   row selection may unblock the import.
  * - UNSUPPORTED_LAYOUT / EMPTY_DOCUMENT → state forced to UNRECOGNIZED with
  *   an UNSUPPORTED_SECTION warning, empty shifts.
  * - NO_SHIFTS_FOUND → empty shifts + PARTIAL_EXTRACTION; the UI decides.
@@ -479,6 +503,9 @@ export function analyzeShiftsFromItems(
         break;
       case 'AMBIGUOUS_EMPLOYEE':
         employeeMatch = 'multiple';
+        break;
+      case 'IDENTITY_MISMATCH':
+        employeeMatch = 'mismatch';
         break;
       case 'UNSUPPORTED_LAYOUT':
       case 'EMPTY_DOCUMENT':
