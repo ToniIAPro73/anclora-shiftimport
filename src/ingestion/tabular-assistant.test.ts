@@ -82,6 +82,17 @@ describe('analyzeRosterTable', () => {
     expect(analyzeRosterTable(table, NADIE).dateColumnIndex).toBe(0);
   });
 
+  it('employee_name header is excluded from value columns (no PII as unknown token)', () => {
+    // GS-10 regression: "employee_name" must hit the employee alias so the
+    // printed name never surfaces as an undefined shift code.
+    const table = parseRosterTable(
+      'employee_id,employee_name,date,value\nEDGE-01,Eva Test,2026-10-01,22:00-06:00\nEDGE-01,Eva Test,2026-10-09,XYZ',
+    )!;
+    const analysis = analyzeRosterTable(table, NADIE);
+    expect(analysis.employeeColumnIndex).toBe(1);
+    expect(analysis.unknownTokens).toEqual(['XYZ']);
+  });
+
   it('detects day-number grid columns and falls back to the leftmost label column', () => {
     const table = parseRosterTable(GRID_CSV)!;
     const analysis = analyzeRosterTable(table, NADIE);

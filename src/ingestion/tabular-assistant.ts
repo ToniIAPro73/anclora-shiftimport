@@ -60,7 +60,7 @@ export const ROSTER_HEADER_ALIASES: Record<string, string[]> = {
   start: ['inicio', 'hora inicio', 'entrada', 'desde', 'start'],
   end: ['fin', 'hora fin', 'salida', 'hasta', 'end'],
   type: ['tipo', 'turno', 'tipo turno', 'tipo de turno', 'shift type', 'type'],
-  employee: ['empleado', 'nombre', 'trabajador', 'employee'],
+  employee: ['empleado', 'nombre', 'nombre empleado', 'trabajador', 'employee', 'employee name'],
   employeeId: ['id', 'legajo', 'identificador', 'employee id', 'worker id', 'member id'],
   value: ['value', 'registro', 'detalle', 'turnos', 'slots', 'allotment'],
 };
