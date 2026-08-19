@@ -40,6 +40,7 @@ export function parseShiftsFromItems(
   allItems: PdfTextItem[],
   context: CalendarImportContext,
   selector: EmployeeSelector,
+  codeOverrides?: Map<string, ShiftCodeMapping>,
 ): ParsedCalendarShift[] {
   if (allItems.length === 0) {
     throw new IngestionError('EMPTY_DOCUMENT', 'El documento no contiene texto extraíble.');
@@ -59,7 +60,6 @@ export function parseShiftsFromItems(
   if (profile.id === 'TYPE_MULTI') {
     return parseMultiSectionShifts(allItems, selector, profile, context);
   }
-
   const targetIds = selector.employeeIdentifiers
     .map((value) => value.replace(/\D/g, ''))
     .filter((value) => value.length > 0);
@@ -95,7 +95,7 @@ export function parseShiftsFromItems(
     );
   }
 
-  return buildShiftsFromEmployeeRow(allItems, row, context, profile);
+  return buildShiftsFromEmployeeRow(allItems, row, context, profile, codeOverrides);
 }
 
 /**
@@ -190,6 +190,7 @@ export function buildShiftsFromEmployeeRow(
   row: EmployeeRow,
   context: CalendarImportContext,
   profile: IngestionProfile,
+  codeOverrides?: Map<string, ShiftCodeMapping>,
 ): ParsedCalendarShift[] {
   const { columnGroups, dayColumns, mappedColumns } = resolveColumnDayMapping(allItems, row, context, profile);
   if (profile.errors.noColumnGroups && columnGroups.length === 0) {
@@ -202,6 +203,29 @@ export function buildShiftsFromEmployeeRow(
     throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noMappedColumns);
   }
 
-  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(allItems) : undefined;
+  const codeProfile = mergeCodeOverrides(
+    profile.useShiftCodeProfile ? buildCodeProfile(allItems) : undefined,
+    codeOverrides,
+  );
   return buildShiftsFromMappedColumns(mappedColumns, context, profile, codeProfile);
+}
+
+/**
+ * Merges learned code mappings (guided recovery) over the document's code
+ * profile. Learned codes win, and they apply even to profiles that do not
+ * opt into code-based parsing — the user explicitly taught the token.
+ * Returns undefined when neither source has entries.
+ */
+export function mergeCodeOverrides(
+  base: Map<string, ShiftCodeMapping> | undefined,
+  overrides: Map<string, ShiftCodeMapping> | undefined,
+): Map<string, ShiftCodeMapping> | undefined {
+  if (!base && (!overrides || overrides.size === 0)) {
+    return undefined;
+  }
+  const merged = new Map(base ?? []);
+  for (const [code, mapping] of overrides ?? []) {
+    merged.set(code.trim().toUpperCase(), mapping);
+  }
+  return merged;
 }

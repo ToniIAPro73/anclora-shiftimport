@@ -68,16 +68,18 @@ describe('generateAssistantQuestions', () => {
     expect(rowSelection?.kind === 'row-selection' && rowSelection.candidates).toHaveLength(2);
   });
 
-  it('emits token-meaning questions for unknown row tokens', () => {
+  it('emits shift-code questions for unknown code-like row tokens', () => {
     // Without the company preset, DL/AJ are unknown tokens in Ana's row.
     const analysis = analyzeItemsForImport(TYPE_A_FIXTURE_ITEMS, CONTEXT, TYPE_A_SELECTOR);
     expect(analysis.unknownTokens).toEqual(['DL', 'AJ']);
 
+    // Short code-like tokens are asked as shift-code (type + times), so the
+    // answer can actually re-parse the cell — never a silent drop.
     const questions = generateAssistantQuestions(TYPE_A_FIXTURE_ITEMS, CONTEXT, analysis);
-    const tokenQuestions = questions.filter((q) => q.kind === 'token-meaning');
+    const tokenQuestions = questions.filter((q) => q.kind === 'shift-code');
     expect(tokenQuestions).toEqual([
-      { kind: 'token-meaning', token: 'DL' },
-      { kind: 'token-meaning', token: 'AJ' },
+      { kind: 'shift-code', code: 'DL' },
+      { kind: 'shift-code', code: 'AJ' },
     ]);
   });
 

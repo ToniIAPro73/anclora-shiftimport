@@ -37,14 +37,14 @@ import {
   findEmployeeRowItems,
   matchesNameTokens,
 } from './core/row-detection';
-import { buildCodeProfile, parseLegendCodes } from './core/shift-code-profile';
+import { buildCodeProfile, codeOverridesFromLearning, parseLegendCodes, ShiftCodeMapping } from './core/shift-code-profile';
 import { isEmployeeIdToken, isEmployeeNameLabel, expandShiftTokens } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
 import { detectPdfDocumentTypeFromItems } from './parsers/detect';
 import { detectSections, selectSectionsForContext } from './parsers/multi-section';
-import { parseShiftsFromItems, resolveColumnDayMapping } from './parsers/parse-items';
+import { ColumnDayResolution, mergeCodeOverrides, parseShiftsFromItems, resolveColumnDayMapping } from './parsers/parse-items';
 
 export interface DocumentStructureAnalysis {
   documentType: PdfDocumentType;
@@ -80,6 +80,8 @@ export interface ItemAnalysis {
   rowItems: PdfTextItem[] | null;
   /** distinct unknown tokens from rowItems */
   unknownTokens: string[];
+  /** day-of-month each unknown token sits on (when the grid was aligned) */
+  unknownTokenDays?: Record<string, number[]>;
   totalTokens: number;
   recognizedTokens: number;
   invalidTimes: number;
@@ -264,13 +266,10 @@ const nameMatchStrength = (
  * for the assistant's day-mapping question).
  */
 const computeDayMappingDiagnostic = (
-  items: PdfTextItem[],
+  resolution: ColumnDayResolution,
   row: EmployeeRow,
-  context: CalendarImportContext,
-  profile: IngestionProfile,
 ): DayMappingDiagnostic => {
-  const { columnGroups, dayColumns, mappedColumns, unmatchedGroupIndices } =
-    resolveColumnDayMapping(items, row, context, profile);
+  const { columnGroups, dayColumns, mappedColumns, unmatchedGroupIndices } = resolution;
   const mappedDays = new Set(mappedColumns.map((column) => column.day));
   return {
     dayHeaderCount: dayColumns.length,
@@ -313,6 +312,7 @@ export function analyzeItemsForImport(
   context: CalendarImportContext,
   selector: EmployeeSelector,
   profilesHint?: UserFormatProfile[],
+  codeOverrides?: Map<string, ShiftCodeMapping>,
 ): ItemAnalysis {
   const structure = analyzeDocumentStructure(items, context, profilesHint);
   const base: ItemAnalysis = {
@@ -355,7 +355,10 @@ export function analyzeItemsForImport(
     ? 'strong'
     : nameMatchStrength(items, row.page, selector.employeeName, profile.rowWindow.markerMaxX);
 
-  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(items) : undefined;
+  const codeProfile = mergeCodeOverrides(
+    profile.useShiftCodeProfile ? buildCodeProfile(items) : undefined,
+    codeOverrides,
+  );
   const cellItems = row.rowItems.filter(
     (item) => item.x > profile.rowWindow.markerMaxX && !isEmployeeIdToken(item.text),
   );
@@ -364,6 +367,7 @@ export function analyzeItemsForImport(
   let recognizedTokens = 0;
   let invalidTimes = 0;
   const unknownTokens = new Set<string>();
+  const unknownItems: Array<{ token: string; item: PdfTextItem }> = [];
   for (const item of cellItems) {
     const text = item.text.trim();
     if (!text) {
@@ -379,6 +383,34 @@ export function analyzeItemsForImport(
       continue;
     }
     unknownTokens.add(text);
+    unknownItems.push({ token: text, item });
+  }
+
+  // Align the grid once: the day-mapping diagnostic plus the day each
+  // unknown-token cell sits on, so recovery can name the affected days.
+  let dayMapping: DayMappingDiagnostic | undefined;
+  let unknownTokenDays: Record<string, number[]> | undefined;
+  if (profile.id !== 'TYPE_MULTI') {
+    const resolution = resolveColumnDayMapping(items, row, context, profile);
+    dayMapping = computeDayMappingDiagnostic(resolution, row);
+    const dayByItem = new Map<PdfTextItem, number>();
+    for (const column of resolution.mappedColumns) {
+      for (const item of column.items) {
+        dayByItem.set(item, column.day);
+      }
+    }
+    const daysByToken: Record<string, Set<number>> = {};
+    for (const { token, item } of unknownItems) {
+      const day = dayByItem.get(item);
+      if (day !== undefined) {
+        (daysByToken[token] ??= new Set()).add(day);
+      }
+    }
+    const entries = Object.entries(daysByToken)
+      .map(([token, days]) => [token, [...days].sort((a, b) => a - b)] as const);
+    if (entries.length > 0) {
+      unknownTokenDays = Object.fromEntries(entries);
+    }
   }
 
   return {
@@ -386,14 +418,13 @@ export function analyzeItemsForImport(
     employeeMatch,
     rowItems: row.rowItems,
     unknownTokens: [...unknownTokens],
+    ...(unknownTokenDays ? { unknownTokenDays } : {}),
     totalTokens,
     recognizedTokens,
     invalidTimes,
     // TYPE_MULTI has no single day-column grid per page; the day-mapping
     // assistant question does not apply to it.
-    ...(profile.id !== 'TYPE_MULTI'
-      ? { dayMapping: computeDayMappingDiagnostic(items, row, context, profile) }
-      : {}),
+    ...(dayMapping ? { dayMapping } : {}),
   };
 }
 
@@ -415,8 +446,21 @@ export function analyzeShiftsFromItems(
   context: CalendarImportContext,
   selector: EmployeeSelector,
   profilesHint?: UserFormatProfile[],
+  codeOverrides?: Map<string, ShiftCodeMapping>,
 ): { shifts: ParsedCalendarShift[]; quality: ImportResult; analysis: ItemAnalysis } {
   let analysis = analyzeItemsForImport(items, context, selector, profilesHint);
+
+  // Learned code mappings from a matched format profile (guided recovery
+  // memory) plus any caller-provided overrides (fresh assistant answers)
+  // apply to both classification and parsing, so the codes the user already
+  // taught resolve instead of surfacing as unknown again.
+  const learnedCodes = analysis.structure.matchedProfile
+    ? codeOverridesFromLearning(analysis.structure.matchedProfile.profile)
+    : undefined;
+  const effectiveCodes = mergeCodeOverrides(learnedCodes, codeOverrides);
+  if (effectiveCodes && effectiveCodes.size > 0) {
+    analysis = analyzeItemsForImport(items, context, selector, profilesHint, effectiveCodes);
+  }
 
   let shifts: ParsedCalendarShift[] = [];
   let employeeMatch = analysis.employeeMatch;
@@ -424,7 +468,7 @@ export function analyzeShiftsFromItems(
   const extraWarnings: ImportWarning[] = [];
 
   try {
-    shifts = parseShiftsFromItems(items, context, selector);
+    shifts = parseShiftsFromItems(items, context, selector, effectiveCodes);
   } catch (error) {
     if (!(error instanceof IngestionError)) {
       throw error;

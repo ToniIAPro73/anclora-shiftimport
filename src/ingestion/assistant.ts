@@ -20,7 +20,7 @@ import { mergeShiftTypeOverrides, ShiftTypeOverrides } from '../lib/shift-types'
 import { getDaysInMonth } from '../lib/week';
 import { mapColumnGroupsToDays } from './core/clustering';
 import { EmployeeRow, EmployeeSelector } from './core/row-detection';
-import { buildCodeProfile } from './core/shift-code-profile';
+import { buildCodeProfile, codeOverridesFromLearning, ShiftCodeMapping } from './core/shift-code-profile';
 import { isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
@@ -28,6 +28,7 @@ import { IngestionProfile } from './profiles/types';
 import {
   buildShiftsFromEmployeeRow,
   buildShiftsFromMappedColumns,
+  mergeCodeOverrides,
   resolveColumnDayMapping,
 } from './parsers/parse-items';
 import { DayMappingDiagnostic, ItemAnalysis } from './analysis';
@@ -172,10 +173,11 @@ export function dayMappingQuestionFromDiagnostic(
  * - day-mapping: at most one, only when the employee row was found AND the
  *   column→day alignment left a column group unmatched (the minimum useful
  *   question; see dayMappingQuestionFromDiagnostic).
- * - token-meaning / shift-code: one per unknown row token (cap 6). Tokens of
- *   a code-based profile (useShiftCodeProfile) that look like codes
- *   (1–4 letters) are asked as shift-code ("¿Qué turno representa M?");
- *   everything else as token-meaning ("¿Qué significa X?").
+ * - token-meaning / shift-code: one per unknown row token (cap 6). Short
+ *   code-like tokens (1–5 letters/digits, e.g. N, TN, G12, X, M1) are asked
+ *   as shift-code ("¿Qué turno representa M?") so the answer can carry a
+ *   type + times and re-parse the cell; longer phrases are asked as
+ *   token-meaning ("¿Qué significa X?").
  */
 export function generateAssistantQuestions(
   items: PdfTextItem[],
@@ -204,9 +206,12 @@ export function generateAssistantQuestions(
     }
   }
 
-  const codeLike = /^[A-Za-zÁÉÍÓÚÑñáéíóú]{1,4}$/;
+  const codeLike = /^[A-Za-zÁÉÍÓÚÑñáéíóú0-9]{1,5}$/;
   for (const token of analysis.unknownTokens.slice(0, MAX_TOKEN_QUESTIONS)) {
-    if (profile?.useShiftCodeProfile && codeLike.test(token)) {
+    // Any short code-like unknown token is asked as a shift-code question
+    // (type + optional times) so the answer can actually re-parse the cell;
+    // longer phrases stay token-meaning (work/rest classification only).
+    if (codeLike.test(token)) {
       questions.push({ kind: 'shift-code', code: token });
     } else {
       questions.push({ kind: 'token-meaning', token });
@@ -239,6 +244,7 @@ export function buildProfileFromAnswers(
   const now = new Date().toISOString();
 
   const tokenAliases: Record<string, string> = {};
+  const codeTimes: Record<string, { startTime: string; endTime: string }> = {};
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
@@ -248,6 +254,11 @@ export function buildProfileFromAnswers(
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
     if (meaning.kind === 'rest') {
       offTokens.push(trimmed);
+    }
+    // Work codes need their times persisted — without them a later re-parse
+    // of a bare code cell (e.g. "N") could not rebuild the shift.
+    if (meaning.kind === 'work' && meaning.startTime && meaning.endTime) {
+      codeTimes[trimmed] = { startTime: meaning.startTime, endTime: meaning.endTime };
     }
   }
 
@@ -275,6 +286,7 @@ export function buildProfileFromAnswers(
     signature: analysis.structure.signature,
     tokenAliases,
     offTokens,
+    ...(Object.keys(codeTimes).length > 0 ? { codeTimes } : {}),
     employeeRow: answers.selectedRow
       ? { strategy: 'manual-row', rowIndex: answers.selectedRow.rowIndex }
       : { strategy: 'name' },
@@ -346,13 +358,40 @@ export function parseWithSelectedRow(
   context: CalendarImportContext,
   candidate: EmployeeRowCandidate,
   profile: IngestionProfile,
+  codeOverrides?: Map<string, ShiftCodeMapping>,
 ): ParsedCalendarShift[] {
   const row = resolveRowForCandidate(items, candidate, profile);
   if (!row) {
     return [];
   }
 
-  return buildShiftsFromEmployeeRow(items, row, context, profile);
+  return buildShiftsFromEmployeeRow(items, row, context, profile, codeOverrides);
+}
+
+/**
+ * Code mappings directly from the current assistant answers — used by the
+ * one-shot re-parse so the just-classified codes resolve immediately, before
+ * any profile round-trip through storage.
+ */
+export function buildCodeOverridesFromAnswers(
+  answers: AssistantAnswers,
+): Map<string, ShiftCodeMapping> {
+  const tokenAliases: Record<string, string> = {};
+  const codeTimes: Record<string, { startTime: string; endTime: string }> = {};
+  const offTokens: string[] = [];
+  for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
+    const trimmed = token.trim();
+    if (!trimmed) {
+      continue;
+    }
+    tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
+    if (meaning.kind === 'rest') {
+      offTokens.push(trimmed);
+    } else if (meaning.startTime && meaning.endTime) {
+      codeTimes[trimmed] = { startTime: meaning.startTime, endTime: meaning.endTime };
+    }
+  }
+  return codeOverridesFromLearning({ tokenAliases, offTokens, codeTimes });
 }
 
 /**
@@ -372,8 +411,12 @@ export function parseWithDayMapping(
   row: EmployeeRow,
   profile: IngestionProfile,
   correction: { columnIndex: number; day: number },
+  codeOverrides?: Map<string, ShiftCodeMapping>,
 ): ParsedCalendarShift[] {
-  const codeProfile = profile.useShiftCodeProfile ? buildCodeProfile(items) : undefined;
+  const codeProfile = mergeCodeOverrides(
+    profile.useShiftCodeProfile ? buildCodeProfile(items) : undefined,
+    codeOverrides,
+  );
   const { columnGroups, dayColumns, mappedColumns } = resolveColumnDayMapping(items, row, context, profile);
 
   const target = columnGroups[correction.columnIndex];

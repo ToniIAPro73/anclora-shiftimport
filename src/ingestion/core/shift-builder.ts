@@ -11,10 +11,10 @@
  */
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { isTimeToken, normalizeTimeToken } from './normalize';
-import { ShiftCodeMapping } from './shift-code-profile';
+import { resolveCode, ShiftCodeMapping } from './shift-code-profile';
 import { expandShiftTokens, isOffToken } from './tokens';
 
-function buildLibreShift(date: string, rawText: string): ParsedCalendarShift {
+function buildAbsenceShift(date: string, rawText: string, shiftTypeId: string): ParsedCalendarShift {
   return {
     date,
     startTime: '',
@@ -23,10 +23,55 @@ function buildLibreShift(date: string, rawText: string): ParsedCalendarShift {
     isValid: true,
     confidence: 1.0,
     rawText,
-    shiftType: 'Libre',
+    shiftType: shiftTypeId,
     notes: null,
-    color: 'red',
+    // Libre keeps its historical red; other absence types resolve their
+    // color from the shift-type registry at render time.
+    color: shiftTypeId === 'Libre' ? 'red' : null,
   };
+}
+
+function buildLibreShift(date: string, rawText: string): ParsedCalendarShift {
+  return buildAbsenceShift(date, rawText, 'Libre');
+}
+
+/**
+ * A single-token cell that resolves through the code profile maps directly
+ * onto the mapping's semantics: free → absence shift of the mapped type
+ * (Libre by default, e.g. Vacaciones when the user taught it), work → timed
+ * shift of the mapped type (Regular by default). Learned codes carry
+ * shiftTypeId; defaults/legends omit it and keep the legacy outcome.
+ */
+function buildFromSingleCode(
+  date: string,
+  tokens: string[],
+  codeProfile: Map<string, ShiftCodeMapping>,
+): ParsedCalendarShift[] | null {
+  if (tokens.length !== 1) {
+    return null;
+  }
+  const mapped = resolveCode(tokens[0], codeProfile);
+  if (!mapped) {
+    return null;
+  }
+  if (mapped.status === 'free') {
+    return [buildAbsenceShift(date, tokens[0], mapped.shiftTypeId ?? 'Libre')];
+  }
+  if (!mapped.startTime || !mapped.endTime) {
+    return null;
+  }
+  return [{
+    date,
+    startTime: mapped.startTime,
+    endTime: mapped.endTime,
+    origin: 'IMP',
+    isValid: true,
+    confidence: 0.9,
+    rawText: tokens[0],
+    shiftType: mapped.shiftTypeId ?? 'Regular',
+    notes: null,
+    color: mapped.shiftTypeId ? null : 'blue',
+  }];
 }
 
 export function buildShiftEntriesForDay(
@@ -34,6 +79,13 @@ export function buildShiftEntriesForDay(
   tokens: string[],
   codeProfile?: Map<string, ShiftCodeMapping>,
 ): ParsedCalendarShift[] {
+  if (codeProfile) {
+    const fromCode = buildFromSingleCode(date, tokens, codeProfile);
+    if (fromCode) {
+      return fromCode;
+    }
+  }
+
   const meaningful = tokens.flatMap((token) => expandShiftTokens(token, codeProfile)).map((token) => token.trim()).filter(Boolean);
   if (meaningful.length === 0) {
     return [];

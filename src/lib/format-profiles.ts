@@ -18,6 +18,13 @@ export interface UserFormatProfile {
   signature: LayoutSignature;
   /** token → shiftTypeId learned from assistant answers (e.g. { DL: 'libre', M: 'regular' }) */
   tokenAliases: Record<string, string>;
+  /**
+   * Learned work-code times: token → { startTime, endTime } for codes the
+   * user classified as work with explicit times (guided recovery). Rest
+   * codes need no entry — their tokenAlias suffices. Document tokens only,
+   * never person data.
+   */
+  codeTimes?: Record<string, { startTime: string; endTime: string }>;
   offTokens: string[];
   /** employee row rule WITHOUT identity: which row selection strategy worked */
   employeeRow: { strategy: 'identifier' | 'name' | 'manual-row'; rowIndex?: number };
@@ -126,6 +133,26 @@ const normalizeDayColumnMap = (
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 };
 
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const normalizeCodeTimes = (
+  raw: unknown,
+): Record<string, { startTime: string; endTime: string }> | undefined => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const entries = Object.entries(raw as Record<string, unknown>)
+    .map(([token, value]) => {
+      const times = value as Partial<{ startTime: unknown; endTime: unknown }> | null;
+      const startTime = typeof times?.startTime === 'string' ? times.startTime : '';
+      const endTime = typeof times?.endTime === 'string' ? times.endTime : '';
+      return [token.trim(), { startTime, endTime }] as const;
+    })
+    .filter(([token, times]) =>
+      Boolean(token) && TIME_PATTERN.test(times.startTime) && TIME_PATTERN.test(times.endTime));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+};
+
 const normalizeTabularMemory = (
   raw: unknown,
 ): UserFormatProfile['tabular'] | undefined => {
@@ -167,6 +194,7 @@ const normalizeProfile = (
     offTokens: Array.isArray(raw.offTokens)
       ? raw.offTokens.map((token) => String(token).trim()).filter(Boolean)
       : [],
+    ...(normalizeCodeTimes(raw.codeTimes) ? { codeTimes: normalizeCodeTimes(raw.codeTimes) } : {}),
     employeeRow: {
       strategy: raw.employeeRow?.strategy === 'identifier' || raw.employeeRow?.strategy === 'name'
         ? raw.employeeRow.strategy
