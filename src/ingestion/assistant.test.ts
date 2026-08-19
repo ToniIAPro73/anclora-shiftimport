@@ -9,11 +9,13 @@ import {
   findEmployeeRowCandidates,
   generateAssistantQuestions,
   parseWithSelectedRow,
+  selectorForCandidate,
   selectorFromAnswers,
 } from './assistant';
 import { analyzeItemsForImport, analyzeShiftsFromItems } from './analysis';
 import { detectCalendarContextFromItems } from './parsers/parse-items';
 import { TYPE_A_PROFILE } from './profiles/type-a';
+import { TYPE_LEGEND_PROFILE } from './profiles/legend';
 import {
   TYPE_A_EXPECTED_WITH_PRESET,
   TYPE_A_FIXTURE_ITEMS,
@@ -147,6 +149,47 @@ describe('selectorFromAnswers', () => {
       selectedRow: { label: 'Ana Martinez (1001)', page: 1, y: 200, rowIndex: 1 },
       tokenMeanings: {},
     })).toEqual({ employeeName: 'Ana Martinez (1001)', employeeIdentifiers: [] });
+  });
+});
+
+describe('selectorForCandidate', () => {
+  // Two-line employee block (GS-03 / TYPE_LEGEND): the id sits on its own
+  // line below the name, and the profile's row window anchors on that id
+  // marker — a name-only selector can never match these rows.
+  const TWO_LINE_ITEMS = [
+    { text: 'Empleado', x: 72, y: 713.9, width: 0, height: 0, page: 1 },
+    { text: 'Ana López', x: 72, y: 695.9, width: 0, height: 0, page: 1 },
+    { text: 'H-201', x: 72, y: 683.9, width: 0, height: 0, page: 1 },
+    { text: 'Recepción', x: 162, y: 683.9, width: 0, height: 0, page: 1 },
+    { text: 'Sergio Mora', x: 72, y: 665.9, width: 0, height: 0, page: 1 },
+    { text: 'H-202', x: 72, y: 653.9, width: 0, height: 0, page: 1 },
+  ];
+
+  it('enriches the session selector with the id line of the candidate block', () => {
+    const selector = selectorForCandidate(
+      TWO_LINE_ITEMS,
+      { label: 'Ana López', page: 1, y: 695.9, rowIndex: 0 },
+      TYPE_LEGEND_PROFILE,
+    );
+    expect(selector).toEqual({ employeeName: 'Ana López', employeeIdentifiers: ['H-201'] });
+  });
+
+  it('stops at the next employee name (no neighbour ids leak in)', () => {
+    const selector = selectorForCandidate(
+      TWO_LINE_ITEMS,
+      { label: 'Sergio Mora', page: 1, y: 665.9, rowIndex: 1 },
+      TYPE_LEGEND_PROFILE,
+    );
+    expect(selector).toEqual({ employeeName: 'Sergio Mora', employeeIdentifiers: ['H-202'] });
+  });
+
+  it('falls back to a name-only selector when the block has no id line', () => {
+    const selector = selectorForCandidate(
+      TYPE_A_FIXTURE_ITEMS,
+      { label: 'Ana Martinez (1001)', page: 1, y: 200, rowIndex: 1 },
+      TYPE_A_PROFILE,
+    );
+    expect(selector.employeeIdentifiers).toEqual([]);
   });
 });
 

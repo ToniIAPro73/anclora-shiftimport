@@ -315,6 +315,36 @@ export function selectorFromAnswers(answers: AssistantAnswers): EmployeeSelector
 }
 
 /**
+ * Session-scoped selector for a manually picked candidate: the printed label
+ * plus the id-like marker printed in the candidate's own block, if any.
+ * Two-line layouts (e.g. TYPE_LEGEND) put the id on a separate line below
+ * the name, and their row window anchors on that id marker — a name-only
+ * selector can never match them. Session use only; NEVER persisted (the
+ * durable profile stores the manual-row strategy + rowIndex only).
+ */
+export function selectorForCandidate(
+  items: PdfTextItem[],
+  candidate: EmployeeRowCandidate,
+  profile: IngestionProfile,
+): EmployeeSelector {
+  const markerMaxX = profile.rowWindow.markerMaxX;
+  const below = items
+    .filter((item) => item.page === candidate.page && item.x < markerMaxX && item.y < candidate.y - 0.5)
+    .sort((a, b) => b.y - a.y);
+  const nextNameY = below.find((item) => isEmployeeNameLabel(item.text))?.y ?? Number.NEGATIVE_INFINITY;
+  const employeeIdentifiers: string[] = [];
+  for (const item of below) {
+    if (item.y <= nextNameY) {
+      break;
+    }
+    if (!isEmployeeNameLabel(item.text) && item.text.replace(/\D/g, '').length >= 2) {
+      employeeIdentifiers.push(item.text.trim());
+    }
+  }
+  return { employeeName: candidate.label, employeeIdentifiers };
+}
+
+/**
  * Resolves the EmployeeRow for a manually picked candidate: rebuilds the row
  * band around the candidate's marker y with the profile's window offsets
  * (manual selection has no "previous label" ceiling / boundary floor, so

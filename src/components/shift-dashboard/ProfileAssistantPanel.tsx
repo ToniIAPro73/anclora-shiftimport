@@ -9,6 +9,7 @@ import {
   parseWithDayMapping,
   parseWithSelectedRow,
   resolveRowForCandidate,
+  selectorForCandidate,
   selectorFromAnswers,
 } from '../../ingestion/assistant';
 import { analyzeShiftsFromItems, ItemAnalysis } from '../../ingestion/analysis';
@@ -145,8 +146,13 @@ export const ProfileAssistantPanel = ({
       applyTokenAliasesToShiftTypes(profile);
     }
 
-    const sessionSelector = selectorFromAnswers(answers) ?? selector;
     const ingestionProfile = getIngestionProfile(analysis.structure.documentType);
+    // A manually picked row resolves through a selector enriched with the
+    // block's printed id when the layout needs it (two-line blocks anchor on
+    // the id marker; a name-only selector cannot match them).
+    const sessionSelector = selectedRow && ingestionProfile
+      ? selectorForCandidate(items, selectedRow, ingestionProfile)
+      : selectorFromAnswers(answers) ?? selector;
 
     // Re-parse: a day-mapping answer forces the corrected column→day
     // assignment over the resolved row (manual selection or selector row);
@@ -173,6 +179,16 @@ export const ProfileAssistantPanel = ({
       }
     } else if (selectedRow && ingestionProfile) {
       shifts = parseWithSelectedRow(items, context, selectedRow, ingestionProfile, codeOverrides);
+      if (shifts.length === 0) {
+        // Band-based row resolution can miss on hybrid text+grid layouts
+        // (the y-window around the label holds no data cells). Fall back to
+        // the label-based pipeline, which matches the typed-name path.
+        try {
+          shifts = parseShiftsFromItems(items, context, sessionSelector, codeOverrides);
+        } catch {
+          shifts = [];
+        }
+      }
     } else {
       try {
         shifts = parseShiftsFromItems(items, context, sessionSelector, codeOverrides);
