@@ -167,6 +167,22 @@ function noShiftsReasonKey(result: DocumentAnalysisResult, itemAnalysis: ItemAna
 const samePeriod = (left: CalendarImportContext, right: CalendarImportContext): boolean =>
   left.month === right.month && left.year === right.year;
 
+const isMissingTime = (value: string): boolean => value.trim() === '' || value === '??:??';
+
+/**
+ * A work row needs both times resolved. Absence rows (typed, no times at
+ * all — Libre/Vacaciones/…) are complete by definition. A `??:??`/empty
+ * start or end on a work row is never importable as a complete shift.
+ */
+const isIncompleteWorkShift = (shift: { startTime: string; endTime: string; shiftType?: string | null }): boolean => {
+  const startMissing = isMissingTime(shift.startTime);
+  const endMissing = isMissingTime(shift.endTime);
+  if (shift.shiftType?.trim() && startMissing && endMissing) {
+    return false;
+  }
+  return startMissing || endMissing;
+};
+
 /**
  * Builds the canonical diagnosis for one import attempt.
  *
@@ -360,7 +376,32 @@ export function buildImportDiagnosis(
     });
   }
 
-  // --- 5. Partial extraction -------------------------------------------------
+  // --- 5. Partial extraction / incomplete times ----------------------------
+  // Work rows with an unresolved start or end (`??:??`) are named here and
+  // excluded from the importable set by the UI until the user corrects or
+  // removes them — never presented as ready, never imported with an empty
+  // time. Absence rows (typed, no times) are not affected.
+  const incompleteDays = [...new Set(
+    shifts
+      .filter(isIncompleteWorkShift)
+      .map((shift) => Number(shift.date.split('-')[2]))
+      .filter((day) => Number.isInteger(day) && day > 0),
+  )].sort((left, right) => left - right);
+  if (incompleteDays.length > 0) {
+    diagnostics.push({
+      code: 'INCOMPLETE_TIMES',
+      severity: 'warning',
+      blocking: false,
+      recoverable: true,
+      messageKey: 'diagnosis.incompleteTimes.message',
+      details: { count: incompleteDays.length },
+      affectedDays: incompleteDays,
+      recovery: 'none',
+      safeToImportPartial: true,
+      stage: 'mapping',
+    });
+  }
+
   if (partial && partial.mapped < partial.expected) {
     diagnostics.push({
       code: 'PARTIAL_EXTRACTION',
@@ -375,6 +416,9 @@ export function buildImportDiagnosis(
       safeToImportPartial: true,
       stage: 'mapping',
     });
+  }
+
+  if (incompleteDays.length > 0 || (partial && partial.mapped < partial.expected)) {
     return finishDiagnosis('PARTIAL', diagnostics, {
       recognizedTokens: itemAnalysis?.recognizedTokens ?? 0,
       totalTokens: itemAnalysis?.totalTokens ?? 0,

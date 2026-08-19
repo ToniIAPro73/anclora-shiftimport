@@ -237,6 +237,42 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(screen.getByText(/La coincidencia con tu nombre es débil/)).toBeTruthy();
   });
 
+  it('incomplete times (??:??) are never "listos": PARTIAL state, excluded from confirm count', async () => {
+    const shifts = [
+      makeShift({ date: '2026-03-04', startTime: '10:00', endTime: '??:??', isValid: false, rawText: '10:00' }),
+      makeShift({ date: '2026-03-05' }),
+    ];
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts,
+      quality: { shifts, confidence: 0.9, warnings: [], state: 'CORRECT' },
+    }));
+
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Parcial'));
+    expect(screen.getByText(/tienen la hora incompleta/)).toBeTruthy();
+    expect(screen.getByText(/Días afectados: 4/)).toBeTruthy();
+    // Only the complete row is importable; the incomplete one is excluded.
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación \(1\/2 listos\)/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(false);
+  });
+
+  it('all rows incomplete → confirm disabled with explanation, never a false Listo', async () => {
+    const shifts = [
+      makeShift({ date: '2026-03-04', startTime: '10:00', endTime: '??:??', isValid: false, rawText: '10:00' }),
+    ];
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts,
+      quality: { shifts, confidence: 0.9, warnings: [], state: 'CORRECT' },
+    }));
+
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Parcial'));
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación \(0\/1 listos\)/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+  });
+
   it('keeps the editable preview working: edit a date, delete a row, diff chips update', async () => {
     mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
 

@@ -55,6 +55,25 @@ describe('buildImportDiagnosis — canonical states', () => {
     expect(diagnosis.diagnostics.every((diagnostic) => !diagnostic.blocking)).toBe(true);
   });
 
+  it('A2. incomplete work times (??:??): PARTIAL + INCOMPLETE_TIMES, never READY', () => {
+    const shifts = [
+      { date: '2026-08-01', startTime: '10:00', endTime: '??:??', shiftType: 'Regular', isValid: false, confidence: 0.9, rawText: '10:00' },
+      { date: '2026-08-02', startTime: '10:00', endTime: '12:00', shiftType: 'Regular', isValid: true, confidence: 0.9, rawText: 'x' },
+      { date: '2026-08-03', startTime: '', endTime: '', shiftType: 'Libre', isValid: true, confidence: 1, rawText: 'OFF' },
+    ];
+    const diagnosis = buildImportDiagnosis(makeResult({ shifts, quality: makeQuality(shifts) }));
+
+    expect(diagnosis.state).toBe('PARTIAL');
+    const diagnostic = diagnosis.diagnostics.find((entry) => entry.code === 'INCOMPLETE_TIMES');
+    expect(diagnostic).toBeDefined();
+    expect(diagnostic?.blocking).toBe(false);
+    expect(diagnostic?.recoverable).toBe(true);
+    expect(diagnostic?.safeToImportPartial).toBe(true);
+    // Only the work row with the missing end time is named — the complete
+    // row and the absence row (typed, no times) are not.
+    expect(diagnostic?.affectedDays).toEqual([1]);
+  });
+
   it('A. GN-06: zero shifts is BLOCKED with NO_SHIFTS_FOUND — never READY', () => {
     const diagnosis = buildImportDiagnosis(makeResult({
       shifts: [],

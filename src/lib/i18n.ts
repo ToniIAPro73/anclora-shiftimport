@@ -317,6 +317,9 @@ const translations: Record<Locale, TranslationTree> = {
         message: '{{recognized}} de {{expected}} días reconocidos.',
         daysList: '{{count}} días necesitan revisión: {{days}}.',
       },
+      incompleteTimes: {
+        message: '{{count}} días tienen la hora incompleta. Corrige o elimina esas filas en la vista previa; tal cual no se importarán.',
+      },
       monthMismatch: {
         message: 'El archivo parece indicar {{detected}}, pero has seleccionado {{selected}}.',
         usePeriod: 'Usar {{period}}',
@@ -619,6 +622,9 @@ const translations: Record<Locale, TranslationTree> = {
       partial: {
         message: '{{recognized}} of {{expected}} days recognized.',
         daysList: '{{count}} days need review: {{days}}.',
+      },
+      incompleteTimes: {
+        message: '{{count}} days have an incomplete time. Edit or remove those rows in the preview; as-is they will not be imported.',
       },
       monthMismatch: {
         message: 'The file seems to indicate {{detected}}, but you selected {{selected}}.',

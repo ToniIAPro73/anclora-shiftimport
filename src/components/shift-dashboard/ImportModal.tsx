@@ -79,8 +79,21 @@ function isFreeShift(shift: Pick<ParsedCalendarShift, 'shiftType'>): boolean {
   return (shift.shiftType ?? '').trim().toLowerCase() === 'libre';
 }
 
+const isMissingTime = (value: string): boolean => value.trim() === '' || value === '??:??';
+
+/**
+ * A row is importable when it carries complete data: absence rows (typed,
+ * no times — Libre/Vacaciones/…) import as-is; work rows need BOTH times
+ * resolved. A `??:??` start/end is never imported as a complete shift —
+ * the row stays out of the ready set until the user edits or deletes it.
+ */
 function hasImportableShiftData(shift: ParsedCalendarShift): boolean {
-  return Boolean((shift.shiftType ?? '').trim()) || shift.startTime !== '??:??' || shift.endTime !== '??:??';
+  const startMissing = isMissingTime(shift.startTime);
+  const endMissing = isMissingTime(shift.endTime);
+  if (Boolean((shift.shiftType ?? '').trim()) && startMissing && endMissing) {
+    return true;
+  }
+  return !startMissing && !endMissing;
 }
 
 /** Maps a reviewed parsed row to the domain Shift the app persists. */
@@ -256,7 +269,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     }
     const effective: DocumentAnalysisResult = {
       ...analysis,
-      shifts: qualityOverride?.shifts ?? analysis.shifts,
+      // Live working set: row edits/deletions in the preview refresh the
+      // diagnosis (e.g. INCOMPLETE_TIMES clears once the row is fixed).
+      shifts: parsedShifts,
       quality: qualityOverride ?? analysis.quality,
       questions: assistantDismissed ? [] : analysis.questions,
     };
@@ -269,7 +284,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       periodConflictResolved,
       recoveryDismissed: assistantDismissed,
     });
-  }, [errorDiagnosis, analysis, qualityOverride, assistantDismissed, assistantSession, selectedMonth, selectedYear, periodConflictResolved]);
+  }, [errorDiagnosis, analysis, parsedShifts, qualityOverride, assistantDismissed, assistantSession, selectedMonth, selectedYear, periodConflictResolved]);
 
   const diagnosisBlocking = diagnosis?.diagnostics.some((diagnostic) => diagnostic.blocking) ?? false;
   const monthMismatch = diagnosis?.diagnostics.find(

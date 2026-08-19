@@ -16,6 +16,7 @@ export type IngestionErrorCode =
   | 'DATE_AMBIGUITY'
   | 'MONTH_MISMATCH'
   | 'PARTIAL_EXTRACTION'
+  | 'INCOMPLETE_TIMES'
   | 'INSUFFICIENT_DATA'
   | 'PARSER_FAILURE';
 
