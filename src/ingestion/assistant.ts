@@ -20,8 +20,9 @@ import { mergeShiftTypeOverrides, ShiftTypeOverrides } from '../lib/shift-types'
 import { getDaysInMonth } from '../lib/week';
 import { mapColumnGroupsToDays } from './core/clustering';
 import { EmployeeRow, EmployeeSelector } from './core/row-detection';
+import { normalizeEmployeeId, normalizeText } from './core/normalize';
 import { buildCodeProfile, codeOverridesFromLearning, ShiftCodeMapping } from './core/shift-code-profile';
-import { isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
+import { isEmployeeIdToken, isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
@@ -65,6 +66,24 @@ export interface AssistantAnswers {
 const DEFAULT_MAX_ROWS = 8;
 const MAX_TOKEN_QUESTIONS = 6;
 
+/**
+ * A row band whose line-mates are mostly day numbers/dates is a structural
+ * column header (e.g. the "Nómina"/"Empleado" title row above the grid),
+ * never an employee. Structural test only — no per-company vocabulary.
+ */
+const DAY_HEADER_LIKE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]?\d{1,2}([/-]\d{1,2}([/-]\d{2,4})?)?$/;
+const MIN_DAY_HEADER_SIBLINGS = 3;
+
+/** Bare numeric employee ids (nómina-style, 4–6 digits) — day numbers are 1–2. */
+const BARE_ID_LIKE = /^\d{4,6}$/;
+
+const isStructuralHeaderBand = (band: PdfTextItem[], pageItems: PdfTextItem[], markerMaxX: number): boolean => {
+  const siblings = pageItems.filter(
+    (item) => item.x >= markerMaxX && Math.abs(item.y - band[0].y) <= 1 && !band.includes(item),
+  );
+  return siblings.filter((item) => DAY_HEADER_LIKE.test(item.text.trim())).length >= MIN_DAY_HEADER_SIBLINGS;
+};
+
 /** User-facing profile label per document type — never a person name. */
 export const DOCUMENT_TYPE_LABELS: Record<PdfDocumentType, string> = {
   TYPE_A: 'Cuadrante mensual',
@@ -99,8 +118,23 @@ export function findEmployeeRowCandidates(
 
   for (const page of pages) {
     const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
+    // Anchor rows: a name label sitting just outside the marker column still
+    // belongs to the marker row when it shares the line with an id marker
+    // (dense real layouts nudge the name a few points right of markerMaxX).
+    const anchorIdYs = pageItems
+      .filter(
+        (item) =>
+          item.x < profile.rowWindow.markerMaxX
+          && (isEmployeeIdToken(item.text.trim()) || BARE_ID_LIKE.test(item.text.trim())),
+      )
+      .map((item) => item.y);
     const labelItems = pageItems.filter(
-      (item) => item.x < profile.rowWindow.markerMaxX && looksLikeEmployeeLabel(item.text),
+      (item) =>
+        (item.x < profile.rowWindow.markerMaxX && looksLikeEmployeeLabel(item.text))
+        || (item.x >= profile.rowWindow.markerMaxX
+          && item.x < profile.rowWindow.dataMinX
+          && isEmployeeNameLabel(item.text)
+          && anchorIdYs.some((anchorY) => Math.abs(anchorY - item.y) <= 1)),
     );
 
     const bands: PdfTextItem[][] = [];
@@ -115,6 +149,9 @@ export function findEmployeeRowCandidates(
 
     for (const band of bands) {
       if (!band.some((item) => isEmployeeNameLabel(item.text))) {
+        continue;
+      }
+      if (isStructuralHeaderBand(band, pageItems, profile.rowWindow.markerMaxX)) {
         continue;
       }
       const label = [...band]
@@ -328,28 +365,53 @@ export function selectorForCandidate(
   profile: IngestionProfile,
 ): EmployeeSelector {
   const markerMaxX = profile.rowWindow.markerMaxX;
-  const below = items
-    .filter((item) => item.page === candidate.page && item.x < markerMaxX && item.y < candidate.y - 0.5)
-    .sort((a, b) => b.y - a.y);
-  const nextNameY = below.find((item) => isEmployeeNameLabel(item.text))?.y ?? Number.NEGATIVE_INFINITY;
-  const employeeIdentifiers: string[] = [];
-  for (const item of below) {
-    if (item.y <= nextNameY) {
-      break;
-    }
-    if (!isEmployeeNameLabel(item.text) && item.text.replace(/\D/g, '').length >= 2) {
-      employeeIdentifiers.push(item.text.trim());
+  const isIdLike = (item: PdfTextItem): boolean =>
+    !isEmployeeNameLabel(item.text) && item.text.replace(/\D/g, '').length >= 2;
+  // Ids printed on the candidate's own line (e.g. TYPE_B: nómina id and name
+  // share the marker line).
+  const sameLine = items
+    .filter(
+      (item) =>
+        item.page === candidate.page
+        && item.x < markerMaxX
+        && Math.abs(item.y - candidate.y) <= 1
+        && item.text.trim() !== candidate.label
+        && isIdLike(item),
+    )
+    .sort((a, b) => a.x - b.x);
+  // Ids printed on a separate line inside the candidate's block (e.g.
+  // TYPE_LEGEND: id line between the name and the next employee's name).
+  // Only scanned when the candidate's own line carries no id — otherwise the
+  // first id below already belongs to the NEXT employee.
+  const belowIds: PdfTextItem[] = [];
+  if (sameLine.length === 0) {
+    const below = items
+      .filter((item) => item.page === candidate.page && item.x < markerMaxX && item.y < candidate.y - 1)
+      .sort((a, b) => b.y - a.y);
+    const nextNameY = below.find((item) => isEmployeeNameLabel(item.text))?.y ?? Number.NEGATIVE_INFINITY;
+    for (const item of below) {
+      if (item.y <= nextNameY) {
+        break;
+      }
+      if (isIdLike(item)) {
+        belowIds.push(item);
+      }
     }
   }
+  const employeeIdentifiers = [...sameLine, ...belowIds].map((item) => item.text.trim());
   return { employeeName: candidate.label, employeeIdentifiers };
 }
 
 /**
  * Resolves the EmployeeRow for a manually picked candidate: rebuilds the row
- * band around the candidate's marker y with the profile's window offsets
- * (manual selection has no "previous label" ceiling / boundary floor, so
- * those modes fall back to a small default band). Returns null when the band
- * holds no data cells.
+ * band around the candidate's marker y with the profile's window rules.
+ * Ceiling falls back to a small offset for non-'offset' modes (manual
+ * selection has no "previous label" ceiling); the floor honors
+ * 'next-row-boundary' by scanning for the next row marker below the
+ * candidate — layouts that split a cell across several physical lines
+ * (start times above the name, end times below it, e.g. real TYPE_B
+ * fortnight rosters) silently lost the trailing line with the old flat
+ * fallback. Returns null when the band holds no data cells.
  */
 export function resolveRowForCandidate(
   items: PdfTextItem[],
@@ -358,10 +420,28 @@ export function resolveRowForCandidate(
 ): EmployeeRow | null {
   const ceilingOffset = profile.rowWindow.ceiling.mode === 'offset' ? profile.rowWindow.ceiling.offset : 15;
   const inclusive = profile.rowWindow.ceiling.mode === 'offset' ? profile.rowWindow.ceiling.inclusive : false;
-  const floorOffset = profile.rowWindow.floor.mode === 'offset' ? profile.rowWindow.floor.offset : -0.5;
-
   const ceilingY = candidate.y + ceilingOffset;
-  const floorY = candidate.y + floorOffset;
+
+  let floorY: number;
+  const floor = profile.rowWindow.floor;
+  if (floor.mode === 'offset') {
+    floorY = candidate.y + floor.offset;
+  } else {
+    const { scan } = floor;
+    const boundary = items
+      .filter(
+        (item) =>
+          item.page === candidate.page
+          && item.x < profile.rowWindow.markerMaxX
+          && item.y < candidate.y - 0.5,
+      )
+      .sort((a, b) => b.y - a.y)
+      .find((item) =>
+        (scan.idPattern && scan.idPattern.test(normalizeEmployeeId(item.text)))
+        || scan.tokens.some((token) => normalizeText(item.text).includes(token)));
+    floorY = boundary ? boundary.y + scan.padY : scan.fallback;
+  }
+
   const rowItems = items.filter(
     (item) =>
       item.page === candidate.page

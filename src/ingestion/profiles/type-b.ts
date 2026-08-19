@@ -34,7 +34,11 @@ export const TYPE_B_PROFILE: IngestionProfile = {
     ceiling: { mode: 'offset', offset: 12, inclusive: true },
     floor: {
       mode: 'next-row-boundary',
-      scan: { idPattern: /^\d{4,6}$/, tokens: ['supervisor', 'sup aea'], padY: 2, fallback: -1000 },
+      // padY must clear the next employee's start-time line: split-line
+      // blocks print start times ~5pt above the row's own id marker, so a
+      // smaller pad lets the neighbour's starts bleed into this row and
+      // produces phantom `??:??` second segments.
+      scan: { idPattern: /^\d{4,6}$/, tokens: ['supervisor', 'sup aea'], padY: 6, fallback: -1000 },
     },
     categoryHints: [
       { tokens: ['jtu'], category: 'Jefe de Turno' },

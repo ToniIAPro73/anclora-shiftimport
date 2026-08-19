@@ -183,13 +183,13 @@ describe('selectorForCandidate', () => {
     expect(selector).toEqual({ employeeName: 'Sergio Mora', employeeIdentifiers: ['H-202'] });
   });
 
-  it('falls back to a name-only selector when the block has no id line', () => {
+  it('harvests the id printed on the candidate line itself', () => {
     const selector = selectorForCandidate(
       TYPE_A_FIXTURE_ITEMS,
       { label: 'Ana Martinez (1001)', page: 1, y: 200, rowIndex: 1 },
       TYPE_A_PROFILE,
     );
-    expect(selector.employeeIdentifiers).toEqual([]);
+    expect(selector.employeeIdentifiers).toEqual(['(1001)']);
   });
 });
 
