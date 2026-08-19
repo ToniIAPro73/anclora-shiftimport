@@ -9,7 +9,15 @@ export type IngestionErrorCode =
   | 'MALFORMED_INPUT'
   | 'UNSUPPORTED_FORMAT'
   | 'NO_SHIFTS_FOUND'
-  | 'UNSUPPORTED_LAYOUT';
+  | 'UNSUPPORTED_LAYOUT'
+  // Structured-diagnosis codes (src/ingestion/diagnostics.ts). These are
+  // emitted as diagnostics, not necessarily thrown as IngestionError.
+  | 'UNKNOWN_SHIFT_CODES'
+  | 'DATE_AMBIGUITY'
+  | 'MONTH_MISMATCH'
+  | 'PARTIAL_EXTRACTION'
+  | 'INSUFFICIENT_DATA'
+  | 'PARSER_FAILURE';
 
 export class IngestionError extends Error {
   readonly code: IngestionErrorCode;
