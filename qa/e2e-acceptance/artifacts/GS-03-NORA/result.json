@@ -1,0 +1,338 @@
+{
+  "caseId": "GS-03-NORA",
+  "expected": {
+    "count": 14,
+    "minCount": 14,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11",
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14"
+    ],
+    "employeeId": "H-301"
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 14,
+    "monthAfterAnalysis": "Octubre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [
+      {
+        "date": "2026-10-01",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-02",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "08:00",
+        "end": "20:00"
+      },
+      {
+        "date": "2026-10-03",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "20:00",
+        "end": "08:00"
+      },
+      {
+        "date": "2026-10-04",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-05",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "08:00",
+        "end": "20:00"
+      },
+      {
+        "date": "2026-10-06",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "20:00",
+        "end": "08:00"
+      },
+      {
+        "date": "2026-10-07",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-08",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "08:00",
+        "end": "20:00"
+      },
+      {
+        "date": "2026-10-09",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "20:00",
+        "end": "08:00"
+      },
+      {
+        "date": "2026-10-10",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-11",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "08:00",
+        "end": "20:00"
+      },
+      {
+        "date": "2026-10-12",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "20:00",
+        "end": "08:00"
+      },
+      {
+        "date": "2026-10-13",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-14",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "08:00",
+        "end": "20:00"
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (14/14 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "a1f40191-bf97-4fb4-9534-22f136da791e",
+        "date": "2026-10-01",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "23b7e5a5-6ef0-4c7b-8e9d-1c6c0418d380",
+        "date": "2026-10-02",
+        "startTime": "08:00",
+        "endTime": "20:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "ecbb4a56-75c2-4bf4-b6a3-c78b5f88a324",
+        "date": "2026-10-03",
+        "startTime": "20:00",
+        "endTime": "08:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "36f34c7e-007f-4939-bbcc-a90eb293c151",
+        "date": "2026-10-04",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "8c9f2f16-1f4b-4af4-8162-ef26f4dc7935",
+        "date": "2026-10-05",
+        "startTime": "08:00",
+        "endTime": "20:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "93013c8b-4366-420b-b036-fd2cc9dabc69",
+        "date": "2026-10-06",
+        "startTime": "20:00",
+        "endTime": "08:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "5fbd9d11-8131-43c5-a710-e1837a16c0e2",
+        "date": "2026-10-07",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "e289cd91-a596-46f8-82c7-dd847fd7f29d",
+        "date": "2026-10-08",
+        "startTime": "08:00",
+        "endTime": "20:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "72331f74-d8ea-488b-8307-61c700e6513f",
+        "date": "2026-10-09",
+        "startTime": "20:00",
+        "endTime": "08:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "05ec57a4-2a9c-417a-913d-7e4a4c2186d8",
+        "date": "2026-10-10",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "fc6cbdad-eda5-457b-b011-4d394358b765",
+        "date": "2026-10-11",
+        "startTime": "08:00",
+        "endTime": "20:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "84bbf16f-bc55-421b-9b84-528b71b349e9",
+        "date": "2026-10-12",
+        "startTime": "20:00",
+        "endTime": "08:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "31d2ebde-8565-47d2-b773-208ed119cbe1",
+        "date": "2026-10-13",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "27ca7bc3-d35f-4621-af88-73cf53c0f5a8",
+        "date": "2026-10-14",
+        "startTime": "08:00",
+        "endTime": "20:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      }
+    ],
+    "badgeCount": 14
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "quality chip present",
+      "pass": true,
+      "detail": "qualityState=Correcto"
+    },
+    {
+      "name": "preview count",
+      "pass": true,
+      "detail": "previewRows=14, expected=14, min=14"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": true,
+      "detail": "month=Octubre, year=2026 (selected Octubre 2026)"
+    },
+    {
+      "name": "expected dates all present in preview",
+      "pass": true,
+      "detail": "missing=[] (of 14)"
+    },
+    {
+      "name": "shifts persisted",
+      "pass": true,
+      "detail": "anclora_shifts_v1 empty"
+    },
+    {
+      "name": "zero cross-month leakage after import",
+      "pass": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "imported count",
+      "pass": true,
+      "detail": "imported=14, expected=14, min=14"
+    },
+    {
+      "name": "no fabricated dates",
+      "pass": true,
+      "detail": "fabricated=[]"
+    },
+    {
+      "name": "calendar badges match imported days",
+      "pass": true,
+      "detail": "badges=14, distinctDays=14, imported=14"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

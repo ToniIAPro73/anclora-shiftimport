@@ -1,0 +1,86 @@
+{
+  "caseId": "GS-04-MIGUEL",
+  "expected": {
+    "count": 7,
+    "minCount": 7,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11"
+    ],
+    "employeeId": "R-002"
+  },
+  "actual": {
+    "errorText": "⚠️ Error: Cannot read properties of undefined (reading 'sheets')",
+    "qualityState": null,
+    "detectedCount": null,
+    "monthAfterAnalysis": null,
+    "yearAfterAnalysis": null,
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [],
+    "confirmLabel": null,
+    "confirmDisabled": true,
+    "saw61Dias": false,
+    "importedShifts": null,
+    "badgeCount": null
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": false,
+      "detail": "errorText=⚠️ Error: Cannot read properties of undefined (reading 'sheets')"
+    },
+    {
+      "name": "quality chip present",
+      "pass": false,
+      "detail": "qualityState=null"
+    },
+    {
+      "name": "preview count",
+      "pass": false,
+      "detail": "previewRows=0, expected=7, min=7"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": false,
+      "detail": "month=null, year=null (selected Octubre 2026)"
+    },
+    {
+      "name": "expected dates all present in preview",
+      "pass": false,
+      "detail": "missing=[\"2026-10-05\",\"2026-10-06\",\"2026-10-07\",\"2026-10-08\",\"2026-10-09\"] (of 7)"
+    },
+    {
+      "name": "confirm enabled",
+      "pass": false,
+      "detail": "confirmLabel=null"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED",
+    "error: [ImportModal] Error: TypeError: Cannot read properties of undefined (reading 'sheets')\n    at B.load (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/exceljs.min-XaWumVfE.js:2:152649)\n    at async F2 (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:88251)\n    at async G2 (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:94572)\n    at async https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:106243\n    at async Ge (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:107457)"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

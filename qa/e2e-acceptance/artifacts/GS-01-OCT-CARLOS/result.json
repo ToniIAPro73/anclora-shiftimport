@@ -1,0 +1,627 @@
+{
+  "caseId": "GS-01-OCT-CARLOS",
+  "expected": {
+    "count": 31,
+    "minCount": 31,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11",
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-17",
+      "2026-10-18",
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25",
+      "2026-10-26",
+      "2026-10-27",
+      "2026-10-28",
+      "2026-10-29",
+      "2026-10-30",
+      "2026-10-31"
+    ],
+    "employeeId": "EMP-102"
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 31,
+    "monthAfterAnalysis": "Octubre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [
+      {
+        "date": "2026-10-01",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-02",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-03",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-04",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-05",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-06",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-07",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-08",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-09",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-10",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-11",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-12",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-13",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-14",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-15",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-16",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-17",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-18",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-19",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-20",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-21",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-22",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-23",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-24",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-25",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-26",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-27",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-28",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-29",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-30",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-31",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (31/31 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "4cb06f83-339a-4c38-9085-47f203fb4f2e",
+        "date": "2026-10-01",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "08cc20f9-b72b-43bf-9fa3-53de7c12eca6",
+        "date": "2026-10-02",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "947829d6-b0f6-4ca9-8303-25b26b8f65a9",
+        "date": "2026-10-03",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "3c78c25e-fdcc-4437-959a-50b5341d82bc",
+        "date": "2026-10-04",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "7104059f-c859-4647-a46f-fd8f48645dd7",
+        "date": "2026-10-05",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "6d96b0e9-523f-4c6c-9899-0d2fb23a7d64",
+        "date": "2026-10-06",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "1f48c5bc-1d07-47bc-9a40-f77c5c1f2e49",
+        "date": "2026-10-07",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "3ce9b675-f1e5-43a2-ac9c-db0feeb89726",
+        "date": "2026-10-08",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "012d9dee-c65f-4321-92be-6025c0404da5",
+        "date": "2026-10-09",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "46201ef1-1b1a-483b-abf7-04d7595f2d5e",
+        "date": "2026-10-10",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "bdf0d307-5b47-4cf1-b270-4d9300262b6d",
+        "date": "2026-10-11",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "472a32d1-2767-4da8-b0b0-6b67d33963e2",
+        "date": "2026-10-12",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b86a1bc2-1d2a-4738-a0ef-58cffaaee82e",
+        "date": "2026-10-13",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "762e29ed-84e4-4cd8-924d-73e75a835403",
+        "date": "2026-10-14",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "9fa8e4d2-8681-4ccf-a149-0be3426e9deb",
+        "date": "2026-10-15",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b2a0c34a-33c3-4818-be83-a87a667ac4bc",
+        "date": "2026-10-16",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "42792d22-0c9b-446e-90db-d8338c50f035",
+        "date": "2026-10-17",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "182aeba7-a4fc-47b3-86b6-0cf25b762132",
+        "date": "2026-10-18",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "8d4a5b7d-2fb6-412c-9934-1dd58fbac896",
+        "date": "2026-10-19",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "63cd2eee-6dbb-4d9d-bd99-29838d5b48a3",
+        "date": "2026-10-20",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "752aea2b-9497-4f87-a0a5-0fdd9c3aa807",
+        "date": "2026-10-21",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "fd442eb1-33cb-46a9-bb2f-d8c734000fb8",
+        "date": "2026-10-22",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "482765ff-449e-4888-865e-dd76179889b1",
+        "date": "2026-10-23",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "9746efe3-01a7-4e04-a88c-ae3f01b3eb7b",
+        "date": "2026-10-24",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f8ba9f19-3576-4e2e-a669-689fd074aa2f",
+        "date": "2026-10-25",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f2d10c73-a50e-4e27-8a29-6f423d8bbdbc",
+        "date": "2026-10-26",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "3f17c24a-17b5-4148-91d7-64db6bad5b5d",
+        "date": "2026-10-27",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "be0875ba-8e00-4c41-bed7-b881a83ceabb",
+        "date": "2026-10-28",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "eb664184-9bc9-4f9d-9394-1da790018895",
+        "date": "2026-10-29",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "dd4e96f6-2171-48f4-bf20-7020ad2bef7a",
+        "date": "2026-10-30",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "5f015487-fcb5-4121-83c4-e0cfc040ba1f",
+        "date": "2026-10-31",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      }
+    ],
+    "badgeCount": 31
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "quality chip present",
+      "pass": true,
+      "detail": "qualityState=Correcto"
+    },
+    {
+      "name": "preview count",
+      "pass": true,
+      "detail": "previewRows=31, expected=31, min=31"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": true,
+      "detail": "month=Octubre, year=2026 (selected Octubre 2026)"
+    },
+    {
+      "name": "expected dates all present in preview",
+      "pass": true,
+      "detail": "missing=[] (of 31)"
+    },
+    {
+      "name": "shifts persisted",
+      "pass": true,
+      "detail": "anclora_shifts_v1 empty"
+    },
+    {
+      "name": "zero cross-month leakage after import",
+      "pass": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "imported count",
+      "pass": true,
+      "detail": "imported=31, expected=31, min=31"
+    },
+    {
+      "name": "no fabricated dates",
+      "pass": true,
+      "detail": "fabricated=[]"
+    },
+    {
+      "name": "calendar badges match imported days",
+      "pass": true,
+      "detail": "badges=31, distinctDays=31, imported=31"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

@@ -1,0 +1,226 @@
+{
+  "config": {
+    "argv": [
+      "/home/toni/.nvm/versions/node/v24.19.0/bin/node",
+      "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/node_modules/.bin/playwright",
+      "test",
+      "--config",
+      "playwright.config.ts",
+      "-g",
+      "GS-02-CLEAN"
+    ],
+    "configFile": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/playwright.config.ts",
+    "rootDir": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/specs",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results",
+        "repeatEach": 1,
+        "retries": 1,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-desktop",
+        "name": "chromium-desktop",
+        "testDir": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/specs",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 2100000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "artifacts/playwright-report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.62.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "ocr.spec.ts",
+      "file": "ocr.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "GS-02-CLEAN",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 2100000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chromium-desktop",
+              "projectName": "chromium-desktop",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 28812,
+                  "error": {
+                    "message": "Error: [\n  {\n    \"name\": \"no error box\",\n    \"pass\": true,\n    \"detail\": \"errorText=null\"\n  },\n  {\n    \"name\": \"quality chip present\",\n    \"pass\": true,\n    \"detail\": \"qualityState=No reconocido\"\n  },\n  {\n    \"name\": \"preview count\",\n    \"pass\": false,\n    \"detail\": \"previewRows=0, expected=31, min=31\"\n  },\n  {\n    \"name\": \"all preview dates in target month\",\n    \"pass\": true,\n    \"detail\": \"outside=[]\"\n  },\n  {\n    \"name\": \"no \\\"61 días\\\" diagnostic\",\n    \"pass\": true,\n    \"detail\": \"saw61Dias=false\"\n  },\n  {\n    \"name\": \"user-selected month preserved\",\n    \"pass\": true,\n    \"detail\": \"month=Octubre, year=2026 (selected Octubre 2026)\"\n  },\n  {\n    \"name\": \"expected dates all present in preview\",\n    \"pass\": false,\n    \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\"\n  },\n  {\n    \"name\": \"confirm enabled\",\n    \"pass\": false,\n    \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\"\n  },\n  {\n    \"name\": \"no uncaught page errors\",\n    \"pass\": true,\n    \"detail\": \"pageErrors=[]\"\n  }\n]\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 17\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"previewRows=0, expected=31, min=31\",\u001b[39m\n\u001b[31m+     \"name\": \"preview count\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\",\u001b[39m\n\u001b[31m+     \"name\": \"expected dates all present in preview\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\",\u001b[39m\n\u001b[31m+     \"name\": \"confirm enabled\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+                    "stack": "Error: [\n  {\n    \"name\": \"no error box\",\n    \"pass\": true,\n    \"detail\": \"errorText=null\"\n  },\n  {\n    \"name\": \"quality chip present\",\n    \"pass\": true,\n    \"detail\": \"qualityState=No reconocido\"\n  },\n  {\n    \"name\": \"preview count\",\n    \"pass\": false,\n    \"detail\": \"previewRows=0, expected=31, min=31\"\n  },\n  {\n    \"name\": \"all preview dates in target month\",\n    \"pass\": true,\n    \"detail\": \"outside=[]\"\n  },\n  {\n    \"name\": \"no \\\"61 días\\\" diagnostic\",\n    \"pass\": true,\n    \"detail\": \"saw61Dias=false\"\n  },\n  {\n    \"name\": \"user-selected month preserved\",\n    \"pass\": true,\n    \"detail\": \"month=Octubre, year=2026 (selected Octubre 2026)\"\n  },\n  {\n    \"name\": \"expected dates all present in preview\",\n    \"pass\": false,\n    \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\"\n  },\n  {\n    \"name\": \"confirm enabled\",\n    \"pass\": false,\n    \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\"\n  },\n  {\n    \"name\": \"no uncaught page errors\",\n    \"pass\": true,\n    \"detail\": \"pageErrors=[]\"\n  }\n]\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 17\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"previewRows=0, expected=31, min=31\",\u001b[39m\n\u001b[31m+     \"name\": \"preview count\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\",\u001b[39m\n\u001b[31m+     \"name\": \"expected dates all present in preview\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\",\u001b[39m\n\u001b[31m+     \"name\": \"confirm enabled\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts:153:80",
+                    "location": {
+                      "file": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts",
+                      "column": 80,
+                      "line": 153
+                    },
+                    "snippet": "  151 |     }\n  152 |\n> 153 |     expect(failures.filter((a) => !a.pass), JSON.stringify(failures, null, 2)).toEqual([]);\n      |                                                                                ^\n  154 |   });\n  155 | }\n  156 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts",
+                        "column": 80,
+                        "line": 153
+                      },
+                      "message": "Error: [\n  {\n    \"name\": \"no error box\",\n    \"pass\": true,\n    \"detail\": \"errorText=null\"\n  },\n  {\n    \"name\": \"quality chip present\",\n    \"pass\": true,\n    \"detail\": \"qualityState=No reconocido\"\n  },\n  {\n    \"name\": \"preview count\",\n    \"pass\": false,\n    \"detail\": \"previewRows=0, expected=31, min=31\"\n  },\n  {\n    \"name\": \"all preview dates in target month\",\n    \"pass\": true,\n    \"detail\": \"outside=[]\"\n  },\n  {\n    \"name\": \"no \\\"61 días\\\" diagnostic\",\n    \"pass\": true,\n    \"detail\": \"saw61Dias=false\"\n  },\n  {\n    \"name\": \"user-selected month preserved\",\n    \"pass\": true,\n    \"detail\": \"month=Octubre, year=2026 (selected Octubre 2026)\"\n  },\n  {\n    \"name\": \"expected dates all present in preview\",\n    \"pass\": false,\n    \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\"\n  },\n  {\n    \"name\": \"confirm enabled\",\n    \"pass\": false,\n    \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\"\n  },\n  {\n    \"name\": \"no uncaught page errors\",\n    \"pass\": true,\n    \"detail\": \"pageErrors=[]\"\n  }\n]\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 17\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"previewRows=0, expected=31, min=31\",\u001b[39m\n\u001b[31m+     \"name\": \"preview count\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\",\u001b[39m\n\u001b[31m+     \"name\": \"expected dates all present in preview\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\",\u001b[39m\n\u001b[31m+     \"name\": \"confirm enabled\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  151 |     }\n  152 |\n> 153 |     expect(failures.filter((a) => !a.pass), JSON.stringify(failures, null, 2)).toEqual([]);\n      |                                                                                ^\n  154 |   });\n  155 | }\n  156 |\n    at /home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts:153:80"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-08-18T23:44:55.673Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop/test-failed-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop/video.webm"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts",
+                    "column": 80,
+                    "line": 153
+                  }
+                },
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 28452,
+                  "error": {
+                    "message": "Error: [\n  {\n    \"name\": \"no error box\",\n    \"pass\": true,\n    \"detail\": \"errorText=null\"\n  },\n  {\n    \"name\": \"quality chip present\",\n    \"pass\": true,\n    \"detail\": \"qualityState=No reconocido\"\n  },\n  {\n    \"name\": \"preview count\",\n    \"pass\": false,\n    \"detail\": \"previewRows=0, expected=31, min=31\"\n  },\n  {\n    \"name\": \"all preview dates in target month\",\n    \"pass\": true,\n    \"detail\": \"outside=[]\"\n  },\n  {\n    \"name\": \"no \\\"61 días\\\" diagnostic\",\n    \"pass\": true,\n    \"detail\": \"saw61Dias=false\"\n  },\n  {\n    \"name\": \"user-selected month preserved\",\n    \"pass\": true,\n    \"detail\": \"month=Octubre, year=2026 (selected Octubre 2026)\"\n  },\n  {\n    \"name\": \"expected dates all present in preview\",\n    \"pass\": false,\n    \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\"\n  },\n  {\n    \"name\": \"confirm enabled\",\n    \"pass\": false,\n    \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\"\n  },\n  {\n    \"name\": \"no uncaught page errors\",\n    \"pass\": true,\n    \"detail\": \"pageErrors=[]\"\n  }\n]\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 17\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"previewRows=0, expected=31, min=31\",\u001b[39m\n\u001b[31m+     \"name\": \"preview count\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\",\u001b[39m\n\u001b[31m+     \"name\": \"expected dates all present in preview\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\",\u001b[39m\n\u001b[31m+     \"name\": \"confirm enabled\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m",
+                    "stack": "Error: [\n  {\n    \"name\": \"no error box\",\n    \"pass\": true,\n    \"detail\": \"errorText=null\"\n  },\n  {\n    \"name\": \"quality chip present\",\n    \"pass\": true,\n    \"detail\": \"qualityState=No reconocido\"\n  },\n  {\n    \"name\": \"preview count\",\n    \"pass\": false,\n    \"detail\": \"previewRows=0, expected=31, min=31\"\n  },\n  {\n    \"name\": \"all preview dates in target month\",\n    \"pass\": true,\n    \"detail\": \"outside=[]\"\n  },\n  {\n    \"name\": \"no \\\"61 días\\\" diagnostic\",\n    \"pass\": true,\n    \"detail\": \"saw61Dias=false\"\n  },\n  {\n    \"name\": \"user-selected month preserved\",\n    \"pass\": true,\n    \"detail\": \"month=Octubre, year=2026 (selected Octubre 2026)\"\n  },\n  {\n    \"name\": \"expected dates all present in preview\",\n    \"pass\": false,\n    \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\"\n  },\n  {\n    \"name\": \"confirm enabled\",\n    \"pass\": false,\n    \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\"\n  },\n  {\n    \"name\": \"no uncaught page errors\",\n    \"pass\": true,\n    \"detail\": \"pageErrors=[]\"\n  }\n]\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 17\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"previewRows=0, expected=31, min=31\",\u001b[39m\n\u001b[31m+     \"name\": \"preview count\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\",\u001b[39m\n\u001b[31m+     \"name\": \"expected dates all present in preview\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\",\u001b[39m\n\u001b[31m+     \"name\": \"confirm enabled\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n    at /home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts:153:80",
+                    "location": {
+                      "file": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts",
+                      "column": 80,
+                      "line": 153
+                    },
+                    "snippet": "  151 |     }\n  152 |\n> 153 |     expect(failures.filter((a) => !a.pass), JSON.stringify(failures, null, 2)).toEqual([]);\n      |                                                                                ^\n  154 |   });\n  155 | }\n  156 |"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts",
+                        "column": 80,
+                        "line": 153
+                      },
+                      "message": "Error: [\n  {\n    \"name\": \"no error box\",\n    \"pass\": true,\n    \"detail\": \"errorText=null\"\n  },\n  {\n    \"name\": \"quality chip present\",\n    \"pass\": true,\n    \"detail\": \"qualityState=No reconocido\"\n  },\n  {\n    \"name\": \"preview count\",\n    \"pass\": false,\n    \"detail\": \"previewRows=0, expected=31, min=31\"\n  },\n  {\n    \"name\": \"all preview dates in target month\",\n    \"pass\": true,\n    \"detail\": \"outside=[]\"\n  },\n  {\n    \"name\": \"no \\\"61 días\\\" diagnostic\",\n    \"pass\": true,\n    \"detail\": \"saw61Dias=false\"\n  },\n  {\n    \"name\": \"user-selected month preserved\",\n    \"pass\": true,\n    \"detail\": \"month=Octubre, year=2026 (selected Octubre 2026)\"\n  },\n  {\n    \"name\": \"expected dates all present in preview\",\n    \"pass\": false,\n    \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\"\n  },\n  {\n    \"name\": \"confirm enabled\",\n    \"pass\": false,\n    \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\"\n  },\n  {\n    \"name\": \"no uncaught page errors\",\n    \"pass\": true,\n    \"detail\": \"pageErrors=[]\"\n  }\n]\n\n\u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoEqual\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // deep equality\u001b[22m\n\n\u001b[32m- Expected  -  1\u001b[39m\n\u001b[31m+ Received  + 17\u001b[39m\n\n\u001b[32m- Array []\u001b[39m\n\u001b[31m+ Array [\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"previewRows=0, expected=31, min=31\",\u001b[39m\n\u001b[31m+     \"name\": \"preview count\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"missing=[\\\"2026-10-01\\\",\\\"2026-10-02\\\",\\\"2026-10-03\\\",\\\"2026-10-04\\\",\\\"2026-10-05\\\"] (of 31)\",\u001b[39m\n\u001b[31m+     \"name\": \"expected dates all present in preview\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+   Object {\u001b[39m\n\u001b[31m+     \"detail\": \"confirmLabel=Confirmar Importación (0/0 listos)\",\u001b[39m\n\u001b[31m+     \"name\": \"confirm enabled\",\u001b[39m\n\u001b[31m+     \"pass\": false,\u001b[39m\n\u001b[31m+   },\u001b[39m\n\u001b[31m+ ]\u001b[39m\n\n  151 |     }\n  152 |\n> 153 |     expect(failures.filter((a) => !a.pass), JSON.stringify(failures, null, 2)).toEqual([]);\n      |                                                                                ^\n  154 |   });\n  155 | }\n  156 |\n    at /home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts:153:80"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 1,
+                  "startTime": "2026-08-18T23:45:26.542Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "screenshot",
+                      "contentType": "image/png",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop-retry1/test-failed-1.png"
+                    },
+                    {
+                      "name": "video",
+                      "contentType": "video/webm",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop-retry1/video.webm"
+                    },
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop-retry1/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/test-results/ocr-GS-02-CLEAN-chromium-desktop-retry1/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/home/toni/workspace/anclora/anclora-shiftimport/qa/e2e-acceptance/helpers/case-positive.ts",
+                    "column": 80,
+                    "line": 153
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "070273dca980bfb90218-a2c94cf3ec3a7f2d7173",
+          "file": "../helpers/case-positive.ts",
+          "line": 29,
+          "column": 7
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-08-18T23:44:54.318Z",
+    "duration": 61696.363,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

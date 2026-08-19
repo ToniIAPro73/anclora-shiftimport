@@ -1,0 +1,55 @@
+{
+  "caseId": "GN-05-TXT",
+  "expected": {
+    "acceptableErrorSubstrings": [
+      "Formato de archivo no soportado."
+    ]
+  },
+  "actual": {
+    "errorText": "⚠️ Error: Formato de archivo no soportado.",
+    "qualityState": null,
+    "assistantVisible": false,
+    "previewRowCount": 0,
+    "confirmLabel": "Confirmar Importación (0/0 listos)",
+    "confirmDisabled": true,
+    "storedShiftsRaw": null
+  },
+  "assertions": [
+    {
+      "name": "explicit error or degraded state shown",
+      "pass": true,
+      "detail": "error=⚠️ Error: Formato de archivo no soportado., quality=null, assistant=false"
+    },
+    {
+      "name": "error message acceptable",
+      "pass": true,
+      "detail": "error=⚠️ Error: Formato de archivo no soportado.; acceptable=[\"Formato de archivo no soportado.\"]"
+    },
+    {
+      "name": "no importable preview rows",
+      "pass": true,
+      "detail": "rows=0"
+    },
+    {
+      "name": "confirm disabled",
+      "pass": true,
+      "detail": "label=Confirmar Importación (0/0 listos)"
+    },
+    {
+      "name": "zero-import invariant (localStorage untouched)",
+      "pass": true,
+      "detail": "anclora_shifts_v1=absent"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED",
+    "error: [ImportModal] Error: IngestionError: Formato de documento no soportado. Formatos admitidos: PDF, PNG/JPG/WebP, CSV y XLSX.\n    at G2 (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:93933)\n    at https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:106249\n    at Ge (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:138:107463)\n    at Object.SC (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:38:9855)\n    at wC (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:38:10009)\n    at AC (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:38:10066)\n    at Gx (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:38:31446)\n    at Tw (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:38:31863)\n    at https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:38:36776\n    at I0 (https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/assets/index-BnwSO4Kh.js:41:36896)"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

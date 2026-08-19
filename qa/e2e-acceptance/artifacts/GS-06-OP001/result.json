@@ -1,0 +1,316 @@
+{
+  "caseId": "GS-06-OP001",
+  "expected": {
+    "count": 3,
+    "minCount": 3,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-05",
+      "2026-10-05",
+      "2026-10-06"
+    ],
+    "employeeId": "OP-001"
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 13,
+    "monthAfterAnalysis": "Agosto",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "",
+        "origin": "CSV",
+        "type": "",
+        "start": "",
+        "end": ""
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (13/13 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "418f629c-69ed-491e-b7f6-e2483175fb58",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "c0f77089-248b-4c0d-949b-74a4c3a1dbc7",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "44d16b33-3628-4680-825a-686b67081848",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "596e9bee-35d8-4021-84cb-637447278ee6",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "f84afb10-7800-4d1a-a002-df62f7174a8a",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "1ff6e321-3130-4d65-a802-9bfcf3845847",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "fe3402d9-2064-46d6-b60a-d823e683bbf6",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "a17cfcc6-a77a-4d12-971d-48f36ce6c07a",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "0bc3afa7-06a1-4cc3-a389-92bc945484ff",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "ec28ce92-b2b9-4778-849d-1c81e92fc3f3",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "0ac99c6e-7345-4444-8402-74086d29fc92",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "a254234c-bf89-439a-9f19-15ed8810e0d8",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "3f63ff86-0924-4a17-a607-1dbffb38208f",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      }
+    ],
+    "badgeCount": 0
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "quality chip present",
+      "pass": true,
+      "detail": "qualityState=Correcto"
+    },
+    {
+      "name": "preview count",
+      "pass": false,
+      "detail": "previewRows=13, expected=3, min=3"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": false,
+      "detail": "outside=[\"\",\"\",\"\",\"\",\"\"]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": false,
+      "detail": "month=Agosto, year=2026 (selected Octubre 2026)"
+    },
+    {
+      "name": "expected dates all present in preview",
+      "pass": false,
+      "detail": "missing=[\"2026-10-05\",\"2026-10-05\",\"2026-10-06\"] (of 3)"
+    },
+    {
+      "name": "shifts persisted",
+      "pass": true,
+      "detail": "anclora_shifts_v1 empty"
+    },
+    {
+      "name": "zero cross-month leakage after import",
+      "pass": false,
+      "detail": "leaked=[\"\",\"\",\"\",\"\",\"\"]"
+    },
+    {
+      "name": "imported count",
+      "pass": false,
+      "detail": "imported=13, expected=3, min=3"
+    },
+    {
+      "name": "no fabricated dates",
+      "pass": true,
+      "detail": "fabricated=[]"
+    },
+    {
+      "name": "calendar badges match imported days",
+      "pass": false,
+      "detail": "badges=0, distinctDays=1, imported=13"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED"
+  ]
+}

@@ -1,0 +1,328 @@
+{
+  "caseId": "GS-03-ANA-MOBILE",
+  "expected": {
+    "count": 14,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11",
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14"
+    ]
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 14,
+    "monthAfterAnalysis": "Octubre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [
+      {
+        "date": "2026-10-01",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-02",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-03",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "23:00",
+        "end": "07:00"
+      },
+      {
+        "date": "2026-10-04",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-05",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-06",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-07",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "23:00",
+        "end": "07:00"
+      },
+      {
+        "date": "2026-10-08",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-09",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-10",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-11",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "23:00",
+        "end": "07:00"
+      },
+      {
+        "date": "2026-10-12",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-13",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-14",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (14/14 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "0f82b4f7-9ca6-455e-83fc-503ab51a56e2",
+        "date": "2026-10-01",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "6d4c4c5a-876a-4bb4-a537-875a45ce5257",
+        "date": "2026-10-02",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "3af2a4cc-955e-4915-b97e-d0fa23082f3e",
+        "date": "2026-10-03",
+        "startTime": "23:00",
+        "endTime": "07:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f81b2494-7020-4734-a37c-efeee11f23a9",
+        "date": "2026-10-04",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "c867b475-a697-418b-a23d-fd5aed165dc2",
+        "date": "2026-10-05",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "85c24af7-93fa-4146-952e-3c6136460ba5",
+        "date": "2026-10-06",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "4550b024-973a-4adb-a71e-736f4f356797",
+        "date": "2026-10-07",
+        "startTime": "23:00",
+        "endTime": "07:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b5e73d5e-6231-4c50-bfca-8d06dd3949b8",
+        "date": "2026-10-08",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "d920bee0-0d2f-4282-99e6-a6fa359232ca",
+        "date": "2026-10-09",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "e97c2278-7e05-49f9-90a2-47e493b8e859",
+        "date": "2026-10-10",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "6f783dd3-ac81-465a-b070-bbaf5714fa3a",
+        "date": "2026-10-11",
+        "startTime": "23:00",
+        "endTime": "07:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "fac1c46b-e8b4-4942-8370-3c19c371ce7e",
+        "date": "2026-10-12",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "e9a9cd1c-1429-48b2-95f3-5144c6757c74",
+        "date": "2026-10-13",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "11a5ac44-b302-466a-a1b8-1d2906d0e103",
+        "date": "2026-10-14",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      }
+    ],
+    "badgeCount": 14
+  },
+  "assertions": [
+    {
+      "name": "modal fits viewport width",
+      "pass": true,
+      "detail": "box={\"x\":12,\"y\":50.640625,\"width\":366,\"height\":742.71875}"
+    },
+    {
+      "name": "modal fits viewport height",
+      "pass": true,
+      "detail": "box={\"x\":12,\"y\":50.640625,\"width\":366,\"height\":742.71875}"
+    },
+    {
+      "name": "employee inputs usable",
+      "pass": true,
+      "detail": "name=Ana López, id=H-201"
+    },
+    {
+      "name": "internal scroll works",
+      "pass": true,
+      "detail": "scroll={\"before\":0,\"after\":0,\"scrollHeight\":717,\"clientHeight\":717}"
+    },
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "preview count",
+      "pass": true,
+      "detail": "previewRows=14, expected=14"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "zero cross-month leakage",
+      "pass": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "imported count",
+      "pass": true,
+      "detail": "imported=14, expected=14"
+    },
+    {
+      "name": "calendar badges present",
+      "pass": true,
+      "detail": "badges=14"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

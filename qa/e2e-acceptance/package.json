@@ -1,0 +1,9 @@
+{
+  "name": "anclora-shiftimport-e2e-acceptance",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Standalone Playwright E2E acceptance battery (test tooling only, not app code).",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

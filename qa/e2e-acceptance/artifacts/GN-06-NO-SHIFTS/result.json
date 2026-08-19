@@ -1,0 +1,51 @@
+{
+  "caseId": "GN-06-NO-SHIFTS",
+  "expected": {
+    "acceptableErrorSubstrings": [
+      "No se ha podido reconocer la estructura de este documento.",
+      "No se han encontrado turnos",
+      "No se ha encontrado a este empleado en el documento."
+    ]
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "assistantVisible": false,
+    "previewRowCount": 0,
+    "confirmLabel": "Confirmar Importación (0/0 listos)",
+    "confirmDisabled": true,
+    "storedShiftsRaw": null
+  },
+  "assertions": [
+    {
+      "name": "explicit error or degraded state shown",
+      "pass": false,
+      "detail": "error=null, quality=Correcto, assistant=false"
+    },
+    {
+      "name": "no importable preview rows",
+      "pass": true,
+      "detail": "rows=0"
+    },
+    {
+      "name": "confirm disabled",
+      "pass": true,
+      "detail": "label=Confirmar Importación (0/0 listos)"
+    },
+    {
+      "name": "zero-import invariant (localStorage untouched)",
+      "pass": true,
+      "detail": "anclora_shifts_v1=absent"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

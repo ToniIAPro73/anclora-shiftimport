@@ -1,0 +1,600 @@
+{
+  "caseId": "GS-01-SEP-CARLOS-MOBILE",
+  "expected": {
+    "count": 30,
+    "monthKey": "2026-09",
+    "dates": [
+      "2026-09-01",
+      "2026-09-02",
+      "2026-09-03",
+      "2026-09-04",
+      "2026-09-05",
+      "2026-09-06",
+      "2026-09-07",
+      "2026-09-08",
+      "2026-09-09",
+      "2026-09-10",
+      "2026-09-11",
+      "2026-09-12",
+      "2026-09-13",
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+      "2026-09-18",
+      "2026-09-19",
+      "2026-09-20",
+      "2026-09-21",
+      "2026-09-22",
+      "2026-09-23",
+      "2026-09-24",
+      "2026-09-25",
+      "2026-09-26",
+      "2026-09-27",
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30"
+    ]
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 30,
+    "monthAfterAnalysis": "Septiembre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [
+      {
+        "date": "2026-09-01",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-02",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-03",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-04",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-05",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-06",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-07",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-08",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-09",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-10",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-11",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-12",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-13",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-14",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-15",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-16",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-17",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-18",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-19",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-20",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-21",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-22",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-23",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-24",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-25",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-09-26",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-27",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-28",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-09-29",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-09-30",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (30/30 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "51e2fd7b-01e0-4f36-9501-cae2e208002c",
+        "date": "2026-09-01",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f6791cd0-3ccc-4876-ba76-34d431b545c8",
+        "date": "2026-09-02",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "48c661c4-230f-4128-a2ec-2f8909704172",
+        "date": "2026-09-03",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "52570460-ec7f-4785-a0af-71430154e868",
+        "date": "2026-09-04",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "d8d86f05-32a1-4d43-9c8c-69a52a46590a",
+        "date": "2026-09-05",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "4a5774b5-544b-45ac-8256-1795948f6f2e",
+        "date": "2026-09-06",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "183ce570-1628-4640-8792-5729e3011a6e",
+        "date": "2026-09-07",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "cffd311b-8287-4c80-905c-84348b1ba144",
+        "date": "2026-09-08",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f8cd5fce-c402-4f1f-8355-2bc61b6d3082",
+        "date": "2026-09-09",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f6102628-8127-4a18-82af-b50dc5616560",
+        "date": "2026-09-10",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "31d5fb5c-8707-4e46-a9a3-6cd526c2ef5f",
+        "date": "2026-09-11",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "0a79ba74-6d85-40fb-8636-bb4f0333d66c",
+        "date": "2026-09-12",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "01b1b28c-979a-4ee0-9c82-dfbf9b10b658",
+        "date": "2026-09-13",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "63e05b64-a09e-4d9c-92d9-628fb7a55377",
+        "date": "2026-09-14",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "169c2567-935e-4a55-8929-9681d570bfa7",
+        "date": "2026-09-15",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "12333dc8-dd33-4c6d-a22f-62612d496ecb",
+        "date": "2026-09-16",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "60821215-8834-4386-9b4b-d0f32c1a9636",
+        "date": "2026-09-17",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "a53600eb-e139-4dce-9afe-a581e563800c",
+        "date": "2026-09-18",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "3e1922d0-4a70-4674-afb5-b229b677d352",
+        "date": "2026-09-19",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b9f6d0b1-7ed7-416f-8153-8d99b3b14563",
+        "date": "2026-09-20",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "03513c46-6d44-4cf8-9107-e69f468f0fa1",
+        "date": "2026-09-21",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "461b0fe4-16fa-4d87-b820-bc2ee55c793e",
+        "date": "2026-09-22",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "c8f3e7ae-8d3d-4abd-a7c8-bee5bce892db",
+        "date": "2026-09-23",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "235c54b0-b90d-4792-a839-36aa16cccb73",
+        "date": "2026-09-24",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "396ec8fb-7ddf-4723-a56b-b0d791d8c183",
+        "date": "2026-09-25",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "86e8227b-bbf3-4785-9f09-1a4faf3786d4",
+        "date": "2026-09-26",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f8e5af33-6971-4390-a506-07bb5046ce51",
+        "date": "2026-09-27",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "31457d66-b6ce-4c71-bdc8-f496057f01b0",
+        "date": "2026-09-28",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "47f98bad-9f99-4123-af38-ce711a71c764",
+        "date": "2026-09-29",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "dccd878a-81ca-4b8a-bfd1-937724cb1d9a",
+        "date": "2026-09-30",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      }
+    ],
+    "badgeCount": 30
+  },
+  "assertions": [
+    {
+      "name": "modal fits viewport width",
+      "pass": true,
+      "detail": "box={\"x\":12,\"y\":50.640625,\"width\":366,\"height\":742.71875}"
+    },
+    {
+      "name": "modal fits viewport height",
+      "pass": true,
+      "detail": "box={\"x\":12,\"y\":50.640625,\"width\":366,\"height\":742.71875}"
+    },
+    {
+      "name": "employee inputs usable",
+      "pass": true,
+      "detail": "name=Carlos Ruiz, id=EMP-102"
+    },
+    {
+      "name": "internal scroll works",
+      "pass": true,
+      "detail": "scroll={\"before\":0,\"after\":0,\"scrollHeight\":1485,\"clientHeight\":1485}"
+    },
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "preview count",
+      "pass": true,
+      "detail": "previewRows=30, expected=30"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "zero cross-month leakage",
+      "pass": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "imported count",
+      "pass": true,
+      "detail": "imported=30, expected=30"
+    },
+    {
+      "name": "calendar badges present",
+      "pass": true,
+      "detail": "badges=30"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

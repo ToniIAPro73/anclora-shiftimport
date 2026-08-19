@@ -1,0 +1,275 @@
+{
+  "caseId": "GS-10-EVA",
+  "expected": {
+    "count": 10,
+    "minCount": 10,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10"
+    ],
+    "employeeId": "EDGE-01"
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 10,
+    "monthAfterAnalysis": "Octubre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": true,
+    "assistantQuestions": [
+      "token:BAJA→rest",
+      "token:AUS→rest",
+      "token:L→rest",
+      "token:XYZ→rest"
+    ],
+    "previewRows": [
+      {
+        "date": "2026-10-01",
+        "origin": "CSV",
+        "type": "Regular",
+        "start": "22:00",
+        "end": "06:00"
+      },
+      {
+        "date": "2026-10-02",
+        "origin": "CSV",
+        "type": "Regular",
+        "start": "00:00",
+        "end": "08:00"
+      },
+      {
+        "date": "2026-10-03",
+        "origin": "CSV",
+        "type": "Regular",
+        "start": "16:00",
+        "end": "24:00"
+      },
+      {
+        "date": "2026-10-04",
+        "origin": "CSV",
+        "type": "Regular",
+        "start": "09:00",
+        "end": "13:00"
+      },
+      {
+        "date": "2026-10-04",
+        "origin": "CSV",
+        "type": "Regular",
+        "start": "17:00",
+        "end": "21:00"
+      },
+      {
+        "date": "2026-10-05",
+        "origin": "CSV",
+        "type": "Vacaciones",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-06",
+        "origin": "CSV",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-07",
+        "origin": "CSV",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-08",
+        "origin": "CSV",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-09",
+        "origin": "CSV",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (10/10 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "f6046fa6-38dc-4322-8bc9-80a136627430",
+        "date": "2026-10-01",
+        "startTime": "22:00",
+        "endTime": "06:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "017df13f-d8a0-4f47-9305-df323d70face",
+        "date": "2026-10-02",
+        "startTime": "00:00",
+        "endTime": "08:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "5c4540f5-da27-4a99-830e-f0be1c04a12a",
+        "date": "2026-10-03",
+        "startTime": "16:00",
+        "endTime": "24:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "937f4fc1-2552-42f3-9639-84154a592d2d",
+        "date": "2026-10-04",
+        "startTime": "09:00",
+        "endTime": "13:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "03e863f4-1fc5-42cd-8cfb-dd79e94ef314",
+        "date": "2026-10-04",
+        "startTime": "17:00",
+        "endTime": "21:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "949ff912-cb2f-4f3b-a280-394fd1645894",
+        "date": "2026-10-05",
+        "startTime": "",
+        "endTime": "",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "0c368a92-bd93-4255-b664-f047f297f329",
+        "date": "2026-10-06",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "38a33e26-329e-4437-9b0c-beeae9ccb780",
+        "date": "2026-10-07",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "4ca60ca6-a1ca-4e56-89ca-7ee9f1b43be1",
+        "date": "2026-10-08",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      },
+      {
+        "id": "f9ce6354-dca1-497e-b04c-f5c29bbffbf9",
+        "date": "2026-10-09",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "csv"
+      }
+    ],
+    "badgeCount": 10
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "quality chip present",
+      "pass": true,
+      "detail": "qualityState=Correcto"
+    },
+    {
+      "name": "preview count",
+      "pass": true,
+      "detail": "previewRows=10, expected=10, min=10"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": true,
+      "detail": "month=Octubre, year=2026 (selected Octubre 2026)"
+    },
+    {
+      "name": "expected dates all present in preview",
+      "pass": false,
+      "detail": "missing=[\"2026-10-10\"] (of 10)"
+    },
+    {
+      "name": "shifts persisted",
+      "pass": true,
+      "detail": "anclora_shifts_v1 empty"
+    },
+    {
+      "name": "zero cross-month leakage after import",
+      "pass": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "imported count",
+      "pass": true,
+      "detail": "imported=10, expected=10, min=10"
+    },
+    {
+      "name": "no fabricated dates",
+      "pass": true,
+      "detail": "fabricated=[]"
+    },
+    {
+      "name": "calendar badges match imported days",
+      "pass": true,
+      "detail": "badges=10, distinctDays=9, imported=10"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

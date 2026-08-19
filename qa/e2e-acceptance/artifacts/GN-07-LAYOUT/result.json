@@ -1,0 +1,50 @@
+{
+  "caseId": "GN-07-LAYOUT",
+  "expected": {
+    "acceptableErrorSubstrings": [
+      "No se ha podido reconocer la estructura de este documento.",
+      "El documento no contiene texto extraíble."
+    ]
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "No reconocido",
+    "assistantVisible": false,
+    "previewRowCount": 0,
+    "confirmLabel": "Confirmar Importación (0/0 listos)",
+    "confirmDisabled": true,
+    "storedShiftsRaw": null
+  },
+  "assertions": [
+    {
+      "name": "explicit error or degraded state shown",
+      "pass": true,
+      "detail": "error=null, quality=No reconocido, assistant=false"
+    },
+    {
+      "name": "no importable preview rows",
+      "pass": true,
+      "detail": "rows=0"
+    },
+    {
+      "name": "confirm disabled",
+      "pass": true,
+      "detail": "label=Confirmar Importación (0/0 listos)"
+    },
+    {
+      "name": "zero-import invariant (localStorage untouched)",
+      "pass": true,
+      "detail": "anclora_shifts_v1=absent"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

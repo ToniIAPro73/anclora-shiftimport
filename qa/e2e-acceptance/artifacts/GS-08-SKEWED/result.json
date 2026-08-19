@@ -1,0 +1,80 @@
+{
+  "caseId": "GS-08-SKEWED",
+  "expected": {
+    "count": 7,
+    "minCount": 7,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25"
+    ],
+    "employeeId": "AP-017"
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "No reconocido",
+    "detectedCount": 0,
+    "monthAfterAnalysis": "Octubre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [],
+    "confirmLabel": "Confirmar Importación (0/0 listos)",
+    "confirmDisabled": true,
+    "saw61Dias": false,
+    "importedShifts": null,
+    "badgeCount": null
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "quality chip present",
+      "pass": true,
+      "detail": "qualityState=No reconocido"
+    },
+    {
+      "name": "preview count",
+      "pass": false,
+      "detail": "previewRows=0, expected=7, min=7"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": true,
+      "detail": "month=Octubre, year=2026 (selected Octubre 2026)"
+    },
+    {
+      "name": "confirm enabled",
+      "pass": false,
+      "detail": "confirmLabel=Confirmar Importación (0/0 listos)"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": []
+}

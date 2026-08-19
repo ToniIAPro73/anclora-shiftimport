@@ -1,0 +1,684 @@
+{
+  "caseId": "GS-01-OCT-JORGE",
+  "expected": {
+    "count": 31,
+    "minCount": 31,
+    "monthKey": "2026-10",
+    "dates": [
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+      "2026-10-10",
+      "2026-10-11",
+      "2026-10-12",
+      "2026-10-13",
+      "2026-10-14",
+      "2026-10-15",
+      "2026-10-16",
+      "2026-10-17",
+      "2026-10-18",
+      "2026-10-19",
+      "2026-10-20",
+      "2026-10-21",
+      "2026-10-22",
+      "2026-10-23",
+      "2026-10-24",
+      "2026-10-25",
+      "2026-10-26",
+      "2026-10-27",
+      "2026-10-28",
+      "2026-10-29",
+      "2026-10-30",
+      "2026-10-31"
+    ],
+    "employeeId": "EMP-104"
+  },
+  "actual": {
+    "errorText": null,
+    "qualityState": "Correcto",
+    "detectedCount": 31,
+    "monthAfterAnalysis": "Octubre",
+    "yearAfterAnalysis": "2026",
+    "assistantAppeared": false,
+    "assistantQuestions": [],
+    "previewRows": [
+      {
+        "date": "2026-10-01",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-02",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-03",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-04",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-05",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-06",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-07",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-08",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-09",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-10",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-11",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-12",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-13",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-14",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-15",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-16",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-17",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-18",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-19",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-20",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-21",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-22",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-23",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-24",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-25",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-26",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-27",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      },
+      {
+        "date": "2026-10-28",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-29",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "15:00",
+        "end": "23:00"
+      },
+      {
+        "date": "2026-10-30",
+        "origin": "PDF",
+        "type": "Regular",
+        "start": "07:00",
+        "end": "15:00"
+      },
+      {
+        "date": "2026-10-31",
+        "origin": "PDF",
+        "type": "Libre",
+        "start": "",
+        "end": ""
+      }
+    ],
+    "confirmLabel": "Confirmar Importación (31/31 listos)",
+    "confirmDisabled": false,
+    "saw61Dias": false,
+    "importedShifts": [
+      {
+        "id": "1034c925-f372-4214-81ea-905f15a050e3",
+        "date": "2026-10-01",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "041c8798-9361-4421-802d-3b57dea03af3",
+        "date": "2026-10-02",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "70489803-ae28-4ff0-8e2f-1a9faf8eb449",
+        "date": "2026-10-03",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "62725c3b-2c5c-416a-bda8-bc69c86b7677",
+        "date": "2026-10-04",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "426c1837-64bc-485a-a358-71c875dc230b",
+        "date": "2026-10-05",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "c11073eb-a04e-4dfe-ba96-1920a9eac868",
+        "date": "2026-10-06",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "3abf7c60-3023-4390-a7a3-4c9566a8ff28",
+        "date": "2026-10-07",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "999c6cc6-535b-4a4f-a070-bb36a7a7b45b",
+        "date": "2026-10-08",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "9f73432d-5a8c-44ee-a8be-f7acf359de17",
+        "date": "2026-10-09",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "a53c791d-4832-4716-82c2-4d42f7c69e3e",
+        "date": "2026-10-10",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "6ad5ac0d-3979-484b-a430-04c51c32eaf5",
+        "date": "2026-10-11",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b2c0a77d-35d1-456b-be1c-79ea5436010e",
+        "date": "2026-10-12",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "917dc42a-24af-473a-be5e-9968edeedb89",
+        "date": "2026-10-13",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "bf2a8ec5-bd8e-4ff1-9203-f6d8861561d9",
+        "date": "2026-10-14",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "64704ad2-f726-4f27-acd4-3839f5aaf8c7",
+        "date": "2026-10-15",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "6845c303-7acf-4a5d-83b9-f9546f9a8e62",
+        "date": "2026-10-16",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b578ae8b-13f2-49d5-a852-051831c5c058",
+        "date": "2026-10-17",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f8a30869-41e7-4a90-8a05-84fc77f33a31",
+        "date": "2026-10-18",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "fd57d18c-0a6a-4664-bf1e-0486a82c1dc4",
+        "date": "2026-10-19",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "fcd51322-6f97-44f5-9869-dd28983452d7",
+        "date": "2026-10-20",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "c0df86a8-dda8-4cfd-8907-bf865f672e8c",
+        "date": "2026-10-21",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "dd80f21e-d95a-481f-947b-77f44528941a",
+        "date": "2026-10-22",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "b94cacce-09db-4fac-ac6e-433c24d2bb68",
+        "date": "2026-10-23",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "5f17f6d5-fb2d-4703-a123-dc5c289cac80",
+        "date": "2026-10-24",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "121ede29-7f5d-40f2-a49a-e6aba893eebb",
+        "date": "2026-10-25",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "f05646c0-69d2-468e-816a-5b3fc631d4a0",
+        "date": "2026-10-26",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "37492b21-66d8-4d9c-ad66-b594d29272e3",
+        "date": "2026-10-27",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "c20a5588-c7b6-47d1-a2ba-ff35f3ec283b",
+        "date": "2026-10-28",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "41f83b37-e0d6-48ea-9dd3-015d54b9ba3e",
+        "date": "2026-10-29",
+        "startTime": "15:00",
+        "endTime": "23:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "e17130b7-75c4-480e-8d1b-e8eee6b9342d",
+        "date": "2026-10-30",
+        "startTime": "07:00",
+        "endTime": "15:00",
+        "location": "Regular",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      },
+      {
+        "id": "0cc74b97-aa70-4626-9031-43e8434d7046",
+        "date": "2026-10-31",
+        "startTime": "",
+        "endTime": "",
+        "location": "Libre",
+        "origin": "IMP",
+        "sourceFormat": "pdf"
+      }
+    ],
+    "badgeCount": 31
+  },
+  "assertions": [
+    {
+      "name": "no error box",
+      "pass": true,
+      "detail": "errorText=null"
+    },
+    {
+      "name": "quality chip present",
+      "pass": true,
+      "detail": "qualityState=Correcto"
+    },
+    {
+      "name": "preview count",
+      "pass": true,
+      "detail": "previewRows=31, expected=31, min=31"
+    },
+    {
+      "name": "all preview dates in target month",
+      "pass": true,
+      "detail": "outside=[]"
+    },
+    {
+      "name": "no \"61 días\" diagnostic",
+      "pass": true,
+      "detail": "saw61Dias=false"
+    },
+    {
+      "name": "user-selected month preserved",
+      "pass": true,
+      "detail": "month=Octubre, year=2026 (selected Octubre 2026)"
+    },
+    {
+      "name": "expected dates all present in preview",
+      "pass": true,
+      "detail": "missing=[] (of 31)"
+    },
+    {
+      "name": "shifts persisted",
+      "pass": true,
+      "detail": "anclora_shifts_v1 empty"
+    },
+    {
+      "name": "zero cross-month leakage after import",
+      "pass": true,
+      "detail": "leaked=[]"
+    },
+    {
+      "name": "imported count",
+      "pass": true,
+      "detail": "imported=31, expected=31, min=31"
+    },
+    {
+      "name": "no fabricated dates",
+      "pass": true,
+      "detail": "fabricated=[]"
+    },
+    {
+      "name": "calendar badges match imported days",
+      "pass": true,
+      "detail": "badges=31, distinctDays=31, imported=31"
+    },
+    {
+      "name": "no uncaught page errors",
+      "pass": true,
+      "detail": "pageErrors=[]"
+    }
+  ],
+  "consoleErrorLines": [
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: the server responded with a status of 403 ()",
+    "error: Failed to load resource: net::ERR_FAILED"
+  ],
+  "pageErrors": [],
+  "failedRequests": [
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED",
+    "403 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/",
+    "708 https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge",
+    "POST https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app/.well-known/vercel/security/request-challenge — net::ERR_ABORTED"
+  ]
+}
