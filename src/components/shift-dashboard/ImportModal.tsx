@@ -30,12 +30,19 @@ import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPa
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirmImport: (shifts: Shift[], targetPeriod: CalendarImportContext) => Promise<boolean>;
+  onConfirmImport: (
+    shifts: Shift[],
+    targetPeriod: CalendarImportContext,
+    selector?: { name: string; externalId: string },
+  ) => Promise<boolean>;
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
   existingShifts?: Shift[];
   /** File pre-selected by the onboarding wizard; analysis starts automatically on open. */
   initialFile?: File | null;
+  /** Authenticated mode: employee selected in the team bar. Prefills the
+   * identity fields so the parser targets that person's row. */
+  employeePreset?: { name: string; externalId: string } | null;
 }
 
 /** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
@@ -218,7 +225,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -310,6 +317,15 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setSelectedMonth(String(initialContext.month));
     setSelectedYear(String(initialContext.year));
   }, [initialContext.month, initialContext.year, isOpen]);
+
+  // Authenticated mode: prefill the parse identity from the selected employee.
+  useEffect(() => {
+    if (!isOpen || !employeePreset) {
+      return;
+    }
+    setEmployeeName(employeePreset.name);
+    setEmployeeId(employeePreset.externalId);
+  }, [isOpen, employeePreset]);
 
   const buildSelector = useCallback((): EmployeeSelector => {
     const storedIdentifiers = loadUserProfile().employeeIdentifiers;
@@ -535,7 +551,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
 
-    onConfirmImport(finalShifts, importContext);
+    onConfirmImport(finalShifts, importContext, {
+      name: employeeName.trim(),
+      externalId: employeeId.trim(),
+    });
     onClose();
   };
 

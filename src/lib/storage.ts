@@ -45,6 +45,10 @@ const loadLocalShifts = (): Shift[] => {
   }
 };
 
+/** Raw local copy read, used by the one-shot local→remote migration (Fase 1).
+ * The local copy is never deleted by the migration. */
+export const loadLocalShiftsForMigration = (): Shift[] => loadLocalShifts();
+
 async function readApiShifts(): Promise<Shift[]> {
   const response = await fetch(SHIFTS_API_URL, {
     method: 'GET',

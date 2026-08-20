@@ -1,13 +1,23 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Shift } from './lib/types';
 import { getMonthDaysISO, getDaysInMonth } from './lib/week';
-import { loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
+import { loadShifts, loadLocalShiftsForMigration, normalizeShift, syncShiftChanges } from './lib/storage';
 import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
+import { fetchSession, logout, SessionInfo } from './lib/session';
+import {
+  createRemoteEmployee,
+  createRemoteImport,
+  listRemoteEmployees,
+  loadRemoteShifts,
+  matchRemoteEmployee,
+  RemoteEmployee,
+  syncRemoteShifts,
+} from './lib/remote';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
@@ -15,6 +25,7 @@ import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
+import { AuthModal } from './components/AuthModal';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
 import { LegalPage } from './components/LegalPage';
@@ -23,6 +34,9 @@ import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
 
 type ThemeMode = 'system' | 'light' | 'dark';
+
+/** localStorage flag: local→remote one-shot migration already done (Fase 1). */
+const MIGRATION_DONE_KEY = 'anclora_shiftimport_migrated_v1';
 
 function insertShift(current: Shift[], incoming: Shift): Shift[] {
   return [...current.filter((shift) => shift.id !== incoming.id), normalizeShift(incoming)];
@@ -47,6 +61,11 @@ function App() {
   const { locale, t } = useI18n();
   const legalPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+/, '') : '';
   const [shifts, setShifts] = useState<Shift[]>([]);
+  // Fase 1: authenticated multi-tenant state. null = guest (local-first flow).
+  const [session, setSession] = useState<SessionInfo | null>(null);
+  const [employees, setEmployees] = useState<RemoteEmployee[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') {
       return 'dark';
@@ -69,10 +88,61 @@ function App() {
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
 
+  // Authenticated bootstrap: loads the org employees, picks the working
+  // employee (self for EMPLOYEE role) and loads that employee's shifts.
+  // One-shot migration: a guest's localStorage shifts are uploaded to the
+  // user's self employee once, the local copy is kept as backup.
+  const hydrateAuthenticated = useCallback(async (nextSession: SessionInfo): Promise<void> => {
+    const orgEmployees = await listRemoteEmployees();
+    setEmployees(orgEmployees);
+
+    const initialEmployeeId = nextSession.role === 'EMPLOYEE'
+      ? nextSession.employeeId
+      : (nextSession.employeeId ?? orgEmployees[0]?.id ?? null);
+    setSelectedEmployeeId(initialEmployeeId);
+
+    if (!initialEmployeeId) {
+      setShifts([]);
+      return;
+    }
+
+    let remoteShifts = await loadRemoteShifts(initialEmployeeId);
+
+    const migrationDone = window.localStorage.getItem(MIGRATION_DONE_KEY) === '1';
+    const isSelfEmployee = initialEmployeeId === nextSession.employeeId;
+    if (!migrationDone && isSelfEmployee && remoteShifts.length === 0) {
+      const localShifts = loadLocalShiftsForMigration();
+      if (localShifts.length > 0) {
+        await syncRemoteShifts(initialEmployeeId, { upserts: localShifts });
+        remoteShifts = await loadRemoteShifts(initialEmployeeId);
+      }
+      window.localStorage.setItem(MIGRATION_DONE_KEY, '1');
+    }
+
+    setShifts(remoteShifts);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
     const hydrateShifts = async () => {
+      const activeSession = await fetchSession();
+      if (cancelled) {
+        return;
+      }
+
+      if (activeSession) {
+        setSession(activeSession);
+        try {
+          await hydrateAuthenticated(activeSession);
+        } catch (error) {
+          console.error('Failed to load remote shifts, falling back to guest mode', error);
+          setSession(null);
+          setShifts(await loadShifts());
+        }
+        return;
+      }
+
       const nextShifts = await loadShifts();
       if (cancelled) {
         return;
@@ -91,7 +161,50 @@ function App() {
     return () => {
       cancelled = true;
     };
+  }, [hydrateAuthenticated]);
+
+  const handleAuthenticated = useCallback(async (nextSession: SessionInfo) => {
+    setSession(nextSession);
+    try {
+      await hydrateAuthenticated(nextSession);
+    } catch (error) {
+      console.error('Failed to load remote data after login', error);
+    }
+  }, [hydrateAuthenticated]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error('Logout failed', error);
+    }
+    setSession(null);
+    setEmployees([]);
+    setSelectedEmployeeId(null);
+    setShifts(await loadShifts());
   }, []);
+
+  const handleSelectEmployee = useCallback(async (employeeId: string) => {
+    setSelectedEmployeeId(employeeId);
+    try {
+      setShifts(await loadRemoteShifts(employeeId));
+    } catch (error) {
+      console.error('Failed to load employee shifts', error);
+    }
+  }, []);
+
+  /** Persist changes through the right backend: remote when authenticated,
+   * localStorage for guests. */
+  const persistChanges = useCallback(async (
+    nextShifts: Shift[],
+    changes: { upserts?: Shift[]; deleteIds?: string[]; importId?: string },
+  ): Promise<void> => {
+    if (session && selectedEmployeeId) {
+      await syncRemoteShifts(selectedEmployeeId, changes);
+      return;
+    }
+    await syncShiftChanges(nextShifts, changes);
+  }, [session, selectedEmployeeId]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -150,7 +263,7 @@ function App() {
     const nextShifts = insertShift(shifts, shift);
 
     try {
-      await syncShiftChanges(nextShifts, { upserts: [shift] });
+      await persistChanges(nextShifts, { upserts: [shift] });
       setShifts(nextShifts);
       setIsModalOpen(false);
       setEditingShiftId(null);
@@ -165,7 +278,7 @@ function App() {
     const nextShifts = shifts.filter(s => s.id !== id);
 
     try {
-      await syncShiftChanges(nextShifts, { deleteIds: [id] });
+      await persistChanges(nextShifts, { deleteIds: [id] });
       setShifts(nextShifts);
       setIsModalOpen(false);
       setEditingShiftId(null);
@@ -196,8 +309,98 @@ function App() {
       setImportConflictState({ existing, incoming, resolve });
     });
 
-  const handleConfirmImport = async (newShifts: Shift[], targetPeriod: CalendarImportContext): Promise<boolean> => {
-    const snapshot = [...shifts];
+  /**
+   * Authenticated import: resolves the parse identity against the org
+   * employee directory (external id first, then normalized name).
+   * - recognized → import under that employee;
+   * - ambiguous → abort with explicit message (no silent matching);
+   * - new → MANAGER/ADMIN may create the employee inline and continue.
+   */
+  const resolveImportEmployee = useCallback(async (
+    selector?: { name: string; externalId: string },
+  ): Promise<RemoteEmployee | null> => {
+    if (!session) {
+      return null;
+    }
+
+    if (session.role === 'EMPLOYEE') {
+      return employees.find((employee) => employee.id === session.employeeId) ?? null;
+    }
+
+    const selected = employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
+    const name = (selector?.name ?? '').trim();
+    const externalId = (selector?.externalId ?? '').trim();
+
+    // Identity untouched relative to the selected employee: no resolution needed.
+    if (selected
+      && (!name || name.toLowerCase() === selected.name.trim().toLowerCase())
+      && (!externalId || externalId === (selected.externalEmployeeId ?? ''))) {
+      return selected;
+    }
+
+    const match = await matchRemoteEmployee({ name, externalId });
+
+    if (match.kind === 'recognized') {
+      return match.employees[0];
+    }
+
+    if (match.kind === 'ambiguous') {
+      window.alert(t('team.ambiguousEmployee', { name }));
+      return null;
+    }
+
+    // kind === 'new': inline alta, never leaves the import flow.
+    const label = externalId ? `${name || externalId} (ID ${externalId})` : name;
+    if (!name) {
+      return null;
+    }
+    if (!window.confirm(t('team.createEmployeeConfirm', { employee: label }))) {
+      return null;
+    }
+    const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined });
+    setEmployees((current) => [...current, created]);
+    return created;
+  }, [session, employees, selectedEmployeeId, t]);
+
+  const handleConfirmImport = async (
+    newShifts: Shift[],
+    targetPeriod: CalendarImportContext,
+    selector?: { name: string; externalId: string },
+  ): Promise<boolean> => {
+    // Authenticated mode: resolve the target employee first; switching the
+    // working set keeps each employee's calendar isolated.
+    let importId: string | undefined;
+    let targetEmployeeId = selectedEmployeeId;
+    if (session) {
+      let targetEmployee: RemoteEmployee | null;
+      try {
+        targetEmployee = await resolveImportEmployee(selector);
+      } catch (error) {
+        console.error('Failed to resolve import employee', error);
+        window.alert(t('team.resolveEmployeeFailed'));
+        return false;
+      }
+      if (!targetEmployee) {
+        return false;
+      }
+      targetEmployeeId = targetEmployee.id;
+
+      try {
+        const created = await createRemoteImport({
+          fileName: '',
+          sourceFormat: newShifts[0]?.sourceFormat ?? '',
+          periodYear: targetPeriod.year,
+          periodMonth: targetPeriod.month,
+        });
+        importId = created.id;
+      } catch (error) {
+        console.error('Failed to register import', error);
+      }
+    }
+
+    const snapshot = targetEmployeeId === selectedEmployeeId
+      ? [...shifts]
+      : await loadRemoteShifts(targetEmployeeId ?? '').catch(() => [] as Shift[]);
     const normalizedIncoming = newShifts.map(normalizeShift);
     let working = [...snapshot];
     const pendingImportedByDate = new Map<string, Shift[]>();
@@ -248,7 +451,14 @@ function App() {
     }
 
     try {
-      await syncShiftChanges(working, { upserts, deleteIds });
+      if (session && targetEmployeeId) {
+        await syncRemoteShifts(targetEmployeeId, { upserts, deleteIds, importId });
+        if (targetEmployeeId !== selectedEmployeeId) {
+          setSelectedEmployeeId(targetEmployeeId);
+        }
+      } else {
+        await syncShiftChanges(working, { upserts, deleteIds });
+      }
       setShifts(working);
       setCurrentYear(targetPeriod.year);
       setCurrentMonth(targetPeriod.month);
@@ -294,6 +504,69 @@ function App() {
       />
 
       <div className="dashboard-body">
+        {!session && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => setIsAuthOpen(true)}
+              style={{ padding: '8px 14px', fontWeight: 700 }}
+            >
+              {t('auth.loginAction')}
+            </button>
+          </div>
+        )}
+
+        {session && (
+          <div
+            className="team-bar"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              flexWrap: 'wrap',
+              marginBottom: '12px',
+              padding: '10px 14px',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '12px',
+              background: 'var(--panel-muted-bg)',
+              fontSize: '0.85rem',
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>
+              {session.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
+            </span>
+            <span style={{ color: 'var(--text-subtle)' }}>{session.role}</span>
+            {session.role === 'EMPLOYEE' ? (
+              <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
+            ) : (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                {t('team.teamLabel')}
+                <select
+                  className="modal-input"
+                  value={selectedEmployeeId ?? ''}
+                  onChange={(event) => void handleSelectEmployee(event.target.value)}
+                  style={{ padding: '6px 10px' }}
+                >
+                  {employees.filter((employee) => employee.status === 'active').map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.name}{employee.externalEmployeeId ? ` (ID ${employee.externalEmployeeId})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => void handleLogout()}
+              style={{ padding: '6px 12px', fontWeight: 700, marginLeft: 'auto' }}
+            >
+              {t('auth.logoutAction')}
+            </button>
+          </div>
+        )}
+
         <StatsBar
           currentMonthShifts={currentMonthShifts}
           daysInMonth={daysInMonth}
@@ -354,6 +627,18 @@ function App() {
         initialContext={{ month: currentMonth, year: currentYear }}
         existingShifts={shifts}
         initialFile={onboardingFile}
+        employeePreset={(() => {
+          const selected = employees.find((employee) => employee.id === selectedEmployeeId);
+          return selected
+            ? { name: selected.name, externalId: selected.externalEmployeeId ?? '' }
+            : null;
+        })()}
+      />
+
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthenticated={handleAuthenticated}
       />
 
       {importConflictState && (
