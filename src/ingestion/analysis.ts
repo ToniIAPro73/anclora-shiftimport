@@ -35,6 +35,7 @@ import {
   detectIdentityMismatch,
   EmployeeRow,
   EmployeeSelector,
+  findAllEmployeeRowItems,
   findEmployeeRowItems,
   findNameMarkerBands,
   idResolvesInDocument,
@@ -47,7 +48,13 @@ import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
 import { detectPdfDocumentTypeFromItems } from './parsers/detect';
 import { detectSections, selectSectionsForContext } from './parsers/multi-section';
-import { ColumnDayResolution, mergeCodeOverrides, parseShiftsFromItems, resolveColumnDayMapping } from './parsers/parse-items';
+import {
+  ColumnDayResolution,
+  countEmployeeDayHeaders,
+  mergeCodeOverrides,
+  parseShiftsFromItems,
+  resolveColumnDayMapping,
+} from './parsers/parse-items';
 
 export interface DocumentStructureAnalysis {
   documentType: PdfDocumentType;
@@ -525,9 +532,21 @@ export function analyzeShiftsFromItems(
 
   // The layout's day headers are the best promise of how many days the
   // document covers; without headers we fall back to the context month.
-  const expectedDays = analysis.structure.dayHeaderCount > 0
-    ? analysis.structure.dayHeaderCount
-    : getDaysInMonth(context.year, context.month);
+  // multiPageEmployee profiles: dayHeaderCount is a document-wide total
+  // (every page's header row, summed) — meaningless as "this employee's
+  // expected days" when one page never has the whole month. Scope it to
+  // the pages this employee actually appears on instead.
+  const multiPageProfile = getIngestionProfile(analysis.structure.documentType);
+  let expectedDays: number;
+  if (multiPageProfile?.multiPageEmployee) {
+    const rows = findAllEmployeeRowItems(items, selector, multiPageProfile.rowWindow);
+    const employeeDayHeaders = countEmployeeDayHeaders(items, rows, context, multiPageProfile);
+    expectedDays = employeeDayHeaders > 0 ? employeeDayHeaders : getDaysInMonth(context.year, context.month);
+  } else {
+    expectedDays = analysis.structure.dayHeaderCount > 0
+      ? analysis.structure.dayHeaderCount
+      : getDaysInMonth(context.year, context.month);
+  }
   const mappedDays = new Set(shifts.map((shift) => shift.date)).size;
   const incompleteAssignments = shifts.filter(
     (shift) => !shift.isValid || shift.startTime === '??:??' || shift.endTime === '??:??',

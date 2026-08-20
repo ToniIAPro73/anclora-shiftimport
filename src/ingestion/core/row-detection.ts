@@ -254,10 +254,18 @@ export function idResolvesInDocument(
  *
  * Returns true only when BOTH resolve and they point to different employees:
  * the id marker is found in the document, the typed name matches at least one
- * printed row label, and the name label that owns the id marker (the nearest
- * name label on the id's line or above it — dense layouts nudge the name a
- * few points right of markerMaxX, so the search extends to dataMinX) does not
+ * printed row label, and the name label that owns the id marker does not
  * match the typed name.
+ *
+ * "Owns" means: falls inside the SAME row band findEmployeeRowItems would
+ * compute for that id marker alone (reusing resolveCeiling/resolveFloor).
+ * This is layout-direction-agnostic on purpose — some profiles print the
+ * name above the id (TYPE_A), others print it below (TYPE_B's id-then-name
+ * marker column) — hardcoding "above" or "below" made this function correct
+ * for one direction and silently wrong for the other (every non-first
+ * employee on a TYPE_B page falsely mismatched, because their own name,
+ * printed below their id, was mistaken for a boundary and skipped in favor
+ * of the row above).
  *
  * An unresolvable name never blocks an id-backed match (false), and an id
  * that appears nowhere never blocks a name-backed match (false) — those are
@@ -299,27 +307,80 @@ export function detectIdentityMismatch(
       continue;
     }
     const idItem = pageItems[idIndex];
-    // Owning band: nearest name-label line on the id's line or above it
-    // (tolerance 1, same as the reading-order line clustering). The whole
-    // line band is compared — extraction may split one name across items,
-    // and a single fragment never holds enough tokens to match.
+
+    const { ceilingY, inclusive } = resolveCeiling(pageItems, [idItem], idIndex, rules);
+    const floorY = resolveFloor(pageItems, [idItem], idIndex, rules);
+
+    // Closest band wins, not first-in-range: the ceiling/floor band is sized
+    // generously for row DATA (which lives past dataMinX and never sees a
+    // neighbour's name), but a name label in the marker column can fall
+    // inside that same slack — e.g. the previous employee's name a few
+    // points above this id. Proximity to the id's own line disambiguates.
     const bands = clusterLineBands(nameMarkerLabelItems(pageItems, rules));
     let owner: PdfTextItem[] | null = null;
+    let ownerDistance = Infinity;
     for (const band of bands) {
-      // Name labels below the id line belong to the next employee's block.
-      if (band[0].y < idItem.y - 1) {
+      const y = band[0].y;
+      const inBand = (inclusive ? y <= ceilingY : y < ceilingY) && y >= floorY;
+      if (!inBand) {
         continue;
       }
-      if (owner === null || band[0].y < owner[0].y) {
+      const distance = Math.abs(y - idItem.y);
+      if (distance < ownerDistance) {
         owner = band;
+        ownerDistance = distance;
       }
     }
+
     // Without a name label owning the id there is nothing to cross-check
     // against; the id stands.
     return owner !== null && !matchesNameTokens(nameMarkerBandText(owner), nameTokens);
   }
 
   return false;
+}
+
+/** Locates the employee's row band on ONE page, or null when no marker
+ * matches there. Shared by findEmployeeRowItems (first match wins) and
+ * findAllEmployeeRowItems (every match is kept — a document where one
+ * employee's data spans several pages, e.g. one page per fortnight). */
+function locateRowOnPage(
+  pageItems: PdfTextItem[],
+  page: number,
+  idFound: boolean,
+  targetIds: string[],
+  nameTokens: string[],
+  rules: RowWindowRules,
+): EmployeeRow | null {
+  const idIndex = pageItems.findIndex(
+    (item) => idFound && targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
+  );
+  const nameIndex = rules.nameMatching
+    ? findNameMarkerIndex(pageItems, nameTokens, rules)
+    : -1;
+
+  if (idFound && idIndex < 0) {
+    return null;
+  }
+
+  const markerIndexes = [nameIndex, idIndex].filter((index) => index >= 0);
+  if (markerIndexes.length === 0) {
+    return null;
+  }
+
+  const markers = markerIndexes.map((index) => pageItems[index]);
+  const { ceilingY, inclusive } = resolveCeiling(pageItems, markers, Math.min(...markerIndexes), rules);
+  const floorY = resolveFloor(pageItems, markers, Math.max(...markerIndexes), rules);
+  const category = resolveCategory(pageItems, Math.min(...markerIndexes), rules);
+
+  const rowItems = pageItems.filter(
+    (item) =>
+      item.x > rules.dataMinX &&
+      (inclusive ? item.y <= ceilingY : item.y < ceilingY) &&
+      item.y >= floorY,
+  );
+
+  return rowItems.length > 0 ? { rowItems, page, category } : null;
 }
 
 /**
@@ -340,45 +401,48 @@ export function findEmployeeRowItems(
   const targetIds = selector.employeeIdentifiers
     .map((value) => normalizeEmployeeId(value))
     .filter((value) => value.length > 0);
-  const normalizedName = normalizeText(selector.employeeName);
-  const nameTokens = normalizedName.split(' ').filter((token) => token.length >= 3);
+  const nameTokens = normalizeText(selector.employeeName).split(' ').filter((token) => token.length >= 3);
   const idFound = targetIds.length > 0 && idResolvesInDocument(items, targetIds, rules.markerMaxX);
 
   const pages = Array.from(new Set(items.map((item) => item.page))).sort((left, right) => left - right);
   for (const page of pages) {
     const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
-    const idIndex = pageItems.findIndex(
-      (item) => idFound && targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
-    );
-    const nameIndex = rules.nameMatching
-      ? findNameMarkerIndex(pageItems, nameTokens, rules)
-      : -1;
-
-    if (idFound && idIndex < 0) {
-      continue;
-    }
-
-    const markerIndexes = [nameIndex, idIndex].filter((index) => index >= 0);
-    if (markerIndexes.length === 0) {
-      continue;
-    }
-
-    const markers = markerIndexes.map((index) => pageItems[index]);
-    const { ceilingY, inclusive } = resolveCeiling(pageItems, markers, Math.min(...markerIndexes), rules);
-    const floorY = resolveFloor(pageItems, markers, Math.max(...markerIndexes), rules);
-    const category = resolveCategory(pageItems, Math.min(...markerIndexes), rules);
-
-    const rowItems = pageItems.filter(
-      (item) =>
-        item.x > rules.dataMinX &&
-        (inclusive ? item.y <= ceilingY : item.y < ceilingY) &&
-        item.y >= floorY,
-    );
-
-    if (rowItems.length > 0) {
-      return { rowItems, page, category };
+    const row = locateRowOnPage(pageItems, page, idFound, targetIds, nameTokens, rules);
+    if (row) {
+      return row;
     }
   }
 
   return null;
+}
+
+/**
+ * Same matching rule as findEmployeeRowItems, but collects EVERY matching
+ * page instead of stopping at the first — for documents where one employee's
+ * data is split across several pages (e.g. one page per fortnight in a
+ * two-quincena monthly layout). Returns an empty array when not found, same
+ * meaning as findEmployeeRowItems returning null.
+ */
+export function findAllEmployeeRowItems(
+  items: PdfTextItem[],
+  selector: EmployeeSelector,
+  rules: RowWindowRules,
+): EmployeeRow[] {
+  const targetIds = selector.employeeIdentifiers
+    .map((value) => normalizeEmployeeId(value))
+    .filter((value) => value.length > 0);
+  const nameTokens = normalizeText(selector.employeeName).split(' ').filter((token) => token.length >= 3);
+  const idFound = targetIds.length > 0 && idResolvesInDocument(items, targetIds, rules.markerMaxX);
+
+  const pages = Array.from(new Set(items.map((item) => item.page))).sort((left, right) => left - right);
+  const rows: EmployeeRow[] = [];
+  for (const page of pages) {
+    const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
+    const row = locateRowOnPage(pageItems, page, idFound, targetIds, nameTokens, rules);
+    if (row) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
 }

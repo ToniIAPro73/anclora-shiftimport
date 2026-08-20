@@ -15,6 +15,7 @@ import {
   detectIdentityMismatch,
   EmployeeRow,
   EmployeeSelector,
+  findAllEmployeeRowItems,
   findEmployeeRowItems,
   idResolvesInDocument,
 } from '../core/row-detection';
@@ -98,6 +99,19 @@ export function parseShiftsFromItems(
         `El nombre ${selector.employeeName} coincide con varias filas del documento. Indica el identificador de empleado para desambiguar.`,
       );
     }
+  }
+
+  if (profile.multiPageEmployee) {
+    const rows = findAllEmployeeRowItems(allItems, selector, profile.rowWindow);
+    if (rows.length === 0) {
+      throw new IngestionError(
+        'UNKNOWN_EMPLOYEE',
+        profile.errors.employeeNotFound
+          .replace('{name}', selector.employeeName)
+          .replace('{id}', targetIds[0] ?? ''),
+      );
+    }
+    return buildShiftsFromEmployeeRows(allItems, rows, context, profile, codeOverrides);
   }
 
   const row = findEmployeeRowItems(allItems, selector, profile.rowWindow);
@@ -223,6 +237,68 @@ export function buildShiftsFromEmployeeRow(
     codeOverrides,
   );
   return buildShiftsFromMappedColumns(mappedColumns, context, profile, codeProfile);
+}
+
+/**
+ * Multi-page sibling of buildShiftsFromEmployeeRow (profile.multiPageEmployee
+ * only): resolves the column→day mapping independently on EACH page the
+ * employee was found on, then merges every page's mapped columns before
+ * building shifts. Day numbers never collide across an employee's own pages
+ * in a two-quincena layout (first half 1-15/16, second half 16/17-31), so a
+ * plain concatenation is safe — each page's day-header row only ever
+ * produces the days actually printed on it.
+ */
+export function buildShiftsFromEmployeeRows(
+  allItems: PdfTextItem[],
+  rows: EmployeeRow[],
+  context: CalendarImportContext,
+  profile: IngestionProfile,
+  codeOverrides?: Map<string, ShiftCodeMapping>,
+): ParsedCalendarShift[] {
+  const allMappedColumns: Array<{ day: number; items: PdfTextItem[] }> = [];
+  let anyColumnGroups = false;
+  let anyDayColumns = false;
+
+  for (const row of rows) {
+    const { columnGroups, dayColumns, mappedColumns } = resolveColumnDayMapping(allItems, row, context, profile);
+    anyColumnGroups = anyColumnGroups || columnGroups.length > 0;
+    anyDayColumns = anyDayColumns || dayColumns.length > 0;
+    allMappedColumns.push(...mappedColumns);
+  }
+
+  if (profile.errors.noColumnGroups && !anyColumnGroups) {
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noColumnGroups);
+  }
+  if (!anyDayColumns) {
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noDayHeaders);
+  }
+  if (profile.errors.noMappedColumns && allMappedColumns.length === 0) {
+    throw new IngestionError('UNSUPPORTED_LAYOUT', profile.errors.noMappedColumns);
+  }
+
+  const codeProfile = mergeCodeOverrides(
+    profile.useShiftCodeProfile ? buildCodeProfile(allItems) : undefined,
+    codeOverrides,
+  );
+  return buildShiftsFromMappedColumns(allMappedColumns, context, profile, codeProfile);
+}
+
+/** Sum of distinct day-header numbers across every page the employee was
+ * found on (profile.multiPageEmployee) — the correct "expected days"
+ * denominator for a document where one page never has the whole month. */
+export function countEmployeeDayHeaders(
+  allItems: PdfTextItem[],
+  rows: EmployeeRow[],
+  context: CalendarImportContext,
+  profile: IngestionProfile,
+): number {
+  const days = new Set<number>();
+  for (const row of rows) {
+    for (const column of getDayColumnsForPage(allItems, row.page, context, profile.dayHeader)) {
+      days.add(column.day);
+    }
+  }
+  return days.size;
 }
 
 /**

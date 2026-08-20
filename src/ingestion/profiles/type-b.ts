@@ -26,7 +26,16 @@ export const TYPE_B_PROFILE: IngestionProfile = {
     ],
     monthShortNames: ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'],
   },
-  dayHeader: { pattern: /^[LMXJVSD](\d{1,2})$/, dayGroup: 1 },
+  // Weekday-initial + day-number header. NOT restricted to the Spanish
+  // L-M-X-J-V-S-D alphabet: some documents print English (S/M/T/W/T/F/S)
+  // or other-locale initials. The day NUMBER is the reliable signal; the
+  // 1-2 letter prefix is accepted generically instead of enumerated, so any
+  // locale's weekday abbreviation resolves the same way.
+  dayHeader: { pattern: /^[A-Za-zÀ-ÖØ-öø-ÿ]{1,2}(\d{1,2})$/, dayGroup: 1 },
+  // One employee's month can be split across pages, one page per fortnight
+  // (e.g. "01-15 Aug" / "16-31 Aug" as separate page blocks, each with its
+  // own repeated day-header row and its own copy of every employee's row).
+  multiPageEmployee: true,
   rowWindow: {
     markerMaxX: 100,
     // Names locate the row too: they print on the id marker's line, a few

@@ -38,6 +38,14 @@ export interface IngestionProfile {
    * profiles (TYPE_A/TYPE_B/TYPE_TAB) are unaffected.
    */
   useShiftCodeProfile?: boolean;
+  /**
+   * When true, one employee's data may span several pages (e.g. one page
+   * per fortnight in a two-quincena monthly layout): row detection collects
+   * EVERY matching page (findAllEmployeeRowItems) instead of stopping at
+   * the first, and shifts/day-columns from every matched page are merged.
+   * Off by default — single-page-per-employee profiles are unaffected.
+   */
+  multiPageEmployee?: boolean;
   errors: {
     /** Supports `{name}` and `{id}` placeholders. */
     employeeNotFound: string;
