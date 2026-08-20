@@ -18,13 +18,19 @@
 - `src/lib/shifts.ts`: lógica de negocio de turnos y métricas.
 - `src/ingestion/`: ingesta de cuadrantes PDF — `core/` (primitivas puras: items de texto, normalización, tokens, clustering, detección de fila, construcción de turnos), `profiles/` (perfiles declarativos TYPE_A/TYPE_B con umbrales y tokens), `parsers/` (pipeline puro sobre items + API de fichero con PDF.js), `analysis.ts` + `assistant.ts` (análisis de calidad y asistente de formato posicional, Phase 1A), `tabular-assistant.ts` (fallback del asistente para CSV roster/grid sin layout posicional), `diagnostics.ts` (Phase 1B: modelo canónico de estados de importación READY/NEEDS_USER_INPUT/PARTIAL/BLOCKED/UNSUPPORTED/FAILED + diagnósticos estructurados con recuperación guiada; la UI consume esto, nunca excepciones crudas).
 - `sdd/`: especificaciones de producto.
-- Backend legacy en saneamiento: `server.mjs`, `server-export.mjs`, `proxy-server.mjs`, `api/shifts` (Neon). Cloud sync desactivado en producción hasta auth + aislamiento.
+- `db/migrations/` + `db/migrate.mjs`: esquema PostgreSQL versionado (Fase 1). Aplicar con `node --env-file=.env.development.local db/migrate.mjs`.
+- `api/`: Vercel Functions multi-tenant sobre Neon (Fase 1). `_lib/auth.js` (sesiones cookie + contexto de seguridad), `_lib/data.js` (data-access org-scoped, tests con sql fake), `auth/`, `session/`, `employees/`, `imports/`, `shifts/`. Aislamiento por `organization_id` forzado en backend, nunca en frontend.
+- Backend legacy en saneamiento: `server.mjs`, `server-export.mjs`, `proxy-server.mjs`. El antiguo `/api/shifts` global sin auth fue reemplazado por la API autenticada.
+- Modelo multi-tenant: Organization (personal=B2C / company=B2B), User (acceso), Membership (rol ADMIN/MANAGER/EMPLOYEE), Employee (persona del cuadrante, user_id opcional), Import (documento), Shift (siempre con organization_id + employee_id). Ver `docs/fase1-multitenant.md`.
+- Modo invitado local-first intacto: sin sesión, todo sigue en `localStorage`. Con sesión, persistencia remota por empleado; migración one-shot local→remoto (sin borrar la copia local).
 
 ## Comandos útiles
 - `npm run dev`: desarrollo local.
 - `npm run build`: validación principal (tsc + vite build).
 - `npm run lint`: linting estricto (`--max-warnings 0`).
-- Tests: Vitest (en introducción durante Phase 0).
+- `npm test`: Vitest (src + api).
+- `node --env-file=.env.development.local db/migrate.mjs`: aplicar migraciones Neon.
+- `node --env-file=.env.development.local scripts/smoke-api.mjs`: smoke test E2E de la API (crea y limpia datos de prueba).
 
 ## Convenciones del proyecto
 - Fechas ISO `YYYY-MM-DD`; horas `HH:mm`.
@@ -35,6 +41,7 @@
 
 ## Reglas para cambios
 - Mantener el flujo: detectar, previsualizar, editar y confirmar.
+- Multi-tenant: toda operación de datos pasa por `api/_lib/data.js` con contexto de sesión; prohibido confiar en IDs de organización/empleado enviados por el cliente sin validar pertenencia. Ningún Shift sin `organization_id` + `employee_id`. Conflicto de re-importación = organization + employee + fingerprint, nunca solo fecha.
 - Nada de PII hardcodeada: identidad de usuario vive en `UserProfile` configurable (Phase 0).
 - Tipos de turno configurables vía `ShiftTypeDefinition`; JT no es feature especial.
 - La importación nunca falla en silencio: estados canónicos + diagnósticos estructurados en `src/ingestion/diagnostics.ts` (Phase 1B). Cero turnos nunca es "Correcto"; un código de turno desconocido nunca se descarta sin avisar; el mes/año seleccionado por el usuario es autoritativo (conflicto = `MONTH_MISMATCH` bloqueante con elección explícita).

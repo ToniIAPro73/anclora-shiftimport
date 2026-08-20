@@ -46,3 +46,6 @@ qa/e2e-acceptance/test-results/
 
 # Real schedules must never be committed (PII); test fixtures are synthetic
 src/ingestion/fixtures/real/
+
+.vercel
+.env*
