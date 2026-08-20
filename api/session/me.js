@@ -17,6 +17,7 @@ export default async function handler(req, res) {
       user: ctx.user,
       organizationId: ctx.organizationId,
       role: ctx.role,
+      plan: ctx.plan,
       employeeId: ctx.employeeId,
       memberships: ctx.memberships,
     });

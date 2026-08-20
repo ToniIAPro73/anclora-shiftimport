@@ -21,14 +21,18 @@ export function getCurrentRoute(): Route {
   return resolveRoute(window.location.pathname);
 }
 
-export function navigate(route: Route): void {
+/** query, when given, is appended as-is (e.g. 'plan=team') — used to carry
+ * UX intent (Fase 1.2G.5's pricing→signup plan hint), never security-
+ * sensitive data; the receiving endpoint always re-validates it. */
+export function navigate(route: Route, query?: string): void {
   if (typeof window === 'undefined') {
     return;
   }
-  if (window.location.pathname === route) {
+  const target = query ? `${route}?${query}` : route;
+  if (window.location.pathname + window.location.search === target) {
     return;
   }
-  window.history.pushState({}, '', route);
+  window.history.pushState({}, '', target);
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
 

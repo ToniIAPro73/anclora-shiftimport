@@ -38,9 +38,13 @@ export default async function handler(req, res) {
       await sql`UPDATE users SET display_name = ${adminName} WHERE id = ${ctx.user.id}`;
     }
 
+    // Fase 1.2G: pre-Stripe trial grant — a fresh company org starts on
+    // 'team' so the B2B signup flow can exercise Team features immediately.
+    // This is NOT a paid subscription; docs/pricing-hypothesis.md documents
+    // it explicitly as pre-billing behavior to replace once Stripe lands.
     const orgRows = await sql`
-      INSERT INTO organizations (name, type)
-      VALUES (${companyName}, 'company')
+      INSERT INTO organizations (name, type, plan)
+      VALUES (${companyName}, 'company', 'team')
       RETURNING id
     `;
     const organizationId = orgRows[0].id;

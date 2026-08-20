@@ -13,6 +13,7 @@ const membership = (organizationId: string): SessionMembership => ({
   organizationId,
   organizationName: `Org ${organizationId}`,
   organizationType: 'company',
+  organizationPlan: 'team',
   role: 'EMPLOYEE',
 });
 

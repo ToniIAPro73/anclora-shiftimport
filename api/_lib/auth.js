@@ -93,13 +93,13 @@ export async function resolveContext(req, sql) {
   const user = { id: rows[0].id, email: rows[0].email, displayName: rows[0].display_name };
 
   const memberships = await sql`
-    SELECT m.organization_id, m.role, o.name AS organization_name, o.type AS organization_type
+    SELECT m.organization_id, m.role, o.name AS organization_name, o.type AS organization_type, o.plan AS organization_plan
     FROM memberships m
     JOIN organizations o ON o.id = m.organization_id
     WHERE m.user_id = ${user.id}
   `;
   if (memberships.length === 0) {
-    return { user, organizationId: null, role: null, employeeId: null, memberships: [] };
+    return { user, organizationId: null, role: null, plan: null, employeeId: null, memberships: [] };
   }
 
   // Client may request an org via header, but only one it actually belongs to.
@@ -126,11 +126,16 @@ export async function resolveContext(req, sql) {
     user,
     organizationId: membership?.organization_id ?? null,
     role: membership?.role ?? null,
+    // Fase 1.2G: the ACTIVE org's plan, read from the org row itself — never
+    // client-supplied. requireFeature/requireWithinLimit (plans.js) read
+    // this, not a request field.
+    plan: membership?.organization_plan ?? null,
     employeeId,
     memberships: memberships.map((m) => ({
       organizationId: m.organization_id,
       organizationName: m.organization_name,
       organizationType: m.organization_type,
+      organizationPlan: m.organization_plan,
       role: m.role,
     })),
   };

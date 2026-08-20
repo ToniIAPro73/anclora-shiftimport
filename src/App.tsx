@@ -48,6 +48,7 @@ import { LandingPage } from './pages/LandingPage';
 import { PricingPage } from './pages/PricingPage';
 import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
+import { getPlanIntentFromUrl } from './lib/plans';
 import { CalendarImportContext } from './lib/import-types';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
@@ -219,6 +220,21 @@ function App() {
     // local-import guide.
     setIsOnboardingOpen(false);
     if (!nextSession.organizationId) {
+      // Fase 1.2G.5: a brand-new (zero-membership) session honors the plan
+      // intent carried from /pricing (?plan=…) by skipping straight to the
+      // matching onboarding path instead of the manual choice modal. No
+      // intent (organic /signup) keeps today's OnboardingChoiceModal.
+      const planIntent = getPlanIntentFromUrl();
+      if (planIntent === 'team') {
+        setNeedsOrgChoice(true);
+        setOnboardingCompanyStep(true);
+        return;
+      }
+      if (planIntent === 'personal' || planIntent === 'free') {
+        setNeedsOrgChoice(true);
+        await handlePersonalOnboarding(planIntent);
+        return;
+      }
       // Multi-org user: nothing loads until an explicit org choice.
       setNeedsOrgChoice(true);
       return;
@@ -229,6 +245,7 @@ function App() {
     } catch (error) {
       console.error('Failed to load remote data after login', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrateAuthenticated]);
 
   const handleSwitchOrganization = useCallback(async (organizationId: string) => {
@@ -247,10 +264,11 @@ function App() {
   }, [hydrateAuthenticated]);
 
   // Fase 1.2C.3: "Para mí" — creates the personal org for a zero-membership
-  // session and lands on Mis turnos.
-  const handlePersonalOnboarding = useCallback(async () => {
+  // session and lands on Mis turnos. Fase 1.2G.5: an explicit plan carries
+  // the pricing-page intent (free vs personal); omitted defaults to free.
+  const handlePersonalOnboarding = useCallback(async (plan?: 'free' | 'personal') => {
     try {
-      const nextSession = await completePersonalOnboarding();
+      const nextSession = await completePersonalOnboarding(plan);
       setSession(nextSession);
       setNeedsOrgChoice(false);
       setOnboardingCompanyStep(false);
@@ -638,7 +656,7 @@ function App() {
   if (route === '/pricing') {
     return (
       <>
-        <PricingPage />
+        <PricingPage isAuthenticated={Boolean(session)} />
         <CookieConsent />
       </>
     );

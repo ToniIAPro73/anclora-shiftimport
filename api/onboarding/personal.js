@@ -27,9 +27,18 @@ export default async function handler(req, res) {
 
     const label = ctx.user.displayName || ctx.user.email;
 
+    // Fase 1.2G: the client may signal which plan it intends (carried from
+    // the pricing page as /signup?plan=personal), but this endpoint is the
+    // authority — only 'free' or 'personal' are ever accepted here (never
+    // 'team': a personal-type org cannot become Team through this path),
+    // and anything else silently falls back to 'free'. The query param is
+    // UX convenience, never trusted as-is.
+    const requestedPlan = String(req.body?.plan ?? '').trim();
+    const plan = requestedPlan === 'personal' ? 'personal' : 'free';
+
     const orgRows = await sql`
-      INSERT INTO organizations (name, type)
-      VALUES (${label}, 'personal')
+      INSERT INTO organizations (name, type, plan)
+      VALUES (${label}, 'personal', ${plan})
       RETURNING id
     `;
     const organizationId = orgRows[0].id;

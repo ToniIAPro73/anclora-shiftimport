@@ -7,8 +7,9 @@ function makeSession(overrides: Partial<SessionInfo>): SessionInfo {
     user: { id: 'u1', email: 'u1@example.com', displayName: 'U1' },
     organizationId: 'org-1',
     role: 'EMPLOYEE',
+    plan: 'team',
     employeeId: 'emp-1',
-    memberships: [{ organizationId: 'org-1', organizationName: 'Org', organizationType: 'company', role: 'EMPLOYEE' }],
+    memberships: [{ organizationId: 'org-1', organizationName: 'Org', organizationType: 'company', organizationPlan: 'team', role: 'EMPLOYEE' }],
     ...overrides,
   };
 }
