@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addMember,
   createEmployee,
   createImport,
   deleteShiftsByIds,
   findEmployeeMatch,
   listImports,
+  listMembers,
   listShifts,
+  removeMember,
   updateEmployee,
+  updateMemberRole,
   upsertShifts,
 } from './data.js';
 
@@ -47,7 +51,7 @@ const shiftRow = (over = {}) => ({
   ...over,
 });
 
-function makeFakeSql({ employees = [], memberships = [], imports = [] } = {}) {
+function makeFakeSql({ employees = [], memberships = [], imports = [], users = [] } = {}) {
   const calls = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
@@ -71,6 +75,44 @@ function makeFakeSql({ employees = [], memberships = [], imports = [] } = {}) {
     }
     if (text.includes('FROM employees')) {
       return Promise.resolve(employees.filter((e) => e.organization_id === values[0]));
+    }
+    if (text.includes('FROM users') && text.includes('lower(email)')) {
+      return Promise.resolve(users.filter((u) => u.email.toLowerCase() === values[0]));
+    }
+    if (text.startsWith('INSERT INTO users')) {
+      const row = { id: `user-new-${users.length}`, email: values[0], display_name: values[2] };
+      users.push(row);
+      return Promise.resolve([row]);
+    }
+    if (text.includes('FROM memberships') && text.includes('count(*)')) {
+      return Promise.resolve([{ n: memberships.filter((m) => m.organization_id === values[0] && m.role === 'ADMIN').length }]);
+    }
+    if (text.startsWith('INSERT INTO memberships')) {
+      memberships.push({ user_id: values[0], organization_id: values[1], role: values[2] });
+      return Promise.resolve([]);
+    }
+    if (text.startsWith('UPDATE memberships')) {
+      const target = memberships.find((m) => m.organization_id === values[1] && m.user_id === values[2]);
+      if (target) {
+        target.role = values[0];
+      }
+      return Promise.resolve([]);
+    }
+    if (text.startsWith('DELETE FROM memberships')) {
+      const index = memberships.findIndex((m) => m.organization_id === values[0] && m.user_id === values[1]);
+      if (index >= 0) {
+        memberships.splice(index, 1);
+      }
+      return Promise.resolve([]);
+    }
+    if (text.startsWith('SELECT m.user_id') && text.includes('FROM memberships')) {
+      return Promise.resolve(memberships.filter((m) => m.organization_id === values[0]).map((m) => ({
+        user_id: m.user_id,
+        role: m.role,
+        created_at: new Date(),
+        email: users.find((u) => u.id === m.user_id)?.email ?? '',
+        display_name: '',
+      })));
     }
     if (text.includes('FROM memberships')) {
       return Promise.resolve(memberships.filter(
@@ -264,5 +306,75 @@ describe('import persistence', () => {
     const { sql } = makeFakeSql();
     await createImport(sql, adminCtx, { fileName: 'a.pdf' });
     expect(await listImports(sql, orgBCtx)).toHaveLength(0);
+  });
+});
+
+describe('membership management (B2B minimal)', () => {
+  const membershipsFixture = () => [
+    { user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' },
+    { user_id: 'user-mgr', organization_id: ORG_A, role: 'MANAGER' },
+  ];
+  const usersFixture = () => [
+    { id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' },
+    { id: 'user-mgr', email: 'mgr@example.com', display_name: 'Mgr' },
+  ];
+  const fakeHash = (password) => `hashed:${password}`;
+
+  it('only ADMIN lists members (MANAGER cannot)', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    const members = await listMembers(sql, adminCtx);
+    expect(members).toHaveLength(2);
+    await expect(listMembers(sql, { ...adminCtx, role: 'MANAGER' }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('adds an existing user without password; rejects duplicates', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    const added = await addMember(sql, adminCtx, { email: 'mgr@example.com', role: 'EMPLOYEE' }, fakeHash)
+      .catch((error) => error);
+    // mgr is already a member → 409
+    expect(added).toMatchObject({ status: 409 });
+
+    const fresh = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    const result = await addMember(fresh.sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123' }, fakeHash);
+    expect(result.role).toBe('EMPLOYEE');
+  });
+
+  it('new user requires an initial password (min 8)', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    await expect(addMember(sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE' }, fakeHash))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(addMember(sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'short' }, fakeHash))
+      .rejects.toMatchObject({ status: 400 });
+  });
+
+  it('rejects invalid roles and non-ADMIN callers (no privilege escalation)', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    await expect(addMember(sql, adminCtx, { email: 'x@example.com', role: 'SUPERADMIN', password: 'temporal-123' }, fakeHash))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(addMember(sql, { ...adminCtx, role: 'MANAGER' }, { email: 'x@example.com', role: 'ADMIN', password: 'temporal-123' }, fakeHash))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(updateMemberRole(sql, { ...adminCtx, role: 'MANAGER' }, { userId: 'user-mgr', role: 'ADMIN' }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('the last ADMIN cannot be demoted or removed; self-removal blocked', async () => {
+    const single = makeFakeSql({
+      memberships: [{ user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' }],
+      users: usersFixture(),
+    });
+    await expect(updateMemberRole(single.sql, adminCtx, { userId: USER_ADMIN, role: 'MANAGER' }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(removeMember(single.sql, adminCtx, { userId: USER_ADMIN }))
+      .rejects.toMatchObject({ status: 400 }); // self-removal
+
+    const two = makeFakeSql({
+      memberships: membershipsFixture(),
+      users: usersFixture(),
+    });
+    await expect(removeMember(two.sql, adminCtx, { userId: USER_ADMIN }))
+      .rejects.toMatchObject({ status: 400 }); // last ADMIN
+    const removed = await removeMember(two.sql, adminCtx, { userId: 'user-mgr' });
+    expect(removed.userId).toBe('user-mgr');
   });
 });

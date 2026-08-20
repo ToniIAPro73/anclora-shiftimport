@@ -9,6 +9,7 @@ import meHandler from '../api/session/me.js';
 import employeesHandler from '../api/employees/index.js';
 import shiftsHandler from '../api/shifts/index.js';
 import importsHandler from '../api/imports/index.js';
+import membershipsHandler from '../api/memberships/index.js';
 
 const sql = neon(process.env.DATABASE_URL);
 const suffix = Date.now().toString(36);
@@ -25,11 +26,14 @@ function mockRes() {
   return res;
 }
 
-const req = (method, { body, query, cookie } = {}) => ({
+const req = (method, { body, query, cookie, orgHeader } = {}) => ({
   method,
   body,
   query: query ?? {},
-  headers: cookie ? { cookie } : {},
+  headers: {
+    ...(cookie ? { cookie } : {}),
+    ...(orgHeader ? { 'x-organization-id': orgHeader } : {}),
+  },
 });
 
 const call = async (handler, request) => {
@@ -116,6 +120,54 @@ const run = async () => {
   // Login/logout roundtrip for A
   const loginA = await call(loginHandler, req('POST', { body: { email: `smoke-a-${suffix}@example.com`, password: 'smoke-pass-1234' } }));
   check('login A', loginA.statusCode === 200);
+
+  // ---- Fase 1.1: memberships + multi-org --------------------------------
+  // ADMIN A adds user B as EMPLOYEE of org A, linked to emp2.
+  const addB = await call(membershipsHandler, req('POST', {
+    cookie: cookieA,
+    body: { email: `smoke-b-${suffix}@example.com`, role: 'EMPLOYEE', employeeId: emp2 },
+  }));
+  check('ADMIN adds existing user as member + employee link', addB.statusCode === 201);
+
+  const membersA = await call(membershipsHandler, req('GET', { cookie: cookieA }));
+  check('membership list org-scoped', membersA.statusCode === 200 && membersA.body.members.length === 2);
+
+  // B now has 2 memberships: without header there is NO active org.
+  const meBmulti = await call(meHandler, req('GET', { cookie: cookieB }));
+  check('multi-org session without selection has no active org', meBmulti.statusCode === 200 && meBmulti.body.organizationId === null);
+  const noOrg = await call(shiftsHandler, req('GET', { cookie: cookieB, query: {} }));
+  check('data endpoint without org selection → 400', noOrg.statusCode === 400);
+
+  // B explicitly selects org A: role EMPLOYEE linked to emp2.
+  const meBinA = await call(meHandler, req('GET', { cookie: cookieB, orgHeader: orgA }));
+  check('explicit org selection validated', meBinA.statusCode === 200 && meBinA.body.role === 'EMPLOYEE' && meBinA.body.employeeId === emp2);
+
+  // B (EMPLOYEE in A) cannot write shifts for another employee of A.
+  const empWrite = await call(shiftsHandler, req('PATCH', {
+    cookie: cookieB,
+    orgHeader: orgA,
+    body: { employeeId: selfA, upserts: [{ employeeId: selfA, date: '2026-09-06', startTime: '08:00', endTime: '16:00', location: 'Regular', origin: 'MAN' }] },
+  }));
+  const selfAAfter = await call(shiftsHandler, req('GET', { cookie: cookieA, query: { employeeId: selfA } }));
+  check('EMPLOYEE write forced to own employee (no cross write)', empWrite.statusCode === 200 && selfAAfter.body.shifts.length === 1);
+  const emp2After = await call(shiftsHandler, req('GET', { cookie: cookieA, query: { employeeId: emp2 } }));
+  check('forced write landed on own employee', emp2After.body.shifts.length === 2);
+
+  // B cannot manage memberships (no privilege escalation).
+  const escB = await call(membershipsHandler, req('POST', { cookie: cookieB, orgHeader: orgA, body: { email: 'x@example.com', role: 'ADMIN', password: 'temporal-123' } }));
+  check('EMPLOYEE cannot add members (403)', escB.statusCode === 403);
+
+  // Last ADMIN protections.
+  const demoteSelf = await call(membershipsHandler, req('PATCH', { cookie: cookieA, body: { userId: meA.body.user.id, role: 'MANAGER' } }));
+  check('last ADMIN cannot be demoted (400)', demoteSelf.statusCode === 400);
+  const removeSelf = await call(membershipsHandler, req('DELETE', { cookie: cookieA, body: { userId: meA.body.user.id } }));
+  check('self-removal blocked (400)', removeSelf.statusCode === 400);
+
+  // Remove B from org A; employee link released.
+  const removeB = await call(membershipsHandler, req('DELETE', { cookie: cookieA, body: { userId: meBmulti.body.user.id } }));
+  check('ADMIN removes membership', removeB.statusCode === 200);
+  const meBafter = await call(meHandler, req('GET', { cookie: cookieB, orgHeader: orgA }));
+  check('revoked membership no longer activates org', meBafter.statusCode === 200 && meBafter.body.organizationId === null);
 
   // Cleanup: deleting organizations cascades employees/imports/shifts/memberships.
   const emailPattern = `smoke-%-${suffix}@example.com`;
