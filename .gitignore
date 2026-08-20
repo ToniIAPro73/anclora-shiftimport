@@ -49,3 +49,7 @@ src/ingestion/fixtures/real/
 
 .vercel
 .env*
+
+# Local E2E (Fase 1.1) artifacts
+qa/e2e-acceptance/test-results-local/
+qa/e2e-acceptance/artifacts/local-fixture.json
