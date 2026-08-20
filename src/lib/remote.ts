@@ -117,3 +117,45 @@ export async function createRemoteImport(input: {
   });
   return payload.import;
 }
+
+// ------------------------------------------------------------ memberships
+
+export interface RemoteMember {
+  userId: string;
+  email: string;
+  displayName: string;
+  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
+}
+
+export async function listRemoteMembers(): Promise<RemoteMember[]> {
+  const payload = await apiFetch<{ members: RemoteMember[] }>('/api/memberships');
+  return payload.members;
+}
+
+export async function addRemoteMember(input: {
+  email: string;
+  role: RemoteMember['role'];
+  password?: string;
+  displayName?: string;
+  employeeId?: string;
+}): Promise<{ userId: string; email: string; role: string }> {
+  const payload = await apiFetch<{ member: { userId: string; email: string; role: string } }>('/api/memberships', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.member;
+}
+
+export async function updateRemoteMemberRole(userId: string, role: RemoteMember['role']): Promise<void> {
+  await apiFetch('/api/memberships', {
+    method: 'PATCH',
+    body: JSON.stringify({ userId, role }),
+  });
+}
+
+export async function removeRemoteMember(userId: string): Promise<void> {
+  await apiFetch('/api/memberships', {
+    method: 'DELETE',
+    body: JSON.stringify({ userId }),
+  });
+}

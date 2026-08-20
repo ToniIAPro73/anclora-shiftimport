@@ -8,7 +8,7 @@ import { fingerprintShift } from './lib/import-dedup';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
-import { fetchSession, logout, SessionInfo } from './lib/session';
+import { fetchResolvedSession, logout, switchOrganization, SessionInfo } from './lib/session';
 import {
   createRemoteEmployee,
   createRemoteImport,
@@ -25,7 +25,10 @@ import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
-import { AuthModal } from './components/AuthModal';
+import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
+import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
+import { MembersModal } from './components/shift-dashboard/MembersModal';
+import { AuthScreen } from './components/AuthScreen';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
 import { LegalPage } from './components/LegalPage';
@@ -66,6 +69,10 @@ function App() {
   const [employees, setEmployees] = useState<RemoteEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
+  const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
+  const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
+  const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') {
       return 'dark';
@@ -90,8 +97,9 @@ function App() {
 
   // Authenticated bootstrap: loads the org employees, picks the working
   // employee (self for EMPLOYEE role) and loads that employee's shifts.
-  // One-shot migration: a guest's localStorage shifts are uploaded to the
-  // user's self employee once, the local copy is kept as backup.
+  // Local→remote migration is EXPLICIT (Fase 1.1): local data triggers a
+  // confirmation modal with preview, never a silent upload. The local copy
+  // is never deleted.
   const hydrateAuthenticated = useCallback(async (nextSession: SessionInfo): Promise<void> => {
     const orgEmployees = await listRemoteEmployees();
     setEmployees(orgEmployees);
@@ -106,35 +114,54 @@ function App() {
       return;
     }
 
-    let remoteShifts = await loadRemoteShifts(initialEmployeeId);
+    const remoteShifts = await loadRemoteShifts(initialEmployeeId);
+    setShifts(remoteShifts);
 
-    const migrationDone = window.localStorage.getItem(MIGRATION_DONE_KEY) === '1';
+    const migrationState = window.localStorage.getItem(MIGRATION_DONE_KEY);
     const isSelfEmployee = initialEmployeeId === nextSession.employeeId;
-    if (!migrationDone && isSelfEmployee && remoteShifts.length === 0) {
+    if (!migrationState && isSelfEmployee && remoteShifts.length === 0) {
       const localShifts = loadLocalShiftsForMigration();
       if (localShifts.length > 0) {
-        await syncRemoteShifts(initialEmployeeId, { upserts: localShifts });
-        remoteShifts = await loadRemoteShifts(initialEmployeeId);
+        setMigrationPrompt({ count: localShifts.length });
       }
-      window.localStorage.setItem(MIGRATION_DONE_KEY, '1');
     }
-
-    setShifts(remoteShifts);
   }, []);
+
+  const handleMigrationImport = useCallback(async (): Promise<boolean> => {
+    if (!session?.employeeId) {
+      return false;
+    }
+    try {
+      const localShifts = loadLocalShiftsForMigration();
+      // Idempotent: same ids upsert (ON CONFLICT id), repeating creates no duplicates.
+      await syncRemoteShifts(session.employeeId, { upserts: localShifts });
+      setShifts(await loadRemoteShifts(session.employeeId));
+      window.localStorage.setItem(MIGRATION_DONE_KEY, 'done');
+      setMigrationPrompt(null);
+      return true;
+    } catch (error) {
+      console.error('Local migration failed', error);
+      return false;
+    }
+  }, [session]);
 
   useEffect(() => {
     let cancelled = false;
 
     const hydrateShifts = async () => {
-      const activeSession = await fetchSession();
+      const resolved = await fetchResolvedSession();
       if (cancelled) {
         return;
       }
 
-      if (activeSession) {
-        setSession(activeSession);
+      if (resolved) {
+        setSession(resolved.session);
+        setNeedsOrgChoice(resolved.needsOrgChoice);
+        if (resolved.needsOrgChoice) {
+          return;
+        }
         try {
-          await hydrateAuthenticated(activeSession);
+          await hydrateAuthenticated(resolved.session);
         } catch (error) {
           console.error('Failed to load remote shifts, falling back to guest mode', error);
           setSession(null);
@@ -165,10 +192,31 @@ function App() {
 
   const handleAuthenticated = useCallback(async (nextSession: SessionInfo) => {
     setSession(nextSession);
+    if (!nextSession.organizationId) {
+      // Multi-org user: nothing loads until an explicit org choice.
+      setNeedsOrgChoice(true);
+      return;
+    }
+    setNeedsOrgChoice(false);
     try {
       await hydrateAuthenticated(nextSession);
     } catch (error) {
       console.error('Failed to load remote data after login', error);
+    }
+  }, [hydrateAuthenticated]);
+
+  const handleSwitchOrganization = useCallback(async (organizationId: string) => {
+    const nextSession = await switchOrganization(organizationId);
+    if (!nextSession || !nextSession.organizationId) {
+      return;
+    }
+    setSession(nextSession);
+    setNeedsOrgChoice(false);
+    setShifts([]);
+    try {
+      await hydrateAuthenticated(nextSession);
+    } catch (error) {
+      console.error('Failed to load organization data', error);
     }
   }, [hydrateAuthenticated]);
 
@@ -181,6 +229,9 @@ function App() {
     setSession(null);
     setEmployees([]);
     setSelectedEmployeeId(null);
+    setNeedsOrgChoice(false);
+    setMigrationPrompt(null);
+    setIsMembersOpen(false);
     setShifts(await loadShifts());
   }, []);
 
@@ -486,6 +537,24 @@ function App() {
     );
   }
 
+  // Auth screen is a full-screen route-like surface (contract: no dashboard
+  // chrome behind it).
+  if (isAuthOpen && !session) {
+    return (
+      <>
+        <AuthScreen
+          onAuthenticated={handleAuthenticated}
+          onContinueAsGuest={() => setIsAuthOpen(false)}
+          onClose={() => setIsAuthOpen(false)}
+        />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  // EMPLOYEE without linked employee record: safe blocked state, no data.
+  const unlinkedEmployee = session?.role === 'EMPLOYEE' && !session.employeeId;
+
   return (
     <div className="container">
       <MonthHeader
@@ -512,12 +581,35 @@ function App() {
               onClick={() => setIsAuthOpen(true)}
               style={{ padding: '8px 14px', fontWeight: 700 }}
             >
-              {t('auth.loginAction')}
+              {t('auth.signIn')}
             </button>
           </div>
         )}
 
-        {session && (
+        {session?.role === 'EMPLOYEE' && unlinkedEmployee ? (
+          <div
+            role="status"
+            style={{
+              padding: '20px',
+              border: '1px solid var(--glass-border)',
+              borderRadius: '12px',
+              background: 'var(--panel-muted-bg)',
+              textAlign: 'center',
+              marginBottom: '12px',
+            }}
+          >
+            <strong>{t('unlinkedEmployee.title')}</strong>
+            <p style={{ margin: '8px 0 12px', color: 'var(--text-muted)' }}>{t('unlinkedEmployee.description')}</p>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => void handleLogout()}
+              style={{ padding: '8px 14px', fontWeight: 700 }}
+            >
+              {t('auth.logoutAction')}
+            </button>
+          </div>
+        ) : session && !needsOrgChoice && (
           <div
             className="team-bar"
             style={{
@@ -533,9 +625,25 @@ function App() {
               fontSize: '0.85rem',
             }}
           >
-            <span style={{ fontWeight: 700 }}>
-              {session.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
-            </span>
+            {session.memberships.length > 1 ? (
+              <select
+                className="modal-input"
+                value={session.organizationId ?? ''}
+                onChange={(event) => void handleSwitchOrganization(event.target.value)}
+                aria-label={t('orgSelector.title')}
+                style={{ padding: '6px 10px', fontWeight: 700, width: 'auto' }}
+              >
+                {session.memberships.map((membership) => (
+                  <option key={membership.organizationId} value={membership.organizationId}>
+                    {membership.organizationName}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span style={{ fontWeight: 700 }}>
+                {session.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
+              </span>
+            )}
             <span style={{ color: 'var(--text-subtle)' }}>{session.role}</span>
             {session.role === 'EMPLOYEE' ? (
               <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
@@ -556,6 +664,16 @@ function App() {
                 </select>
               </label>
             )}
+            {session.role === 'ADMIN' && (
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setIsMembersOpen(true)}
+                style={{ padding: '6px 12px', fontWeight: 700 }}
+              >
+                {t('members.title')}
+              </button>
+            )}
             <button
               type="button"
               className="btn-outline"
@@ -567,6 +685,8 @@ function App() {
           </div>
         )}
 
+        {!unlinkedEmployee && !needsOrgChoice && (
+          <>
         <StatsBar
           currentMonthShifts={currentMonthShifts}
           daysInMonth={daysInMonth}
@@ -583,6 +703,8 @@ function App() {
             onCreateShift={handleCreateShiftForDate}
           />
         </section>
+          </>
+        )}
       </div>
 
       <ShiftModal
@@ -635,10 +757,36 @@ function App() {
         })()}
       />
 
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onAuthenticated={handleAuthenticated}
+      <OrgSelectorModal
+        isOpen={Boolean(session) && needsOrgChoice}
+        memberships={session?.memberships ?? []}
+        onSelect={(organizationId) => void handleSwitchOrganization(organizationId)}
+        onLogout={() => void handleLogout()}
+      />
+
+      <LocalMigrationModal
+        isOpen={migrationPrompt !== null}
+        shiftCount={migrationPrompt?.count ?? 0}
+        organizationName={session?.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
+        employeeName={employees.find((employee) => employee.id === session?.employeeId)?.name ?? session?.user.displayName ?? ''}
+        onImport={handleMigrationImport}
+        onKeepLocal={() => {
+          window.localStorage.setItem(MIGRATION_DONE_KEY, 'local-only');
+          setMigrationPrompt(null);
+        }}
+        onCancel={() => setMigrationPrompt(null)}
+      />
+
+      <MembersModal
+        isOpen={isMembersOpen}
+        onClose={() => setIsMembersOpen(false)}
+        employees={employees}
+        currentUserId={session?.user.id ?? ''}
+        onChanged={() => {
+          if (session) {
+            void hydrateAuthenticated(session);
+          }
+        }}
       />
 
       {importConflictState && (
