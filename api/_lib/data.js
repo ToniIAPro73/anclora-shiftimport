@@ -207,6 +207,156 @@ export async function updateEmployee(sql, ctx, input) {
   return mapEmployeeRow(rows[0]);
 }
 
+// -------------------------------------------------------------- memberships
+
+const VALID_ROLES = ['ADMIN', 'MANAGER', 'EMPLOYEE'];
+
+function mapMemberRow(row) {
+  return {
+    userId: row.user_id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role,
+    createdAt: row.created_at,
+  };
+}
+
+/** ADMIN only: members of the active organization. */
+export async function listMembers(sql, ctx) {
+  requireRole(ctx, 'ADMIN');
+  const rows = await sql`
+    SELECT m.user_id, m.role, m.created_at, u.email, u.display_name
+    FROM memberships m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.organization_id = ${ctx.organizationId}
+    ORDER BY u.email ASC
+  `;
+  return rows.map(mapMemberRow);
+}
+
+async function countOrgAdmins(sql, organizationId) {
+  const rows = await sql`
+    SELECT count(*)::int AS n FROM memberships
+    WHERE organization_id = ${organizationId} AND role = 'ADMIN'
+  `;
+  return rows[0].n;
+}
+
+/**
+ * ADMIN only: add a member to the active organization.
+ * - Existing registered user (by email): password not required.
+ * - New user: ADMIN sets an initial password (min 8) and hands it over
+ *   out-of-band. No email infrastructure exists yet — documented limitation.
+ * Role escalation is impossible: only ADMIN reaches this function and the
+ * role whitelist is enforced here.
+ */
+export async function addMember(sql, ctx, input, hashPasswordFn) {
+  requireRole(ctx, 'ADMIN');
+  const email = String(input?.email ?? '').trim().toLowerCase();
+  const role = String(input?.role ?? '').trim();
+  if (!email || !VALID_ROLES.includes(role)) {
+    throw new HttpError(400, 'Valid email and role are required');
+  }
+
+  let userRows = await sql`SELECT id FROM users WHERE lower(email) = ${email}`;
+  if (userRows.length === 0) {
+    const password = String(input?.password ?? '');
+    if (password.length < 8) {
+      throw new HttpError(400, 'New users require an initial password of at least 8 characters');
+    }
+    userRows = await sql`
+      INSERT INTO users (email, password_hash, display_name)
+      VALUES (${email}, ${hashPasswordFn(password)}, ${String(input?.displayName ?? '').trim()})
+      RETURNING id
+    `;
+  }
+  const userId = userRows[0].id;
+
+  const existing = await sql`
+    SELECT 1 FROM memberships
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+  `;
+  if (existing.length > 0) {
+    throw new HttpError(409, 'User is already a member of the organization');
+  }
+
+  await sql`
+    INSERT INTO memberships (user_id, organization_id, role)
+    VALUES (${userId}, ${ctx.organizationId}, ${role})
+  `;
+
+  // Optional User ↔ Employee link at creation time.
+  const employeeId = String(input?.employeeId ?? '').trim();
+  if (employeeId) {
+    await assertEmployeeInOrg(sql, ctx, employeeId);
+    await sql`
+      UPDATE employees SET user_id = ${userId}, updated_at = NOW()
+      WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
+    `;
+  }
+
+  return { userId, email, role };
+}
+
+/** ADMIN only: change a member's role. The last ADMIN cannot be demoted. */
+export async function updateMemberRole(sql, ctx, input) {
+  requireRole(ctx, 'ADMIN');
+  const userId = String(input?.userId ?? '').trim();
+  const role = String(input?.role ?? '').trim();
+  if (!userId || !VALID_ROLES.includes(role)) {
+    throw new HttpError(400, 'Valid userId and role are required');
+  }
+  const rows = await sql`
+    SELECT role FROM memberships
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+  `;
+  if (rows.length === 0) {
+    throw new HttpError(404, 'Membership not found');
+  }
+  if (rows[0].role === 'ADMIN' && role !== 'ADMIN'
+    && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
+    throw new HttpError(400, 'The organization must keep at least one ADMIN');
+  }
+  await sql`
+    UPDATE memberships SET role = ${role}
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+  `;
+  return { userId, role };
+}
+
+/** ADMIN only: remove a membership. Self-removal and orphaning the org
+ * without an ADMIN are blocked. Linked employees keep existing (user_id
+ * set to NULL). */
+export async function removeMember(sql, ctx, input) {
+  requireRole(ctx, 'ADMIN');
+  const userId = String(input?.userId ?? '').trim();
+  if (!userId) {
+    throw new HttpError(400, 'userId is required');
+  }
+  if (userId === ctx.user.id) {
+    throw new HttpError(400, 'You cannot remove your own membership');
+  }
+  const rows = await sql`
+    SELECT role FROM memberships
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+  `;
+  if (rows.length === 0) {
+    throw new HttpError(404, 'Membership not found');
+  }
+  if (rows[0].role === 'ADMIN' && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
+    throw new HttpError(400, 'The organization must keep at least one ADMIN');
+  }
+  await sql`
+    DELETE FROM memberships
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+  `;
+  await sql`
+    UPDATE employees SET user_id = NULL, updated_at = NOW()
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+  `;
+  return { userId };
+}
+
 // ------------------------------------------------------------------ imports
 
 export async function listImports(sql, ctx) {

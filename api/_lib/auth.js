@@ -97,21 +97,30 @@ export async function resolveContext(req, sql) {
   }
 
   // Client may request an org via header, but only one it actually belongs to.
+  // No silent fallback to the first membership: with several organizations
+  // and no explicit valid selection the context has NO active organization
+  // and data endpoints must refuse to serve (explicit selection required).
   const requestedOrg = String(req.headers?.['x-organization-id'] ?? '').trim();
-  const membership = memberships.find((m) => m.organization_id === requestedOrg) ?? memberships[0];
+  const membership = requestedOrg
+    ? memberships.find((m) => m.organization_id === requestedOrg) ?? null
+    : (memberships.length === 1 ? memberships[0] : null);
 
-  const employeeRows = await sql`
-    SELECT id FROM employees
-    WHERE organization_id = ${membership.organization_id}
-      AND user_id = ${user.id}
-      AND status = 'active'
-  `;
+  let employeeId = null;
+  if (membership) {
+    const employeeRows = await sql`
+      SELECT id FROM employees
+      WHERE organization_id = ${membership.organization_id}
+        AND user_id = ${user.id}
+        AND status = 'active'
+    `;
+    employeeId = employeeRows[0]?.id ?? null;
+  }
 
   return {
     user,
-    organizationId: membership.organization_id,
-    role: membership.role,
-    employeeId: employeeRows[0]?.id ?? null,
+    organizationId: membership?.organization_id ?? null,
+    role: membership?.role ?? null,
+    employeeId,
     memberships: memberships.map((m) => ({
       organizationId: m.organization_id,
       organizationName: m.organization_name,
@@ -126,6 +135,20 @@ export class HttpError extends Error {
     super(message);
     this.status = status;
   }
+}
+
+/**
+ * Guards an endpoint: 401 without session, 400 when the session has no
+ * active organization (multi-org users must select one explicitly).
+ */
+export function requireOrgContext(ctx) {
+  if (!ctx) {
+    throw new HttpError(401, 'Not authenticated');
+  }
+  if (!ctx.organizationId) {
+    throw new HttpError(400, 'Organization selection required');
+  }
+  return ctx;
 }
 
 /** Role guard: ADMIN > MANAGER > EMPLOYEE. */

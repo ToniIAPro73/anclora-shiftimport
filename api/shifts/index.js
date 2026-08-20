@@ -1,4 +1,4 @@
-import { getSql, resolveContext } from '../_lib/auth.js';
+import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
 import { deleteShiftsByIds, listShifts, upsertShifts } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
@@ -13,10 +13,7 @@ import { handleError, sendJson } from '../_lib/http.js';
 export default async function handler(req, res) {
   try {
     const sql = getSql();
-    const ctx = await resolveContext(req, sql);
-    if (!ctx || !ctx.organizationId) {
-      return sendJson(res, 401, { error: 'Not authenticated' });
-    }
+    const ctx = requireOrgContext(await resolveContext(req, sql));
 
     if (req.method === 'GET') {
       const shifts = await listShifts(sql, ctx, String(req.query?.employeeId ?? ''));
