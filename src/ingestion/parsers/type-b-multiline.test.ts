@@ -4,11 +4,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
+import { IngestionError } from '../../lib/ingestion-errors';
+import { analyzeItemsForImport } from '../analysis';
 import {
   findEmployeeRowCandidates,
   parseWithSelectedRow,
   selectorForCandidate,
 } from '../assistant';
+import { countEmployeeNameCandidates } from '../core/row-detection';
+import { PdfTextItem } from '../core/text-items';
 import { parseShiftsFromItems } from './parse-items';
 import { TYPE_B_PROFILE } from '../profiles/type-b';
 import {
@@ -60,5 +64,84 @@ describe('TYPE_B split-line layout (real fortnight pattern)', () => {
     // No phantom ??:?? segment from the neighbour's start line.
     expect(shifts.every((shift) => shift.endTime !== '??:??')).toBe(true);
     expect(summarize(shifts)).toEqual(TYPE_B_MULTILINE_EXPECTED);
+  });
+});
+
+/**
+ * Direct employee matching (typed name / typed id) must agree with the
+ * candidate-row detection the assistant uses — a name the assistant lists
+ * must also match when typed verbatim (real FTPS QA regression).
+ */
+describe('TYPE_B direct employee matching', () => {
+  const SECOND_ROW_EXPECTED = [
+    { date: '2026-09-01', startTime: '17:00', endTime: '01:00', shiftType: 'Regular', isValid: true },
+    { date: '2026-09-02', startTime: '08:00', endTime: '12:00', shiftType: 'Regular', isValid: true },
+    { date: '2026-09-03', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    { date: '2026-09-04', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    { date: '2026-09-05', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+  ];
+
+  it('direct name match: name inside the marker column', () => {
+    const selector = { employeeName: 'Ficticio Uno', employeeIdentifiers: [] };
+    const analysis = analyzeItemsForImport(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector);
+    expect(analysis.employeeMatch).toBe('strong');
+    expect(summarize(parseShiftsFromItems(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector)))
+      .toEqual(TYPE_B_MULTILINE_EXPECTED);
+  });
+
+  it('direct name match: name right of the marker column (id-anchored line)', () => {
+    const selector = { employeeName: 'Ficticia Dos', employeeIdentifiers: [] };
+    const analysis = analyzeItemsForImport(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector);
+    expect(analysis.employeeMatch).toBe('strong');
+    expect(summarize(parseShiftsFromItems(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector)))
+      .toEqual(SECOND_ROW_EXPECTED);
+  });
+
+  it('direct id match: bare nómina id locates the row', () => {
+    const selector = { employeeName: '', employeeIdentifiers: ['90002'] };
+    const analysis = analyzeItemsForImport(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector);
+    expect(analysis.employeeMatch).toBe('strong');
+    expect(summarize(parseShiftsFromItems(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector)))
+      .toEqual(SECOND_ROW_EXPECTED);
+  });
+
+  it('name + id of the same employee: consistent, no mismatch', () => {
+    const selector = { employeeName: 'Ficticia Dos', employeeIdentifiers: ['90002'] };
+    expect(summarize(parseShiftsFromItems(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector)))
+      .toEqual(SECOND_ROW_EXPECTED);
+  });
+
+  it('name + id of different employees: IDENTITY_MISMATCH, nothing parsed', () => {
+    const selector = { employeeName: 'Ficticio Uno', employeeIdentifiers: ['90002'] };
+    try {
+      parseShiftsFromItems(TYPE_B_MULTILINE_ITEMS, TYPE_B_MULTILINE_CONTEXT, selector);
+      expect.unreachable('must throw on identity mismatch');
+    } catch (error) {
+      expect(error).toBeInstanceOf(IngestionError);
+      expect((error as IngestionError).code).toBe('IDENTITY_MISMATCH');
+    }
+  });
+
+  it('name split across several text items still matches as one line', () => {
+    const split: PdfTextItem[] = [
+      ...TYPE_B_MULTILINE_ITEMS,
+      { text: '90003', x: 28, y: 397.8, width: 0, height: 0, page: 1 },
+      { text: 'Fictio', x: 88, y: 397.8, width: 0, height: 0, page: 1 },
+      { text: 'Tres', x: 120, y: 397.8, width: 0, height: 0, page: 1 },
+      { text: 'OFF', x: 263, y: 397.8, width: 0, height: 0, page: 1 },
+    ];
+    // One row candidate, not two: the split items are one visual line.
+    expect(countEmployeeNameCandidates(split, 'Fictio Tres', TYPE_B_PROFILE.rowWindow)).toBe(1);
+
+    const selector = { employeeName: 'Fictio Tres', employeeIdentifiers: [] };
+    expect(summarize(parseShiftsFromItems(split, TYPE_B_MULTILINE_CONTEXT, selector))).toEqual([
+      { date: '2026-09-01', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    ]);
+
+    // The split name combined with its own id must not trip the cross-check.
+    const withId = { employeeName: 'Fictio Tres', employeeIdentifiers: ['90003'] };
+    expect(summarize(parseShiftsFromItems(split, TYPE_B_MULTILINE_CONTEXT, withId))).toEqual([
+      { date: '2026-09-01', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    ]);
   });
 });

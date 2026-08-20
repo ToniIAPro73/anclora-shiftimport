@@ -7,7 +7,7 @@
  * [floorY, ceilingY) (or inclusive ceiling, per profile) over the items to
  * the right of the marker column.
  */
-import { looksLikeEmployeeLabel, isEmployeeNameLabel } from './tokens';
+import { isEmployeeIdToken, isEmployeeNameLabel, looksLikeEmployeeLabel } from './tokens';
 import { normalizeEmployeeId, normalizeText } from './normalize';
 import { PdfTextItem, sortPdfItemsForReading } from './text-items';
 
@@ -60,13 +60,79 @@ export interface EmployeeRow {
   category: string;
 }
 
-export function findNameMarkerIndex(pageItems: PdfTextItem[], nameTokens: string[], markerMaxX: number): number {
-  return pageItems.findIndex((item) => {
-    if (item.x >= markerMaxX || !isEmployeeNameLabel(item.text)) {
+/** Bare numeric employee ids (nómina-style, 4–6 digits) — day numbers are 1–2. */
+export const isBareEmployeeId = (text: string): boolean => /^\d{4,6}$/.test(text.trim());
+
+/**
+ * Name-label items that may locate an employee row, under ONE rule shared by
+ * direct matching, candidate counting and the assistant's candidate listing
+ * (findEmployeeRowCandidates): a name belongs to a marker row either inside
+ * the marker column, or — dense real layouts nudge the name a few points
+ * right of markerMaxX — in the extended zone up to dataMinX when it shares
+ * the line (tolerance 1, same as the reading-order clustering) with an id
+ * marker in the marker column.
+ */
+function nameMarkerLabelItems(pageItems: PdfTextItem[], rules: RowWindowRules): PdfTextItem[] {
+  const anchorYs = pageItems
+    .filter(
+      (item) => item.x < rules.markerMaxX && (isEmployeeIdToken(item.text) || isBareEmployeeId(item.text)),
+    )
+    .map((item) => item.y);
+  return pageItems.filter((item) => {
+    if (!isEmployeeNameLabel(item.text)) {
       return false;
     }
-    return matchesNameTokens(item.text, nameTokens);
+    if (item.x < rules.markerMaxX) {
+      return true;
+    }
+    return item.x < rules.dataMinX && anchorYs.some((anchorY) => Math.abs(anchorY - item.y) <= 1);
   });
+}
+
+/** Clusters label items (reading order) into visual line bands, tolerance 1. */
+function clusterLineBands(labelItems: PdfTextItem[]): PdfTextItem[][] {
+  const bands: PdfTextItem[][] = [];
+  for (const item of labelItems) {
+    const last = bands[bands.length - 1];
+    if (last && Math.abs(last[0].y - item.y) <= 1) {
+      last.push(item);
+    } else {
+      bands.push([item]);
+    }
+  }
+  return bands;
+}
+
+/** Display text of a line band: items left to right, space-joined. */
+export function nameMarkerBandText(band: PdfTextItem[]): string {
+  return [...band]
+    .sort((left, right) => left.x - right.x)
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+/**
+ * Line bands whose joined label matches the typed name tokens. Matching runs
+ * on the WHOLE band text, not per item: PDF text extraction may split one
+ * printed name across several items, and no single item then holds enough
+ * tokens to match on its own.
+ */
+export function findNameMarkerBands(
+  pageItems: PdfTextItem[],
+  nameTokens: string[],
+  rules: RowWindowRules,
+): PdfTextItem[][] {
+  if (nameTokens.length === 0) {
+    return [];
+  }
+  return clusterLineBands(nameMarkerLabelItems(pageItems, rules))
+    .filter((band) => matchesNameTokens(nameMarkerBandText(band), nameTokens));
+}
+
+export function findNameMarkerIndex(pageItems: PdfTextItem[], nameTokens: string[], rules: RowWindowRules): number {
+  const band = findNameMarkerBands(pageItems, nameTokens, rules)[0];
+  return band ? pageItems.indexOf(band[0]) : -1;
 }
 
 /** True when the item text prefix-matches at least min(2, tokens) name tokens. */
@@ -80,15 +146,16 @@ export function matchesNameTokens(text: string, nameTokens: string[]): boolean {
 }
 
 /**
- * Counts distinct employee-name label items that match the selector name
- * across all pages (same matching rule as findNameMarkerIndex). Used to
- * detect AMBIGUOUS_EMPLOYEE before any row is selected: more than one
+ * Counts distinct employee-name line bands that match the selector name
+ * across all pages (same matching rule as findNameMarkerIndex — one visual
+ * line counts once, even when extraction split the name across items). Used
+ * to detect AMBIGUOUS_EMPLOYEE before any row is selected: more than one
  * candidate with no disambiguating id means we must not auto-pick.
  */
 export function countEmployeeNameCandidates(
   items: PdfTextItem[],
   employeeName: string,
-  markerMaxX: number,
+  rules: RowWindowRules,
 ): number {
   const nameTokens = normalizeText(employeeName).split(' ').filter((token) => token.length >= 3);
   if (nameTokens.length === 0) {
@@ -98,11 +165,7 @@ export function countEmployeeNameCandidates(
   let candidates = 0;
   for (const page of pages) {
     const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
-    for (const item of pageItems) {
-      if (item.x < markerMaxX && isEmployeeNameLabel(item.text) && matchesNameTokens(item.text, nameTokens)) {
-        candidates += 1;
-      }
-    }
+    candidates += findNameMarkerBands(pageItems, nameTokens, rules).length;
   }
   return candidates;
 }
@@ -222,7 +285,7 @@ export function detectIdentityMismatch(
   const sortedPages = pages.map((page) => sortPdfItemsForReading(items.filter((item) => item.page === page)));
 
   const nameResolves = sortedPages.some(
-    (pageItems) => findNameMarkerIndex(pageItems, nameTokens, rules.dataMinX) >= 0,
+    (pageItems) => findNameMarkerBands(pageItems, nameTokens, rules).length > 0,
   );
   if (!nameResolves) {
     return false;
@@ -236,23 +299,24 @@ export function detectIdentityMismatch(
       continue;
     }
     const idItem = pageItems[idIndex];
-    let owner: PdfTextItem | null = null;
-    for (const item of pageItems) {
-      if (item.x >= rules.dataMinX || !isEmployeeNameLabel(item.text)) {
+    // Owning band: nearest name-label line on the id's line or above it
+    // (tolerance 1, same as the reading-order line clustering). The whole
+    // line band is compared — extraction may split one name across items,
+    // and a single fragment never holds enough tokens to match.
+    const bands = clusterLineBands(nameMarkerLabelItems(pageItems, rules));
+    let owner: PdfTextItem[] | null = null;
+    for (const band of bands) {
+      // Name labels below the id line belong to the next employee's block.
+      if (band[0].y < idItem.y - 1) {
         continue;
       }
-      // Owning label: nearest name label on the id's line or above it
-      // (tolerance 1, same as the reading-order line clustering).
-      if (item.y < idItem.y - 1) {
-        continue;
-      }
-      if (owner === null || item.y < owner.y) {
-        owner = item;
+      if (owner === null || band[0].y < owner[0].y) {
+        owner = band;
       }
     }
     // Without a name label owning the id there is nothing to cross-check
     // against; the id stands.
-    return owner !== null && !matchesNameTokens(owner.text, nameTokens);
+    return owner !== null && !matchesNameTokens(nameMarkerBandText(owner), nameTokens);
   }
 
   return false;
@@ -287,7 +351,7 @@ export function findEmployeeRowItems(
       (item) => idFound && targetIds.includes(normalizeEmployeeId(item.text)) && item.x < rules.markerMaxX,
     );
     const nameIndex = rules.nameMatching
-      ? findNameMarkerIndex(pageItems, nameTokens, rules.markerMaxX)
+      ? findNameMarkerIndex(pageItems, nameTokens, rules)
       : -1;
 
     if (idFound && idIndex < 0) {

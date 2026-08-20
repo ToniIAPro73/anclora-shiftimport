@@ -129,7 +129,7 @@ export function parseMultiSectionShifts(
     if (bandItems.length === 0) continue;
 
     if (targetIds.length === 0) {
-      nameCandidateTotal += countEmployeeNameCandidates(bandItems, selector.employeeName, profile.rowWindow.markerMaxX);
+      nameCandidateTotal += countEmployeeNameCandidates(bandItems, selector.employeeName, profile.rowWindow);
     }
 
     const row = findEmployeeRowItems(bandItems, selector, profile.rowWindow);

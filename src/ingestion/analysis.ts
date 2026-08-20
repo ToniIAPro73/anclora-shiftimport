@@ -36,11 +36,12 @@ import {
   EmployeeRow,
   EmployeeSelector,
   findEmployeeRowItems,
+  findNameMarkerBands,
   idResolvesInDocument,
-  matchesNameTokens,
+  nameMarkerBandText,
 } from './core/row-detection';
 import { buildCodeProfile, codeOverridesFromLearning, parseLegendCodes, ShiftCodeMapping } from './core/shift-code-profile';
-import { isEmployeeIdToken, isEmployeeNameLabel, expandShiftTokens } from './core/tokens';
+import { isEmployeeIdToken, expandShiftTokens } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
@@ -234,27 +235,25 @@ export function analyzeDocumentStructure(
 
 /**
  * Name-only match strength: 'strong' when every name token (length ≥ 3)
- * prefix-matches a word of the located marker label, 'weak' when the match
- * is partial (matchesNameTokens accepts ≥ min(2, n) tokens).
+ * prefix-matches a word of the located marker line band, 'weak' when the
+ * match is partial (matchesNameTokens accepts ≥ min(2, n) tokens).
  */
 const nameMatchStrength = (
   items: PdfTextItem[],
   page: number,
   employeeName: string,
-  markerMaxX: number,
+  rules: IngestionProfile['rowWindow'],
 ): 'strong' | 'weak' => {
   const nameTokens = normalizeText(employeeName).split(' ').filter((token) => token.length >= 3);
   if (nameTokens.length === 0) {
     return 'weak';
   }
   const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page));
-  const marker = pageItems.find(
-    (item) => item.x < markerMaxX && isEmployeeNameLabel(item.text) && matchesNameTokens(item.text, nameTokens),
-  );
-  if (!marker) {
+  const band = findNameMarkerBands(pageItems, nameTokens, rules)[0];
+  if (!band) {
     return 'weak';
   }
-  const words = normalizeText(marker.text).split(' ');
+  const words = normalizeText(nameMarkerBandText(band)).split(' ');
   const matched = nameTokens.filter((token) =>
     words.some((word) => word.startsWith(token) || token.startsWith(word)),
   );
@@ -354,7 +353,7 @@ export function analyzeItemsForImport(
 
   const useNamePath = targetIds.length === 0 || !idFound;
   if (useNamePath) {
-    const candidates = countEmployeeNameCandidates(items, selector.employeeName, profile.rowWindow.markerMaxX);
+    const candidates = countEmployeeNameCandidates(items, selector.employeeName, profile.rowWindow);
     if (candidates > 1) {
       return { ...base, employeeMatch: 'multiple' };
     }
@@ -374,7 +373,7 @@ export function analyzeItemsForImport(
   // is graded by token coverage.
   const employeeMatch: EmployeeMatchStrength = idFound
     ? 'strong'
-    : nameMatchStrength(items, row.page, selector.employeeName, profile.rowWindow.markerMaxX);
+    : nameMatchStrength(items, row.page, selector.employeeName, profile.rowWindow);
 
   const codeProfile = mergeCodeOverrides(
     profile.useShiftCodeProfile ? buildCodeProfile(items) : undefined,

@@ -29,7 +29,10 @@ export const TYPE_B_PROFILE: IngestionProfile = {
   dayHeader: { pattern: /^[LMXJVSD](\d{1,2})$/, dayGroup: 1 },
   rowWindow: {
     markerMaxX: 100,
-    nameMatching: false,
+    // Names locate the row too: they print on the id marker's line, a few
+    // points right of markerMaxX in dense layouts (row-detection extends the
+    // name zone to dataMinX for lines anchored by an id marker).
+    nameMatching: true,
     dataMinX: 150,
     ceiling: { mode: 'offset', offset: 12, inclusive: true },
     floor: {

@@ -83,7 +83,7 @@ export function parseShiftsFromItems(
   // candidates = UNKNOWN_EMPLOYEE, several candidates = we must not auto-pick
   // one silently (corpus GN-01/GN-02).
   if (targetIds.length === 0 || !idFound) {
-    const nameCandidates = countEmployeeNameCandidates(allItems, selector.employeeName, profile.rowWindow.markerMaxX);
+    const nameCandidates = countEmployeeNameCandidates(allItems, selector.employeeName, profile.rowWindow);
     if (nameCandidates === 0) {
       throw new IngestionError(
         'UNKNOWN_EMPLOYEE',

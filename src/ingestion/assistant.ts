@@ -19,7 +19,7 @@ import { CalendarImportContext, ParsedCalendarShift, PdfDocumentType } from '../
 import { mergeShiftTypeOverrides, ShiftTypeOverrides } from '../lib/shift-types';
 import { getDaysInMonth } from '../lib/week';
 import { mapColumnGroupsToDays } from './core/clustering';
-import { EmployeeRow, EmployeeSelector } from './core/row-detection';
+import { EmployeeRow, EmployeeSelector, isBareEmployeeId } from './core/row-detection';
 import { normalizeEmployeeId, normalizeText } from './core/normalize';
 import { buildCodeProfile, codeOverridesFromLearning, ShiftCodeMapping } from './core/shift-code-profile';
 import { isEmployeeIdToken, isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
@@ -74,9 +74,6 @@ const MAX_TOKEN_QUESTIONS = 6;
 const DAY_HEADER_LIKE = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]?\d{1,2}([/-]\d{1,2}([/-]\d{2,4})?)?$/;
 const MIN_DAY_HEADER_SIBLINGS = 3;
 
-/** Bare numeric employee ids (nómina-style, 4–6 digits) — day numbers are 1–2. */
-const BARE_ID_LIKE = /^\d{4,6}$/;
-
 const isStructuralHeaderBand = (band: PdfTextItem[], pageItems: PdfTextItem[], markerMaxX: number): boolean => {
   const siblings = pageItems.filter(
     (item) => item.x >= markerMaxX && Math.abs(item.y - band[0].y) <= 1 && !band.includes(item),
@@ -125,7 +122,7 @@ export function findEmployeeRowCandidates(
       .filter(
         (item) =>
           item.x < profile.rowWindow.markerMaxX
-          && (isEmployeeIdToken(item.text.trim()) || BARE_ID_LIKE.test(item.text.trim())),
+          && (isEmployeeIdToken(item.text.trim()) || isBareEmployeeId(item.text)),
       )
       .map((item) => item.y);
     const labelItems = pageItems.filter(
