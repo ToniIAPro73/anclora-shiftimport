@@ -1,0 +1,407 @@
+{
+  "dataset_version": "1.0",
+  "organization_hint": "Anclora ShiftImport Demo",
+  "notes": "Synthetic employees only. No real credentials. Use existing ADMIN account for seeding.",
+  "employees": [
+    {
+      "external_employee_id": "SI120001",
+      "full_name": "Adriana Molina Serra",
+      "email_synthetic": "adriana.molina.serra@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "MANAGER",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120002",
+      "full_name": "Alberto Riera Campos",
+      "email_synthetic": "alberto.riera.campos@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "MANAGER",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120003",
+      "full_name": "Alicia Romero Pons",
+      "email_synthetic": "alicia.romero.pons@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120004",
+      "full_name": "Ana Belén Vargas Ruiz",
+      "email_synthetic": "ana.belen.vargas.ruiz@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120005",
+      "full_name": "Andrés Costa Ferrer",
+      "email_synthetic": "andres.costa.ferrer@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120006",
+      "full_name": "Beatriz López Vidal",
+      "email_synthetic": "beatriz.lopez.vidal@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120007",
+      "full_name": "Bruno Martínez Gil",
+      "email_synthetic": "bruno.martinez.gil@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120008",
+      "full_name": "Carla Navarro Torres",
+      "email_synthetic": "carla.navarro.torres@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120009",
+      "full_name": "Carlos Paredes Soler",
+      "email_synthetic": "carlos.paredes.soler@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120010",
+      "full_name": "Carmen Ruiz Mateu",
+      "email_synthetic": "carmen.ruiz.mateu@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120011",
+      "full_name": "Claudia Jiménez Costa",
+      "email_synthetic": "claudia.jimenez.costa@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120012",
+      "full_name": "Daniel Ortega Vidal",
+      "email_synthetic": "daniel.ortega.vidal@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120013",
+      "full_name": "David Sánchez Pons",
+      "email_synthetic": "david.sanchez.pons@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120014",
+      "full_name": "Elena Ferrer Morales",
+      "email_synthetic": "elena.ferrer.morales@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120015",
+      "full_name": "Eva García Riera",
+      "email_synthetic": "eva.garcia.riera@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120016",
+      "full_name": "Fernando López Serra",
+      "email_synthetic": "fernando.lopez.serra@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120017",
+      "full_name": "Gabriela Torres Martín",
+      "email_synthetic": "gabriela.torres.martin@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120018",
+      "full_name": "Héctor Navarro Ruiz",
+      "email_synthetic": "hector.navarro.ruiz@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120019",
+      "full_name": "Inés Campos Vidal",
+      "email_synthetic": "ines.campos.vidal@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120020",
+      "full_name": "Isabel Pons Ferrer",
+      "email_synthetic": "isabel.pons.ferrer@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120021",
+      "full_name": "Javier Morales Costa",
+      "email_synthetic": "javier.morales.costa@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120022",
+      "full_name": "Jorge Serra López",
+      "email_synthetic": "jorge.serra.lopez@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120023",
+      "full_name": "Laura Martín Riera",
+      "email_synthetic": "laura.martin.riera@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120024",
+      "full_name": "Lucía Vidal Campos",
+      "email_synthetic": "lucia.vidal.campos@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120025",
+      "full_name": "Manuel Torres Pons",
+      "email_synthetic": "manuel.torres.pons@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120026",
+      "full_name": "Marcos Ferrer Ruiz",
+      "email_synthetic": "marcos.ferrer.ruiz@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120027",
+      "full_name": "Marta García Soler",
+      "email_synthetic": "marta.garcia.soler@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120028",
+      "full_name": "Miguel Navarro Serra",
+      "email_synthetic": "miguel.navarro.serra@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120029",
+      "full_name": "Nadia Romero Costa",
+      "email_synthetic": "nadia.romero.costa@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120030",
+      "full_name": "Natalia López Ferrer",
+      "email_synthetic": "natalia.lopez.ferrer@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120031",
+      "full_name": "Óscar Pons Vidal",
+      "email_synthetic": "oscar.pons.vidal@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120032",
+      "full_name": "Patricia Riera Morales",
+      "email_synthetic": "patricia.riera.morales@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120033",
+      "full_name": "Raúl Campos Torres",
+      "email_synthetic": "raul.campos.torres@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120034",
+      "full_name": "Rocío Serra Martín",
+      "email_synthetic": "rocio.serra.martin@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120035",
+      "full_name": "Sara Ferrer López",
+      "email_synthetic": "sara.ferrer.lopez@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120036",
+      "full_name": "Sergio Vidal Ruiz",
+      "email_synthetic": "sergio.vidal.ruiz@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120037",
+      "full_name": "Sonia Navarro Pons",
+      "email_synthetic": "sonia.navarro.pons@example.invalid",
+      "department": "Pasaje",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120038",
+      "full_name": "Víctor García Costa",
+      "email_synthetic": "victor.garcia.costa@example.invalid",
+      "department": "Operaciones",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120039",
+      "full_name": "Yasmina Riera Serra",
+      "email_synthetic": "yasmina.riera.serra@example.invalid",
+      "department": "Ventas",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    },
+    {
+      "external_employee_id": "SI120040",
+      "full_name": "Zulema Martín Vidal",
+      "email_synthetic": "zulema.martin.vidal@example.invalid",
+      "department": "Atención al cliente",
+      "desired_app_role": "EMPLOYEE",
+      "has_user_account": "false",
+      "status": "ACTIVE",
+      "synthetic": "true"
+    }
+  ]
+}
