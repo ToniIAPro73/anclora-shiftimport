@@ -57,6 +57,12 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
 
+    // createEmployee plan-limit check (values: [organizationId])
+    if (text.startsWith('SELECT count(*) AS count FROM employees')) {
+      return Promise.resolve([{
+        count: String(employees.filter((e) => e.organization_id === values[0] && e.status === 'active').length),
+      }]);
+    }
     // assertEmployeeInOrg (values: [id, organizationId])
     if (text.startsWith('SELECT id FROM employees')) {
       return Promise.resolve(employees.filter((e) => e.id === values[0] && e.organization_id === values[1]));
@@ -156,9 +162,11 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
   return { sql, calls };
 }
 
-const adminCtx = { user: { id: USER_ADMIN }, organizationId: ORG_A, role: 'ADMIN', employeeId: null };
-const employeeCtx = { user: { id: USER_EMP }, organizationId: ORG_A, role: 'EMPLOYEE', employeeId: EMP_A1 };
-const orgBCtx = { user: { id: USER_ADMIN }, organizationId: ORG_B, role: 'ADMIN', employeeId: null };
+// plan: 'team' (unlimited) by default so pre-existing tests are unaffected
+// by Fase 1.2G's plan-limit enforcement; dedicated tests below override it.
+const adminCtx = { user: { id: USER_ADMIN }, organizationId: ORG_A, role: 'ADMIN', employeeId: null, plan: 'team' };
+const employeeCtx = { user: { id: USER_EMP }, organizationId: ORG_A, role: 'EMPLOYEE', employeeId: EMP_A1, plan: 'team' };
+const orgBCtx = { user: { id: USER_ADMIN }, organizationId: ORG_B, role: 'ADMIN', employeeId: null, plan: 'team' };
 
 const UUID = '22222222-2222-4222-8222-222222222222';
 const shiftInput = (over = {}) => ({
@@ -247,6 +255,30 @@ describe('employee management', () => {
     const { sql } = makeFakeSql();
     const created = await createEmployee(sql, adminCtx, { name: 'Sin Cuenta' });
     expect(created.userId).toBeNull();
+  });
+
+  it('Fase 1.2G: a free-plan org can create its first employee', async () => {
+    const { sql } = makeFakeSql();
+    const created = await createEmployee(sql, { ...adminCtx, plan: 'free' }, { name: 'Primera Persona' });
+    expect(created.name).toBe('Primera Persona');
+  });
+
+  it('Fase 1.2G: a free-plan org cannot create a second employee (structural team-guard)', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    await expect(createEmployee(sql, { ...adminCtx, plan: 'free' }, { name: 'Segunda Persona' }))
+      .rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
+  });
+
+  it('Fase 1.2G: a personal-plan org is capped at 1 employee too', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    await expect(createEmployee(sql, { ...adminCtx, plan: 'personal' }, { name: 'Segunda Persona' }))
+      .rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
+  });
+
+  it('Fase 1.2G: a team-plan org has no employee cap', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A), employeeRow(EMP_A2, ORG_A)] });
+    const created = await createEmployee(sql, { ...adminCtx, plan: 'team' }, { name: 'Tercera Persona' });
+    expect(created.name).toBe('Tercera Persona');
   });
 
   it('only ADMIN can edit/deactivate employees', async () => {
@@ -338,6 +370,16 @@ describe('membership management (B2B minimal)', () => {
     const fresh = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
     const result = await addMember(fresh.sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123' }, fakeHash);
     expect(result.role).toBe('EMPLOYEE');
+  });
+
+  it('Fase 1.2G: free/personal plans cannot invite members (team management is Team-only)', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    await expect(
+      addMember(sql, { ...adminCtx, plan: 'free' }, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123' }, fakeHash),
+    ).rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
+    await expect(
+      addMember(sql, { ...adminCtx, plan: 'personal' }, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123' }, fakeHash),
+    ).rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
   });
 
   it('new user requires an initial password (min 8)', async () => {

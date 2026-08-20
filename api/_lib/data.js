@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, requireRole } from './auth.js';
+import { requireFeature, requireWithinLimit } from './plans.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -156,6 +157,20 @@ export async function createEmployee(sql, ctx, input) {
   if (!name) {
     throw new HttpError(400, 'Employee name is required');
   }
+
+  // Fase 1.2G: structural enforcement — Free/Personal cap at 1 employee,
+  // so a personal-plan org can never accidentally grow into a full B2B
+  // team workspace just by inline-adding people.
+  const existing = await sql`
+    SELECT count(*) AS count FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
+  `;
+  requireWithinLimit(
+    ctx.plan,
+    'maxEmployees',
+    Number(existing[0]?.count ?? 0),
+    'This plan only allows 1 employee. Upgrade to Team to add more.',
+  );
+
   const externalId = String(input?.externalEmployeeId ?? '').trim() || null;
   const rows = await sql`
     INSERT INTO employees (organization_id, external_employee_id, name)
@@ -252,6 +267,9 @@ async function countOrgAdmins(sql, organizationId) {
  */
 export async function addMember(sql, ctx, input, hashPasswordFn) {
   requireRole(ctx, 'ADMIN');
+  // Fase 1.2G: inviting another user into the org is "team management" —
+  // Free/Personal orgs are single-person by design, never silently.
+  requireFeature(ctx.plan, 'teamManagement', 'Inviting team members requires the Team plan.');
   const email = String(input?.email ?? '').trim().toLowerCase();
   const role = String(input?.role ?? '').trim();
   if (!email || !VALID_ROLES.includes(role)) {

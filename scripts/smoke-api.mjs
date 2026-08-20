@@ -99,10 +99,20 @@ const run = async () => {
 
   const meA = await call(meHandler, req('GET', { cookie: cookieA }));
   check('session A resolves org+role+employee', meA.body.role === 'ADMIN' && Boolean(meA.body.organizationId) && Boolean(meA.body.employeeId));
+  check('personal onboarding defaults plan to free', meA.body.plan === 'free');
   const orgA = meA.body.organizationId;
   const selfA = meA.body.employeeId;
-  const orgB = (await call(meHandler, req('GET', { cookie: cookieB }))).body.organizationId;
+  const meBInitial = await call(meHandler, req('GET', { cookie: cookieB }));
+  check('personal onboarding (B) defaults plan to free', meBInitial.body.plan === 'free');
+  const orgB = meBInitial.body.organizationId;
   check('two tenants are distinct organizations', orgA !== orgB);
+
+  // Fase 1.2G: the multi-employee / membership infra checks below predate
+  // plan enforcement and are not exercising plan gating themselves — lift
+  // org A onto Team directly via SQL (same pattern as the rate-limit
+  // window aging below) so they keep testing what they always tested.
+  // Dedicated plan-enforcement checks run further down using org B.
+  await sql`UPDATE organizations SET plan = 'team' WHERE id = ${orgA}`;
 
   // A creates second employee (inline alta)
   const created = await call(employeesHandler, req('POST', { cookie: cookieA, body: { name: 'Empleada Dos', externalEmployeeId: `E${suffix}` } }));
@@ -229,6 +239,38 @@ const run = async () => {
     meC.body.role === 'ADMIN' && meC.body.employeeId === null
       && meC.body.memberships[0]?.organizationType === 'company',
   );
+  check('company onboarding grants plan team (pre-billing trial grant, §4 pricing-hypothesis.md)', meC.body.plan === 'team');
+
+  // ---- Fase 1.2G: plan model & entitlement enforcement -------------------
+  // Org B is still on its default 'free' plan (untouched above) — use it to
+  // exercise the real backend gates end to end.
+  const blockedFreeEmployee = await call(employeesHandler, req('POST', { cookie: cookieB, body: { name: 'Segundo Empleado B' } }));
+  check('FREE plan blocks a 2nd employee (403 PLAN_LIMIT)', blockedFreeEmployee.statusCode === 403 && blockedFreeEmployee.body.code === 'PLAN_LIMIT');
+
+  const blockedFreeInvite = await call(membershipsHandler, req('POST', { cookie: cookieB, body: { email: `smoke-invite-${suffix}@example.com`, role: 'EMPLOYEE', password: 'temporal-123' } }));
+  check('FREE plan blocks inviting a member (403 PLAN_LIMIT)', blockedFreeInvite.statusCode === 403 && blockedFreeInvite.body.code === 'PLAN_LIMIT');
+
+  await sql`UPDATE organizations SET plan = 'personal' WHERE id = ${orgB}`;
+  const blockedPersonalEmployee = await call(employeesHandler, req('POST', { cookie: cookieB, body: { name: 'Segundo Empleado B (personal)' } }));
+  check('PERSONAL plan also blocks a 2nd employee (403 PLAN_LIMIT)', blockedPersonalEmployee.statusCode === 403 && blockedPersonalEmployee.body.code === 'PLAN_LIMIT');
+
+  await sql`UPDATE organizations SET plan = 'team' WHERE id = ${orgB}`;
+  const allowedTeamEmployee = await call(employeesHandler, req('POST', { cookie: cookieB, body: { name: 'Segundo Empleado B (team)' } }));
+  check('TEAM plan allows a 2nd employee', allowedTeamEmployee.statusCode === 201);
+
+  const allowedTeamInvite = await call(membershipsHandler, req('POST', { cookie: cookieB, body: { email: `smoke-invite-${suffix}@example.com`, role: 'EMPLOYEE', password: 'temporal-123' } }));
+  check('TEAM plan allows inviting a member', allowedTeamInvite.statusCode === 201);
+
+  // Commercial-intent routing (§1.2G.15): the client can send any plan it
+  // likes, but personal onboarding only ever whitelists free|personal.
+  const regD = await call(registerHandler, req('POST', {
+    body: { email: `smoke-d-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke D' },
+  }));
+  const cookieD = String(regD.headers['set-cookie']).split(';')[0];
+  const onboardD = await call(personalOnboardingHandler, req('POST', { cookie: cookieD, body: { plan: 'team' } }));
+  const meD = await call(meHandler, req('GET', { cookie: cookieD }));
+  check('personal onboarding never grants team even if the client requests it', onboardD.statusCode === 201 && meD.body.plan === 'free');
+  const orgD = meD.body.organizationId;
 
   // ---- Fase 1.2D: password recovery ---------------------------------
   const reqUnknown = await call(requestResetHandler, req('POST', { body: { email: `nobody-${suffix}@example.com` } }));
@@ -315,7 +357,7 @@ const run = async () => {
 
   // Cleanup: deleting organizations cascades employees/imports/shifts/memberships.
   const emailPattern = `smoke-%-${suffix}@example.com`;
-  await sql`DELETE FROM organizations WHERE id = ${orgA} OR id = ${orgB} OR id = ${orgC} OR id = ${orgRL}`;
+  await sql`DELETE FROM organizations WHERE id = ${orgA} OR id = ${orgB} OR id = ${orgC} OR id = ${orgD} OR id = ${orgRL}`;
   await sql`DELETE FROM users WHERE email LIKE ${emailPattern}`;
   await sql`DELETE FROM login_attempts WHERE id_key IN (${`ip:${RL_IP}`}, ${`ip:203.0.113.5`}, ${`email:${rlEmail}`}, ${`email:${otherEmail}`}, ${'ip:unknown'})`;
 

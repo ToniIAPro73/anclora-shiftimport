@@ -8,5 +8,11 @@ export function handleError(res, error) {
   if (status >= 500) {
     console.error('[api] error', error);
   }
-  sendJson(res, status, { error: status >= 500 ? 'Unexpected API error' : error.message });
+  sendJson(res, status, {
+    error: status >= 500 ? 'Unexpected API error' : error.message,
+    // Machine-readable reason (e.g. 'PLAN_LIMIT') lets the frontend show the
+    // upgrade UX instead of a generic error banner — never inferred from
+    // the message string.
+    ...(status < 500 && error?.code ? { code: error.code } : {}),
+  });
 }
