@@ -187,6 +187,59 @@ export async function register(email: string, password: string, displayName: str
   return session;
 }
 
+/**
+ * Fase 1.2C.3: "Para mí" onboarding choice. Creates the personal org for
+ * the current (freshly registered, zero-membership) user and re-resolves
+ * the session so the caller lands with an active organization.
+ */
+export async function completePersonalOnboarding(): Promise<SessionInfo> {
+  await apiFetch('/api/onboarding/personal', { method: 'POST' });
+  const session = await fetchSession();
+  if (!session) {
+    throw new ApiError(401, 'Onboarding failed');
+  }
+  setRequestOrganizationId(resolveActiveOrganization(session.user.id, session.memberships));
+  return session;
+}
+
+/**
+ * Fase 1.2C.4: "Para mi empresa" onboarding choice. adminName is only
+ * required when the account has no display name yet.
+ */
+export async function completeCompanyOnboarding(companyName: string, adminName?: string): Promise<SessionInfo> {
+  await apiFetch('/api/onboarding/company', {
+    method: 'POST',
+    body: JSON.stringify({ companyName, adminName }),
+  });
+  const session = await fetchSession();
+  if (!session) {
+    throw new ApiError(401, 'Onboarding failed');
+  }
+  setRequestOrganizationId(resolveActiveOrganization(session.user.id, session.memberships));
+  return session;
+}
+
+/**
+ * Fase 1.2D.2: always resolves (backend responds 200 regardless of whether
+ * the email exists) — the caller should show a generic confirmation
+ * unconditionally, never branch on the result.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiFetch('/api/auth/request-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+/** Fase 1.2D.3: throws with a user-facing message when the token is
+ * invalid/expired/already used. */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await apiFetch('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword }),
+  });
+}
+
 export async function logout(): Promise<void> {
   await apiFetch('/api/auth/logout', { method: 'POST' });
   setRequestOrganizationId(null);

@@ -2,12 +2,15 @@ import { FormEvent, useState } from 'react';
 import { Eye, EyeOff, X } from 'lucide-react';
 import { login, register, SessionInfo } from '../lib/session';
 import { useI18n } from '../lib/use-i18n';
+import { navigate } from '../lib/route';
 
 interface AuthScreenProps {
   onAuthenticated: (session: SessionInfo) => void;
   /** Guest mode: local-first flow without an account. */
   onContinueAsGuest: () => void;
   onClose?: () => void;
+  /** Preselect the register card, e.g. when routed via /signup. Defaults to login. */
+  initialMode?: 'login' | 'register';
 }
 
 /**
@@ -17,9 +20,9 @@ interface AuthScreenProps {
  * a toggle of the same card. No OAuth: social buttons render disabled
  * (documented absence, never simulated).
  */
-export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose }: AuthScreenProps) => {
+export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initialMode = 'login' }: AuthScreenProps) => {
   const { t } = useI18n();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -156,7 +159,7 @@ export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose }: Auth
             <button
               type="button"
               className="auth-link"
-              onClick={() => setNotice(t('auth.forgotPasswordUnavailable'))}
+              onClick={() => navigate('/forgot-password')}
             >
               {t('auth.forgotPassword')}
             </button>

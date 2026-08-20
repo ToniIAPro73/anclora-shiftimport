@@ -18,7 +18,7 @@ export function getSql() {
   return cachedSql;
 }
 
-const hashToken = (token) => createHash('sha256').update(token).digest('hex');
+export const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 
 export function parseSessionToken(req) {
   const header = String(req.headers?.cookie ?? '');
@@ -56,6 +56,12 @@ export async function destroySession(sql, token) {
     return;
   }
   await sql`DELETE FROM sessions WHERE token_hash = ${hashToken(token)}`;
+}
+
+/** Fase 1.2D.3: password reset invalidates every active session for the
+ * user, not just the one the request happened to arrive on. */
+export async function destroyAllSessions(sql, userId) {
+  await sql`DELETE FROM sessions WHERE user_id = ${userId}`;
 }
 
 /**

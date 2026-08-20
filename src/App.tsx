@@ -8,7 +8,14 @@ import { fingerprintShift } from './lib/import-dedup';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
-import { fetchResolvedSession, logout, switchOrganization, SessionInfo } from './lib/session';
+import {
+  fetchResolvedSession,
+  logout,
+  switchOrganization,
+  completePersonalOnboarding,
+  completeCompanyOnboarding,
+  SessionInfo,
+} from './lib/session';
 import {
   createRemoteEmployee,
   createRemoteImport,
@@ -26,12 +33,21 @@ import { ImportModal } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
+import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
+import { CompanyOnboardingModal } from './components/shift-dashboard/CompanyOnboardingModal';
 import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
+import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { AuthScreen } from './components/AuthScreen';
+import { ForgotPasswordScreen } from './components/ForgotPasswordScreen';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { CookieConsent } from './components/CookieConsent';
 import { LegalFooter } from './components/LegalFooter';
 import { LegalPage } from './components/LegalPage';
+import { LandingPage } from './pages/LandingPage';
+import { PricingPage } from './pages/PricingPage';
+import { navigate, useRoute } from './lib/route';
+import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { CalendarImportContext } from './lib/import-types';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
@@ -63,6 +79,7 @@ function describeShift(shift: Shift, locale: 'es' | 'en', t: (key: string) => st
 function App() {
   const { locale, t } = useI18n();
   const legalPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+/, '') : '';
+  const route = useRoute();
   const [shifts, setShifts] = useState<Shift[]>([]);
   // Fase 1: authenticated multi-tenant state. null = guest (local-first flow).
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -71,8 +88,12 @@ function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
+  // Fase 1.2C.2: sub-step inside the zero-membership onboarding choice
+  // (needsOrgChoice + no memberships). Only meaningful while that state holds.
+  const [onboardingCompanyStep, setOnboardingCompanyStep] = useState(false);
   const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
+  const [isTeamImportOpen, setIsTeamImportOpen] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     if (typeof window === 'undefined') {
       return 'dark';
@@ -192,6 +213,11 @@ function App() {
 
   const handleAuthenticated = useCallback(async (nextSession: SessionInfo) => {
     setSession(nextSession);
+    // The guest first-run guide may already be scheduled from the pre-auth
+    // hydration effect (it runs regardless of route); a real session
+    // supersedes it — onboarding here is the org-choice flow, not the
+    // local-import guide.
+    setIsOnboardingOpen(false);
     if (!nextSession.organizationId) {
       // Multi-org user: nothing loads until an explicit org choice.
       setNeedsOrgChoice(true);
@@ -220,6 +246,31 @@ function App() {
     }
   }, [hydrateAuthenticated]);
 
+  // Fase 1.2C.3: "Para mí" — creates the personal org for a zero-membership
+  // session and lands on Mis turnos.
+  const handlePersonalOnboarding = useCallback(async () => {
+    try {
+      const nextSession = await completePersonalOnboarding();
+      setSession(nextSession);
+      setNeedsOrgChoice(false);
+      setOnboardingCompanyStep(false);
+      await hydrateAuthenticated(nextSession);
+    } catch (error) {
+      console.error('Personal onboarding failed', error);
+      window.alert(t('onboardingChoice.failed'));
+    }
+  }, [hydrateAuthenticated, t]);
+
+  // Fase 1.2C.4: "Para mi empresa" — creates the company org and lands on
+  // Equipo. Errors propagate so CompanyOnboardingModal can show them inline.
+  const handleCompanyOnboarding = useCallback(async (companyName: string, adminName?: string) => {
+    const nextSession = await completeCompanyOnboarding(companyName, adminName);
+    setSession(nextSession);
+    setNeedsOrgChoice(false);
+    setOnboardingCompanyStep(false);
+    await hydrateAuthenticated(nextSession);
+  }, [hydrateAuthenticated]);
+
   const handleLogout = useCallback(async () => {
     try {
       await logout();
@@ -230,6 +281,7 @@ function App() {
     setEmployees([]);
     setSelectedEmployeeId(null);
     setNeedsOrgChoice(false);
+    setOnboardingCompanyStep(false);
     setMigrationPrompt(null);
     setIsMembersOpen(false);
     setShifts(await loadShifts());
@@ -276,6 +328,25 @@ function App() {
       mediaQuery.removeEventListener('change', applyTheme);
     };
   }, [themeMode]);
+
+  // Fase 1.2A.1: an authenticated user landing on /login or /signup (e.g. via
+  // back button) is sent straight to the app instead of seeing the form again.
+  useEffect(() => {
+    if (session && (route === '/login' || route === '/signup')) {
+      navigate('/app');
+    }
+  }, [session, route]);
+
+  // Fase 1.2A.2: post-login router. /app is one physical route that already
+  // adapts by role; this only drives the page title from the same
+  // contractual resolver (EMPLOYEE → Mis turnos, MANAGER/ADMIN → Equipo,
+  // multi-org unresolved → org selector) so it stays a single source of truth.
+  useEffect(() => {
+    if (route !== '/app' || !session) {
+      return;
+    }
+    document.title = POST_LOGIN_TITLES[resolvePostLoginDestination(session, needsOrgChoice)];
+  }, [route, session, needsOrgChoice]);
 
   const monthDays = useMemo(() => getMonthDaysISO(currentYear, currentMonth), [currentYear, currentMonth]);
   const daysInMonth = useMemo(() => getDaysInMonth(currentYear, currentMonth), [currentYear, currentMonth]);
@@ -552,8 +623,76 @@ function App() {
     );
   }
 
+  // Fase 1.2A.1: public routing surfaces. /app (dashboard) still allows the
+  // guest local-first flow when there's no session — the hard anonymous gate
+  // is a Fase 1.2H decision, not implemented here.
+  if (route === '/') {
+    return (
+      <>
+        <LandingPage isAuthenticated={Boolean(session)} />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  if (route === '/pricing') {
+    return (
+      <>
+        <PricingPage />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  if ((route === '/login' || route === '/signup') && !session) {
+    return (
+      <>
+        <AuthScreen
+          initialMode={route === '/signup' ? 'register' : 'login'}
+          onAuthenticated={(nextSession) => {
+            void handleAuthenticated(nextSession);
+            navigate('/app');
+          }}
+          onContinueAsGuest={() => navigate('/app')}
+          onClose={() => navigate('/')}
+        />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  // Fase 1.2D: password recovery. Reachable regardless of session state
+  // (a logged-in-elsewhere user may still follow a reset link).
+  if (route === '/forgot-password') {
+    return (
+      <>
+        <ForgotPasswordScreen />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  if (route === '/reset-password') {
+    return (
+      <>
+        <ResetPasswordScreen />
+        <CookieConsent />
+      </>
+    );
+  }
+
   // EMPLOYEE without linked employee record: safe blocked state, no data.
   const unlinkedEmployee = session?.role === 'EMPLOYEE' && !session.employeeId;
+  // Fase 1.2C.5 "estados incompletos": a personal organization should always
+  // have its self-employee. Zero employees there means onboarding didn't
+  // finish (e.g. request interrupted between org+membership and employee
+  // creation) — never show an ambiguous empty calendar for that.
+  const activeMembership = session?.memberships.find((m) => m.organizationId === session.organizationId);
+  const brokenPersonalOrg = Boolean(
+    session && !needsOrgChoice && activeMembership?.organizationType === 'personal'
+      && !session.employeeId && employees.length === 0,
+  );
+  const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
 
   return (
     <div className="container">
@@ -586,7 +725,7 @@ function App() {
           </div>
         )}
 
-        {session?.role === 'EMPLOYEE' && unlinkedEmployee ? (
+        {accountIncomplete ? (
           <div
             role="status"
             style={{
@@ -598,8 +737,10 @@ function App() {
               marginBottom: '12px',
             }}
           >
-            <strong>{t('unlinkedEmployee.title')}</strong>
-            <p style={{ margin: '8px 0 12px', color: 'var(--text-muted)' }}>{t('unlinkedEmployee.description')}</p>
+            <strong>{t(brokenPersonalOrg ? 'brokenPersonalOrg.title' : 'unlinkedEmployee.title')}</strong>
+            <p style={{ margin: '8px 0 12px', color: 'var(--text-muted)' }}>
+              {t(brokenPersonalOrg ? 'brokenPersonalOrg.description' : 'unlinkedEmployee.description')}
+            </p>
             <button
               type="button"
               className="btn-outline"
@@ -664,6 +805,16 @@ function App() {
                 </select>
               </label>
             )}
+            {(session.role === 'ADMIN' || session.role === 'MANAGER') && (
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setIsTeamImportOpen(true)}
+                style={{ padding: '6px 12px', fontWeight: 700 }}
+              >
+                {t('teamImport.openAction')}
+              </button>
+            )}
             {session.role === 'ADMIN' && (
               <button
                 type="button"
@@ -685,7 +836,7 @@ function App() {
           </div>
         )}
 
-        {!unlinkedEmployee && !needsOrgChoice && (
+        {!accountIncomplete && !needsOrgChoice && (
           <>
         <StatsBar
           currentMonthShifts={currentMonthShifts}
@@ -758,10 +909,24 @@ function App() {
       />
 
       <OrgSelectorModal
-        isOpen={Boolean(session) && needsOrgChoice}
+        isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) > 0}
         memberships={session?.memberships ?? []}
         onSelect={(organizationId) => void handleSwitchOrganization(organizationId)}
         onLogout={() => void handleLogout()}
+      />
+
+      <OnboardingChoiceModal
+        isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0 && !onboardingCompanyStep}
+        onSelectPersonal={() => void handlePersonalOnboarding()}
+        onSelectCompany={() => setOnboardingCompanyStep(true)}
+        onLogout={() => void handleLogout()}
+      />
+
+      <CompanyOnboardingModal
+        isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0 && onboardingCompanyStep}
+        requireAdminName={!session?.user.displayName}
+        onConfirm={handleCompanyOnboarding}
+        onBack={() => setOnboardingCompanyStep(false)}
       />
 
       <LocalMigrationModal
@@ -783,6 +948,16 @@ function App() {
         employees={employees}
         currentUserId={session?.user.id ?? ''}
         onChanged={() => {
+          if (session) {
+            void hydrateAuthenticated(session);
+          }
+        }}
+      />
+
+      <TeamImportModal
+        isOpen={isTeamImportOpen}
+        onClose={() => setIsTeamImportOpen(false)}
+        onImported={() => {
           if (session) {
             void hydrateAuthenticated(session);
           }

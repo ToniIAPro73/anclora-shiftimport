@@ -5,8 +5,13 @@ import { handleError, sendJson } from '../_lib/http.js';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * B2C bootstrap: creates the user, a personal organization, an ADMIN
- * membership and the self-linked Employee, then opens a session.
+ * Account bootstrap: creates the user and opens a session. Organization and
+ * membership are deliberately NOT created here — Fase 1.2C.2 requires an
+ * explicit "Para mí" / "Para mi empresa" choice right after signup, handled
+ * by POST /api/onboarding/personal or /api/onboarding/company. A freshly
+ * registered account intentionally has zero memberships until that step
+ * completes (see resolveContext: memberships.length === 0 is a valid,
+ * expected state, not an error).
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -39,30 +44,11 @@ export default async function handler(req, res) {
     `;
     const user = userRows[0];
 
-    const orgRows = await sql`
-      INSERT INTO organizations (name, type)
-      VALUES (${name || normalizedEmail}, 'personal')
-      RETURNING id, name, type
-    `;
-    const org = orgRows[0];
-
-    await sql`
-      INSERT INTO memberships (user_id, organization_id, role)
-      VALUES (${user.id}, ${org.id}, 'ADMIN')
-    `;
-
-    // Self employee so the B2C import flow works without extra setup.
-    await sql`
-      INSERT INTO employees (organization_id, name, user_id)
-      VALUES (${org.id}, ${name || normalizedEmail}, ${user.id})
-    `;
-
     const { token, expiresAt } = await createSession(sql, user.id);
     res.setHeader('Set-Cookie', sessionCookieHeader(req, token, expiresAt));
 
     return sendJson(res, 201, {
       user: { id: user.id, email: user.email, displayName: user.display_name },
-      organizations: [{ id: org.id, name: org.name, type: org.type, role: 'ADMIN' }],
     });
   } catch (error) {
     return handleError(res, error);

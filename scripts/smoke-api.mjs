@@ -10,6 +10,31 @@ import employeesHandler from '../api/employees/index.js';
 import shiftsHandler from '../api/shifts/index.js';
 import importsHandler from '../api/imports/index.js';
 import membershipsHandler from '../api/memberships/index.js';
+import personalOnboardingHandler from '../api/onboarding/personal.js';
+import companyOnboardingHandler from '../api/onboarding/company.js';
+import requestResetHandler from '../api/auth/request-reset.js';
+import resetPasswordHandler from '../api/auth/reset-password.js';
+
+/** request-reset.js logs the reset link instead of emailing it (Fase
+ * 1.2D.4 delivery gap) — capture that line to redeem the token in-process. */
+async function callCapturingToken(handler, request) {
+  const originalLog = console.log;
+  let captured = null;
+  console.log = (...args) => {
+    const line = args.join(' ');
+    const match = line.match(/token=([^\s&]+)/);
+    if (match) {
+      captured = match[1];
+    }
+    originalLog(...args);
+  };
+  try {
+    const res = await call(handler, request);
+    return { res, token: captured };
+  } finally {
+    console.log = originalLog;
+  }
+}
 
 const sql = neon(process.env.DATABASE_URL);
 const suffix = Date.now().toString(36);
@@ -26,13 +51,14 @@ function mockRes() {
   return res;
 }
 
-const req = (method, { body, query, cookie, orgHeader } = {}) => ({
+const req = (method, { body, query, cookie, orgHeader, ip } = {}) => ({
   method,
   body,
   query: query ?? {},
   headers: {
     ...(cookie ? { cookie } : {}),
     ...(orgHeader ? { 'x-organization-id': orgHeader } : {}),
+    ...(ip ? { 'x-forwarded-for': ip } : {}),
   },
 });
 
@@ -56,11 +82,20 @@ const run = async () => {
   check('register A', regA.statusCode === 201);
   const cookieA = String(regA.headers['set-cookie']).split(';')[0];
 
+  // Fase 1.2C: register no longer auto-creates an org — the "Para mí"
+  // onboarding choice does, explicitly, right after signup.
+  const onboardA = await call(personalOnboardingHandler, req('POST', { cookie: cookieA }));
+  check('personal onboarding creates org+employee', onboardA.statusCode === 201);
+
   // Tenant B
   const regB = await call(registerHandler, req('POST', {
     body: { email: `smoke-b-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke B' },
   }));
   const cookieB = String(regB.headers['set-cookie']).split(';')[0];
+  const onboardB = await call(personalOnboardingHandler, req('POST', { cookie: cookieB }));
+  check('personal onboarding is idempotency-guarded per user', onboardB.statusCode === 201);
+  const onboardBAgain = await call(personalOnboardingHandler, req('POST', { cookie: cookieB }));
+  check('repeating onboarding after completion is rejected (409)', onboardBAgain.statusCode === 409);
 
   const meA = await call(meHandler, req('GET', { cookie: cookieA }));
   check('session A resolves org+role+employee', meA.body.role === 'ADMIN' && Boolean(meA.body.organizationId) && Boolean(meA.body.employeeId));
@@ -169,10 +204,120 @@ const run = async () => {
   const meBafter = await call(meHandler, req('GET', { cookie: cookieB, orgHeader: orgA }));
   check('revoked membership no longer activates org', meBafter.statusCode === 200 && meBafter.body.organizationId === null);
 
+  // ---- Fase 1.2C.4: company onboarding ("Para mi empresa") --------------
+  const regC = await call(registerHandler, req('POST', {
+    body: { email: `smoke-c-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: '' },
+  }));
+  const cookieC = String(regC.headers['set-cookie']).split(';')[0];
+
+  const companyMissingAdmin = await call(companyOnboardingHandler, req('POST', {
+    cookie: cookieC,
+    body: { companyName: 'Smoke Co' },
+  }));
+  check('company onboarding requires admin name when account has none', companyMissingAdmin.statusCode === 400);
+
+  const companyOk = await call(companyOnboardingHandler, req('POST', {
+    cookie: cookieC,
+    body: { companyName: 'Smoke Co', adminName: 'Smoke Admin' },
+  }));
+  check('company onboarding creates org (no self employee)', companyOk.statusCode === 201);
+  const orgC = companyOk.body.organizationId;
+
+  const meC = await call(meHandler, req('GET', { cookie: cookieC }));
+  check(
+    'company onboarding: ADMIN role, org type company, no self employee',
+    meC.body.role === 'ADMIN' && meC.body.employeeId === null
+      && meC.body.memberships[0]?.organizationType === 'company',
+  );
+
+  // ---- Fase 1.2D: password recovery ---------------------------------
+  const reqUnknown = await call(requestResetHandler, req('POST', { body: { email: `nobody-${suffix}@example.com` } }));
+  const { res: reqA, token: resetTokenA } = await callCapturingToken(
+    requestResetHandler,
+    req('POST', { body: { email: `smoke-a-${suffix}@example.com` } }),
+  );
+  check(
+    'request-reset responds identically for unknown vs known email (no enumeration)',
+    reqUnknown.statusCode === 200 && reqA.statusCode === 200
+      && JSON.stringify(reqUnknown.body) === JSON.stringify(reqA.body),
+  );
+  check('request-reset issues a token for a known email', Boolean(resetTokenA));
+
+  const wrongToken = await call(resetPasswordHandler, req('POST', { body: { token: 'not-a-real-token', newPassword: 'new-pass-1234' } }));
+  check('reset-password rejects an unknown token (400)', wrongToken.statusCode === 400);
+
+  const resetOk = await call(resetPasswordHandler, req('POST', { body: { token: resetTokenA, newPassword: 'new-pass-1234' } }));
+  check('reset-password accepts a valid token', resetOk.statusCode === 200);
+
+  const oldLoginFails = await call(loginHandler, req('POST', { body: { email: `smoke-a-${suffix}@example.com`, password: 'smoke-pass-1234' } }));
+  check('old password no longer works after reset', oldLoginFails.statusCode === 401);
+  const newLoginWorks = await call(loginHandler, req('POST', { body: { email: `smoke-a-${suffix}@example.com`, password: 'new-pass-1234' } }));
+  check('new password works after reset', newLoginWorks.statusCode === 200);
+
+  const meAAfterReset = await call(meHandler, req('GET', { cookie: cookieA }));
+  check('reset-password invalidated the pre-existing session', meAAfterReset.statusCode === 401);
+
+  const reuseToken = await call(resetPasswordHandler, req('POST', { body: { token: resetTokenA, newPassword: 'another-pass-1234' } }));
+  check('reset token is single-use (409/400 on reuse)', reuseToken.statusCode === 400);
+
+  // ---- Fase 1.2E: distributed login rate limiting ------------------------
+  const RL_IP = '198.51.100.77';
+  const rlEmail = `smoke-rl-${suffix}@example.com`;
+  const otherEmail = `smoke-rl-other-${suffix}@example.com`;
+
+  const regRL = await call(registerHandler, req('POST', { body: { email: rlEmail, password: 'rl-correct-pass1', displayName: 'RL' } }));
+  const cookieRL = String(regRL.headers['set-cookie']).split(';')[0];
+  const onboardRL = await call(personalOnboardingHandler, req('POST', { cookie: cookieRL }));
+  const orgRL = onboardRL.body.organizationId;
+
+  // Allowed: attempts under the per-email threshold (10) all get a normal
+  // 401, never 429.
+  let allUnder429 = true;
+  for (let i = 0; i < 5; i += 1) {
+    const attempt = await call(loginHandler, req('POST', { ip: RL_IP, body: { email: rlEmail, password: 'wrong-pass' } }));
+    if (attempt.statusCode !== 401) allUnder429 = false;
+  }
+  check('rate limit: attempts under the threshold are allowed through (401, not 429)', allUnder429);
+
+  // Blocked: push past the per-email threshold.
+  for (let i = 0; i < 6; i += 1) {
+    await call(loginHandler, req('POST', { ip: RL_IP, body: { email: rlEmail, password: 'wrong-pass' } }));
+  }
+  const blocked = await call(loginHandler, req('POST', { ip: RL_IP, body: { email: rlEmail, password: 'wrong-pass' } }));
+  check('rate limit: blocks once the per-email threshold is exceeded (429)', blocked.statusCode === 429);
+
+  // Isolation: the same email from a different IP is still blocked (the
+  // per-email limit does not depend on source IP)...
+  const blockedOtherIp = await call(loginHandler, req('POST', { ip: '203.0.113.5', body: { email: rlEmail, password: 'wrong-pass' } }));
+  check('rate limit: per-email block applies across different IPs', blockedOtherIp.statusCode === 429);
+
+  // ...but a different identity on the same (now-implicated) IP is not
+  // blocked by the email limiter — isolation between identities.
+  const notBlockedOtherEmail = await call(loginHandler, req('POST', { ip: RL_IP, body: { email: otherEmail, password: 'whatever' } }));
+  check('rate limit: a different identity on the same IP is not blocked by the email limiter', notBlockedOtherEmail.statusCode === 401);
+
+  // Blocking happens before credential verification: even the correct
+  // password is refused while rate-limited.
+  const correctWhileBlocked = await call(loginHandler, req('POST', { ip: RL_IP, body: { email: rlEmail, password: 'rl-correct-pass1' } }));
+  check('rate limit: blocks even the correct password once tripped', correctWhileBlocked.statusCode === 429);
+
+  // Expiration: age the window back past 5 minutes (waiting on real
+  // wall-clock time would be impractical here) and confirm the next
+  // attempt is let through again.
+  await sql`UPDATE login_attempts SET window_start = NOW() - INTERVAL '10 minutes' WHERE id_key = ${`email:${rlEmail}`}`;
+  const afterExpiry = await call(loginHandler, req('POST', { ip: RL_IP, body: { email: rlEmail, password: 'rl-correct-pass1' } }));
+  check('rate limit: expired window allows a fresh attempt through (successful login)', afterExpiry.statusCode === 200);
+
+  // Success clears the counters: the very next wrong attempt starts a
+  // fresh window instead of being instantly blocked.
+  const freshAfterSuccess = await call(loginHandler, req('POST', { ip: RL_IP, body: { email: rlEmail, password: 'wrong-pass' } }));
+  check('rate limit: a successful login clears the counters (next failure is not instantly blocked)', freshAfterSuccess.statusCode === 401);
+
   // Cleanup: deleting organizations cascades employees/imports/shifts/memberships.
   const emailPattern = `smoke-%-${suffix}@example.com`;
-  await sql`DELETE FROM organizations WHERE id = ${orgA} OR id = ${orgB}`;
+  await sql`DELETE FROM organizations WHERE id = ${orgA} OR id = ${orgB} OR id = ${orgC} OR id = ${orgRL}`;
   await sql`DELETE FROM users WHERE email LIKE ${emailPattern}`;
+  await sql`DELETE FROM login_attempts WHERE id_key IN (${`ip:${RL_IP}`}, ${`ip:203.0.113.5`}, ${`email:${rlEmail}`}, ${`email:${otherEmail}`}, ${'ip:unknown'})`;
 
   const failed = results.filter(([, ok]) => !ok);
   console.log(failed.length === 0 ? `\nSMOKE OK (${results.length} checks)` : `\nSMOKE FAILED (${failed.length})`);

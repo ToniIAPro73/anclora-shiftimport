@@ -19,6 +19,8 @@ beforeEach(() => {
 });
 
 function renderApp() {
+  // Fase 1.2A.1: dashboard now lives at /app, not /.
+  window.history.pushState({}, '', '/app');
   return render(
     <I18nProvider>
       <App />
@@ -76,5 +78,48 @@ describe('App onboarding', () => {
     renderApp();
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
     expect(screen.queryByText('Bienvenido a Anclora ShiftImport')).toBeNull();
+  });
+});
+
+describe('Fase 1.2A.1 public/private routing', () => {
+  function renderAt(path: string) {
+    window.history.pushState({}, '', path);
+    return render(
+      <I18nProvider>
+        <App />
+      </I18nProvider>,
+    );
+  }
+
+  it('renders the landing page at /', async () => {
+    renderAt('/');
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Empezar gratis' }).length).toBeGreaterThan(0));
+    expect(screen.queryByRole('button', { name: 'Importar' })).toBeNull();
+  });
+
+  it('renders the pricing placeholder at /pricing', async () => {
+    renderAt('/pricing');
+    await waitFor(() => expect(screen.getByText('Precios')).toBeTruthy());
+  });
+
+  it('renders login form at /login', async () => {
+    renderAt('/login');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeTruthy());
+    expect(screen.queryByText('Confirmar contraseña')).toBeNull();
+  });
+
+  it('renders signup form (register mode) at /signup', async () => {
+    renderAt('/signup');
+    await waitFor(() => expect(screen.getByText('Confirmar contraseña')).toBeTruthy());
+  });
+
+  it('still serves the guest dashboard at /app (soft gate, no session required)', async () => {
+    renderAt('/app');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeTruthy());
+  });
+
+  it('falls back unknown paths to the /app dashboard', async () => {
+    renderAt('/some/unknown/path');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeTruthy());
   });
 });

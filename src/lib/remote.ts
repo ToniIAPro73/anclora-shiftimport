@@ -84,14 +84,18 @@ export async function listRemoteEmployees(): Promise<RemoteEmployee[]> {
 export async function matchRemoteEmployee(
   selector: { name: string; externalId: string },
 ): Promise<{ kind: EmployeeMatchKind; employees: RemoteEmployee[] }> {
-  const params = new URLSearchParams({ match: '1' });
+  // Built by hand (not URLSearchParams): URLSearchParams encodes spaces as
+  // '+', which the API's req.query parser does not decode back to a space —
+  // any name with a space (i.e. almost every real name) would silently
+  // never match. %20 (via encodeURIComponent) decodes correctly everywhere.
+  const parts = ['match=1'];
   if (selector.externalId.trim()) {
-    params.set('externalEmployeeId', selector.externalId.trim());
+    parts.push(`externalEmployeeId=${encodeURIComponent(selector.externalId.trim())}`);
   }
   if (selector.name.trim()) {
-    params.set('name', selector.name.trim());
+    parts.push(`name=${encodeURIComponent(selector.name.trim())}`);
   }
-  return apiFetch(`/api/employees?${params.toString()}`);
+  return apiFetch(`/api/employees?${parts.join('&')}`);
 }
 
 export async function createRemoteEmployee(input: {
