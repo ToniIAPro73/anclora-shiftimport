@@ -14,6 +14,8 @@ import {
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { Shift } from '../../lib/types';
+import { ApiError } from '../../lib/session';
+import { UpgradePrompt } from './UpgradePrompt';
 
 interface TeamImportModalProps {
   isOpen: boolean;
@@ -97,6 +99,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
   // employee (one document, one source event); CSV keeps its existing
   // per-employee Import (unchanged, regression-safe).
   const [sourceFormat, setSourceFormat] = useState<'csv' | 'pdf'>('csv');
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   if (!isOpen) {
     return null;
@@ -186,7 +189,11 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
       });
       updateRow(row.key, { status: 'recognized', resolvedEmployeeId: created.id, selected: true, busy: false });
     } catch (err) {
-      console.error('Failed to create employee inline', err);
+      if (err instanceof ApiError && err.code === 'PLAN_LIMIT') {
+        setShowUpgrade(true);
+      } else {
+        console.error('Failed to create employee inline', err);
+      }
       updateRow(row.key, { busy: false });
     }
   };
@@ -295,6 +302,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
   const failedOutcomes = outcomes.filter((outcome) => !outcome.ok);
 
   return (
+    <>
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '760px', width: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
@@ -519,5 +527,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
         )}
       </div>
     </div>
+    <UpgradePrompt isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
+    </>
   );
 };

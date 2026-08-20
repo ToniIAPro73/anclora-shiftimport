@@ -9,6 +9,8 @@ import {
   RemoteEmployee,
 } from '../../lib/remote';
 import { ModalShell } from '../ui/ModalShell';
+import { UpgradePrompt } from './UpgradePrompt';
+import { ApiError } from '../../lib/session';
 
 interface MembersModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
   const { t } = useI18n();
   const [members, setMembers] = useState<RemoteMember[]>([]);
   const [error, setError] = useState('');
+  const [showUpgrade, setShowUpgrade] = useState(false);
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -60,7 +63,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
       await reload();
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('members.actionFailed'));
+      if (err instanceof ApiError && err.code === 'PLAN_LIMIT') {
+        setShowUpgrade(true);
+      } else {
+        setError(err instanceof Error ? err.message : t('members.actionFailed'));
+      }
     } finally {
       setBusy(false);
     }
@@ -89,6 +96,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
   );
 
   return (
+    <>
     <ModalShell isOpen={isOpen} onClose={onClose} title={t('members.title')} maxWidth="560px">
       <div style={{ display: 'grid', gap: '8px', marginBottom: '18px' }}>
         {members.map((member) => (
@@ -158,5 +166,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
         </button>
       </form>
     </ModalShell>
+    <UpgradePrompt isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
+    </>
   );
 };
