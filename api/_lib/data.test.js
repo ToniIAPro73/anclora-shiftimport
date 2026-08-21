@@ -353,9 +353,19 @@ describe('employee lifecycle (deactivate/reactivate/delete)', () => {
     });
     await updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'active' });
     const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
-    expect(update.text).toContain('deactivated_at = CASE WHEN');
-    expect(update.text).toContain('ELSE NULL END');
     expect(update.values[2]).toBe('active');
+    expect(update.values[4]).toBeNull();
+  });
+
+  it('editing an inactive employee without touching status preserves deactivated_at', async () => {
+    const deactivatedAt = new Date('2025-03-01T00:00:00Z');
+    const { sql, calls } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { status: 'inactive', deactivated_at: deactivatedAt })],
+    });
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, name: 'Renamed' });
+    const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(update.values[2]).toBe('inactive');
+    expect(update.values[4]).toBe(deactivatedAt);
   });
 
   it('EMPLOYEE and MANAGER roles cannot deactivate, reactivate or delete', async () => {

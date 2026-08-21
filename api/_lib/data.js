@@ -347,13 +347,20 @@ export async function updateEmployee(sql, ctx, input) {
     }
   }
 
+  let deactivatedAt = current.deactivatedAt;
+  if (status === 'inactive' && current.status !== 'inactive') {
+    deactivatedAt = new Date();
+  } else if (status === 'active') {
+    deactivatedAt = null;
+  }
+
   const rows = await sql`
     UPDATE employees
     SET name = ${name},
         external_employee_id = ${externalId},
         status = ${status},
         user_id = ${userId},
-        deactivated_at = CASE WHEN ${status} = 'inactive' THEN NOW() ELSE NULL END,
+        deactivated_at = ${deactivatedAt},
         updated_at = NOW()
     WHERE id = ${id} AND organization_id = ${ctx.organizationId}
     RETURNING *
