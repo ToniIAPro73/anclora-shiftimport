@@ -16,6 +16,7 @@ import {
   buildTabularImportResult,
   buildTabularProfileFromAnswers,
   dayNumberFromHeader,
+  detectCsvDelimiter,
   generateTabularQuestions,
   parseRosterTable,
   parseRosterTableWithAnswers,
@@ -75,6 +76,31 @@ describe('parseRosterTable', () => {
     expect(parseRosterTable('a,b\n"c,d')).toBeNull();
     // A quote appearing mid-field, not as an opening quote or a doubled escape.
     expect(parseRosterTable('a,b\nc"d,e')).toBeNull();
+  });
+
+  it('parses a semicolon-delimited CSV (Spanish/German/French Excel default export)', () => {
+    expect(parseRosterTable('external_employee_id;name\n30394;"Casero Bosquet, Ana Maria"')).toEqual({
+      headers: ['external_employee_id', 'name'],
+      rows: [['30394', 'Casero Bosquet, Ana Maria']],
+    });
+  });
+});
+
+describe('detectCsvDelimiter', () => {
+  it('picks comma for a plain comma-delimited header', () => {
+    expect(detectCsvDelimiter('external_employee_id,name')).toBe(',');
+  });
+
+  it('picks semicolon when the header only splits on semicolon', () => {
+    expect(detectCsvDelimiter('external_employee_id;name')).toBe(';');
+  });
+
+  it('picks tab when the header only splits on tab', () => {
+    expect(detectCsvDelimiter('external_employee_id\tname')).toBe('\t');
+  });
+
+  it('defaults to comma for a single-column header with no delimiter at all', () => {
+    expect(detectCsvDelimiter('external_employee_id')).toBe(',');
   });
 });
 

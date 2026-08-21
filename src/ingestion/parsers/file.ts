@@ -22,6 +22,7 @@ import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
 import {
   analyzeRosterTable,
+  detectCsvDelimiter,
   generateTabularQuestions,
   normalizeTableHeader,
   parseCsvLine,
@@ -276,15 +277,18 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
   }
 
   // A quoted field is now genuinely supported (parseCsvLine) — only a truly
-  // malformed quote structure in the header is rejected outright.
-  const headerParsed = parseCsvLine(rows[0]);
+  // malformed quote structure in the header is rejected outright. Delimiter
+  // is auto-detected (`,`/`;`/tab) — Spanish/German/French Excel exports
+  // default to `;`, since `,` is their locale's decimal separator.
+  const delimiter = detectCsvDelimiter(rows[0]);
+  const headerParsed = parseCsvLine(rows[0], delimiter);
   if (headerParsed.malformed) {
     throw new IngestionError(
       'MALFORMED_INPUT',
       'El CSV contiene una cabecera con comillas mal formadas.',
     );
   }
-  const parsedDataRows = rows.slice(1).map((line) => ({ line, ...parseCsvLine(line) }));
+  const parsedDataRows = rows.slice(1).map((line) => ({ line, ...parseCsvLine(line, delimiter) }));
   const malformedRow = parsedDataRows.find((parsed) => parsed.malformed);
   if (malformedRow) {
     throw new IngestionError(
@@ -579,7 +583,8 @@ function analyzeRosterDocument(
   selector: EmployeeSelector,
 ): DocumentAnalysisResult {
   const lines = stripBom(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const headers = parseCsvLine(lines[0] ?? '').cells;
+  const delimiter = detectCsvDelimiter(lines[0] ?? '');
+  const headers = parseCsvLine(lines[0] ?? '', delimiter).cells;
   const rows = lines.slice(1);
 
   const employeeCol = findRosterColumnIndex(headers, 'employee');
@@ -592,7 +597,7 @@ function analyzeRosterDocument(
     const targetIds = selector.employeeIdentifiers.map((value) => value.replace(/\D/g, '')).filter(Boolean);
     const nameTokens = normalizeText(selector.employeeName).split(' ').filter((token) => token.length >= 3);
     for (const line of rows) {
-      const cells = parseCsvLine(line).cells;
+      const cells = parseCsvLine(line, delimiter).cells;
       const idCell = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').replace(/\D/g, '') : '';
       const nameCell = employeeCol !== undefined ? (cells[employeeCol] ?? '') : '';
       const idHit = idCell.length > 0 && targetIds.includes(idCell);
@@ -609,7 +614,7 @@ function analyzeRosterDocument(
   let invalidTimes = 0;
   const unknownTokens = new Set<string>();
   for (const line of rows) {
-    const cells = parseCsvLine(line).cells;
+    const cells = parseCsvLine(line, delimiter).cells;
     for (const column of [valueCol, typeCol]) {
       if (column === undefined) {
         continue;

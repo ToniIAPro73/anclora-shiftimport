@@ -72,6 +72,19 @@ describe('parseEmployeesCsv', () => {
       ]);
     });
 
+    it('semicolon-delimited CSV imports (Spanish/German/French Excel default export)', () => {
+      const csv = 'external_employee_id;name\n38248;Roberto Jaime\n85919;Joan Cerda';
+      expect(parseEmployeesCsv(csv)).toEqual([
+        { externalEmployeeId: '38248', name: 'Roberto Jaime' },
+        { externalEmployeeId: '85919', name: 'Joan Cerda' },
+      ]);
+    });
+
+    it('semicolon-delimited CSV with a quoted comma-name still keeps the comma inside the field', () => {
+      const csv = 'external_employee_id;name\n30394;"Casero Bosquet, Ana Maria"';
+      expect(parseEmployeesCsv(csv)).toEqual([{ externalEmployeeId: '30394', name: 'Casero Bosquet, Ana Maria' }]);
+    });
+
     it('Case 8: a realistic multi-row file with quoted comma-names and BOM imports every row', () => {
       const csv = '\uFEFFexternal_employee_id,name\n'
         + '38248,"Bosch Noguera, Roberto Jaime"\n'

@@ -112,6 +112,29 @@ export function stripBom(text: string): string {
   return text.replace(/^\uFEFF/, '');
 }
 
+const CSV_DELIMITER_CANDIDATES = [',', ';', '\t'];
+
+/**
+ * Picks the delimiter that splits the header line into the most columns \u2014
+ * `,` is the RFC4180 default, but Spanish/German/French Excel exports
+ * `;`-delimited CSV by default (their locale uses `,` as the decimal
+ * separator), and some exports use tabs. Matches the delimiter set the
+ * previous naive splitter (`splitTableLine`) accepted, so switching to a
+ * real quote-aware parser doesn't narrow what already worked.
+ */
+export function detectCsvDelimiter(headerLine: string): string {
+  let best = CSV_DELIMITER_CANDIDATES[0];
+  let bestCount = 0;
+  for (const candidate of CSV_DELIMITER_CANDIDATES) {
+    const { cells, malformed } = parseCsvLine(headerLine, candidate);
+    if (!malformed && cells.length > bestCount) {
+      best = candidate;
+      bestCount = cells.length;
+    }
+  }
+  return best;
+}
+
 export function normalizeTableHeader(value: string): string {
   // underscores become spaces so worker_id matches the alias "worker id"
   return normalizeText(value).replace(/_/g, ' ');
@@ -201,7 +224,8 @@ export function parseRosterTable(text: string): RosterTable | null {
   if (lines.length < 2) {
     return null;
   }
-  const headerParsed = parseCsvLine(lines[0]);
+  const delimiter = detectCsvDelimiter(lines[0]);
+  const headerParsed = parseCsvLine(lines[0], delimiter);
   if (headerParsed.malformed) {
     return null;
   }
@@ -211,7 +235,7 @@ export function parseRosterTable(text: string): RosterTable | null {
   }
   const rows: string[][] = [];
   for (const line of lines.slice(1)) {
-    const parsed = parseCsvLine(line);
+    const parsed = parseCsvLine(line, delimiter);
     if (parsed.malformed) {
       return null;
     }
