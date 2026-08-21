@@ -264,6 +264,7 @@ const translations: Record<Locale, TranslationTree> = {
     team: {
       teamLabel: 'Equipo:',
       employeeLabel: 'Empleado:',
+      roleLabel: 'Rol',
       myShifts: 'Mis turnos',
       createEmployeeConfirm: 'Empleado no registrado: {{employee}}. ¿Crear empleado y continuar la importación?',
       ambiguousEmployee: 'El nombre "{{name}}" coincide con varios empleados. Indica el ID de empleado para desambiguar.',
@@ -920,6 +921,7 @@ const translations: Record<Locale, TranslationTree> = {
     team: {
       teamLabel: 'Team:',
       employeeLabel: 'Employee:',
+      roleLabel: 'Role',
       myShifts: 'My shifts',
       createEmployeeConfirm: 'Unregistered employee: {{employee}}. Create the employee and continue the import?',
       ambiguousEmployee: 'The name "{{name}}" matches several employees. Provide the employee ID to disambiguate.',

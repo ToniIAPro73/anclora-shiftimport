@@ -822,7 +822,12 @@ function App() {
                 </span>
               )}
             </label>
-            <span style={{ color: 'var(--text-subtle)' }}>{session.role ? t(`role.${session.role.toLowerCase()}`) : ''}</span>
+            {session.role && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                {t('team.roleLabel')}
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t(`role.${session.role.toLowerCase()}`)}</span>
+              </label>
+            )}
             <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--glass-border)' }} aria-hidden="true" />
             {session.role === 'EMPLOYEE' ? (
               <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
