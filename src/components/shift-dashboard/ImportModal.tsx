@@ -15,6 +15,8 @@ import {
   ImportState,
 } from '../../ingestion/diagnostics';
 import { EmployeeSelector } from '../../ingestion/core/row-detection';
+import { detectTeamRoster } from '../../ingestion/team-roster';
+import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
 import { touchFormatProfile } from '../../lib/format-profiles';
@@ -43,6 +45,10 @@ interface ImportModalProps {
   /** Authenticated mode: employee selected in the team bar. Prefills the
    * identity fields so the parser targets that person's row. */
   employeePreset?: { name: string; externalId: string } | null;
+  /** EMPLOYEE role (or any authenticated session): identity comes from the
+   * account, not free text — Name/ID become read-only context, never a
+   * selector the user can retype to import as someone else. */
+  identityLocked?: boolean;
 }
 
 /** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
@@ -225,7 +231,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -246,6 +252,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [qualityOverride, setQualityOverride] = useState<ImportResult | null>(null);
   const [assistantSession, setAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
   const [assistantDismissed, setAssistantDismissed] = useState(false);
+  // identityLocked (EMPLOYEE) + a multi-person roster: true when the roster
+  // was successfully detected but no row matched the account's own employee.
+  const [selfNotFound, setSelfNotFound] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialFileHandledRef = useRef<File | null>(null);
   const previewTrackedRef = useRef(false);
@@ -338,6 +347,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext) => {
     setLoading(true);
     setErrorDiagnosis(null);
+    setSelfNotFound(false);
     setScanTime(null);
     setAnalysis(null);
     setQualityOverride(null);
@@ -345,6 +355,44 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setAssistantDismissed(false);
     setPeriodConflictResolved(false);
     setDetectedFormat(getImportFormatLabel(classifyDocument(target)));
+
+    // identityLocked (EMPLOYEE): a document may legitimately be a whole-team
+    // roster (many named employees). Never surface those other rows — try
+    // roster detection first (same detector TeamImportModal uses) and, when
+    // it finds more than one person, filter to the account's own employee
+    // before anything reaches the preview UI. A non-roster document (the
+    // common case: a personal-only file) falls through unchanged below.
+    if (identityLocked) {
+      const isPdf = target.name.toLowerCase().endsWith('.pdf') || target.type.toLowerCase().includes('pdf');
+      try {
+        const rosterDetection = isPdf
+          ? await detectPdfTeamRoster(target)
+          : detectTeamRoster(await target.text());
+        const employees = rosterDetection?.employees ?? [];
+        if (employees.length > 1) {
+          const selfName = (employeePreset?.name ?? '').trim().toLowerCase();
+          const selfExternalId = (employeePreset?.externalId ?? '').trim();
+          const selfRow = employees.find((employee) => (
+            (selfExternalId && employee.externalEmployeeId === selfExternalId)
+            || (selfName && employee.name.trim().toLowerCase() === selfName)
+          ));
+          setDetectedFormat(getImportFormatLabel(isPdf ? 'pdf' : 'csv'));
+          if (!selfRow) {
+            setSelfNotFound(true);
+            setLoading(false);
+            return;
+          }
+          setParsedShifts(selfRow.shifts);
+          setLoading(false);
+          return;
+        }
+      } catch (rosterError: unknown) {
+        // Roster detection is a best-effort pre-check, not authoritative —
+        // any failure here just falls through to the normal single-employee
+        // pipeline below, which has its own error handling.
+        console.warn('[ImportModal] Roster pre-check failed, falling back', rosterError);
+      }
+    }
 
     // The month/year selects are the authoritative user context: always
     // analyze under them. When the document's own evidence points elsewhere,
@@ -370,7 +418,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     } finally {
       setLoading(false);
     }
-  }, [buildSelector, selectedMonth, selectedYear]);
+  }, [buildSelector, selectedMonth, selectedYear, identityLocked, employeePreset]);
 
   // Onboarding handoff: a pre-selected file auto-starts the pipeline once.
   useEffect(() => {
@@ -431,6 +479,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setFile(null);
     setParsedShifts([]);
     setErrorDiagnosis(null);
+    setSelfNotFound(false);
     setPeriodConflictResolved(false);
     setScanTime(null);
     setDetectedFormat(null);
@@ -455,6 +504,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setFile(selected);
     setParsedShifts([]);
     setErrorDiagnosis(null);
+    setSelfNotFound(false);
     setPeriodConflictResolved(false);
     setScanTime(null);
     setAnalysis(null);
@@ -536,12 +586,16 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       year: Number.parseInt(selectedYear, 10),
     };
 
-    const profile = loadUserProfile();
-    saveUserProfile({
-      ...profile,
-      displayName: employeeName.trim() || profile.displayName,
-      employeeIdentifiers: employeeId.trim() ? [employeeId.trim()] : profile.employeeIdentifiers,
-    });
+    // identityLocked: identity is the account's, never local guest profile
+    // text — don't let a locked/read-only field write into the local profile.
+    if (!identityLocked) {
+      const profile = loadUserProfile();
+      saveUserProfile({
+        ...profile,
+        displayName: employeeName.trim() || profile.displayName,
+        employeeIdentifiers: employeeId.trim() ? [employeeId.trim()] : profile.employeeIdentifiers,
+      });
+    }
 
     // A successful import through a recognized format counts as a profile use.
     const matchedProfileId = quality?.profileId ?? analysis?.structure?.matchedProfile?.profile.id;
@@ -551,10 +605,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
 
-    onConfirmImport(finalShifts, importContext, {
-      name: employeeName.trim(),
-      externalId: employeeId.trim(),
-    });
+    // identityLocked: the selector is always the account's own identity —
+    // never whatever text sits in the (now read-only) fields.
+    const selector = identityLocked
+      ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
+      : { name: employeeName.trim(), externalId: employeeId.trim() };
+
+    onConfirmImport(finalShifts, importContext, selector);
     onClose();
   };
 
@@ -641,13 +698,24 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 <span>{t('importModal.nameLabel')}</span>
-                <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder={t('importModal.namePlaceholder')} style={{ padding: '10px 12px' }} />
+                {identityLocked ? (
+                  <span
+                    style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--text-primary)' }}
+                    data-testid="import-employee-name-locked"
+                  >
+                    {employeeName}
+                  </span>
+                ) : (
+                  <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder={t('importModal.namePlaceholder')} style={{ padding: '10px 12px' }} />
+                )}
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                <span>{t('importModal.idLabel')}</span>
-                <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder={t('importModal.idPlaceholder')} style={{ padding: '10px 12px' }} />
-              </label>
+              {!identityLocked && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <span>{t('importModal.idLabel')}</span>
+                  <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder={t('importModal.idPlaceholder')} style={{ padding: '10px 12px' }} />
+                </label>
+              )}
 
               <ModalSelect label={t('importModal.monthLabel')} value={selectedMonth} options={monthSelectOptions} onChange={setSelectedMonth} />
 
@@ -961,12 +1029,19 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   {/* GN-06: zero importable shifts is an explicit state with a
                       reason — never a silent "Correcto" 0/0. */}
                   <p style={{ marginTop: '12px' }}>
-                    {diagnosis?.diagnostics.some((diagnostic) => diagnostic.code === 'NO_SHIFTS_FOUND')
-                      ? t('diagnosis.noShifts.title')
-                      : diagnosis?.state === 'UNSUPPORTED' || diagnosis?.state === 'FAILED'
-                        ? t(STATE_I18N_KEYS[diagnosis.state])
-                        : t('importModal.emptyStateHint')}
+                    {selfNotFound
+                      ? t('importModal.selfNotFound')
+                      : diagnosis?.diagnostics.some((diagnostic) => diagnostic.code === 'NO_SHIFTS_FOUND')
+                        ? t('diagnosis.noShifts.title')
+                        : diagnosis?.state === 'UNSUPPORTED' || diagnosis?.state === 'FAILED'
+                          ? t(STATE_I18N_KEYS[diagnosis.state])
+                          : t('importModal.emptyStateHint')}
                   </p>
+                  {selfNotFound && (
+                    <p style={{ marginTop: '6px', fontSize: '0.8rem', opacity: 0.8 }}>
+                      {t('importModal.selfNotFoundHint')}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, requireRole } from './auth.js';
-import { requireFeature, requireWithinLimit } from './plans.js';
+import { canUseFeature, requireFeature, requireWithinLimit } from './plans.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -118,10 +118,31 @@ export async function listEmployees(sql, ctx) {
   return rows.map(mapEmployeeRow);
 }
 
-/** Matching support for the importer: find by external id or normalized name. */
+/** Matching support for the importer: find by external id or normalized name.
+ *
+ * EMPLOYEE role: never search the org directory by client-sent text — that
+ * would leak other employees' names/ids to a curious/malicious request. An
+ * EMPLOYEE can only ever "match" their own linked row, or get 'new' (never
+ * another employee's row, never 'ambiguous' with other people). */
 export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) {
   const normalizedName = String(name ?? '').trim().toLowerCase();
   const externalId = String(externalEmployeeId ?? '').trim();
+
+  if (ctx.role === 'EMPLOYEE') {
+    if (!ctx.employeeId) {
+      return { kind: 'new', employees: [] };
+    }
+    const rows = await sql`
+      SELECT * FROM employees WHERE id = ${ctx.employeeId} AND organization_id = ${ctx.organizationId}
+    `;
+    const self = rows[0] ? mapEmployeeRow(rows[0]) : null;
+    if (!self) {
+      return { kind: 'new', employees: [] };
+    }
+    const selfMatches = (externalId && externalId === (self.externalEmployeeId ?? ''))
+      || (normalizedName && normalizedName === self.name.trim().toLowerCase());
+    return selfMatches ? { kind: 'recognized', employees: [self] } : { kind: 'new', employees: [] };
+  }
 
   if (externalId) {
     const rows = await sql`
@@ -448,6 +469,21 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     }
     const employeeId = effectiveEmployeeId(ctx, shift.employeeId);
     await assertEmployeeInOrg(sql, ctx, employeeId);
+
+    // Plan/role separation (Fase: role-aware import unification) — ROLE
+    // decides WHO an ADMIN/MANAGER may write for (any org employee, checked
+    // above); PLAN decides whether the org may operate on more than one
+    // distinct employee at all. DB-observed, not client-declared: a request
+    // can't dodge this by spreading employees across separate calls.
+    if (ctx.role !== 'EMPLOYEE' && !canUseFeature(ctx.plan, 'multiEmployeeImport')) {
+      const existingEmployees = await sql`
+        SELECT DISTINCT employee_id FROM shifts WHERE organization_id = ${ctx.organizationId}
+      `;
+      const otherEmployeeExists = existingEmployees.some((row) => row.employee_id !== employeeId);
+      if (otherEmployeeExists) {
+        requireFeature(ctx.plan, 'multiEmployeeImport', 'This plan only allows shifts for a single employee. Upgrade to Team to import for more.');
+      }
+    }
 
     const id = shift.id && UUID_RE.test(shift.id) ? shift.id : randomUUID();
     const rows = await sql`
