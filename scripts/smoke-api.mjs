@@ -134,7 +134,7 @@ const run = async () => {
       ],
     },
   }));
-  check('multi-employee same-day upsert (no conflict)', upsert.statusCode === 200 && upsert.body.saved === 2);
+  check('multi-employee same-day upsert (no conflict)', upsert.statusCode === 200 && upsert.body.saved.length === 2);
 
   const listSelf = await call(shiftsHandler, req('GET', { cookie: cookieA, query: { employeeId: selfA } }));
   const listEmp2 = await call(shiftsHandler, req('GET', { cookie: cookieA, query: { employeeId: emp2 } }));
