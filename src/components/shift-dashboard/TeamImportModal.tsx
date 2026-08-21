@@ -112,6 +112,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
   const rosterCounts = useMemo(() => ({
     total: rows.length,
     recognized: rows.filter((row) => row.status === 'recognized').length,
+    recognizedInactive: rows.filter((row) => row.status === 'recognized_inactive').length,
     new: rows.filter((row) => row.status === 'new').length,
     ambiguous: rows.filter((row) => row.status === 'ambiguous').length,
   }), [rows]);
@@ -327,7 +328,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
   };
 
   const selectedRows = rows.filter((row) => row.selected && row.status === 'recognized' && row.resolvedEmployeeId);
-  const noneEligible = rosterCounts.recognized === 0 && (rosterCounts.new > 0 || rosterCounts.ambiguous > 0);
+  const noneEligible = rosterCounts.recognized === 0 && rosterCounts.total > 0;
 
   const handleContinueToPreview = async () => {
     if (selectedRows.length === 0) {

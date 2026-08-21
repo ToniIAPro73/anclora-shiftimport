@@ -177,7 +177,7 @@ describe('TeamImportModal (Select-All feedback, not a silent no-op)', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [csvFile()] } });
 
-    await waitFor(() => expect(screen.getByText('2 detectados · 0 reconocidos · 2 nuevos · 0 ambiguos')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('2 detectados · 0 reconocidos · 0 inactivos · 2 nuevos · 0 ambiguos')).toBeTruthy());
     expect(screen.getByText('0 seleccionados de 2')).toBeTruthy();
     expect(screen.getByText('Resuelve los empleados nuevos antes de seleccionarlos.')).toBeTruthy();
 
@@ -205,7 +205,7 @@ describe('TeamImportModal (Select-All feedback, not a silent no-op)', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [csvFile()] } });
 
-    await waitFor(() => expect(screen.getByText('2 detectados · 1 reconocidos · 1 nuevos · 0 ambiguos')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('2 detectados · 1 reconocidos · 0 inactivos · 1 nuevos · 0 ambiguos')).toBeTruthy());
     fireEvent.click(screen.getByText('Seleccionar todos'));
 
     expect(screen.getByText('1 seleccionados de 2')).toBeTruthy();
@@ -287,7 +287,7 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
 
     await waitFor(() => expect(screen.getByText('1 creados · 1 ya existentes · 0 errores')).toBeTruthy());
     // Both rows are now recognized+selected — no manual refresh needed.
-    expect(screen.getByText('2 detectados · 2 reconocidos · 0 nuevos · 0 ambiguos')).toBeTruthy();
+    expect(screen.getByText('2 detectados · 2 reconocidos · 0 inactivos · 0 nuevos · 0 ambiguos')).toBeTruthy();
     expect(screen.getByText('2 seleccionados de 2')).toBeTruthy();
   });
 
