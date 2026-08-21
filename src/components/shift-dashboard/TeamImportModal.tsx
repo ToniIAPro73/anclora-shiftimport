@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
+import { PlanId } from '../../lib/session';
 import { detectTeamRoster, DetectedTeamEmployee } from '../../ingestion/team-roster';
 import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
 import {
@@ -22,6 +23,11 @@ interface TeamImportModalProps {
   onClose: () => void;
   /** Called after a successful import so the caller can refresh its employee list. */
   onImported: () => void;
+  /** Active organization's plan, threaded to the contextual UpgradePrompt. */
+  currentPlan?: PlanId | null;
+  /** A sibling Team-plan org to offer switching to instead of upgrading. */
+  switchTarget?: { id: string; name: string } | null;
+  onSwitchOrg?: (organizationId: string) => void;
 }
 
 interface TeamRow {
@@ -86,12 +92,23 @@ const statusLabelKey: Record<EmployeeMatchKind, string> = {
  * individually/all → preview (new/conflicting/unchanged per employee,
  * conflicts are never silently overwritten) → import → results summary.
  */
-export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModalProps) => {
+export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = null, switchTarget = null, onSwitchOrg }: TeamImportModalProps) => {
   const { t } = useI18n();
   const [step, setStep] = useState<Step>('upload');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<TeamRow[]>([]);
+  // Select-All feedback (GS-team-testing-ux): the exclusion policy itself
+  // (recognized+resolved only) is correct — new/ambiguous rows need explicit
+  // per-row resolution first. What was missing is visible feedback: without
+  // this, clicking "Seleccionar todos" on a fresh org (everything `new`)
+  // silently selects 0 rows and looks like nothing happened.
+  const rosterCounts = useMemo(() => ({
+    total: rows.length,
+    recognized: rows.filter((row) => row.status === 'recognized').length,
+    new: rows.filter((row) => row.status === 'new').length,
+    ambiguous: rows.filter((row) => row.status === 'ambiguous').length,
+  }), [rows]);
   const [preview, setPreview] = useState<PreviewEntry[]>([]);
   const [outcomes, setOutcomes] = useState<ImportOutcome[]>([]);
   const [importing, setImporting] = useState(false);
@@ -203,6 +220,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
   };
 
   const selectedRows = rows.filter((row) => row.selected && row.status === 'recognized' && row.resolvedEmployeeId);
+  const noneEligible = rosterCounts.recognized === 0 && (rosterCounts.new > 0 || rosterCounts.ambiguous > 0);
 
   const handleContinueToPreview = async () => {
     if (selectedRows.length === 0) {
@@ -337,12 +355,27 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
         )}
 
         {step === 'select' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          // No `overflow: hidden` here (UI_MOTION_CONTRACT): the row list
+          // below already scrolls on its own (overflowY: auto), so a clip
+          // boundary here only cut off the hover-elevated buttons on their
+          // right edge — never actually needed for layout.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+              {t('teamImport.rosterSummary', rosterCounts)}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
+                {t('teamImport.selectedCount', { selected: selectedRows.length, total: rosterCounts.total })}
+              </span>
               <button type="button" className="btn-outline" onClick={handleSelectAll} style={{ padding: '8px 14px', fontWeight: 700 }}>
                 {t('teamImport.selectAll')}
               </button>
             </div>
+            {noneEligible && (
+              <p role="status" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-gold)' }}>
+                {t('teamImport.resolveBeforeSelect')}
+              </p>
+            )}
             <div style={{ overflowY: 'auto', display: 'grid', gap: '8px', paddingRight: '4px' }}>
               {rows.map((row) => (
                 <div
@@ -443,7 +476,10 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
         )}
 
         {step === 'preview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', overflow: 'hidden' }}>
+          // Same clipping fix as the select step — the entries list already
+          // scrolls on its own; this outer `hidden` only clipped hover
+          // elevation on the flush-right "Importar" button.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <h4 style={{ margin: 0 }}>{t('teamImport.previewTitle')}</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
@@ -527,7 +563,13 @@ export const TeamImportModal = ({ isOpen, onClose, onImported }: TeamImportModal
         )}
       </div>
     </div>
-    <UpgradePrompt isOpen={showUpgrade} onClose={() => setShowUpgrade(false)} />
+    <UpgradePrompt
+      isOpen={showUpgrade}
+      onClose={() => setShowUpgrade(false)}
+      currentPlan={currentPlan}
+      switchTarget={switchTarget}
+      onSwitchOrg={onSwitchOrg}
+    />
     </>
   );
 };

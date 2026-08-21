@@ -155,3 +155,54 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
   });
 });
+
+describe('TeamImportModal (Select-All feedback, not a silent no-op)', () => {
+  it('all-new roster: Select All selects 0, shows the count and the resolve-first guidance — never silent', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e1', externalEmployeeId: 'A1', name: 'Alguien Uno', shifts: [rosterShift('2026-03-04')] },
+        { key: 'e2', externalEmployeeId: 'A2', name: 'Alguien Dos', shifts: [rosterShift('2026-03-05')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('2 detectados · 0 reconocidos · 2 nuevos · 0 ambiguos')).toBeTruthy());
+    expect(screen.getByText('0 seleccionados de 2')).toBeTruthy();
+    expect(screen.getByText('Resuelve los empleados nuevos antes de seleccionarlos.')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Seleccionar todos'));
+    // Still 0 — the button is a legitimate no-op here (nothing eligible),
+    // but the state is never silent: count + guidance stay visible.
+    expect(screen.getByText('0 seleccionados de 2')).toBeTruthy();
+    expect(screen.getByText('Resuelve los empleados nuevos antes de seleccionarlos.')).toBeTruthy();
+  });
+
+  it('mixed roster: Select All selects only recognized rows and reports the correct count', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e1', externalEmployeeId: '1001', name: 'Ana Martinez', shifts: [rosterShift('2026-03-04')] },
+        { key: 'e2', externalEmployeeId: '', name: 'Nuevo Empleado', shifts: [rosterShift('2026-03-05')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockImplementation(async ({ name }) => (
+      name === 'Ana Martinez'
+        ? { kind: 'recognized' as const, employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: '1001' })] }
+        : { kind: 'new' as const, employees: [] }
+    ));
+
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('2 detectados · 1 reconocidos · 1 nuevos · 0 ambiguos')).toBeTruthy());
+    fireEvent.click(screen.getByText('Seleccionar todos'));
+
+    expect(screen.getByText('1 seleccionados de 2')).toBeTruthy();
+    // Not "none eligible" — a recognized row exists, so no guidance banner.
+    expect(screen.queryByText('Resuelve los empleados nuevos antes de seleccionarlos.')).toBeNull();
+  });
+});
