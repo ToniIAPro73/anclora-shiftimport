@@ -402,11 +402,13 @@ export async function deleteEmployee(sql, ctx, input) {
   }
   await assertEmployeeNotLastAdmin(sql, ctx, mapEmployeeRow(rows[0]));
 
-  const shiftCount = await sql`
-    SELECT count(*)::int AS n FROM shifts
-    WHERE employee_id = ${id} AND organization_id = ${ctx.organizationId}
+  const deleted = await sql`
+    DELETE FROM employees
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+      AND NOT EXISTS (SELECT 1 FROM shifts WHERE employee_id = ${id})
+    RETURNING id
   `;
-  if (shiftCount[0].n > 0) {
+  if (deleted.length === 0) {
     const error = new HttpError(
       409,
       'This employee has shift history that would be destroyed; deactivate the employee instead of deleting',
@@ -414,11 +416,6 @@ export async function deleteEmployee(sql, ctx, input) {
     error.code = 'EMPLOYEE_HAS_HISTORY';
     throw error;
   }
-
-  await sql`
-    DELETE FROM employees
-    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
-  `;
   return { deleted: true };
 }
 

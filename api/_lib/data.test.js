@@ -95,7 +95,7 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         (e) => e.organization_id === values[0] && e.name.trim().toLowerCase() === values[1],
       ));
     }
-    if (text.includes('FROM employees')) {
+    if (text.startsWith('SELECT') && text.includes('FROM employees')) {
       return Promise.resolve(employees.filter((e) => e.organization_id === values[0]));
     }
     if (text.includes('FROM users') && text.includes('lower(email)')) {
@@ -185,9 +185,14 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve([employeeRow(values[5] ?? 'emp-a1', ORG_A, { name: values[0] })]);
     }
     if (text.startsWith('DELETE FROM employees')) {
+      const hasShifts = shifts.some((s) => s.employee_id === values[0]);
+      if (hasShifts) {
+        return Promise.resolve([]);
+      }
       const index = employees.findIndex((e) => e.id === values[0] && e.organization_id === values[1]);
       if (index >= 0) {
         employees.splice(index, 1);
+        return Promise.resolve([{ id: values[0] }]);
       }
       return Promise.resolve([]);
     }
@@ -196,7 +201,7 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
     }
     return Promise.resolve([]);
   };
-  return { sql, calls };
+  return { sql, calls, employees };
 }
 
 // plan: 'team' (unlimited) by default so pre-existing tests are unaffected
@@ -397,22 +402,24 @@ describe('employee lifecycle (deactivate/reactivate/delete)', () => {
   });
 
   it('deleting an employee with shift history is blocked (EMPLOYEE_HAS_HISTORY), nothing deleted', async () => {
-    const { sql, calls } = makeFakeSql({
+    const { sql, calls, employees } = makeFakeSql({
       employees: [employeeRow(EMP_A1, ORG_A)],
       shifts: [shiftRow()],
     });
     await expect(deleteEmployee(sql, adminCtx, { id: EMP_A1 }))
       .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_HAS_HISTORY' });
-    expect(calls.some((call) => call.text.startsWith('DELETE FROM employees'))).toBe(false);
+    expect(employees.some((e) => e.id === EMP_A1)).toBe(true);
   });
 
-  it('deleting an employee without shifts issues an org-scoped DELETE', async () => {
+  it('deleting an employee without shifts issues an org-scoped, history-guarded DELETE', async () => {
     const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
     const result = await deleteEmployee(sql, adminCtx, { id: EMP_A1 });
     expect(result).toEqual({ deleted: true });
     const deleteCall = calls.find((call) => call.text.startsWith('DELETE FROM employees'));
     expect(deleteCall.text).toContain('organization_id');
-    expect(deleteCall.values).toEqual([EMP_A1, ORG_A]);
+    expect(deleteCall.text).toContain('NOT EXISTS');
+    expect(deleteCall.values[0]).toBe(EMP_A1);
+    expect(deleteCall.values[1]).toBe(ORG_A);
   });
 
   it('deleting the employee linked to the last ADMIN user is blocked (LAST_ADMIN)', async () => {
