@@ -231,6 +231,11 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
   };
 
   const handleResolveAmbiguous = (row: TeamRow, employeeId: string) => {
+    const candidate = row.candidates.find((entry) => entry.id === employeeId);
+    if (candidate?.status === 'inactive') {
+      updateRow(row.key, { status: 'recognized_inactive', candidates: [candidate], resolvedEmployeeId: null });
+      return;
+    }
     updateRow(row.key, { status: 'recognized', resolvedEmployeeId: employeeId, selected: true });
   };
 
@@ -617,7 +622,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
                         <option value="" disabled>{t('teamImport.chooseMatch')}</option>
                         {row.candidates.map((candidate) => (
                           <option key={candidate.id} value={candidate.id}>
-                            {candidate.name}{candidate.externalEmployeeId ? ` (ID ${candidate.externalEmployeeId})` : ''}
+                            {candidate.name}{candidate.externalEmployeeId ? ` (ID ${candidate.externalEmployeeId})` : ''}{candidate.status === 'inactive' ? ` (${t('teamImport.statusRecognizedInactive')})` : ''}
                           </option>
                         ))}
                       </select>
