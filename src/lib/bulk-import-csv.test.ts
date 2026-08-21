@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseEmployeesCsv, parseUsersCsv } from './bulk-import-csv';
 
@@ -82,6 +84,24 @@ describe('parseEmployeesCsv', () => {
         { externalEmployeeId: '89622', name: 'Garau Femenia, Maria Mercedes' },
         { externalEmployeeId: '30394', name: 'Casero Bosquet, Ana Maria' },
       ]);
+    });
+  });
+
+  describe('P0.3: 58-employee file (synthetic — same structure as the real preload file: quoted "Apellidos, Nombre" names, no BOM)', () => {
+    it('imports exactly 58 rows, all with a non-empty id and name, no unexpected duplicates', () => {
+      const csv = readFileSync(
+        path.join(__dirname, 'fixtures', 'synthetic-58-employees.csv'),
+        'utf-8',
+      );
+      const rows = parseEmployeesCsv(csv);
+      expect(rows).not.toBeNull();
+      expect(rows).toHaveLength(58);
+      rows!.forEach((row) => {
+        expect(row.externalEmployeeId).not.toBe('');
+        expect(row.name).not.toBe('');
+      });
+      const ids = rows!.map((row) => row.externalEmployeeId);
+      expect(new Set(ids).size).toBe(58);
     });
   });
 });
