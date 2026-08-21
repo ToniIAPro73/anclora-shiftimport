@@ -104,7 +104,7 @@ describe('Fase 1.2A.1 public/private routing', () => {
 
   it('renders the pricing placeholder at /pricing', async () => {
     renderAt('/pricing');
-    await waitFor(() => expect(screen.getByText('Precios')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Precios' })).toBeTruthy());
   });
 
   it('renders login form at /login', async () => {

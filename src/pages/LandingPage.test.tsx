@@ -1,16 +1,28 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { I18nProvider } from '../lib/i18n-react';
+import { ThemeProvider } from '../lib/theme-react';
 import { LandingPage } from './LandingPage';
 
 afterEach(cleanup);
 
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+});
+
 function renderLanding(isAuthenticated: boolean) {
   return render(
-    <I18nProvider>
-      <LandingPage isAuthenticated={isAuthenticated} />
-    </I18nProvider>,
+    <ThemeProvider>
+      <I18nProvider>
+        <LandingPage isAuthenticated={isAuthenticated} />
+      </I18nProvider>
+    </ThemeProvider>,
   );
 }
 

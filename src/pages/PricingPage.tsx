@@ -1,6 +1,8 @@
 import { navigate } from '../lib/route';
 import { useI18n } from '../lib/use-i18n';
 import { PLAN_IDS, PLANS } from '../lib/plans';
+import { PublicHeader } from '../components/PublicHeader';
+import { LegalFooter } from '../components/LegalFooter';
 
 interface PricingPageProps {
   isAuthenticated: boolean;
@@ -26,7 +28,9 @@ export const PricingPage = ({ isAuthenticated }: PricingPageProps) => {
   };
 
   return (
-    <div className="pricing-page pricing-page--full">
+    <div className="pricing-page">
+      <PublicHeader isAuthenticated={isAuthenticated} />
+      <div className="pricing-page--full">
       <h1>{t('pricing.title')}</h1>
       <p className="pricing-subtitle">{t('pricing.subtitle')}</p>
       <p className="pricing-hypothesis-notice">{t('pricing.hypothesisNotice')}</p>
@@ -113,6 +117,8 @@ export const PricingPage = ({ isAuthenticated }: PricingPageProps) => {
       <button type="button" className="btn-outline" onClick={() => navigate('/')}>
         {t('pricing.back')}
       </button>
+      </div>
+      <LegalFooter />
     </div>
   );
 };
