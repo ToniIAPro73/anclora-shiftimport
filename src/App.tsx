@@ -5,6 +5,7 @@ import { loadShifts, loadLocalShiftsForMigration, normalizeShift, syncShiftChang
 import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
+import { reconcileImport } from './lib/import-reconciliation';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
@@ -571,7 +572,18 @@ function App() {
 
     try {
       if (session && targetEmployeeId) {
-        await syncRemoteShifts(targetEmployeeId, { upserts, deleteIds, importId });
+        const { saved } = await syncRemoteShifts(targetEmployeeId, { upserts, deleteIds, importId });
+        const reconciliation = reconcileImport(upserts, saved);
+        if (reconciliation.status === 'FAIL') {
+          console.error('Import reconciliation FAILED: expected != persisted', reconciliation);
+          window.alert(
+            t('importConflict.reconciliationFailed', {
+              expected: reconciliation.expectedCount,
+              persisted: reconciliation.matchedCount,
+            }),
+          );
+          return false;
+        }
         if (targetEmployeeId !== selectedEmployeeId) {
           setSelectedEmployeeId(targetEmployeeId);
         }

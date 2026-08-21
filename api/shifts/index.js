@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         deleteIds.length > 0 ? deleteShiftsByIds(sql, ctx, deleteIds, requestedEmployeeId) : Promise.resolve(0),
       ]);
 
-      return sendJson(res, 200, { saved: saved.length, deleted });
+      return sendJson(res, 200, { saved, deleted });
     }
 
     res.setHeader('Allow', 'GET, PATCH');

@@ -53,11 +53,16 @@ export async function loadRemoteShifts(employeeId: string): Promise<Shift[]> {
   return payload.shifts.map(toShift);
 }
 
+/**
+ * Returns what the server actually persisted (not just a count) — a caller
+ * that needs to prove "expected == persisted" (see reconcileImport in
+ * import-reconciliation.ts) needs the real rows, not a trust-me number.
+ */
 export async function syncRemoteShifts(
   employeeId: string,
   changes: { upserts?: Shift[]; deleteIds?: string[]; importId?: string },
-): Promise<void> {
-  await apiFetch('/api/shifts', {
+): Promise<{ saved: Shift[]; deleted: number }> {
+  const payload = await apiFetch<{ saved: RemoteShiftRow[]; deleted: number }>('/api/shifts', {
     method: 'PATCH',
     body: JSON.stringify({
       employeeId,
@@ -74,6 +79,7 @@ export async function syncRemoteShifts(
       deleteIds: changes.deleteIds ?? [],
     }),
   });
+  return { saved: payload.saved.map(toShift), deleted: payload.deleted };
 }
 
 export async function listRemoteEmployees(): Promise<RemoteEmployee[]> {

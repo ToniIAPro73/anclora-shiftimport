@@ -121,7 +121,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     });
     mockedLoadRemoteShifts.mockResolvedValue([]);
     mockedCreateRemoteImport.mockResolvedValue({ id: 'import-1', fileName: '', sourceFormat: 'csv', periodYear: 2026, periodMonth: 2, status: 'completed' });
-    mockedSyncRemoteShifts.mockResolvedValue(undefined);
+    mockedSyncRemoteShifts.mockResolvedValue({ saved: [], deleted: 0 });
     const onImported = vi.fn();
 
     renderTeamImportModal(onImported);
