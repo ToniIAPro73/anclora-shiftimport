@@ -1905,9 +1905,21 @@ button:hover {
   .landing-hero-grid {
     grid-template-columns: 1fr;
   }
+  /* The absolute/rotated card stack is sized for a ~550px desktop column;
+     it doesn't degrade cleanly to a single-column width, so it switches to
+     plain stacked flow here instead of shrinking the rotation trick. */
   .hero-stack {
-    min-height: 260px;
-    margin-top: var(--space-xl);
+    position: static;
+    min-height: 0;
+    max-width: 480px;
+    margin: var(--space-xl) auto 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+  }
+  .hero-stack-card {
+    position: static;
+    transform: none !important;
   }
 }
 
