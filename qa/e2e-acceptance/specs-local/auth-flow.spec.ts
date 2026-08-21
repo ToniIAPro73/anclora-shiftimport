@@ -51,7 +51,9 @@ test.describe('Caso 1 — Employee', () => {
     expect(payload.shifts.every((s: { employeeId: string }) => s.employeeId === fixture.empA1)).toBe(true);
 
     await page.getByRole('button', { name: 'Salir' }).click();
-    await expect(page.getByRole('button', { name: 'Iniciar sesión' })).toBeVisible();
+    // Deterministic logout: lands on the login screen (contract: no app shell
+    // with null user after logout).
+    await expect(page.locator('#auth-email')).toBeVisible();
   });
 
   test('EMPLOYEE without linked employee gets a safe blocked state', async ({ page }) => {
@@ -67,14 +69,17 @@ test.describe('Caso 2 — Admin', () => {
   test('sees team, switches employees, manages members', async ({ page }) => {
     await loginAs(page, fixture.emails.admin);
 
-    // Team selector with both employees (alphabetical order).
-    const teamSelect = page.locator('.team-bar select');
-    await expect(teamSelect).toBeVisible();
-    await expect(teamSelect.locator('option')).toHaveText([/E2E Dos/, /E2E Uno/]);
+    // NOTE (deuda preexistente): este caso buscaba un <select> nativo que fue
+    // sustituido por SearchableSelect; actualizado mínimamente al combobox real.
+    // Team selector (SearchableSelect) with both employees (alphabetical order).
+    const employeeSelect = page.getByRole('button', { name: 'Empleado:' });
+    await expect(employeeSelect).toBeVisible();
+    await employeeSelect.click();
+    await expect(page.getByRole('option')).toHaveText([/E2E Dos/, /E2E Uno/]);
 
     // Default employee (first): E2E Dos → 1 shift. Switch to E2E Uno → 2 shifts.
     await expect(page.locator('.month-shift-badge')).toHaveCount(1);
-    await teamSelect.selectOption({ label: 'E2E Uno (ID E001)' });
+    await page.getByRole('option', { name: /E2E Uno/ }).click();
     await expect(page.locator('.month-shift-badge')).toHaveCount(2);
 
     // Membership management: add + remove a user.
@@ -82,7 +87,7 @@ test.describe('Caso 2 — Admin', () => {
     const membersModal = page.locator('.modal-overlay');
     await expect(membersModal.getByText('admin@e2e.test')).toBeVisible();
     await membersModal.getByPlaceholder('Email del usuario').fill('nuevo-miembro@e2e.test');
-    await membersModal.getByPlaceholder('Contraseña inicial (solo usuarios nuevos)').fill('Temporal-1234');
+    await membersModal.getByPlaceholder(/Contraseña inicial/).fill('Temporal-1234');
     await membersModal.getByRole('button', { name: 'Añadir' }).click();
     await expect(membersModal.getByText('nuevo-miembro@e2e.test')).toBeVisible();
     const row = membersModal.locator('div', { hasText: 'nuevo-miembro@e2e.test' }).last();
