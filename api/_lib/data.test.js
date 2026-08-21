@@ -453,12 +453,23 @@ describe('membership management (B2B minimal)', () => {
     ).rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
   });
 
-  it('new user requires an initial password (min 8)', async () => {
+  it('a supplied initial password must be at least 8 characters', async () => {
     const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
-    await expect(addMember(sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE' }, fakeHash))
-      .rejects.toMatchObject({ status: 400 });
     await expect(addMember(sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'short' }, fakeHash))
       .rejects.toMatchObject({ status: 400 });
+  });
+
+  it('an omitted password (bulk-import path) generates one server-side and returns it once', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    const created = await addMember(sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE' }, fakeHash);
+    expect(created.temporaryPassword).toBeTruthy();
+    expect(created.temporaryPassword.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('a member created with an explicit password never returns a temporaryPassword', async () => {
+    const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    const created = await addMember(sql, adminCtx, { email: 'otro@example.com', role: 'EMPLOYEE', password: 'temporal-123' }, fakeHash);
+    expect(created.temporaryPassword).toBeUndefined();
   });
 
   it('rejects invalid roles and non-ADMIN callers (no privilege escalation)', async () => {

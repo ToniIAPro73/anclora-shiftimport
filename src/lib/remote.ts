@@ -109,6 +109,22 @@ export async function createRemoteEmployee(input: {
   return payload.employee;
 }
 
+/** Safe-fields-only update: name (and optionally externalEmployeeId/status
+ * carried through explicitly by the caller to avoid the PATCH default of
+ * forcing status back to 'active' when omitted). Never touches userId. */
+export async function updateRemoteEmployee(input: {
+  id: string;
+  name?: string;
+  externalEmployeeId?: string;
+  status?: 'active' | 'inactive';
+}): Promise<RemoteEmployee> {
+  const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.employee;
+}
+
 export async function createRemoteImport(input: {
   fileName: string;
   sourceFormat: string;
@@ -136,14 +152,23 @@ export async function listRemoteMembers(): Promise<RemoteMember[]> {
   return payload.members;
 }
 
+export interface AddedMember {
+  userId: string;
+  email: string;
+  role: string;
+  /** Present only when the server generated it (password omitted from the
+   * request) — shown once by the caller, never persisted, never re-fetchable. */
+  temporaryPassword?: string;
+}
+
 export async function addRemoteMember(input: {
   email: string;
   role: RemoteMember['role'];
   password?: string;
   displayName?: string;
   employeeId?: string;
-}): Promise<{ userId: string; email: string; role: string }> {
-  const payload = await apiFetch<{ member: { userId: string; email: string; role: string } }>('/api/memberships', {
+}): Promise<AddedMember> {
+  const payload = await apiFetch<{ member: AddedMember }>('/api/memberships', {
     method: 'POST',
     body: JSON.stringify(input),
   });

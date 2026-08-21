@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, requireRole } from './auth.js';
 import { canUseFeature, requireFeature, requireWithinLimit } from './plans.js';
 
@@ -281,8 +281,15 @@ async function countOrgAdmins(sql, organizationId) {
 /**
  * ADMIN only: add a member to the active organization.
  * - Existing registered user (by email): password not required.
- * - New user: ADMIN sets an initial password (min 8) and hands it over
- *   out-of-band. No email infrastructure exists yet — documented limitation.
+ * - New user, password supplied: ADMIN sets an initial password (min 8) and
+ *   hands it over out-of-band.
+ * - New user, password omitted (bulk CSV import path): a random password is
+ *   generated server-side (never client-supplied, never predictable, never
+ *   logged) and returned ONCE in the response as `temporaryPassword` — the
+ *   caller must show it to the ADMIN immediately and never persist it in
+ *   plaintext. No email infrastructure exists yet — documented limitation,
+ *   this is the explicit out-of-band handoff for both the single and bulk
+ *   add-member flows.
  * Role escalation is impossible: only ADMIN reaches this function and the
  * role whitelist is enforced here.
  */
@@ -298,10 +305,15 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
   }
 
   let userRows = await sql`SELECT id FROM users WHERE lower(email) = ${email}`;
+  let temporaryPassword;
   if (userRows.length === 0) {
-    const password = String(input?.password ?? '');
-    if (password.length < 8) {
+    const suppliedPassword = String(input?.password ?? '');
+    if (suppliedPassword && suppliedPassword.length < 8) {
       throw new HttpError(400, 'New users require an initial password of at least 8 characters');
+    }
+    const password = suppliedPassword || randomBytes(12).toString('base64url');
+    if (!suppliedPassword) {
+      temporaryPassword = password;
     }
     userRows = await sql`
       INSERT INTO users (email, password_hash, display_name)
@@ -334,7 +346,7 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
     `;
   }
 
-  return { userId, email, role };
+  return temporaryPassword ? { userId, email, role, temporaryPassword } : { userId, email, role };
 }
 
 /** ADMIN only: change a member's role. The last ADMIN cannot be demoted. */
