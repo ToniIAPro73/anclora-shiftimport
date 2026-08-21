@@ -29,7 +29,15 @@ async function loginAs(page: Page, email: string) {
   await page.getByRole('button', { name: 'Iniciar sesión' }).first().click();
   await page.locator('#auth-email').fill(email);
   await page.locator('#auth-password').fill(fixture.password);
+  // Contract: when loginAs resolves, the session is established (the login
+  // response landed, so the cookie is stored) and the login screen has been
+  // left — subsequent page.request calls never race the cookie.
+  const loginResponse = page.waitForResponse(
+    (response) => response.url().includes('/api/auth/login') && response.ok(),
+  );
   await page.locator('form .auth-submit').click();
+  await loginResponse;
+  await expect(page.locator('#auth-email')).toHaveCount(0);
 }
 
 test.describe('Caso 1 — Employee', () => {
@@ -113,12 +121,20 @@ test.describe('Caso 3 — Multi-org', () => {
     await expect(page.locator('.month-shift-badge')).toHaveCount(1);
 
     // Switch to org B → ADMIN, empty team calendar, no org A shifts.
-    await page.locator('.team-bar select').first().selectOption({ label: fixture.orgBName });
-    await expect(page.getByText('Equipo:')).toBeVisible();
+    // Real UI: native combobox in the team bar, aria-label "Selecciona
+    // organización"; option labels carry extra context ("Nombre — Empresa ·
+    // Plan"), so select by stable org id value instead of label text.
+    const orgSwitcher = page.getByRole('combobox', { name: 'Selecciona organización' });
+    await orgSwitcher.selectOption({ value: fixture.orgB });
+    // Post-switch state: org B active (ADMIN there), empty team calendar,
+    // no org A shifts. ("Equipo:" label is dead i18n — no longer rendered.)
+    await expect(orgSwitcher).toHaveValue(fixture.orgB);
+    await expect(page.getByRole('button', { name: 'Empleado:' })).toBeVisible();
     await expect(page.locator('.month-shift-badge')).toHaveCount(0);
 
     // Back to A via header switcher.
-    await page.locator('.team-bar select').first().selectOption({ label: fixture.orgAName });
+    await orgSwitcher.selectOption({ value: fixture.orgA });
+    await expect(orgSwitcher).toHaveValue(fixture.orgA);
     await expect(page.locator('.month-shift-badge')).toHaveCount(1);
 
     await page.getByRole('button', { name: 'Salir' }).click();
@@ -210,8 +226,15 @@ test.describe('Caso 6 — Role-aware unified import', () => {
     await expect(page.getByRole('button', { name: 'Importar', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Importar equipo' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Importar', exact: true }).click();
-    await expect(page.getByText('Sube el CSV de turnos del equipo')).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Team roster flow (TeamImportModal): real rendered heading is
+    // teamImport.title ("Importar cuadrante"); "Sube el CSV de turnos del
+    // equipo" is a dead i18n key, never rendered.
+    await expect(page.locator('.modal-overlay').getByRole('heading', { name: 'Importar cuadrante' })).toBeVisible();
+    await expect(page.locator('.modal-overlay').getByText('Elegir archivo')).toBeVisible();
+    // TeamImportModal has no ESC handling (pre-ModalShell component) — close
+    // via its real close button.
+    await page.locator('.modal-overlay').getByRole('button', { name: 'Cerrar' }).click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
     await page.getByRole('button', { name: 'Salir' }).click();
   });
 
