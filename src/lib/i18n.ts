@@ -114,7 +114,14 @@ const translations: Record<Locale, TranslationTree> = {
       saveShiftFailed: 'No se pudo guardar el turno en la base de datos. Inténtalo de nuevo.',
       deleteShiftFailed: 'No se pudo eliminar el turno de la base de datos. Inténtalo de nuevo.',
       importSaveFailed: 'No se pudieron guardar los turnos importados en la base de datos. Inténtalo de nuevo.',
-      reconciliationFailed: 'La importación no se pudo verificar: se esperaban {{expected}} turnos y solo se confirmaron {{persisted}} como guardados correctamente. No se ha dado por completada. Revisa la consola para más detalle e inténtalo de nuevo.',
+    },
+    importResult: {
+      titlePass: 'Importación verificada',
+      titleFail: 'Importación no verificada',
+      counts: 'Turnos guardados y confirmados: {{persisted}} de {{expected}} esperados.',
+      reasonMissing: 'no se encontró guardado en el servidor',
+      reasonFieldMismatch: 'guardado con datos distintos a los esperados ({{fields}})',
+      close: 'Cerrar',
     },
     auth: {
       loginTitle: 'Iniciar sesión',
@@ -763,7 +770,14 @@ const translations: Record<Locale, TranslationTree> = {
       saveShiftFailed: 'Could not save the shift to the database. Please try again.',
       deleteShiftFailed: 'Could not delete the shift from the database. Please try again.',
       importSaveFailed: 'Could not save the imported shifts to the database. Please try again.',
-      reconciliationFailed: 'The import could not be verified: {{expected}} shifts were expected but only {{persisted}} were confirmed as saved. The import was not marked complete. Check the console for details and try again.',
+    },
+    importResult: {
+      titlePass: 'Import verified',
+      titleFail: 'Import not verified',
+      counts: 'Shifts saved and confirmed: {{persisted}} of {{expected}} expected.',
+      reasonMissing: 'was not found saved on the server',
+      reasonFieldMismatch: 'saved with different data than expected ({{fields}})',
+      close: 'Close',
     },
     auth: {
       loginTitle: 'Sign in',

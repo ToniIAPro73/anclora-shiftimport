@@ -5,7 +5,7 @@ import { loadShifts, loadLocalShiftsForMigration, normalizeShift, syncShiftChang
 import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
-import { reconcileImport } from './lib/import-reconciliation';
+import { reconcileImport, ReconciliationReport } from './lib/import-reconciliation';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
@@ -39,6 +39,7 @@ import { CompanyOnboardingModal } from './components/shift-dashboard/CompanyOnbo
 import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
+import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
 import { AuthScreen } from './components/AuthScreen';
 import { ForgotPasswordScreen } from './components/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
@@ -104,6 +105,7 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [importResult, setImportResult] = useState<ReconciliationReport | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingFile, setOnboardingFile] = useState<File | null>(null);
@@ -576,13 +578,11 @@ function App() {
         const reconciliation = reconcileImport(upserts, saved);
         if (reconciliation.status === 'FAIL') {
           console.error('Import reconciliation FAILED: expected != persisted', reconciliation);
-          window.alert(
-            t('importConflict.reconciliationFailed', {
-              expected: reconciliation.expectedCount,
-              persisted: reconciliation.matchedCount,
-            }),
-          );
+          setImportResult(reconciliation);
           return false;
+        }
+        if (upserts.length > 0) {
+          setImportResult(reconciliation);
         }
         if (targetEmployeeId !== selectedEmployeeId) {
           setSelectedEmployeeId(targetEmployeeId);
@@ -949,6 +949,14 @@ function App() {
           onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         />
       )}
+
+      {importResult ? (
+        <ImportResultModal
+          isOpen
+          onClose={() => setImportResult(null)}
+          report={importResult}
+        />
+      ) : null}
 
       <OrgSelectorModal
         isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) > 0}
