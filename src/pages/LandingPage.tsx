@@ -93,15 +93,15 @@ export const LandingPage = ({ isAuthenticated }: LandingPageProps) => {
       </section>
 
       <section className="landing-section before-after">
-        <h2 style={{ textAlign: 'center', marginBottom: 'var(--space-xl)' }}>{t('beforeAfter.title')}</h2>
+        <h2 style={{ textAlign: 'center', marginBottom: 'var(--space-xl)' }}>{t('landing.beforeAfter.title')}</h2>
         <div className="before-after-grid">
           <article className="before-after-card before-after-card--before">
-            <span className="before-after-card-label">{t('beforeAfter.beforeLabel')}</span>
-            <p>{t('beforeAfter.beforeBody')}</p>
+            <span className="before-after-card-label">{t('landing.beforeAfter.beforeLabel')}</span>
+            <p>{t('landing.beforeAfter.beforeBody')}</p>
           </article>
           <article className="before-after-card before-after-card--after">
-            <span className="before-after-card-label">{t('beforeAfter.afterLabel')}</span>
-            <p>{t('beforeAfter.afterBody')}</p>
+            <span className="before-after-card-label">{t('landing.beforeAfter.afterLabel')}</span>
+            <p>{t('landing.beforeAfter.afterBody')}</p>
           </article>
         </div>
       </section>
