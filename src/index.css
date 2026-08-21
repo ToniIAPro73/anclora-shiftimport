@@ -280,6 +280,7 @@ button:hover {
 
 .container {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 14px 18px;
@@ -1432,6 +1433,125 @@ button:hover {
 
   .jt-counter-modal-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* Short landscape viewports (phone/tablet landscape, height ≤ 700px).
+   Desktop shells (768px+ tall, e.g. 1366x768 / 1920x1080) keep the fixed
+   no-scroll layout untouched. Here the page scrolls naturally, the header
+   stays in ONE compact row (overriding the ≤980px stacked layout, which
+   would eat the whole viewport), and calendar rows get a height floor so
+   day cells never collapse to zero. */
+@media (max-height: 700px) {
+  html, body {
+    /* height:auto (not the base 100%) keeps the VIEWPORT as the scroll
+       container — with height:100% body would clip and scroll internally,
+       leaving window.scrollY stuck at 0. */
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
+  .container {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 8px 14px;
+    gap: 6px;
+  }
+
+  .dashboard-header {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 10px;
+  }
+
+  .dashboard-brand {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .dashboard-title {
+    font-size: 1.05rem;
+    /* narrow landscape: truncate with ellipsis instead of clipping mid-glyph */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dashboard-subtitle,
+  .dashboard-identity {
+    display: none;
+  }
+
+  .month-toolbar {
+    justify-content: center;
+  }
+
+  .month-navigator {
+    min-width: 0;
+    width: auto;
+  }
+
+  .month-nav-label {
+    min-width: 0;
+    padding: 0 8px;
+    font-size: 0.88rem;
+  }
+
+  .dashboard-actions {
+    width: auto;
+    gap: 6px;
+  }
+
+  .dashboard-action-button,
+  .theme-toggle {
+    min-height: 36px;
+  }
+
+  .dashboard-action-button {
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .totals-line {
+    padding: 2px 6px;
+  }
+
+  /* Let the calendar size to its content: the unlocked page scroll absorbs
+     the overflow instead of the flex chain squeezing rows to zero. The
+     shell keeps its internal horizontal scroll for narrow widths. */
+  .dashboard-body,
+  .calendar-stage,
+  .month-grid-root,
+  .month-grid-cells {
+    flex: none;
+    height: auto;
+  }
+
+  .month-grid-shell {
+    flex: none;
+    overflow-y: visible;
+  }
+
+  .month-grid-cells {
+    grid-auto-rows: minmax(48px, auto);
+  }
+
+  .month-day-cell {
+    min-height: 48px;
+  }
+}
+
+/* The 360px preview floor can exceed the whole viewport on short screens;
+   the modal overlay already scrolls, so a smaller floor keeps it reachable. */
+@media (max-width: 760px) and (max-height: 700px) {
+  .import-modal-right {
+    min-height: 220px;
   }
 }
 
