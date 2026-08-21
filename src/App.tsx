@@ -53,8 +53,6 @@ import { CalendarImportContext } from './lib/import-types';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
 
-type ThemeMode = 'system' | 'light' | 'dark';
-
 /** localStorage flag: local→remote one-shot migration already done (Fase 1). */
 const MIGRATION_DONE_KEY = 'anclora_shiftimport_migrated_v1';
 
@@ -95,16 +93,6 @@ function App() {
   const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isTeamImportOpen, setIsTeamImportOpen] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    if (typeof window === 'undefined') {
-      return 'dark';
-    }
-
-    const savedTheme = window.localStorage.getItem('anclora_theme_mode');
-    return savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system'
-      ? savedTheme
-      : 'dark';
-  });
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -327,26 +315,6 @@ function App() {
     await syncShiftChanges(nextShifts, changes);
   }, [session, selectedEmployeeId]);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-
-    const applyTheme = () => {
-      const resolvedTheme = themeMode === 'system'
-        ? (mediaQuery.matches ? 'dark' : 'light')
-        : themeMode;
-      root.dataset.theme = resolvedTheme;
-    };
-
-    applyTheme();
-    window.localStorage.setItem('anclora_theme_mode', themeMode);
-    mediaQuery.addEventListener('change', applyTheme);
-
-    return () => {
-      mediaQuery.removeEventListener('change', applyTheme);
-    };
-  }, [themeMode]);
-
   // Fase 1.2A.1: an authenticated user landing on /login or /signup (e.g. via
   // back button) is sent straight to the app instead of seeing the form again.
   useEffect(() => {
@@ -441,9 +409,6 @@ function App() {
     setIsModalOpen(true);
   };
 
-  const handleToggleTheme = () => {
-    setThemeMode((current) => current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system');
-  };
   const requestImportDecision = (existing: Shift, incoming: Shift) =>
     new Promise<'replace' | 'skip' | 'abort'>((resolve) => {
       setImportConflictState({ existing, incoming, resolve });
@@ -718,8 +683,6 @@ function App() {
         year={currentYear}
         month={currentMonth}
         onNavigate={handleNavigate}
-        themeMode={themeMode}
-        onToggleTheme={handleToggleTheme}
         onAddShift={() => {
           setEditingShiftId(null);
           setDraftShiftDate(null);

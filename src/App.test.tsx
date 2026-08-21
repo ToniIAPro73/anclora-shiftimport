@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { setupLocalStorageMock } from './test-utils/local-storage';
 import { I18nProvider } from './lib/i18n-react';
+import { ThemeProvider } from './lib/theme-react';
 import { completeOnboarding, loadOnboarding } from './lib/onboarding';
 import App from './App';
 
@@ -22,9 +23,11 @@ function renderApp() {
   // Fase 1.2A.1: dashboard now lives at /app, not /.
   window.history.pushState({}, '', '/app');
   return render(
-    <I18nProvider>
-      <App />
-    </I18nProvider>,
+    <ThemeProvider>
+      <I18nProvider>
+        <App />
+      </I18nProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -85,9 +88,11 @@ describe('Fase 1.2A.1 public/private routing', () => {
   function renderAt(path: string) {
     window.history.pushState({}, '', path);
     return render(
-      <I18nProvider>
-        <App />
-      </I18nProvider>,
+      <ThemeProvider>
+        <I18nProvider>
+          <App />
+        </I18nProvider>
+      </ThemeProvider>,
     );
   }
 

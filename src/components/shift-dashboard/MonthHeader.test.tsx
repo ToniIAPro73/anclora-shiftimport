@@ -1,27 +1,28 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
+import { ThemeProvider } from '../../lib/theme-react';
 import { MonthHeader } from './MonthHeader';
 
 setupLocalStorageMock();
 afterEach(cleanup);
 
-function renderHeader(onToggleTheme = vi.fn()) {
+function renderHeader() {
   return render(
-    <I18nProvider>
-      <MonthHeader
-        year={2026}
-        month={0}
-        onNavigate={() => {}}
-        onAddShift={() => {}}
-        onImport={() => {}}
-        onOpenSettings={() => {}}
-        themeMode="dark"
-        onToggleTheme={onToggleTheme}
-      />
-    </I18nProvider>,
+    <ThemeProvider>
+      <I18nProvider>
+        <MonthHeader
+          year={2026}
+          month={0}
+          onNavigate={() => {}}
+          onAddShift={() => {}}
+          onImport={() => {}}
+          onOpenSettings={() => {}}
+        />
+      </I18nProvider>
+    </ThemeProvider>,
   );
 }
 
@@ -47,9 +48,10 @@ describe('MonthHeader language toggle', () => {
   });
 
   it('toggling the language does not touch the theme toggle state', () => {
-    const onToggleTheme = vi.fn();
-    renderHeader(onToggleTheme);
+    renderHeader();
+    const themeToggle = screen.getByRole('button', { name: /Cambiar tema/i });
+    const themeEmojiBefore = themeToggle.textContent;
     fireEvent.click(screen.getByRole('button', { name: /Cambiar idioma/i }));
-    expect(onToggleTheme).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Change theme/i }).textContent).toBe(themeEmojiBefore);
   });
 });

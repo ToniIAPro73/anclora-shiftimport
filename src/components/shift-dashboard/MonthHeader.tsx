@@ -2,7 +2,8 @@ import { ChevronLeft, ChevronRight, PlusCircle, Settings } from 'lucide-react';
 import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
 import { useI18n } from '../../lib/use-i18n';
 import { TurnosLogo } from '../branding/TurnosLogo';
-import { SpainFlagIcon, UkFlagIcon } from '../branding/FlagIcon';
+import { ThemeToggle } from '../ui/ThemeToggle';
+import { LanguageToggle } from '../ui/LanguageToggle';
 
 interface MonthHeaderProps {
   year: number;
@@ -11,14 +12,10 @@ interface MonthHeaderProps {
   onAddShift: () => void;
   onImport: () => void;
   onOpenSettings: () => void;
-  themeMode: 'system' | 'light' | 'dark';
-  onToggleTheme: () => void;
 }
 
-export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onOpenSettings, themeMode, onToggleTheme }: MonthHeaderProps) => {
-  const { locale, toggleLocale, t, tl } = useI18n();
-  const themeEmoji = themeMode === 'light' ? '☀️' : themeMode === 'dark' ? '🌙' : '🖥️';
-  const themeLabel = themeMode === 'light' ? t('header.themeLight') : themeMode === 'dark' ? t('header.themeDark') : t('header.themeSystem');
+export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onOpenSettings }: MonthHeaderProps) => {
+  const { t, tl } = useI18n();
   const identity = formatProfileIdentity(loadUserProfile());
   const monthNames = tl('calendar.months');
 
@@ -53,23 +50,8 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
       </div>
 
       <div className="dashboard-actions">
-        <button
-          onClick={onToggleTheme}
-          className="theme-toggle"
-          title={t('header.themeLabel', { mode: themeLabel })}
-          aria-label={t('header.themeToggleAria', { mode: themeLabel })}
-        >
-          <span>{themeEmoji}</span>
-        </button>
-        <button
-          onClick={toggleLocale}
-          className="theme-toggle lang-toggle"
-          title={locale.toUpperCase()}
-          aria-label={t('header.languageToggleAria', { locale: locale.toUpperCase() })}
-        >
-          {locale === 'es' ? <SpainFlagIcon className="lang-toggle-flag" /> : <UkFlagIcon className="lang-toggle-flag" />}
-          <span>{locale.toUpperCase()}</span>
-        </button>
+        <ThemeToggle />
+        <LanguageToggle />
         <button onClick={onOpenSettings} className="theme-toggle" title={t('settings.title')} aria-label={t('header.settingsAria')}>
           <Settings size={18} />
         </button>
