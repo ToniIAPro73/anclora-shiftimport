@@ -26,7 +26,11 @@ export default async function globalSetup() {
   const sql = neon(loadDatabaseUrl());
   const hash = hashPassword(PASSWORD);
 
-  const orgA = (await sql`INSERT INTO organizations (name, type) VALUES ('E2E Org A', 'company') RETURNING id`)[0].id;
+  // Org A exercises administrative scenarios (member management, team
+  // import) that are Team-plan capabilities (server-side PLAN_LIMIT gate,
+  // api/_lib/plans.js) — the fixture must declare that plan explicitly.
+  // Org B and Org Fresh only cover viewing/migration flows → default 'free'.
+  const orgA = (await sql`INSERT INTO organizations (name, type, plan) VALUES ('E2E Org A', 'company', 'team') RETURNING id`)[0].id;
   const orgB = (await sql`INSERT INTO organizations (name, type) VALUES ('E2E Org B', 'company') RETURNING id`)[0].id;
   const orgFresh = (await sql`INSERT INTO organizations (name, type) VALUES ('E2E Fresh', 'personal') RETURNING id`)[0].id;
 
