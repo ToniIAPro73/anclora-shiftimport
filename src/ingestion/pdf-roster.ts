@@ -15,7 +15,7 @@
  */
 import { normalizeEmployeeId, normalizeText } from './core/normalize';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
-import { isEmployeeNameLabel } from './core/tokens';
+import { findAllNameMarkerBands, nameMarkerBandText } from './core/row-detection';
 import { detectPdfDocumentTypeFromItems } from './parsers/detect';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
@@ -43,7 +43,7 @@ export function detectPdfRoster(items: PdfTextItem[]): PdfRosterDetection | null
     return null;
   }
 
-  const { markerMaxX } = profile.rowWindow;
+  const { markerMaxX, dataMinX } = profile.rowWindow;
   const idPattern = profile.rowWindow.floor.mode === 'next-row-boundary' && profile.rowWindow.floor.scan.idPattern
     ? profile.rowWindow.floor.scan.idPattern
     : FALLBACK_ID_PATTERN;
@@ -52,27 +52,40 @@ export function detectPdfRoster(items: PdfTextItem[]): PdfRosterDetection | null
   const pages = Array.from(new Set(items.map((item) => item.page)));
 
   for (const page of pages) {
-    const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page && item.x < markerMaxX));
-    const idItems = pageItems.filter((item) => idPattern.test(normalizeEmployeeId(item.text)));
-    const nameItems = pageItems.filter((item) => isEmployeeNameLabel(item.text));
+    // Ids are reliably narrow/left-aligned (x < markerMaxX). Names are NOT:
+    // dense real layouts print the name right after a variable-width id, so
+    // its start x drifts with the id's own digit count — some names land a
+    // few points past markerMaxX. Scanning for id items only up to
+    // markerMaxX, but names up to dataMinX (findAllNameMarkerBands — the
+    // same rule the single-employee row-detection engine already uses), so
+    // a name a few points wide of the marker column is never silently
+    // dropped from the candidate pool (which previously made its id fall
+    // back to the nearest OTHER row's name instead).
+    const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page && item.x < dataMinX));
+    const idItems = pageItems.filter((item) => item.x < markerMaxX && idPattern.test(normalizeEmployeeId(item.text)));
+    const nameBands = findAllNameMarkerBands(pageItems, profile.rowWindow);
 
     for (const idItem of idItems) {
-      // Nearest name label by |Δy| — same disambiguation rule as the
+      // Nearest name band by |Δy| — same disambiguation rule as the
       // identity-mismatch owner lookup (core/row-detection.ts): a wide
       // net around the id can catch a neighbouring employee's name too,
       // proximity to the id's own line is what actually identifies "theirs".
-      const nameItem = [...nameItems].sort(
-        (left, right) => Math.abs(left.y - idItem.y) - Math.abs(right.y - idItem.y),
+      const nameBand = [...nameBands].sort(
+        (left, right) => Math.abs(left[0].y - idItem.y) - Math.abs(right[0].y - idItem.y),
       )[0];
-      if (!nameItem) {
+      if (!nameBand) {
+        continue;
+      }
+      const name = nameMarkerBandText(nameBand);
+      if (!name) {
         continue;
       }
 
       const externalEmployeeId = idItem.text.trim();
       const normalizedId = normalizeEmployeeId(externalEmployeeId);
-      const key = normalizedId || `name:${normalizeText(nameItem.text)}`;
+      const key = normalizedId || `name:${normalizeText(name)}`;
       if (!byKey.has(key)) {
-        byKey.set(key, { key, externalEmployeeId, name: nameItem.text.trim() });
+        byKey.set(key, { key, externalEmployeeId, name });
       }
     }
   }

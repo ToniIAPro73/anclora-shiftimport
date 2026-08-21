@@ -130,6 +130,20 @@ export function findNameMarkerBands(
     .filter((band) => matchesNameTokens(nameMarkerBandText(band), nameTokens));
 }
 
+/**
+ * Every name-marker line band on a page, unfiltered — the roster enumerator
+ * (pdf-roster.ts) needs every printed name, not one target identity, but
+ * must share the exact same name-zone extension rule as findNameMarkerBands
+ * (nameMarkerLabelItems: marker column, or the dense-layout zone up to
+ * dataMinX when it shares a line with an id marker) so a fix to one is a
+ * fix to both — a roster-only reimplementation of that rule previously let
+ * names past markerMaxX silently drop out of the candidate pool, which is
+ * exactly what caused ids to inherit a neighbouring row's name.
+ */
+export function findAllNameMarkerBands(pageItems: PdfTextItem[], rules: RowWindowRules): PdfTextItem[][] {
+  return clusterLineBands(nameMarkerLabelItems(pageItems, rules));
+}
+
 export function findNameMarkerIndex(pageItems: PdfTextItem[], nameTokens: string[], rules: RowWindowRules): number {
   const band = findNameMarkerBands(pageItems, nameTokens, rules)[0];
   return band ? pageItems.indexOf(band[0]) : -1;

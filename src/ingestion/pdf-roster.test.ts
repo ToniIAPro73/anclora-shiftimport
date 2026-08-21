@@ -5,6 +5,7 @@ import { createRequire } from 'node:module';
 import { GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { extractDocumentItems } from './parsers/file';
 import { detectPdfRoster } from './pdf-roster';
+import { PdfTextItem } from './core/text-items';
 
 const require = createRequire(import.meta.url);
 GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');
@@ -62,5 +63,59 @@ describe('detectPdfRoster (Fase 1.2F-PDF, real reference fixture)', () => {
 
   it('returns null for a document with no recognizable roster', () => {
     expect(detectPdfRoster([])).toBeNull();
+  });
+});
+
+// Reduced positional fixture reproducing the real-world TYPE_B id/name drift
+// bug: PDF FTPS 1-15 SEPTIEMBRE 2026 PAX Y LL 2026 prints each employee's
+// name on the id marker's own line, but its start x varies with the id's
+// digit width — some names land a few points past markerMaxX (100). The
+// roster enumerator used to scan for names only up to markerMaxX, silently
+// dropping those names from the candidate pool; the nearest-Δy fallback
+// then attached the PREVIOUS row's name to the id instead. This fixture is
+// hand-built from the real document's actual x/y coordinates (dumped via
+// extractDocumentItems against the source PDF, never committed — it's
+// gitignored, PII) — never a name-specific exception, purely positional.
+function textItem(text: string, x: number, y: number): PdfTextItem {
+  return { text, x, y, width: 10, height: 10, page: 1 };
+}
+
+const TYPE_B_DRIFT_FIXTURE: PdfTextItem[] = [
+  // Document-type detection anchors (TYPE_B: a weekday+day header, "Nomina").
+  textItem('Nomina', 21.3, 503.0),
+  textItem('L5', 300.0, 600.0),
+  // Row 1: name well inside markerMaxX (100) — the control case, always worked.
+  textItem('38248', 28.1, 423.9),
+  textItem('Bosch Noguera, Roberto Jaime', 87.9, 423.9),
+  // Row 2: name starts PAST markerMaxX (110.1 > 100) — the drift bug.
+  textItem('85919', 28.1, 401.1),
+  textItem('Cerda Cerda, Joan', 110.1, 401.1),
+  // Row 3: back inside markerMaxX.
+  textItem('89622', 28.1, 378.3),
+  textItem('Garau Femenia, Maria Mercedes', 85.1, 378.3),
+  // Row 4: drift again (101.8 > 100).
+  textItem('52495', 28.1, 355.5),
+  textItem('Grimalt Moreno, Marina', 101.8, 355.5),
+  // Row 5: drift again (109.6 > 100).
+  textItem('33408', 28.1, 332.7),
+  textItem('Leon Perez, Esther', 109.6, 332.7),
+];
+
+describe('detectPdfRoster (TYPE_B id/name drift regression — reduced positional fixture)', () => {
+  it('never attaches a neighbouring row\'s name when the own name lands a few points past markerMaxX', () => {
+    const roster = detectPdfRoster(TYPE_B_DRIFT_FIXTURE);
+    expect(roster).not.toBeNull();
+    const byId = new Map(roster!.employees.map((employee) => [employee.externalEmployeeId, employee.name]));
+
+    expect(byId.get('38248')).toBe('Bosch Noguera, Roberto Jaime');
+    expect(byId.get('85919')).toBe('Cerda Cerda, Joan'); // previously inherited row 1's name
+    expect(byId.get('89622')).toBe('Garau Femenia, Maria Mercedes');
+    expect(byId.get('52495')).toBe('Grimalt Moreno, Marina'); // previously inherited row 3's name
+    expect(byId.get('33408')).toBe('Leon Perez, Esther'); // previously inherited row 3's name
+
+    // No name value is reused across two different ids — the exact failure
+    // signature reported (one name attached to 2-3 distinct ids).
+    const names = [...byId.values()];
+    expect(new Set(names).size).toBe(names.length);
   });
 });
