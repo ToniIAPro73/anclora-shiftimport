@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { Shift } from './lib/types';
 import { getMonthDaysISO, getDaysInMonth } from './lib/week';
 import { loadShifts, loadLocalShiftsForMigration, normalizeShift, syncShiftChanges } from './lib/storage';
@@ -11,7 +12,9 @@ import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboardi
 import { trackTtfvEvent } from './lib/ttfv';
 import {
   fetchResolvedSession,
+  fetchSession,
   logout,
+  setUnauthorizedHandler,
   switchOrganization,
   completePersonalOnboarding,
   completeCompanyOnboarding,
@@ -87,6 +90,18 @@ function App() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   // Fase 1: authenticated multi-tenant state. null = guest (local-first flow).
   const [session, setSession] = useState<SessionInfo | null>(null);
+  // The app shell must not render while the first session resolution is still
+  // in flight: null conflates "guest" with "not resolved yet", and rendering
+  // on an indeterminate state is what produces partial-auth flashes.
+  const [authResolved, setAuthResolved] = useState(false);
+  // Bumped on every transition to unauthenticated: async auth work started
+  // before the transition (bootstrap, post-login hydration) must never write
+  // state afterwards, or it would resurrect org data into the guest view.
+  const authEpochRef = useRef(0);
+  const sessionRef = useRef<SessionInfo | null>(null);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
   const [employees, setEmployees] = useState<RemoteEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const selectedEmployeeIdRef = useRef<string | null>(null);
@@ -120,7 +135,11 @@ function App() {
   // confirmation modal with preview, never a silent upload. The local copy
   // is never deleted.
   const hydrateAuthenticated = useCallback(async (nextSession: SessionInfo): Promise<void> => {
+    const epoch = authEpochRef.current;
     const orgEmployees = await listRemoteEmployees();
+    if (epoch !== authEpochRef.current) {
+      return; // logged out (or session invalidated) while this was in flight
+    }
     setEmployees(orgEmployees);
 
     // Prefer keeping whatever employee was already selected (e.g. a
@@ -143,6 +162,9 @@ function App() {
     }
 
     const remoteShifts = await loadRemoteShifts(initialEmployeeId);
+    if (epoch !== authEpochRef.current) {
+      return;
+    }
     setShifts(remoteShifts);
 
     const migrationState = window.localStorage.getItem(MIGRATION_DONE_KEY);
@@ -177,37 +199,45 @@ function App() {
     let cancelled = false;
 
     const hydrateShifts = async () => {
-      const resolved = await fetchResolvedSession();
-      if (cancelled) {
-        return;
-      }
-
-      if (resolved) {
-        setSession(resolved.session);
-        setNeedsOrgChoice(resolved.needsOrgChoice);
-        if (resolved.needsOrgChoice) {
+      try {
+        const resolved = await fetchResolvedSession();
+        if (cancelled) {
           return;
         }
-        try {
-          await hydrateAuthenticated(resolved.session);
-        } catch (error) {
-          console.error('Failed to load remote shifts, falling back to guest mode', error);
-          setSession(null);
-          setShifts(await loadShifts());
+
+        if (resolved) {
+          setSession(resolved.session);
+          setNeedsOrgChoice(resolved.needsOrgChoice);
+          if (resolved.needsOrgChoice) {
+            return;
+          }
+          try {
+            await hydrateAuthenticated(resolved.session);
+          } catch (error) {
+            console.error('Failed to load remote shifts, falling back to guest mode', error);
+            setSession(null);
+            setShifts(await loadShifts());
+          }
+          return;
         }
-        return;
-      }
 
-      const nextShifts = await loadShifts();
-      if (cancelled) {
-        return;
-      }
+        const nextShifts = await loadShifts();
+        if (cancelled) {
+          return;
+        }
 
-      setShifts(nextShifts);
-      // First-run guide: only for genuinely new users (shouldShowOnboarding
-      // silently completes the record for pre-existing users with shifts).
-      if (shouldShowOnboarding(nextShifts.length)) {
-        setIsOnboardingOpen(true);
+        setShifts(nextShifts);
+        // First-run guide: only for genuinely new users (shouldShowOnboarding
+        // silently completes the record for pre-existing users with shifts).
+        if (shouldShowOnboarding(nextShifts.length)) {
+          setIsOnboardingOpen(true);
+        }
+      } finally {
+        // The /app shell stays behind a loading gate until the first session
+        // resolution (and its hydration) settles — success, fallback or guest.
+        if (!cancelled) {
+          setAuthResolved(true);
+        }
       }
     };
 
@@ -295,21 +325,79 @@ function App() {
     await hydrateAuthenticated(nextSession);
   }, [hydrateAuthenticated]);
 
+  /**
+   * Single transition point into the unauthenticated state. Used by explicit
+   * logout, by the global 401 handler (session invalidated elsewhere) and by
+   * bfcache restores of a stale authenticated page. Deterministic: clear ALL
+   * auth-scoped state, then land on the login screen — never an intermediate
+   * "app shell with null user" state. Guest data in localStorage is
+   * preserved: guest mode remains reachable via "continuar como invitado".
+   */
+  const resetToUnauthenticated = useCallback(async () => {
+    authEpochRef.current += 1;
+    // Atomic transition: the auth-scoped state must COMMIT before the route
+    // changes. Without flushSync, navigate()'s synchronous popstate dispatch
+    // flushes the route update first (discrete-event priority), producing an
+    // intermediate commit with (route=/login, session still set) — which the
+    // authenticated-redirect effect above reads as "logged-in user on /login"
+    // and bounces straight back to /app.
+    flushSync(() => {
+      setSession(null);
+      setEmployees([]);
+      setSelectedEmployeeId(null);
+      setNeedsOrgChoice(false);
+      setOnboardingCompanyStep(false);
+      setMigrationPrompt(null);
+      setIsMembersOpen(false);
+      setIsAuthOpen(false);
+    });
+    setShifts(await loadShifts());
+    navigate('/login');
+  }, []);
+
   const handleLogout = useCallback(async () => {
     try {
       await logout();
     } catch (error) {
+      // Server-side invalidation failed (offline, 5xx): the user intent is
+      // still "leave", so the local transition happens regardless. A later
+      // refresh legitimately restores the session in that case — it was
+      // never invalidated server-side.
       console.error('Logout failed', error);
     }
-    setSession(null);
-    setEmployees([]);
-    setSelectedEmployeeId(null);
-    setNeedsOrgChoice(false);
-    setOnboardingCompanyStep(false);
-    setMigrationPrompt(null);
-    setIsMembersOpen(false);
-    setShifts(await loadShifts());
-  }, []);
+    await resetToUnauthenticated();
+  }, [resetToUnauthenticated]);
+
+  // A 401 on any authenticated API call means the session died server-side
+  // (expired, or invalidated from another tab/device): transition instead of
+  // rendering a broken authenticated shell.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (sessionRef.current) {
+        void resetToUnauthenticated();
+      }
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [resetToUnauthenticated]);
+
+  // Back/forward cache: restoring a page from bfcache brings back the
+  // in-memory authenticated React state even though the cookie may already
+  // be invalidated (e.g. logout happened after the page was cached).
+  // Re-validate against the backend before trusting that restored state.
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || !sessionRef.current) {
+        return;
+      }
+      void fetchSession().then((restored) => {
+        if (!restored) {
+          void resetToUnauthenticated();
+        }
+      });
+    };
+    window.addEventListener('pageshow', onPageShow);
+    return () => window.removeEventListener('pageshow', onPageShow);
+  }, [resetToUnauthenticated]);
 
   const handleSelectEmployee = useCallback(async (employeeId: string) => {
     setSelectedEmployeeId(employeeId);
@@ -742,6 +830,21 @@ function App() {
     return (
       <>
         <ResetPasswordScreen />
+        <CookieConsent />
+      </>
+    );
+  }
+
+  // The main shell renders only once auth is unequivocally resolved. While
+  // the first session resolution is in flight, `session === null` would
+  // otherwise be misread as "guest" and flash the operational UI (and its
+  // guest chrome) before the authenticated state lands.
+  if (!authResolved && route === '/app') {
+    return (
+      <>
+        <div className="container" role="status" style={{ padding: '48px 16px', color: 'var(--text-muted)' }}>
+          {t('common.loading')}
+        </div>
         <CookieConsent />
       </>
     );

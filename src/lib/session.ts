@@ -92,6 +92,19 @@ export function setRequestOrganizationId(organizationId: string | null): void {
   requestOrgId = organizationId;
 }
 
+/**
+ * Invoked when an authenticated API call answers 401: the session is gone
+ * server-side (expired, invalidated in another tab/device) and the app must
+ * transition to unauthenticated instead of rendering a partial-auth shell.
+ * Auth endpoints and /api/session/me are excluded — their 401 is the normal
+ * guest/bad-credentials signal, not a session invalidation.
+ */
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  unauthorizedHandler = handler;
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
@@ -106,6 +119,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (response.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/session/')) {
+      unauthorizedHandler?.();
+    }
     const body = payload as { error?: string; code?: string };
     throw new ApiError(response.status, String(body.error ?? `HTTP ${response.status}`), body.code);
   }
@@ -255,6 +271,12 @@ export async function resetPassword(token: string, newPassword: string): Promise
 }
 
 export async function logout(): Promise<void> {
-  await apiFetch('/api/auth/logout', { method: 'POST' });
-  setRequestOrganizationId(null);
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+  } finally {
+    // The org header is tab-local auth context: it must be dropped even when
+    // the server call fails, or subsequent guest-mode calls would keep
+    // sending a stale organization id.
+    setRequestOrganizationId(null);
+  }
 }
