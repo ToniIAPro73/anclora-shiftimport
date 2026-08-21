@@ -110,7 +110,17 @@ export function qualityStateFor(confidence: number, signals: QualitySignals): Im
   if (signals.employeeMatch === 'none' || signals.employeeMatch === 'mismatch') {
     return 'UNRECOGNIZED';
   }
-  const canBeCorrect = !signals.profileDrift && signals.employeeMatch !== 'multiple';
+  // An unresolved code (e.g. a company-specific "DL") that correlates with
+  // missing days is silent data loss by construction: the cells exist in
+  // the source document but produced no shift because nothing knows what
+  // the code means yet. The additive confidence penalties alone can still
+  // land above CORRECT_THRESHOLD even when a large fraction of the month is
+  // missing this way (confirmed against a real fixture: 7 of 15 days gone,
+  // confidence 0.88 — above the 0.85 threshold). This never reaches
+  // CORRECT: the user must resolve the unknown token (guided recovery)
+  // before the import can be trusted, however high the numeric confidence.
+  const hasUnresolvedTokenLoss = signals.unknownTokens.length > 0 && signals.mappedDays < signals.expectedDays;
+  const canBeCorrect = !signals.profileDrift && signals.employeeMatch !== 'multiple' && !hasUnresolvedTokenLoss;
   if (confidence >= CORRECT_THRESHOLD && canBeCorrect) {
     return 'CORRECT';
   }
