@@ -46,6 +46,7 @@ function mapEmployeeRow(row) {
     name: row.name,
     userId: row.user_id,
     status: row.status,
+    deactivatedAt: row.deactivated_at,
   };
 }
 
@@ -151,7 +152,11 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
         AND external_employee_id = ${externalId}
     `;
     if (rows.length > 0) {
-      return { kind: 'recognized', employees: rows.map(mapEmployeeRow) };
+      const employees = rows.map(mapEmployeeRow);
+      if (employees.length === 1 && employees[0].status === 'inactive') {
+        return { kind: 'recognized_inactive', employees };
+      }
+      return { kind: 'recognized', employees };
     }
   }
 
@@ -162,7 +167,8 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
         AND lower(trim(name)) = ${normalizedName}
     `;
     if (rows.length === 1) {
-      return { kind: 'recognized', employees: rows.map(mapEmployeeRow) };
+      const employees = rows.map(mapEmployeeRow);
+      return { kind: employees[0].status === 'inactive' ? 'recognized_inactive' : 'recognized', employees };
     }
     if (rows.length > 1) {
       return { kind: 'ambiguous', employees: rows.map(mapEmployeeRow) };
@@ -213,8 +219,10 @@ export async function createEmployee(sql, ctx, input) {
 export async function bulkCreateEmployees(sql, ctx, items) {
   requireRole(ctx, 'MANAGER');
 
+  // The roster index covers employees of ANY status so an inactive employee
+  // is matched (reported as 'existing_inactive') instead of duplicated.
   const existingRows = await sql`
-    SELECT * FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
+    SELECT * FROM employees WHERE organization_id = ${ctx.organizationId}
   `;
   const byExternalId = new Map();
   const byName = new Map();
@@ -227,7 +235,9 @@ export async function bulkCreateEmployees(sql, ctx, items) {
     byName.set(key, byName.has(key) ? null : employee); // null = ambiguous, never auto-matched
   }
 
-  let runningCount = existingRows.length;
+  // Plan-limit semantics (maxEmployees) count ACTIVE employees only, same as
+  // createEmployee — inactive rows never consume the quota.
+  let runningCount = existingRows.filter((row) => row.status === 'active').length;
   const results = [];
 
   for (const raw of Array.isArray(items) ? items : []) {
@@ -243,7 +253,7 @@ export async function bulkCreateEmployees(sql, ctx, items) {
     const matched = (externalId && byExternalId.get(externalId))
       || (!externalId && byName.get(name.toLowerCase()));
     if (matched) {
-      results.push({ key, status: 'existing', employee: matched });
+      results.push({ key, status: matched.status === 'inactive' ? 'existing_inactive' : 'existing', employee: matched });
       continue;
     }
 
@@ -283,6 +293,28 @@ export async function bulkCreateEmployees(sql, ctx, items) {
   return { results };
 }
 
+/**
+ * Last-admin protection for the employee lifecycle: deactivating or deleting
+ * the employee linked to the org's last ADMIN user would leave the org
+ * without anyone able to manage it (same rule as updateMemberRole /
+ * removeMember). HttpError has no code param, so the machine-readable code
+ * is attached post-construction; handleError serializes it.
+ */
+async function assertEmployeeNotLastAdmin(sql, ctx, employee) {
+  if (!employee.userId) {
+    return;
+  }
+  const rows = await sql`
+    SELECT role FROM memberships
+    WHERE organization_id = ${ctx.organizationId} AND user_id = ${employee.userId}
+  `;
+  if (rows[0]?.role === 'ADMIN' && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
+    const error = new HttpError(400, 'The organization must keep at least one ADMIN');
+    error.code = 'LAST_ADMIN';
+    throw error;
+  }
+}
+
 export async function updateEmployee(sql, ctx, input) {
   requireRole(ctx, 'ADMIN');
   const id = String(input?.id ?? '').trim();
@@ -297,6 +329,9 @@ export async function updateEmployee(sql, ctx, input) {
     ? String(input.externalEmployeeId).trim() || null
     : current.externalEmployeeId;
   const status = input?.status === 'inactive' ? 'inactive' : 'active';
+  if (status === 'inactive') {
+    await assertEmployeeNotLastAdmin(sql, ctx, current);
+  }
   // userId link: only a user that is a member of this org can be linked.
   let userId = current.userId;
   if (input?.userId !== undefined) {
@@ -318,11 +353,53 @@ export async function updateEmployee(sql, ctx, input) {
         external_employee_id = ${externalId},
         status = ${status},
         user_id = ${userId},
+        deactivated_at = CASE WHEN ${status} = 'inactive' THEN NOW() ELSE NULL END,
         updated_at = NOW()
     WHERE id = ${id} AND organization_id = ${ctx.organizationId}
     RETURNING *
   `;
   return mapEmployeeRow(rows[0]);
+}
+
+/**
+ * ADMIN only: permanently delete an employee. Only possible when the
+ * employee has NO shift history — shifts.employee_id is ON DELETE CASCADE,
+ * so a raw delete would silently destroy it; employees with history must be
+ * deactivated instead (409 EMPLOYEE_HAS_HISTORY).
+ */
+export async function deleteEmployee(sql, ctx, input) {
+  requireRole(ctx, 'ADMIN');
+  const id = String(input?.id ?? '').trim();
+  if (!id) {
+    throw new HttpError(400, 'Employee id is required');
+  }
+  const rows = await sql`
+    SELECT * FROM employees
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+  `;
+  if (rows.length === 0) {
+    throw new HttpError(404, 'Employee not found');
+  }
+  await assertEmployeeNotLastAdmin(sql, ctx, mapEmployeeRow(rows[0]));
+
+  const shiftCount = await sql`
+    SELECT count(*)::int AS n FROM shifts
+    WHERE employee_id = ${id} AND organization_id = ${ctx.organizationId}
+  `;
+  if (shiftCount[0].n > 0) {
+    const error = new HttpError(
+      409,
+      'This employee has shift history that would be destroyed; deactivate the employee instead of deleting',
+    );
+    error.code = 'EMPLOYEE_HAS_HISTORY';
+    throw error;
+  }
+
+  await sql`
+    DELETE FROM employees
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+  `;
+  return { deleted: true };
 }
 
 // -------------------------------------------------------------- memberships

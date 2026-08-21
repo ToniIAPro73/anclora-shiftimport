@@ -4,6 +4,7 @@ import {
   bulkCreateEmployees,
   createEmployee,
   createImport,
+  deleteEmployee,
   deleteShiftsByIds,
   findEmployeeMatch,
   listImports,
@@ -58,6 +59,12 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
 
+    // deleteEmployee history gate (values: [employeeId, organizationId])
+    if (text.startsWith('SELECT count(*)::int AS n FROM shifts')) {
+      return Promise.resolve([{
+        n: shifts.filter((s) => s.employee_id === values[0] && s.organization_id === values[1]).length,
+      }]);
+    }
     // upsertShifts multi-employee plan-guard (values: [organizationId])
     if (text.startsWith('SELECT DISTINCT employee_id FROM shifts')) {
       const distinct = [...new Set(shifts.filter((s) => s.organization_id === values[0]).map((s) => s.employee_id))];
@@ -73,9 +80,12 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
     if (text.startsWith('SELECT id FROM employees')) {
       return Promise.resolve(employees.filter((e) => e.id === values[0] && e.organization_id === values[1]));
     }
-    // updateEmployee current-row lookup (values: [id])
+    // updateEmployee current-row lookup (values: [id]); deleteEmployee loads
+    // org-scoped (values: [id, organizationId]).
     if (text.startsWith('SELECT * FROM employees WHERE id =')) {
-      return Promise.resolve(employees.filter((e) => e.id === values[0]));
+      return Promise.resolve(employees.filter(
+        (e) => e.id === values[0] && (values.length < 2 || e.organization_id === values[1]),
+      ));
     }
     if (text.includes('FROM employees') && text.includes('external_employee_id')) {
       return Promise.resolve(employees.filter((e) => e.organization_id === values[0] && e.external_employee_id === values[1]));
@@ -173,6 +183,13 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
     }
     if (text.startsWith('UPDATE employees')) {
       return Promise.resolve([employeeRow(values[5] ?? 'emp-a1', ORG_A, { name: values[0] })]);
+    }
+    if (text.startsWith('DELETE FROM employees')) {
+      const index = employees.findIndex((e) => e.id === values[0] && e.organization_id === values[1]);
+      if (index >= 0) {
+        employees.splice(index, 1);
+      }
+      return Promise.resolve([]);
     }
     if (text.startsWith('DELETE FROM shifts')) {
       return Promise.resolve([{ id: values[0] }]);
@@ -311,6 +328,152 @@ describe('employee management', () => {
     const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)], memberships: [] });
     await expect(updateEmployee(sql, adminCtx, { id: EMP_A1, userId: 'outsider' }))
       .rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('employee lifecycle (deactivate/reactivate/delete)', () => {
+  const lastAdminFixtures = () => ({
+    employees: [employeeRow(EMP_A1, ORG_A, { user_id: USER_ADMIN })],
+    memberships: [{ user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' }],
+  });
+
+  it('ADMIN deactivates: status inactive + deactivated_at stamped in one org-scoped UPDATE', async () => {
+    const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'inactive' });
+    const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(update.text).toContain('deactivated_at');
+    expect(update.values[2]).toBe('inactive');
+    expect(update.values[5]).toBe(EMP_A1);
+    expect(update.values[6]).toBe(ORG_A);
+  });
+
+  it('ADMIN reactivates: status active + deactivated_at reset to NULL', async () => {
+    const { sql, calls } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { status: 'inactive', deactivated_at: new Date() })],
+    });
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'active' });
+    const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(update.text).toContain('deactivated_at = CASE WHEN');
+    expect(update.text).toContain('ELSE NULL END');
+    expect(update.values[2]).toBe('active');
+  });
+
+  it('EMPLOYEE and MANAGER roles cannot deactivate, reactivate or delete', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    const managerCtx = { ...adminCtx, role: 'MANAGER' };
+    for (const ctx of [employeeCtx, managerCtx]) {
+      await expect(updateEmployee(sql, ctx, { id: EMP_A1, status: 'inactive' }))
+        .rejects.toMatchObject({ status: 403 });
+      await expect(updateEmployee(sql, ctx, { id: EMP_A1, status: 'active' }))
+        .rejects.toMatchObject({ status: 403 });
+      await expect(deleteEmployee(sql, ctx, { id: EMP_A1 }))
+        .rejects.toMatchObject({ status: 403 });
+    }
+  });
+
+  it('deactivating the employee linked to the last ADMIN user is blocked (LAST_ADMIN)', async () => {
+    const { sql, calls } = makeFakeSql(lastAdminFixtures());
+    await expect(updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'inactive' }))
+      .rejects.toMatchObject({ status: 400, code: 'LAST_ADMIN' });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+
+  it('deactivating an ADMIN-linked employee is allowed when another ADMIN remains', async () => {
+    const fixtures = lastAdminFixtures();
+    fixtures.memberships.push({ user_id: 'user-admin-2', organization_id: ORG_A, role: 'ADMIN' });
+    const { sql, calls } = makeFakeSql(fixtures);
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'inactive' });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(true);
+  });
+
+  it('deleting an employee with shift history is blocked (EMPLOYEE_HAS_HISTORY), nothing deleted', async () => {
+    const { sql, calls } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A)],
+      shifts: [shiftRow()],
+    });
+    await expect(deleteEmployee(sql, adminCtx, { id: EMP_A1 }))
+      .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_HAS_HISTORY' });
+    expect(calls.some((call) => call.text.startsWith('DELETE FROM employees'))).toBe(false);
+  });
+
+  it('deleting an employee without shifts issues an org-scoped DELETE', async () => {
+    const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    const result = await deleteEmployee(sql, adminCtx, { id: EMP_A1 });
+    expect(result).toEqual({ deleted: true });
+    const deleteCall = calls.find((call) => call.text.startsWith('DELETE FROM employees'));
+    expect(deleteCall.text).toContain('organization_id');
+    expect(deleteCall.values).toEqual([EMP_A1, ORG_A]);
+  });
+
+  it('deleting the employee linked to the last ADMIN user is blocked (LAST_ADMIN)', async () => {
+    const { sql, calls } = makeFakeSql(lastAdminFixtures());
+    await expect(deleteEmployee(sql, adminCtx, { id: EMP_A1 }))
+      .rejects.toMatchObject({ status: 400, code: 'LAST_ADMIN' });
+    expect(calls.some((call) => call.text.startsWith('DELETE FROM employees'))).toBe(false);
+  });
+
+  it('delete of an unknown or other-org employee is a 404', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    await expect(deleteEmployee(sql, adminCtx, { id: 'emp-missing' }))
+      .rejects.toMatchObject({ status: 404 });
+    await expect(deleteEmployee(sql, orgBCtx, { id: EMP_A1 }))
+      .rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('employee matching with inactive employees', () => {
+  it('single inactive match reports recognized_inactive (by name and by external id)', async () => {
+    const inactive = () => makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { name: 'Ana Martinez', external_employee_id: '90001', status: 'inactive' })],
+    });
+    const byName = await findEmployeeMatch(inactive().sql, adminCtx, { externalEmployeeId: '', name: 'ana martinez' });
+    expect(byName.kind).toBe('recognized_inactive');
+    expect(byName.employees[0]).toMatchObject({ id: EMP_A1, status: 'inactive' });
+
+    const byExternalId = await findEmployeeMatch(inactive().sql, adminCtx, { externalEmployeeId: '90001', name: '' });
+    expect(byExternalId.kind).toBe('recognized_inactive');
+  });
+
+  it('single active match stays recognized; multi-match stays ambiguous regardless of status', async () => {
+    const single = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { name: 'Ana Martinez', status: 'active' })],
+    });
+    expect((await findEmployeeMatch(single.sql, adminCtx, { externalEmployeeId: '', name: 'Ana Martinez' })).kind).toBe('recognized');
+
+    const double = makeFakeSql({
+      employees: [
+        employeeRow(EMP_A1, ORG_A, { name: 'Ana Martinez', status: 'inactive' }),
+        employeeRow(EMP_A2, ORG_A, { name: 'Ana Martinez', status: 'active' }),
+      ],
+    });
+    expect((await findEmployeeMatch(double.sql, adminCtx, { externalEmployeeId: '', name: 'Ana Martinez' })).kind).toBe('ambiguous');
+  });
+
+  it('bulk create matches an inactive employee as existing_inactive and never duplicates it', async () => {
+    const { sql, calls } = makeFakeSql({
+      employees: [
+        employeeRow(EMP_A1, ORG_A, { name: 'Inactivo', external_employee_id: 'EXT9', status: 'inactive' }),
+        employeeRow(EMP_A2, ORG_A, { name: 'Activo', external_employee_id: null, status: 'active' }),
+      ],
+    });
+    const { results } = await bulkCreateEmployees(sql, adminCtx, [
+      { key: 'k1', name: 'Inactivo', externalEmployeeId: 'EXT9' },
+      { key: 'k2', name: 'Activo', externalEmployeeId: '' },
+    ]);
+    expect(results.find((r) => r.key === 'k1')).toMatchObject({ status: 'existing_inactive' });
+    expect(results.find((r) => r.key === 'k2')).toMatchObject({ status: 'existing' });
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO employees'))).toBe(false);
+  });
+
+  it('bulk create keeps plan-limit semantics on ACTIVE employees only', async () => {
+    const { sql } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { status: 'inactive' })],
+    });
+    // Free plan caps at 1 ACTIVE employee: an inactive row must not consume it.
+    const { results } = await bulkCreateEmployees(sql, { ...adminCtx, plan: 'free' }, [
+      { key: 'k1', name: 'Nueva', externalEmployeeId: 'EXT1' },
+    ]);
+    expect(results[0]).toMatchObject({ status: 'created' });
   });
 });
 

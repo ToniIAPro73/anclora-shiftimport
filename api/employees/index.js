@@ -1,5 +1,5 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { createEmployee, findEmployeeMatch, listEmployees, updateEmployee } from '../_lib/data.js';
+import { createEmployee, deleteEmployee, findEmployeeMatch, listEmployees, updateEmployee } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -8,6 +8,8 @@ import { handleError, sendJson } from '../_lib/http.js';
  *                                      externalId/name as query params)
  * POST /api/employees                — create (MANAGER+, inline alta flow)
  * PATCH /api/employees               — update/deactivate/link user (ADMIN)
+ * DELETE /api/employees              — permanent delete, only without shift
+ *                                      history (ADMIN)
  */
 export default async function handler(req, res) {
   try {
@@ -36,7 +38,12 @@ export default async function handler(req, res) {
       return sendJson(res, 200, { employee });
     }
 
-    res.setHeader('Allow', 'GET, POST, PATCH');
+    if (req.method === 'DELETE') {
+      const result = await deleteEmployee(sql, ctx, req.body ?? {});
+      return sendJson(res, 200, result);
+    }
+
+    res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
     return sendJson(res, 405, { error: 'Method not allowed' });
   } catch (error) {
     return handleError(res, error);
