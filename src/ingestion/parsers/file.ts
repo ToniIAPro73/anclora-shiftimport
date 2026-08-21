@@ -24,11 +24,12 @@ import {
   analyzeRosterTable,
   generateTabularQuestions,
   normalizeTableHeader,
+  parseCsvLine,
   parseRosterTable,
   parseTableDate,
   ROSTER_HEADER_ALIASES,
   RosterTable,
-  splitTableLine,
+  stripBom,
   tabularRowSelectionQuestion,
 } from '../tabular-assistant';
 import { detectCalendarContextFromItems, parseShiftsFromItems } from './parse-items';
@@ -269,20 +270,30 @@ export interface RosterParseOptions {
  * the caller.
  */
 export function parseRosterCsv(text: string, options: RosterParseOptions = {}): ParsedCalendarShift[] | null {
-  const rows = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rows = stripBom(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (rows.length < 2) {
     return null;
   }
 
-  // A quoted field means the simple CSV parser cannot trust the structure.
-  if (text.includes('"')) {
+  // A quoted field is now genuinely supported (parseCsvLine) — only a truly
+  // malformed quote structure in the header is rejected outright.
+  const headerParsed = parseCsvLine(rows[0]);
+  if (headerParsed.malformed) {
     throw new IngestionError(
       'MALFORMED_INPUT',
-      'El CSV contiene campos entre comillas no soportados por el importador simple.',
+      'El CSV contiene una cabecera con comillas mal formadas.',
+    );
+  }
+  const parsedDataRows = rows.slice(1).map((line) => ({ line, ...parseCsvLine(line) }));
+  const malformedRow = parsedDataRows.find((parsed) => parsed.malformed);
+  if (malformedRow) {
+    throw new IngestionError(
+      'MALFORMED_INPUT',
+      'El CSV contiene una fila con comillas mal formadas.',
     );
   }
 
-  const headers = splitTableLine(rows[0]);
+  const headers = headerParsed.cells;
   const columnByField = new Map<string, number>();
   for (const [field, aliases] of Object.entries(ROSTER_HEADER_ALIASES)) {
     const aliasSet = new Set(aliases.map(normalizeTableHeader));
@@ -309,8 +320,7 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
   const employeeIdCol = columnByField.get('employeeId');
 
   const shifts: ParsedCalendarShift[] = [];
-  for (const line of rows.slice(1)) {
-    const cells = splitTableLine(line);
+  for (const { cells, line } of parsedDataRows) {
     const rowDate = dateCol !== undefined ? parseTableDate(cells[dateCol] ?? '') : null;
     const workerId = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').trim() : '';
 
@@ -568,8 +578,8 @@ function analyzeRosterDocument(
   roster: ParsedCalendarShift[],
   selector: EmployeeSelector,
 ): DocumentAnalysisResult {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const headers = splitTableLine(lines[0] ?? '');
+  const lines = stripBom(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const headers = parseCsvLine(lines[0] ?? '').cells;
   const rows = lines.slice(1);
 
   const employeeCol = findRosterColumnIndex(headers, 'employee');
@@ -582,7 +592,7 @@ function analyzeRosterDocument(
     const targetIds = selector.employeeIdentifiers.map((value) => value.replace(/\D/g, '')).filter(Boolean);
     const nameTokens = normalizeText(selector.employeeName).split(' ').filter((token) => token.length >= 3);
     for (const line of rows) {
-      const cells = splitTableLine(line);
+      const cells = parseCsvLine(line).cells;
       const idCell = employeeIdCol !== undefined ? (cells[employeeIdCol] ?? '').replace(/\D/g, '') : '';
       const nameCell = employeeCol !== undefined ? (cells[employeeCol] ?? '') : '';
       const idHit = idCell.length > 0 && targetIds.includes(idCell);
@@ -599,7 +609,7 @@ function analyzeRosterDocument(
   let invalidTimes = 0;
   const unknownTokens = new Set<string>();
   for (const line of rows) {
-    const cells = splitTableLine(line);
+    const cells = parseCsvLine(line).cells;
     for (const column of [valueCol, typeCol]) {
       if (column === undefined) {
         continue;

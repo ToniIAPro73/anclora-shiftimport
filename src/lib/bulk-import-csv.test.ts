@@ -25,6 +25,65 @@ describe('parseEmployeesCsv', () => {
   it('returns null for an unparseable/quoted file', () => {
     expect(parseEmployeesCsv('not,a,valid\ntable"with,quotes')).toBeNull();
   });
+
+  describe('hardening (real-world repro cases)', () => {
+    it('Case 1: UTF-8 without BOM imports', () => {
+      const csv = 'external_employee_id,name\n38248,Roberto Jaime';
+      expect(parseEmployeesCsv(csv)).toEqual([{ externalEmployeeId: '38248', name: 'Roberto Jaime' }]);
+    });
+
+    it('Case 2: UTF-8 with BOM imports identically to the no-BOM version', () => {
+      const csv = '\uFEFFexternal_employee_id,name\n38248,Roberto Jaime';
+      expect(parseEmployeesCsv(csv)).toEqual([{ externalEmployeeId: '38248', name: 'Roberto Jaime' }]);
+    });
+
+    it('Case 3: a quoted name with an embedded comma stays one field, never splits into two columns', () => {
+      const csv = 'external_employee_id,name\n30394,"Casero Bosquet, Ana Maria"';
+      expect(parseEmployeesCsv(csv)).toEqual([{ externalEmployeeId: '30394', name: 'Casero Bosquet, Ana Maria' }]);
+    });
+
+    it('Case 4: CRLF line endings import', () => {
+      const csv = 'external_employee_id,name\r\n38248,"Bosch Noguera, Roberto Jaime"\r\n85919,Joan Cerda';
+      expect(parseEmployeesCsv(csv)).toEqual([
+        { externalEmployeeId: '38248', name: 'Bosch Noguera, Roberto Jaime' },
+        { externalEmployeeId: '85919', name: 'Joan Cerda' },
+      ]);
+    });
+
+    it('Case 5: LF line endings import', () => {
+      const csv = 'external_employee_id,name\n38248,Roberto Jaime\n85919,Joan Cerda';
+      expect(parseEmployeesCsv(csv)).toEqual([
+        { externalEmployeeId: '38248', name: 'Roberto Jaime' },
+        { externalEmployeeId: '85919', name: 'Joan Cerda' },
+      ]);
+    });
+
+    it('Case 6: a wrong/unrecognized header fails explicitly (null), never silently accepted', () => {
+      expect(parseEmployeesCsv('id,full_name\n38248,Roberto Jaime')).toBeNull();
+    });
+
+    it('Case 7: duplicate external_employee_id rows are both returned by the parser — dedup policy lives in the caller', () => {
+      const csv = 'external_employee_id,name\n38248,Roberto Jaime\n38248,Roberto Jaime Duplicate';
+      expect(parseEmployeesCsv(csv)).toEqual([
+        { externalEmployeeId: '38248', name: 'Roberto Jaime' },
+        { externalEmployeeId: '38248', name: 'Roberto Jaime Duplicate' },
+      ]);
+    });
+
+    it('Case 8: a realistic multi-row file with quoted comma-names and BOM imports every row', () => {
+      const csv = '\uFEFFexternal_employee_id,name\n'
+        + '38248,"Bosch Noguera, Roberto Jaime"\n'
+        + '85919,"Cerda Cerda, Joan"\n'
+        + '89622,"Garau Femenia, Maria Mercedes"\n'
+        + '30394,"Casero Bosquet, Ana Maria"';
+      expect(parseEmployeesCsv(csv)).toEqual([
+        { externalEmployeeId: '38248', name: 'Bosch Noguera, Roberto Jaime' },
+        { externalEmployeeId: '85919', name: 'Cerda Cerda, Joan' },
+        { externalEmployeeId: '89622', name: 'Garau Femenia, Maria Mercedes' },
+        { externalEmployeeId: '30394', name: 'Casero Bosquet, Ana Maria' },
+      ]);
+    });
+  });
 });
 
 describe('parseUsersCsv', () => {

@@ -46,6 +46,72 @@ export interface RosterTable {
 export const splitTableLine = (line: string): string[] =>
   line.split(/[,;\t]/).map((cell) => cell.trim());
 
+/**
+ * RFC4180-style single-line CSV field parser: a field starting with `"` is
+ * quoted (delimiters inside it are literal, `""` is an escaped quote) and
+ * runs until its closing `"`. Any other field is read verbatim up to the
+ * next delimiter — this is what makes `30394,"Casero Bosquet, Ana Maria"`
+ * parse as two fields (`30394`, `Casero Bosquet, Ana Maria`) instead of
+ * three, which a naive `split(',')` can never do correctly.
+ *
+ * Returns `malformed: true` only for a genuinely broken quote structure —
+ * a quote that never closes before the line ends, or a `"` appearing
+ * somewhere a real quoted field never puts one (mid-field, not as the
+ * field's very first character or a doubled `""` escape). A well-formed
+ * quoted field (or a field with no quotes at all) is always `malformed:
+ * false` — this is deliberately NOT "any quote character present".
+ */
+export function parseCsvLine(line: string, delimiter = ','): { cells: string[]; malformed: boolean } {
+  const cells: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let malformed = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[index + 1] === '"') {
+          current += '"';
+          index += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += char;
+      }
+      continue;
+    }
+    if (char === '"') {
+      if (current === '') {
+        inQuotes = true;
+      } else {
+        // A quote appearing after the field has already started (not as an
+        // escape, since we're not inQuotes) never happens in well-formed
+        // CSV — this is the actual malformed-structure signal.
+        malformed = true;
+        current += char;
+      }
+    } else if (char === delimiter) {
+      cells.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (inQuotes) {
+    malformed = true;
+  }
+  cells.push(current.trim());
+  return { cells, malformed };
+}
+
+/** Strips a leading UTF-8 BOM (U+FEFF), if present — a CSV saved as
+ * "UTF-8 with BOM" must parse identically to plain UTF-8. */
+export function stripBom(text: string): string {
+  return text.replace(/^\uFEFF/, '');
+}
+
 export function normalizeTableHeader(value: string): string {
   // underscores become spaces so worker_id matches the alias "worker id"
   return normalizeText(value).replace(/_/g, ' ');
@@ -123,23 +189,35 @@ export function dayNumberFromHeader(header: string): number | null {
 
 /**
  * Parses raw CSV/plain text into a plain table: first non-empty line is the
- * header row, the rest are data rows. Returns null for quoted content (the
- * simple parser cannot trust the structure, same rule as parseRosterCsv) and
- * for documents without at least a header row plus one data row.
+ * header row, the rest are data rows. A quoted field (`30394,"Casero
+ * Bosquet, Ana Maria"`) is parsed correctly — the comma inside the quotes
+ * stays part of the field, never splits it. Returns null for a genuinely
+ * malformed line (an malformed quote) or for documents without at least
+ * a header row plus one data row. Strips a leading UTF-8 BOM first, so
+ * "UTF-8 with BOM" and plain UTF-8 parse identically.
  */
 export function parseRosterTable(text: string): RosterTable | null {
-  if (text.includes('"')) {
-    return null;
-  }
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = stripBom(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2) {
     return null;
   }
-  const headers = splitTableLine(lines[0]);
+  const headerParsed = parseCsvLine(lines[0]);
+  if (headerParsed.malformed) {
+    return null;
+  }
+  const headers = headerParsed.cells;
   if (headers.filter(Boolean).length < 2) {
     return null;
   }
-  return { headers, rows: lines.slice(1).map(splitTableLine) };
+  const rows: string[][] = [];
+  for (const line of lines.slice(1)) {
+    const parsed = parseCsvLine(line);
+    if (parsed.malformed) {
+      return null;
+    }
+    rows.push(parsed.cells);
+  }
+  return { headers, rows };
 }
 
 export interface RosterTableAnalysis {

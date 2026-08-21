@@ -51,7 +51,7 @@ const GRID_CSV = [
 ].join('\n');
 
 describe('parseRosterTable', () => {
-  it('parses headers and rows; rejects quoted and header-only content', () => {
+  it('parses headers and rows; rejects header-only and unstructured content', () => {
     expect(parseRosterTable(GRID_CSV)).toEqual({
       headers: ['Empleado', '1', '2', '3'],
       rows: [
@@ -60,8 +60,21 @@ describe('parseRosterTable', () => {
       ],
     });
     expect(parseRosterTable('a,b\n')).toBeNull();
-    expect(parseRosterTable('a,b\n"c",d')).toBeNull();
     expect(parseRosterTable('solo\nlineas\nsueltas')).toBeNull();
+  });
+
+  it('parses a well-formed quoted field correctly — the comma inside it never splits the field', () => {
+    expect(parseRosterTable('external_employee_id,name\n30394,"Casero Bosquet, Ana Maria"')).toEqual({
+      headers: ['external_employee_id', 'name'],
+      rows: [['30394', 'Casero Bosquet, Ana Maria']],
+    });
+  });
+
+  it('rejects a row with a genuinely malformed quote (never "any quote present")', () => {
+    // Unterminated quote.
+    expect(parseRosterTable('a,b\n"c,d')).toBeNull();
+    // A quote appearing mid-field, not as an opening quote or a doubled escape.
+    expect(parseRosterTable('a,b\nc"d,e')).toBeNull();
   });
 });
 
