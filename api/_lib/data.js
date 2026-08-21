@@ -328,9 +328,22 @@ export async function updateEmployee(sql, ctx, input) {
   const externalId = input?.externalEmployeeId !== undefined
     ? String(input.externalEmployeeId).trim() || null
     : current.externalEmployeeId;
-  const status = input?.status === 'inactive' ? 'inactive' : 'active';
-  if (status === 'inactive') {
+  const status = input?.status === undefined
+    ? current.status
+    : (input.status === 'inactive' ? 'inactive' : 'active');
+  if (status === 'inactive' && current.status !== 'inactive') {
     await assertEmployeeNotLastAdmin(sql, ctx, current);
+  }
+  if (status === 'active' && current.status === 'inactive') {
+    const existing = await sql`
+      SELECT count(*) AS count FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
+    `;
+    requireWithinLimit(
+      ctx.plan,
+      'maxEmployees',
+      Number(existing[0]?.count ?? 0),
+      'This plan only allows 1 employee. Upgrade to Team to add more.',
+    );
   }
   // userId link: only a user that is a member of this org can be linked.
   let userId = current.userId;
