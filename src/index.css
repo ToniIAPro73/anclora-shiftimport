@@ -1120,6 +1120,10 @@ button:hover {
 .brand-mark {
   width: 58px;
   height: 58px;
+  /* The header grid can squeeze the brand column; never let the circle
+     deform into an ellipse (keeps the 48px/32px overrides square too). */
+  flex-shrink: 0;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;
   border: 1px solid var(--glass-border);
