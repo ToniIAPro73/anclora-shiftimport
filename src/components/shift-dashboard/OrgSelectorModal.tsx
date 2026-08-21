@@ -1,6 +1,7 @@
 import { SessionMembership } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
+import { formatOrgContext } from '../../lib/org-labels';
 
 interface OrgSelectorModalProps {
   isOpen: boolean;
@@ -39,14 +40,19 @@ export const OrgSelectorModal = ({ isOpen, memberships, onSelect, onLogout }: Or
               padding: '12px 14px',
               fontWeight: 700,
               display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '10px',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: '2px',
               width: '100%',
             }}
           >
-            <span>{membership.organizationName}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{membership.role}</span>
+            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', width: '100%' }}>
+              <span>{membership.organizationName}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', fontWeight: 400 }}>{t(`role.${membership.role.toLowerCase()}`)}</span>
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)', fontWeight: 400 }}>
+              {formatOrgContext(t, membership)}
+            </span>
           </button>
         ))}
       </div>

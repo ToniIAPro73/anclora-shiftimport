@@ -49,6 +49,7 @@ import { PricingPage } from './pages/PricingPage';
 import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { getPlanIntentFromUrl } from './lib/plans';
+import { formatOrgContext } from './lib/org-labels';
 import { CalendarImportContext } from './lib/import-types';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
@@ -676,6 +677,15 @@ function App() {
   );
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
 
+  // UpgradePrompt context: a sibling Team-plan org the user already belongs
+  // to, offered as "switch instead of upgrade" — never switched automatically.
+  const teamSwitchTarget = session?.memberships.find(
+    (m) => m.organizationPlan === 'team' && m.organizationId !== session.organizationId,
+  );
+  const switchTarget = teamSwitchTarget
+    ? { id: teamSwitchTarget.organizationId, name: teamSwitchTarget.organizationName }
+    : null;
+
   return (
     <div className="container">
       <MonthHeader
@@ -746,26 +756,33 @@ function App() {
               fontSize: '0.85rem',
             }}
           >
-            {session.memberships.length > 1 ? (
-              <select
-                className="modal-input"
-                value={session.organizationId ?? ''}
-                onChange={(event) => void handleSwitchOrganization(event.target.value)}
-                aria-label={t('orgSelector.title')}
-                style={{ padding: '6px 10px', fontWeight: 700, width: 'auto' }}
-              >
-                {session.memberships.map((membership) => (
-                  <option key={membership.organizationId} value={membership.organizationId}>
-                    {membership.organizationName}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span style={{ fontWeight: 700 }}>
-                {session.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
-              </span>
-            )}
-            <span style={{ color: 'var(--text-subtle)' }}>{session.role}</span>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+              {t('orgSelector.activeLabel')}
+              {session.memberships.length > 1 ? (
+                <select
+                  className="modal-input"
+                  value={session.organizationId ?? ''}
+                  onChange={(event) => void handleSwitchOrganization(event.target.value)}
+                  aria-label={t('orgSelector.title')}
+                  style={{ padding: '6px 10px', fontWeight: 700, width: 'auto' }}
+                >
+                  {session.memberships.map((membership) => (
+                    <option key={membership.organizationId} value={membership.organizationId}>
+                      {membership.organizationName} — {formatOrgContext(t, membership)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {(() => {
+                    const active = session.memberships.find((m) => m.organizationId === session.organizationId);
+                    return active ? `${active.organizationName} — ${formatOrgContext(t, active)}` : '';
+                  })()}
+                </span>
+              )}
+            </label>
+            <span style={{ color: 'var(--text-subtle)' }}>{session.role ? t(`role.${session.role.toLowerCase()}`) : ''}</span>
+            <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--glass-border)' }} aria-hidden="true" />
             {session.role === 'EMPLOYEE' ? (
               <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
             ) : (
@@ -891,6 +908,9 @@ function App() {
           onImported={() => {
             void hydrateAuthenticated(session);
           }}
+          currentPlan={session.plan}
+          switchTarget={switchTarget}
+          onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         />
       )}
 
@@ -933,6 +953,9 @@ function App() {
         onClose={() => setIsMembersOpen(false)}
         employees={employees}
         currentUserId={session?.user.id ?? ''}
+        currentPlan={session?.plan ?? null}
+        switchTarget={switchTarget}
+        onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         onChanged={() => {
           if (session) {
             void hydrateAuthenticated(session);
