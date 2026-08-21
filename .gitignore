@@ -53,3 +53,8 @@ src/ingestion/fixtures/real/
 # Local E2E (Fase 1.1) artifacts
 qa/e2e-acceptance/test-results-local/
 qa/e2e-acceptance/artifacts/local-fixture.json
+
+# Fase 1.2B-VISUAL: Stitch design brief (reference material, not code) and
+# local visual-QA screenshots — evidence kept on disk, never committed.
+design-reference/
+qa/1.2b-visual/
