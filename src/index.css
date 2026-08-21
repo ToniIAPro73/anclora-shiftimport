@@ -2737,7 +2737,11 @@ button:hover {
   padding: 4px;
   border: 1px solid var(--glass-border);
   border-radius: 10px;
-  background: var(--glass-bg);
+  /* Elevated floating surface: must be opaque. --glass-bg is a translucency
+   * token for cards sitting over the app background (8% alpha dark / 72%
+   * light) — used here it let the rows behind bleed through the menu.
+   * --color-bg-elevated is the solid per-theme surface token. */
+  background: var(--color-bg-elevated);
   box-shadow: var(--shadow-hover);
 }
 
