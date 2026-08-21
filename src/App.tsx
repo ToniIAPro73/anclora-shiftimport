@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Shift } from './lib/types';
 import { getMonthDaysISO, getDaysInMonth } from './lib/week';
 import { loadShifts, loadLocalShiftsForMigration, normalizeShift, syncShiftChanges } from './lib/storage';
@@ -50,6 +50,7 @@ import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { getPlanIntentFromUrl } from './lib/plans';
 import { formatOrgContext } from './lib/org-labels';
+import { SearchableSelect } from './components/ui/SearchableSelect';
 import { CalendarImportContext } from './lib/import-types';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
@@ -77,7 +78,7 @@ function describeShift(shift: Shift, locale: 'es' | 'en', t: (key: string) => st
   return `${origin} ${type} ${shift.startTime}-${shift.endTime} ${on} ${shift.date}`;
 }
 function App() {
-  const { locale, t } = useI18n();
+  const { locale, t, tl } = useI18n();
   const legalPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+/, '') : '';
   const route = useRoute();
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -85,6 +86,10 @@ function App() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [employees, setEmployees] = useState<RemoteEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const selectedEmployeeIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedEmployeeIdRef.current = selectedEmployeeId;
+  }, [selectedEmployeeId]);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
@@ -114,9 +119,18 @@ function App() {
     const orgEmployees = await listRemoteEmployees();
     setEmployees(orgEmployees);
 
+    // Prefer keeping whatever employee was already selected (e.g. a
+    // TeamImportModal import refresh, or a plain reload) as long as it's
+    // still a valid active employee of THIS org's fresh roster — never a
+    // stale id from a previous organization, since activeIds is always
+    // scoped to orgEmployees just fetched for the current org.
+    const activeIds = new Set(orgEmployees.filter((employee) => employee.status === 'active').map((employee) => employee.id));
+    const previousSelection = selectedEmployeeIdRef.current;
     const initialEmployeeId = nextSession.role === 'EMPLOYEE'
       ? nextSession.employeeId
-      : (nextSession.employeeId ?? orgEmployees[0]?.id ?? null);
+      : (previousSelection && activeIds.has(previousSelection)
+        ? previousSelection
+        : (nextSession.employeeId ?? orgEmployees[0]?.id ?? null));
     setSelectedEmployeeId(initialEmployeeId);
 
     if (!initialEmployeeId) {
@@ -786,21 +800,25 @@ function App() {
             {session.role === 'EMPLOYEE' ? (
               <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
             ) : (
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)' }}>
-                {t('team.teamLabel')}
-                <select
-                  className="modal-input"
+              <div style={{ minWidth: '220px', maxWidth: '320px' }}>
+                <SearchableSelect
+                  label={t('team.employeeLabel')}
                   value={selectedEmployeeId ?? ''}
-                  onChange={(event) => void handleSelectEmployee(event.target.value)}
-                  style={{ padding: '6px 10px' }}
-                >
-                  {employees.filter((employee) => employee.status === 'active').map((employee) => (
-                    <option key={employee.id} value={employee.id}>
-                      {employee.name}{employee.externalEmployeeId ? ` (ID ${employee.externalEmployeeId})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  onChange={(employeeId) => void handleSelectEmployee(employeeId)}
+                  searchPlaceholder={t('employeeSelect.searchPlaceholder')}
+                  emptyMessage={employees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
+                  ariaLabel={t('team.employeeLabel')}
+                  options={employees
+                    .filter((employee) => employee.status === 'active')
+                    .map((employee) => ({
+                      value: employee.id,
+                      label: employee.externalEmployeeId
+                        ? `${employee.name} · ID ${employee.externalEmployeeId}`
+                        : employee.name,
+                      searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
+                    }))}
+                />
+              </div>
             )}
             {session.role === 'ADMIN' && (
               <button
@@ -831,6 +849,12 @@ function App() {
           currentYearShifts={currentYearShifts}
           daysInYear={daysInYear}
         />
+
+        {session && currentMonthShifts.length === 0 && (session.role === 'EMPLOYEE' || selectedEmployeeId) && (
+          <p role="status" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--glass-border)', background: 'var(--panel-muted-bg)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            {t('calendar.noShiftsForEmployee', { month: tl('calendar.months')[currentMonth], year: currentYear })}
+          </p>
+        )}
 
         <section className="calendar-stage">
           <MonthGrid

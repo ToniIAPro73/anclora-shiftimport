@@ -937,6 +937,12 @@ button:hover {
   color: #ffffff;
 }
 
+/* Keyboard-navigated highlight (arrow keys) — distinct from hover/selected
+ * since it must persist without the pointer being over the option. */
+.modal-select-option.is-highlighted {
+  background: rgba(205, 235, 190, 0.14);
+}
+
 :root[data-theme='light'] .modal-select-trigger {
   background: #ffffff;
   color: #17233f;
@@ -959,6 +965,10 @@ button:hover {
 
 :root[data-theme='light'] .modal-select-option.is-selected {
   background: rgba(106, 173, 73, 0.16);
+}
+
+:root[data-theme='light'] .modal-select-option.is-highlighted {
+  background: rgba(106, 173, 73, 0.08);
 }
 
 :root[data-theme='dark'] .modal-select-menu,
@@ -993,6 +1003,11 @@ button:hover {
 :root:not([data-theme]) .modal-select-option.is-selected {
   background: #9cc8f0 !important;
   color: #1b2a48 !important;
+}
+
+:root[data-theme='dark'] .modal-select-option.is-highlighted,
+:root:not([data-theme]) .modal-select-option.is-highlighted {
+  background: rgba(156, 200, 240, 0.35) !important;
 }
 
 :root:not([data-theme='light']) select.modal-input {
