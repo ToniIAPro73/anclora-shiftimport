@@ -16,6 +16,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     removeRemoteMember: vi.fn(),
     createRemoteEmployee: vi.fn(),
     updateRemoteEmployee: vi.fn(),
+    deleteRemoteEmployee: vi.fn(),
   };
 });
 
@@ -28,6 +29,7 @@ const mockedListRemoteMembers = vi.mocked(remote.listRemoteMembers);
 const mockedAddRemoteMember = vi.mocked(remote.addRemoteMember);
 const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
 const mockedUpdateRemoteEmployee = vi.mocked(remote.updateRemoteEmployee);
+const mockedDeleteRemoteEmployee = vi.mocked(remote.deleteRemoteEmployee);
 
 const remoteEmployee = (over: Partial<RemoteEmployee> = {}): RemoteEmployee => ({
   id: 'emp-x',
@@ -39,7 +41,7 @@ const remoteEmployee = (over: Partial<RemoteEmployee> = {}): RemoteEmployee => (
   ...over,
 });
 
-function renderMembersModal(employees: RemoteEmployee[] = []) {
+function renderMembersModal(employees: RemoteEmployee[] = [], onChanged: () => void = () => {}) {
   return render(
     <I18nProvider>
       <MembersModal
@@ -47,7 +49,7 @@ function renderMembersModal(employees: RemoteEmployee[] = []) {
         onClose={() => {}}
         employees={employees}
         currentUserId="user-admin"
-        onChanged={() => {}}
+        onChanged={onChanged}
       />
     </I18nProvider>,
   );
@@ -220,5 +222,134 @@ describe('MembersModal — bulk users CSV import', () => {
     for (const call of mockedAddRemoteMember.mock.calls) {
       expect(call[0]).not.toHaveProperty('password');
     }
+  });
+});
+
+describe('MembersModal — employee lifecycle (Bloque D)', () => {
+  const openEmployeesTab = async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    fireEvent.click(screen.getByText('Empleados'));
+    await waitFor(() => expect(screen.getByText('Añadir empleado')).toBeTruthy());
+  };
+
+  it('renders a text badge Activo/Inactivo per row', async () => {
+    renderMembersModal([
+      remoteEmployee({ id: 'e1', name: 'Ana Activa', status: 'active' }),
+      remoteEmployee({ id: 'e2', name: 'Bea Inactiva', status: 'inactive' }),
+    ]);
+    await openEmployeesTab();
+
+    expect(screen.getByText('Activo')).toBeTruthy();
+    expect(screen.getByText('Inactivo')).toBeTruthy();
+  });
+
+  it('the row menu shows Desactivar for active employees and Reactivar for inactive ones', async () => {
+    renderMembersModal([
+      remoteEmployee({ id: 'e1', name: 'Ana Activa', status: 'active' }),
+      remoteEmployee({ id: 'e2', name: 'Bea Inactiva', status: 'inactive' }),
+    ]);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
+    expect(screen.getByRole('menuitem', { name: 'Editar' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Desactivar' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Eliminar definitivamente' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Reactivar' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Bea Inactiva' }));
+    expect(screen.getByRole('menuitem', { name: 'Reactivar' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Desactivar' })).toBeNull();
+  });
+
+  it('Desactivar asks for confirmation and PATCHes status inactive', async () => {
+    const onChanged = vi.fn();
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e1', status: 'inactive' }));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Ana Activa', status: 'active' })], onChanged);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledTimes(1));
+    expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'e1', status: 'inactive' });
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
+  it('Reactivar PATCHes status active without confirmation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e2', status: 'active' }));
+    renderMembersModal([remoteEmployee({ id: 'e2', name: 'Bea Inactiva', status: 'inactive' })]);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Bea Inactiva' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Reactivar' }));
+
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'e2', status: 'active' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it('Eliminar definitivamente deletes after explicit confirmation', async () => {
+    const onChanged = vi.fn();
+    mockedDeleteRemoteEmployee.mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Ana Activa' })], onChanged);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Eliminar definitivamente' }));
+
+    await waitFor(() => expect(mockedDeleteRemoteEmployee).toHaveBeenCalledWith('e1'));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(mockedUpdateRemoteEmployee).not.toHaveBeenCalled();
+  });
+
+  it('on 409 EMPLOYEE_HAS_HISTORY it shows the server message and offers Desactivar instead', async () => {
+    const { ApiError } = await import('../../lib/session');
+    mockedDeleteRemoteEmployee.mockRejectedValue(new ApiError(409, 'El empleado tiene turnos registrados.', 'EMPLOYEE_HAS_HISTORY'));
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e1', status: 'inactive' }));
+    // First confirm = delete, second = accept the deactivate offer.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Ana Activa' })]);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Eliminar definitivamente' }));
+
+    await waitFor(() => expect(screen.getByText('El empleado tiene turnos registrados.')).toBeTruthy());
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'e1', status: 'inactive' }));
+  });
+
+  it('on 400 LAST_ADMIN when deactivating, the server message is surfaced and nothing else happens', async () => {
+    const { ApiError } = await import('../../lib/session');
+    mockedUpdateRemoteEmployee.mockRejectedValue(new ApiError(400, 'No puedes desactivar al último administrador.', 'LAST_ADMIN'));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Admin Vinculado', userId: 'user-admin' })]);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Admin Vinculado' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+
+    await waitFor(() => expect(screen.getByText('No puedes desactivar al último administrador.')).toBeTruthy());
+  });
+
+  it('Editar switches the row to inline edit and saves name via updateRemoteEmployee (status carried through)', async () => {
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e2', name: 'Bea Nueva', status: 'inactive' }));
+    renderMembersModal([remoteEmployee({ id: 'e2', name: 'Bea Inactiva', status: 'inactive', externalEmployeeId: 'SI2' })]);
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Bea Inactiva' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }));
+
+    const nameInput = screen.getByDisplayValue('Bea Inactiva');
+    fireEvent.change(nameInput, { target: { value: 'Bea Nueva' } });
+    fireEvent.click(screen.getByText('Guardar'));
+
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({
+      id: 'e2',
+      name: 'Bea Nueva',
+      externalEmployeeId: 'SI2',
+      status: 'inactive',
+    }));
   });
 });

@@ -26,6 +26,7 @@ import {
   RemoteEmployee,
   syncRemoteShifts,
 } from './lib/remote';
+import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
@@ -464,6 +465,27 @@ function App() {
 
     if (match.kind === 'recognized') {
       return match.employees[0];
+    }
+
+    // Bloque E: an inactive existing employee is never silently reactivated
+    // nor duplicated — ADMIN chooses explicitly; other roles are blocked.
+    if (match.kind === 'recognized_inactive') {
+      const matched = match.employees[0];
+      const resolution = await resolveInactiveEmployeeMatch({
+        employee: matched,
+        role: session.role,
+        confirmReactivate: () => window.confirm(t('team.reactivateEmployeeConfirm', { name: matched.name })),
+      });
+      if (resolution.kind === 'not_admin') {
+        window.alert(t('team.inactiveEmployeeBlocked', { name: matched.name }));
+        return null;
+      }
+      if (resolution.kind === 'kept_inactive') {
+        window.alert(t('team.keepInactiveAbort', { name: matched.name }));
+        return null;
+      }
+      setEmployees((current) => current.map((employee) => (employee.id === resolution.employee.id ? resolution.employee : employee)));
+      return resolution.employee;
     }
 
     if (match.kind === 'ambiguous') {
@@ -984,6 +1006,7 @@ function App() {
           onImported={() => {
             void hydrateAuthenticated(session);
           }}
+          sessionRole={session.role}
           currentPlan={session.plan}
           switchTarget={switchTarget}
           onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}

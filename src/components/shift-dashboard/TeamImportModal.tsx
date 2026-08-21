@@ -8,6 +8,7 @@ import {
   EmployeeMatchKind,
   matchRemoteEmployee,
   createRemoteEmployee,
+  updateRemoteEmployee,
   bulkCreateRemoteEmployees,
   BulkCreateResult,
   createRemoteImport,
@@ -17,7 +18,7 @@ import {
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { Shift } from '../../lib/types';
-import { ApiError } from '../../lib/session';
+import { ApiError, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
 
 interface TeamImportModalProps {
@@ -25,6 +26,8 @@ interface TeamImportModalProps {
   onClose: () => void;
   /** Called after a successful import so the caller can refresh its employee list. */
   onImported: () => void;
+  /** Role of the current session — only ADMIN can reactivate inactive matches (Bloque E). */
+  sessionRole?: Role | null;
   /** Active organization's plan, threaded to the contextual UpgradePrompt. */
   currentPlan?: PlanId | null;
   /** A sibling Team-plan org to offer switching to instead of upgrading. */
@@ -80,6 +83,7 @@ function periodOf(dateIso: string): { year: number; month: number } {
 
 const statusLabelKey: Record<EmployeeMatchKind, string> = {
   recognized: 'teamImport.statusRecognized',
+  recognized_inactive: 'teamImport.statusRecognizedInactive',
   new: 'teamImport.statusNew',
   ambiguous: 'teamImport.statusAmbiguous',
 };
@@ -94,7 +98,7 @@ const statusLabelKey: Record<EmployeeMatchKind, string> = {
  * individually/all → preview (new/conflicting/unchanged per employee,
  * conflicts are never silently overwritten) → import → results summary.
  */
-export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = null, switchTarget = null, onSwitchOrg }: TeamImportModalProps) => {
+export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = null, currentPlan = null, switchTarget = null, onSwitchOrg }: TeamImportModalProps) => {
   const { t } = useI18n();
   const [step, setStep] = useState<Step>('upload');
   const [error, setError] = useState('');
@@ -168,7 +172,9 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
           name: employee.name,
           detected: employee,
           status: match.kind,
-          candidates: match.kind === 'ambiguous' ? match.employees : [],
+          // recognized_inactive carries its single match in candidates so the
+          // Reactivar action knows which employee to PATCH.
+          candidates: match.kind === 'recognized' ? [] : match.employees,
           resolvedEmployeeId: match.kind === 'recognized' ? match.employees[0]?.id ?? null : null,
           selected: false,
           busy: false,
@@ -227,6 +233,27 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
     updateRow(row.key, { status: 'recognized', resolvedEmployeeId: employeeId, selected: true });
   };
 
+  // Bloque E: reactivating an inactive match is explicit (confirm) and
+  // ADMIN-only; the row becomes importable right away, never duplicated.
+  const handleReactivate = async (row: TeamRow) => {
+    const employee = row.candidates[0];
+    if (!employee) {
+      return;
+    }
+    if (!window.confirm(t('teamImport.reactivateConfirm', { name: row.name }))) {
+      return;
+    }
+    updateRow(row.key, { busy: true });
+    try {
+      await updateRemoteEmployee({ id: employee.id, status: 'active' });
+      updateRow(row.key, { status: 'recognized', resolvedEmployeeId: employee.id, selected: true, busy: false });
+    } catch (err) {
+      console.error('Failed to reactivate employee', err);
+      setError(t('teamImport.reactivateFailed'));
+      updateRow(row.key, { busy: false });
+    }
+  };
+
   // "Crear todos los nuevos" — bulk-create every `new` row in one request
   // instead of one window.confirm per row. The confirm panel below is a
   // pure local render of rows already in state — nothing is created until
@@ -267,7 +294,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
       let hitPlanLimit = false;
       for (const result of results) {
         if (result.status === 'created') created += 1;
-        else if (result.status === 'existing') existing += 1;
+        else if (result.status === 'existing' || result.status === 'existing_inactive') existing += 1;
         else {
           failed += 1;
           if (result.reason === 'plan_limit') hitPlanLimit = true;
@@ -278,6 +305,11 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
         const result = byKey.get(row.key);
         if (!result || !result.employee) {
           return row;
+        }
+        // existing_inactive: matched an inactive employee — never duplicated,
+        // surfaced as such (ADMIN can reactivate from the row).
+        if (result.status === 'existing_inactive') {
+          return { ...row, status: 'recognized_inactive', candidates: [result.employee], resolvedEmployeeId: null };
         }
         return { ...row, status: 'recognized', resolvedEmployeeId: result.employee.id, selected: true };
       }));
@@ -556,6 +588,17 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
                       style={{ padding: '6px 10px', fontWeight: 700, fontSize: '0.78rem' }}
                     >
                       {t('teamImport.create')}
+                    </button>
+                  )}
+                  {row.status === 'recognized_inactive' && sessionRole === 'ADMIN' && (
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={row.busy}
+                      onClick={() => void handleReactivate(row)}
+                      style={{ padding: '6px 10px', fontWeight: 700, fontSize: '0.78rem' }}
+                    >
+                      {t('teamImport.reactivate')}
                     </button>
                   )}
                   {row.status === 'ambiguous' && (

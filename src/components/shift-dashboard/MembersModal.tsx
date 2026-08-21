@@ -3,6 +3,7 @@ import { useI18n } from '../../lib/use-i18n';
 import {
   addRemoteMember,
   createRemoteEmployee,
+  deleteRemoteEmployee,
   listRemoteMembers,
   RemoteMember,
   removeRemoteMember,
@@ -73,6 +74,12 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
   const [newEmployeeName, setNewEmployeeName] = useState('');
   const [newEmployeeExternalId, setNewEmployeeExternalId] = useState('');
 
+  // Employee lifecycle (Bloque D): per-row contextual menu + inline edit.
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editExternalId, setEditExternalId] = useState('');
+
   // Bulk Users CSV.
   const usersFileRef = useRef<HTMLInputElement>(null);
   const [usersPreview, setUsersPreview] = useState<UserPreviewRow[] | null>(null);
@@ -107,8 +114,33 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
       setUsersResult(null);
       setEmployeesPreview(null);
       setEmployeesResult(null);
+      setOpenMenuId(null);
+      setEditingEmployeeId(null);
     }
   }, [isOpen, reload]);
+
+  // Contextual employee menu: closes on ESC or any pointer-down outside it.
+  useEffect(() => {
+    if (!openMenuId) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenMenuId(null);
+      }
+    };
+    const onPointerDown = (event: MouseEvent) => {
+      if (!(event.target instanceof HTMLElement && event.target.closest('[data-employee-menu]'))) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [openMenuId]);
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -160,6 +192,78 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
       setNewEmployeeName('');
       setNewEmployeeExternalId('');
     });
+  };
+
+  // ------------------------------------------------------ employee lifecycle
+
+  const startEditEmployee = (employee: RemoteEmployee) => {
+    setOpenMenuId(null);
+    setEditingEmployeeId(employee.id);
+    setEditName(employee.name);
+    setEditExternalId(employee.externalEmployeeId ?? '');
+  };
+
+  const handleEditEmployeeSave = (employee: RemoteEmployee, event: FormEvent) => {
+    event.preventDefault();
+    void run(async () => {
+      // status carried through explicitly: the PATCH default would force an
+      // inactive employee back to 'active' when status is omitted.
+      await updateRemoteEmployee({
+        id: employee.id,
+        name: editName.trim(),
+        externalEmployeeId: editExternalId.trim(),
+        status: employee.status,
+      });
+      setEditingEmployeeId(null);
+    });
+  };
+
+  const handleDeactivateEmployee = (employee: RemoteEmployee) => {
+    setOpenMenuId(null);
+    if (!window.confirm(t('members.deactivateConfirm', { name: employee.name }))) {
+      return;
+    }
+    // On 400 LAST_ADMIN (and any other rejection) run() surfaces the server
+    // message in the modal's error area.
+    void run(() => updateRemoteEmployee({ id: employee.id, status: 'inactive' }));
+  };
+
+  const handleReactivateEmployee = (employee: RemoteEmployee) => {
+    setOpenMenuId(null);
+    void run(() => updateRemoteEmployee({ id: employee.id, status: 'active' }));
+  };
+
+  const handleDeleteEmployee = async (employee: RemoteEmployee) => {
+    setOpenMenuId(null);
+    if (!window.confirm(t('members.deleteConfirm', { name: employee.name }))) {
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await deleteRemoteEmployee(employee.id);
+      await reload();
+      onChanged();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'EMPLOYEE_HAS_HISTORY') {
+        // History is never destroyed: explain and offer deactivation instead.
+        setError(err.message);
+        if (window.confirm(t('members.hasHistoryDeactivateOffer'))) {
+          try {
+            await updateRemoteEmployee({ id: employee.id, status: 'inactive' });
+            setError('');
+            await reload();
+            onChanged();
+          } catch (fallbackErr) {
+            setError(fallbackErr instanceof Error ? fallbackErr.message : t('members.actionFailed'));
+          }
+        }
+      } else {
+        setError(err instanceof Error ? err.message : t('members.actionFailed'));
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const copyToClipboard = async (key: string, value: string) => {
@@ -526,11 +630,78 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                   padding: '10px 12px', background: 'var(--panel-muted-bg)', fontSize: '0.85rem',
                 }}
               >
-                <span style={{ fontWeight: 700, flex: 1 }}>
-                  {employee.name}
-                  {employee.externalEmployeeId && <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}> · ID {employee.externalEmployeeId}</span>}
-                </span>
-                {!employee.userId && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.noLink')}</span>}
+                {editingEmployeeId === employee.id ? (
+                  <form onSubmit={(event) => handleEditEmployeeSave(employee, event)} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+                    <input
+                      className="modal-input"
+                      type="text"
+                      required
+                      value={editName}
+                      onChange={(event) => setEditName(event.target.value)}
+                      placeholder={t('members.employeeNamePlaceholder')}
+                      aria-label={t('members.employeeNamePlaceholder')}
+                      style={{ padding: '6px 10px', flex: 1, minWidth: '140px' }}
+                    />
+                    <input
+                      className="modal-input"
+                      type="text"
+                      value={editExternalId}
+                      onChange={(event) => setEditExternalId(event.target.value)}
+                      placeholder={t('members.employeeIdPlaceholder')}
+                      aria-label={t('members.employeeIdPlaceholder')}
+                      style={{ padding: '6px 10px', width: '140px' }}
+                    />
+                    <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '6px 10px', fontWeight: 800 }}>
+                      {t('common.save')}
+                    </button>
+                    <button type="button" className="btn-outline" disabled={busy} onClick={() => setEditingEmployeeId(null)} style={{ padding: '6px 10px', fontWeight: 700 }}>
+                      {t('common.cancel')}
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <span style={{ fontWeight: 700, flex: 1 }}>
+                      {employee.name}
+                      {employee.externalEmployeeId && <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}> · ID {employee.externalEmployeeId}</span>}
+                    </span>
+                    <span className={`status-badge ${employee.status === 'active' ? 'status-badge--active' : 'status-badge--inactive'}`}>
+                      {t(employee.status === 'active' ? 'members.statusActive' : 'members.statusInactive')}
+                    </span>
+                    {!employee.userId && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.noLink')}</span>}
+                    <div className="employee-menu" data-employee-menu>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        disabled={busy}
+                        aria-label={t('members.rowMenuAria', { name: employee.name })}
+                        aria-expanded={openMenuId === employee.id}
+                        onClick={() => setOpenMenuId((current) => (current === employee.id ? null : employee.id))}
+                        style={{ padding: '4px 10px', fontWeight: 700 }}
+                      >
+                        ⋮
+                      </button>
+                      {openMenuId === employee.id && (
+                        <div className="employee-menu-list" role="menu">
+                          <button type="button" role="menuitem" className="employee-menu-item" onClick={() => startEditEmployee(employee)}>
+                            {t('common.edit')}
+                          </button>
+                          {employee.status === 'active' ? (
+                            <button type="button" role="menuitem" className="employee-menu-item" onClick={() => handleDeactivateEmployee(employee)}>
+                              {t('members.deactivateAction')}
+                            </button>
+                          ) : (
+                            <button type="button" role="menuitem" className="employee-menu-item" onClick={() => handleReactivateEmployee(employee)}>
+                              {t('members.reactivateAction')}
+                            </button>
+                          )}
+                          <button type="button" role="menuitem" className="employee-menu-item employee-menu-item--danger" onClick={() => void handleDeleteEmployee(employee)}>
+                            {t('members.deleteAction')}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

@@ -19,6 +19,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     ...actual,
     matchRemoteEmployee: vi.fn(),
     createRemoteEmployee: vi.fn(),
+    updateRemoteEmployee: vi.fn(),
     bulkCreateRemoteEmployees: vi.fn(),
     createRemoteImport: vi.fn(),
     syncRemoteShifts: vi.fn(),
@@ -35,15 +36,16 @@ beforeEach(() => {
 const mockedDetectTeamRoster = vi.mocked(detectTeamRoster);
 const mockedMatchRemoteEmployee = vi.mocked(remote.matchRemoteEmployee);
 const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
+const mockedUpdateRemoteEmployee = vi.mocked(remote.updateRemoteEmployee);
 const mockedBulkCreateRemoteEmployees = vi.mocked(remote.bulkCreateRemoteEmployees);
 const mockedCreateRemoteImport = vi.mocked(remote.createRemoteImport);
 const mockedSyncRemoteShifts = vi.mocked(remote.syncRemoteShifts);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 
-function renderTeamImportModal(onImported: () => void = () => {}) {
+function renderTeamImportModal(onImported: () => void = () => {}, sessionRole: 'ADMIN' | 'MANAGER' = 'ADMIN') {
   return render(
     <I18nProvider>
-      <TeamImportModal isOpen onClose={() => {}} onImported={onImported} />
+      <TeamImportModal isOpen onClose={() => {}} onImported={onImported} sessionRole={sessionRole} />
     </I18nProvider>,
   );
 }
@@ -306,5 +308,77 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
     fireEvent.click(screen.getByText('Crear 1 empleados'));
 
     await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
+  });
+});
+
+describe('TeamImportModal — inactive employee awareness (Bloque E)', () => {
+  const inactiveRoster = () => ({
+    employees: [
+      { key: 'e1', externalEmployeeId: '1001', name: 'Ana Inactiva', shifts: [rosterShift('2026-03-04')] },
+    ],
+  });
+  const inactiveMatch = () => ({
+    kind: 'recognized_inactive' as const,
+    employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Inactiva', externalEmployeeId: '1001', status: 'inactive' })],
+  });
+
+  const uploadRoster = async () => {
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+    await waitFor(() => expect(screen.getByText('Existente — Inactivo')).toBeTruthy());
+  };
+
+  it('ADMIN: recognized_inactive row shows the state and a Reactivar action that PATCHes and selects the row', async () => {
+    mockedDetectTeamRoster.mockReturnValue(inactiveRoster());
+    mockedMatchRemoteEmployee.mockResolvedValue(inactiveMatch());
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'emp-ana', status: 'active' }));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderTeamImportModal(() => {}, 'ADMIN');
+    await uploadRoster();
+
+    // Not importable while inactive: checkbox stays disabled.
+    expect((screen.getByLabelText('Ana Inactiva') as HTMLInputElement).disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'emp-ana', status: 'active' }));
+    await waitFor(() => expect(screen.getByText('Reconocido')).toBeTruthy());
+    expect(screen.getByText('1 seleccionados de 1')).toBeTruthy();
+    // Never duplicated: no employee creation call.
+    expect(mockedCreateRemoteEmployee).not.toHaveBeenCalled();
+    expect(mockedBulkCreateRemoteEmployees).not.toHaveBeenCalled();
+  });
+
+  it('non-ADMIN: the state is shown but there is no Reactivar action and the row is not importable', async () => {
+    mockedDetectTeamRoster.mockReturnValue(inactiveRoster());
+    mockedMatchRemoteEmployee.mockResolvedValue(inactiveMatch());
+
+    renderTeamImportModal(() => {}, 'MANAGER');
+    await uploadRoster();
+
+    expect(screen.queryByRole('button', { name: 'Reactivar' })).toBeNull();
+    expect((screen.getByLabelText('Ana Inactiva') as HTMLInputElement).disabled).toBe(true);
+    expect(mockedUpdateRemoteEmployee).not.toHaveBeenCalled();
+  });
+
+  it('bulk result existing_inactive flips the row to the inactive state (never duplicated)', async () => {
+    mockedDetectTeamRoster.mockReturnValue(inactiveRoster());
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    mockedBulkCreateRemoteEmployees.mockResolvedValue([
+      { key: 'e1', status: 'existing_inactive', employee: remoteEmployee({ id: 'emp-ana', name: 'Ana Inactiva', externalEmployeeId: '1001', status: 'inactive' }) },
+    ]);
+
+    renderTeamImportModal(() => {}, 'ADMIN');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Crear 1 empleados nuevos')).toBeTruthy());
+    fireEvent.click(screen.getByText('Crear 1 empleados nuevos'));
+    fireEvent.click(screen.getByText('Crear 1 empleados'));
+
+    await waitFor(() => expect(screen.getByText('Existente — Inactivo')).toBeTruthy());
+    expect(screen.getByText('0 creados · 1 ya existentes · 0 errores')).toBeTruthy();
+    expect((screen.getByLabelText('Ana Inactiva') as HTMLInputElement).disabled).toBe(true);
   });
 });

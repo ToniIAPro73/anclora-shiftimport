@@ -25,7 +25,9 @@ export interface RemoteImport {
   status: string;
 }
 
-export type EmployeeMatchKind = 'recognized' | 'ambiguous' | 'new';
+/** `recognized_inactive`: the single match exists but its status is
+ * 'inactive' — never silently reactivated nor duplicated by import flows. */
+export type EmployeeMatchKind = 'recognized' | 'recognized_inactive' | 'ambiguous' | 'new';
 
 interface RemoteShiftRow {
   id: string;
@@ -131,7 +133,18 @@ export async function updateRemoteEmployee(input: {
   return payload.employee;
 }
 
-export type BulkCreateStatus = 'created' | 'existing' | 'failed';
+/** Hard delete (ADMIN only). The server rejects with 409
+ * `EMPLOYEE_HAS_HISTORY` when the employee has shift history (kept; the
+ * caller should offer deactivation instead) and 400 `LAST_ADMIN` when the
+ * employee is linked to the org's last ADMIN user. */
+export async function deleteRemoteEmployee(id: string): Promise<void> {
+  await apiFetch('/api/employees', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  });
+}
+
+export type BulkCreateStatus = 'created' | 'existing' | 'existing_inactive' | 'failed';
 export type BulkCreateFailReason = 'invalid' | 'plan_limit' | 'error';
 
 export interface BulkCreateResult {

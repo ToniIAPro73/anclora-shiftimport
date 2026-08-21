@@ -2579,3 +2579,61 @@ button:hover {
   .pricing-card { transition: none; }
   .pricing-card:hover { transform: none; }
 }
+
+/* Bloque D: employee lifecycle (MembersModal) — status badge + per-row menu */
+.status-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-badge--active {
+  color: var(--color-accent);
+  background: var(--info-bg);
+}
+
+.status-badge--inactive {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.employee-menu {
+  position: relative;
+}
+
+.employee-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 40;
+  display: grid;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-hover);
+}
+
+.employee-menu-item {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.employee-menu-item:hover,
+.employee-menu-item:focus-visible {
+  background: var(--shift-badge-hover-bg);
+}
+
+.employee-menu-item--danger {
+  color: var(--danger);
+}
