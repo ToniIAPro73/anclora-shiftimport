@@ -577,7 +577,7 @@ function App() {
         const { saved } = await syncRemoteShifts(targetEmployeeId, { upserts, deleteIds, importId });
         const reconciliation = reconcileImport(upserts, saved);
         if (reconciliation.status === 'FAIL') {
-          console.error('Import reconciliation FAILED: expected != persisted', reconciliation);
+          console.error('Import reconciliation FAILED: expected != persisted', { importId, employeeId: targetEmployeeId, ...reconciliation });
           setImportResult(reconciliation);
           return false;
         }
@@ -603,7 +603,22 @@ function App() {
       return true;
     } catch (error) {
       console.error('Failed to persist imported shifts', error);
-      window.alert(t('importConflict.importSaveFailed'));
+      // A mid-batch failure (e.g. a plan-limit check tripping on shift N of
+      // M) can leave 1..N-1 already committed server-side even though this
+      // call rejected — telling the user "nothing was saved" here would
+      // itself be a silent-loss lie. Re-read what's actually on the server
+      // and reconcile against that, instead of assuming zero effect.
+      if (session && targetEmployeeId) {
+        try {
+          const persistedNow = await loadRemoteShifts(targetEmployeeId);
+          setImportResult(reconcileImport(upserts, persistedNow));
+        } catch (verifyError) {
+          console.error('Failed to verify partial import state after a save error', verifyError);
+          window.alert(t('importConflict.importSaveFailed'));
+        }
+      } else {
+        window.alert(t('importConflict.importSaveFailed'));
+      }
       return false;
     }
   };
