@@ -92,7 +92,6 @@ function App() {
   const [onboardingCompanyStep, setOnboardingCompanyStep] = useState(false);
   const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
-  const [isTeamImportOpen, setIsTeamImportOpen] = useState(false);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -786,16 +785,6 @@ function App() {
                 </select>
               </label>
             )}
-            {(session.role === 'ADMIN' || session.role === 'MANAGER') && (
-              <button
-                type="button"
-                className="btn-outline"
-                onClick={() => setIsTeamImportOpen(true)}
-                style={{ padding: '6px 12px', fontWeight: 700 }}
-              >
-                {t('teamImport.openAction')}
-              </button>
-            )}
             {session.role === 'ADMIN' && (
               <button
                 type="button"
@@ -871,23 +860,39 @@ function App() {
         }}
       />
 
-      <ImportModal
-        isOpen={isImportOpen}
-        onClose={() => {
-          setIsImportOpen(false);
-          setOnboardingFile(null);
-        }}
-        onConfirmImport={handleConfirmImport}
-        initialContext={{ month: currentMonth, year: currentYear }}
-        existingShifts={shifts}
-        initialFile={onboardingFile}
-        employeePreset={(() => {
-          const selected = employees.find((employee) => employee.id === selectedEmployeeId);
-          return selected
-            ? { name: selected.name, externalId: selected.externalEmployeeId ?? '' }
-            : null;
-        })()}
-      />
+      {(!session || session.role === 'EMPLOYEE') && (
+        <ImportModal
+          isOpen={isImportOpen}
+          onClose={() => {
+            setIsImportOpen(false);
+            setOnboardingFile(null);
+          }}
+          onConfirmImport={handleConfirmImport}
+          initialContext={{ month: currentMonth, year: currentYear }}
+          existingShifts={shifts}
+          initialFile={onboardingFile}
+          employeePreset={(() => {
+            // EMPLOYEE identity is never the team-bar selector (admin-only
+            // concept) — always the user's own linked employee record.
+            if (!session) {
+              return null;
+            }
+            const self = employees.find((employee) => employee.id === session.employeeId);
+            return self ? { name: self.name, externalId: self.externalEmployeeId ?? '' } : null;
+          })()}
+          identityLocked={Boolean(session)}
+        />
+      )}
+
+      {session && (session.role === 'ADMIN' || session.role === 'MANAGER') && (
+        <TeamImportModal
+          isOpen={isImportOpen}
+          onClose={() => setIsImportOpen(false)}
+          onImported={() => {
+            void hydrateAuthenticated(session);
+          }}
+        />
+      )}
 
       <OrgSelectorModal
         isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) > 0}
@@ -929,16 +934,6 @@ function App() {
         employees={employees}
         currentUserId={session?.user.id ?? ''}
         onChanged={() => {
-          if (session) {
-            void hydrateAuthenticated(session);
-          }
-        }}
-      />
-
-      <TeamImportModal
-        isOpen={isTeamImportOpen}
-        onClose={() => setIsTeamImportOpen(false)}
-        onImported={() => {
           if (session) {
             void hydrateAuthenticated(session);
           }
