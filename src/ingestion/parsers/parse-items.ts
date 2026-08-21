@@ -141,7 +141,10 @@ export function resolveColumnDayMapping(
   profile: IngestionProfile,
 ): ColumnDayResolution {
   const columnGroups = clusterByX(row.rowItems, profile.clusterTolerance);
-  const dayColumns = getDayColumnsForPage(allItems, row.page, context, profile.dayHeader);
+  // fallbackToOtherPages=true: this resolves ONE row's actual shift data —
+  // a page that never repeats the day-header row must not lose every
+  // employee printed on it (see getDayColumnsForPage's doc comment).
+  const dayColumns = getDayColumnsForPage(allItems, row.page, context, profile.dayHeader, true);
   const { mapped, unmatchedGroupIndices } = mapColumnGroupsToDaysDetailed(
     columnGroups,
     dayColumns,
@@ -294,7 +297,7 @@ export function countEmployeeDayHeaders(
 ): number {
   const days = new Set<number>();
   for (const row of rows) {
-    for (const column of getDayColumnsForPage(allItems, row.page, context, profile.dayHeader)) {
+    for (const column of getDayColumnsForPage(allItems, row.page, context, profile.dayHeader, true)) {
       days.add(column.day);
     }
   }
