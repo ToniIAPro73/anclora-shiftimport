@@ -8,6 +8,7 @@ import { getTtfvEvents } from '../../lib/ttfv';
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { analyzeDocumentFile, DocumentAnalysisResult } from '../../ingestion/parsers/file';
 import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
+import { detectTeamRoster } from '../../ingestion/team-roster';
 import { ImportModal } from './ImportModal';
 
 vi.mock('../../ingestion/parsers/file', async (importOriginal) => {
@@ -20,11 +21,17 @@ vi.mock('../../ingestion/analysis', async (importOriginal) => {
   return { ...actual, analyzeItemsForImport: vi.fn() };
 });
 
+vi.mock('../../ingestion/team-roster', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../ingestion/team-roster')>();
+  return { ...actual, detectTeamRoster: vi.fn() };
+});
+
 setupLocalStorageMock();
 afterEach(cleanup);
 
 const mockedAnalyzeDocumentFile = vi.mocked(analyzeDocumentFile);
 const mockedAnalyzeItemsForImport = vi.mocked(analyzeItemsForImport);
+const mockedDetectTeamRoster = vi.mocked(detectTeamRoster);
 
 const INITIAL_CONTEXT = { month: 0, year: 2026 };
 const DOCUMENT_CONTEXT = { month: 2, year: 2026 };
@@ -101,7 +108,12 @@ function makeItemAnalysis(overrides: Partial<ItemAnalysis> = {}): ItemAnalysis {
 function renderImportModal(
   locale: 'es' | 'en',
   onClose: () => void,
-  options: { onConfirmImport?: (shifts: unknown, period: unknown) => Promise<boolean>; initialFile?: File | null } = {},
+  options: {
+    onConfirmImport?: (shifts: unknown, period: unknown, selector?: unknown) => Promise<boolean>;
+    initialFile?: File | null;
+    employeePreset?: { name: string; externalId: string } | null;
+    identityLocked?: boolean;
+  } = {},
 ) {
   if (locale === 'en') {
     localStorage.setItem('anclora_shiftimport_locale_v1', 'en');
@@ -114,6 +126,8 @@ function renderImportModal(
         onConfirmImport={options.onConfirmImport ?? (async () => true)}
         initialContext={INITIAL_CONTEXT}
         initialFile={options.initialFile ?? null}
+        employeePreset={options.employeePreset ?? null}
+        identityLocked={options.identityLocked ?? false}
       />
     </I18nProvider>,
   );
@@ -317,5 +331,81 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
 
     await waitFor(() => expect(screen.getByText('1 nuevos')).toBeTruthy());
     expect(document.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+});
+
+describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () => {
+  const SELF = { name: 'Toni Ballesteros', externalId: '1001' };
+  const roster = (names: string[]) => ({
+    employees: names.map((name, index) => ({
+      key: `emp-${index}`,
+      externalEmployeeId: name === SELF.name ? SELF.externalId : '',
+      name,
+      shifts: [makeShift({ date: `2026-03-0${index + 1}` })],
+    })),
+  });
+
+  it('locked identity: Name is read-only text, ID field is gone entirely', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true });
+
+    expect(screen.getByTestId('import-employee-name-locked').textContent).toBe(SELF.name);
+    expect(screen.queryByLabelText('Nombre')).toBeNull();
+    expect(screen.queryByPlaceholderText('Nombre del empleado')).toBeNull();
+    expect(screen.queryByPlaceholderText('ID de empleado')).toBeNull();
+  });
+
+  it('unlocked (guest) identity: Name/ID stay editable inputs', () => {
+    renderImportModal('es', () => {});
+    expect(screen.getByPlaceholderText('Nombre del empleado')).toBeTruthy();
+    expect(screen.getByPlaceholderText('ID de empleado')).toBeTruthy();
+  });
+
+  it('confirm always sends the account identity, never a retyped one, when locked', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    const receivedSelectors: unknown[] = [];
+    const onConfirmImport = vi.fn(async (...args: [unknown, unknown, unknown?]) => {
+      receivedSelectors.push(args[2]);
+      return true;
+    });
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, onConfirmImport, initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText('Confirmar Importación (2/2 listos)')).toBeTruthy());
+    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+
+    await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
+    expect(receivedSelectors[0]).toEqual({ name: SELF.name, externalId: SELF.externalId });
+  });
+
+  it('multi-employee CSV roster: only the account\'s own row is extracted, other names never render', async () => {
+    mockedDetectTeamRoster.mockReturnValue(roster(['Alguien Mas', SELF.name, 'Otra Persona']));
+    const callsBefore = mockedAnalyzeDocumentFile.mock.calls.length;
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText('1 encontrados')).toBeTruthy());
+    expect(screen.queryByText('Alguien Mas')).toBeNull();
+    expect(screen.queryByText('Otra Persona')).toBeNull();
+    // Roster self-filter is a full bypass: the single-employee analysis
+    // pipeline (which would have no self-filtering at all) is never reached.
+    expect(mockedAnalyzeDocumentFile.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('multi-employee CSV roster without the account\'s row: explicit not-found message, no other names, no data leak', async () => {
+    mockedDetectTeamRoster.mockReturnValue(roster(['Alguien Mas', 'Otra Persona']));
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText('No hemos encontrado tus turnos en este documento.')).toBeTruthy());
+    expect(screen.getByText('Comprueba que has seleccionado el cuadrante correcto.')).toBeTruthy();
+    expect(screen.queryByText('Alguien Mas')).toBeNull();
+    expect(screen.queryByText('Otra Persona')).toBeNull();
+  });
+
+  it('single-employee (non-roster) CSV: falls through to the normal single-employee pipeline unchanged', async () => {
+    mockedDetectTeamRoster.mockReturnValue(null);
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, initialFile: csvFile() });
+
+    await waitFor(() => expect(mockedAnalyzeDocumentFile).toHaveBeenCalled());
+    expect(screen.getByText(/^2 encontrados/)).toBeTruthy();
   });
 });

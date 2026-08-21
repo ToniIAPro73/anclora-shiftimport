@@ -1,0 +1,157 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { setupLocalStorageMock } from '../../test-utils/local-storage';
+import { I18nProvider } from '../../lib/i18n-react';
+import { detectTeamRoster } from '../../ingestion/team-roster';
+import * as remote from '../../lib/remote';
+import { RemoteEmployee } from '../../lib/remote';
+import { TeamImportModal } from './TeamImportModal';
+
+vi.mock('../../ingestion/team-roster', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../ingestion/team-roster')>();
+  return { ...actual, detectTeamRoster: vi.fn() };
+});
+
+vi.mock('../../lib/remote', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/remote')>();
+  return {
+    ...actual,
+    matchRemoteEmployee: vi.fn(),
+    createRemoteEmployee: vi.fn(),
+    createRemoteImport: vi.fn(),
+    syncRemoteShifts: vi.fn(),
+    loadRemoteShifts: vi.fn(),
+  };
+});
+
+setupLocalStorageMock();
+afterEach(cleanup);
+
+const mockedDetectTeamRoster = vi.mocked(detectTeamRoster);
+const mockedMatchRemoteEmployee = vi.mocked(remote.matchRemoteEmployee);
+const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
+const mockedCreateRemoteImport = vi.mocked(remote.createRemoteImport);
+const mockedSyncRemoteShifts = vi.mocked(remote.syncRemoteShifts);
+const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
+
+function renderTeamImportModal(onImported: () => void = () => {}) {
+  return render(
+    <I18nProvider>
+      <TeamImportModal isOpen onClose={() => {}} onImported={onImported} />
+    </I18nProvider>,
+  );
+}
+
+const csvFile = () => new File(['name,date,start,end\nAna,2026-03-04,08:00,16:00'], 'equipo.csv', { type: 'text/csv' });
+
+const remoteEmployee = (over: Partial<RemoteEmployee> = {}): RemoteEmployee => ({
+  id: 'emp-x',
+  organizationId: 'org-1',
+  externalEmployeeId: null,
+  name: 'X',
+  userId: null,
+  status: 'active',
+  ...over,
+});
+
+const rosterShift = (date: string) => ({
+  date,
+  startTime: '08:00',
+  endTime: '16:00',
+  origin: 'IMP' as const,
+  isValid: true,
+  confidence: 1,
+  rawText: '08:00-16:00',
+  shiftType: 'Regular',
+  notes: null,
+  color: null,
+});
+
+describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', () => {
+  it('recognized/new/ambiguous rows render with the right per-status controls', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e1', externalEmployeeId: '1001', name: 'Ana Martinez', shifts: [rosterShift('2026-03-04')] },
+        { key: 'e2', externalEmployeeId: '', name: 'Nuevo Empleado', shifts: [rosterShift('2026-03-05')] },
+        { key: 'e3', externalEmployeeId: '', name: 'Nombre Duplicado', shifts: [rosterShift('2026-03-06')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockImplementation(async ({ name }) => {
+      if (name === 'Ana Martinez') {
+        return { kind: 'recognized' as const, employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: '1001' })] };
+      }
+      if (name === 'Nombre Duplicado') {
+        return {
+          kind: 'ambiguous' as const,
+          employees: [
+            remoteEmployee({ id: 'emp-dup1', name: 'Nombre Duplicado' }),
+            remoteEmployee({ id: 'emp-dup2', name: 'Nombre Duplicado' }),
+          ],
+        };
+      }
+      return { kind: 'new' as const, employees: [] };
+    });
+
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Reconocido')).toBeTruthy());
+    expect(screen.getByText('Nuevo')).toBeTruthy();
+    expect(screen.getByText('Ambiguo')).toBeTruthy();
+    expect(screen.getByText('Crear')).toBeTruthy();
+    expect(screen.getByText('Crear como nuevo')).toBeTruthy();
+  });
+
+  it('select recognized → preview → confirm writes shifts for that employee only', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e1', externalEmployeeId: '1001', name: 'Ana Martinez', shifts: [rosterShift('2026-03-04')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({
+      kind: 'recognized',
+      employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: '1001' })],
+    });
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+    mockedCreateRemoteImport.mockResolvedValue({ id: 'import-1', fileName: '', sourceFormat: 'csv', periodYear: 2026, periodMonth: 2, status: 'completed' });
+    mockedSyncRemoteShifts.mockResolvedValue(undefined);
+    const onImported = vi.fn();
+
+    renderTeamImportModal(onImported);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
+    fireEvent.click(screen.getByText('Importar'));
+
+    await waitFor(() => expect(mockedSyncRemoteShifts).toHaveBeenCalledTimes(1));
+    expect(mockedSyncRemoteShifts.mock.calls[0][0]).toBe('emp-ana');
+    await waitFor(() => expect(screen.getByText('Importación completada')).toBeTruthy());
+    expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it('inline "new" employee creation resolves PLAN_LIMIT into the upgrade prompt, not a crash', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [{ key: 'e1', externalEmployeeId: '', name: 'Nuevo Empleado', shifts: [rosterShift('2026-03-04')] }],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    const { ApiError } = await import('../../lib/session');
+    mockedCreateRemoteEmployee.mockRejectedValue(new ApiError(403, 'Plan limit reached', 'PLAN_LIMIT'));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Crear')).toBeTruthy());
+    fireEvent.click(screen.getByText('Crear'));
+
+    await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
+  });
+});

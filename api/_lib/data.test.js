@@ -51,12 +51,17 @@ const shiftRow = (over = {}) => ({
   ...over,
 });
 
-function makeFakeSql({ employees = [], memberships = [], imports = [], users = [] } = {}) {
+function makeFakeSql({ employees = [], memberships = [], imports = [], users = [], shifts = [] } = {}) {
   const calls = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
 
+    // upsertShifts multi-employee plan-guard (values: [organizationId])
+    if (text.startsWith('SELECT DISTINCT employee_id FROM shifts')) {
+      const distinct = [...new Set(shifts.filter((s) => s.organization_id === values[0]).map((s) => s.employee_id))];
+      return Promise.resolve(distinct.map((employee_id) => ({ employee_id })));
+    }
     // createEmployee plan-limit check (values: [organizationId])
     if (text.startsWith('SELECT count(*) AS count FROM employees')) {
       return Promise.resolve([{
@@ -320,6 +325,72 @@ describe('employee matching', () => {
   it('unknown identity reports new', async () => {
     const { sql } = makeFakeSql({ employees: [] });
     expect((await findEmployeeMatch(sql, adminCtx, { externalEmployeeId: '99999', name: 'Nadie' })).kind).toBe('new');
+  });
+
+  it('EMPLOYEE role can never resolve another employee by name or external id (no leak)', async () => {
+    const { sql } = makeFakeSql({
+      employees: [
+        employeeRow(EMP_A1, ORG_A, { name: 'Toni Ballesteros' }),
+        employeeRow(EMP_A2, ORG_A, { name: 'Otra Persona', external_employee_id: '90002' }),
+      ],
+    });
+    // Querying by a real coworker's exact name/external id must never return
+    // that coworker's row to an EMPLOYEE-role caller.
+    const byName = await findEmployeeMatch(sql, employeeCtx, { externalEmployeeId: '', name: 'Otra Persona' });
+    expect(byName.kind).toBe('new');
+    expect(byName.employees).toHaveLength(0);
+
+    const byExternalId = await findEmployeeMatch(sql, employeeCtx, { externalEmployeeId: '90002', name: '' });
+    expect(byExternalId.kind).toBe('new');
+    expect(byExternalId.employees).toHaveLength(0);
+  });
+
+  it('EMPLOYEE role resolves only its own linked employee', async () => {
+    const { sql } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { name: 'Toni Ballesteros' })],
+    });
+    const result = await findEmployeeMatch(sql, employeeCtx, { externalEmployeeId: '', name: 'Toni Ballesteros' });
+    expect(result.kind).toBe('recognized');
+    expect(result.employees).toEqual([expect.objectContaining({ id: EMP_A1 })]);
+  });
+});
+
+describe('role vs plan separation (multi-employee import)', () => {
+  it('ADMIN on a free plan cannot write shifts for a second employee once one already exists', async () => {
+    const { sql } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A), employeeRow(EMP_A2, ORG_A)],
+      shifts: [{ organization_id: ORG_A, employee_id: EMP_A1 }],
+    });
+    await expect(upsertShifts(sql, { ...adminCtx, plan: 'free' }, [shiftInput({ employeeId: EMP_A2 })]))
+      .rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
+  });
+
+  it('ADMIN on a team plan can write shifts for a second employee', async () => {
+    const { sql } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A), employeeRow(EMP_A2, ORG_A)],
+      shifts: [{ organization_id: ORG_A, employee_id: EMP_A1 }],
+    });
+    const saved = await upsertShifts(sql, { ...adminCtx, plan: 'team' }, [shiftInput({ employeeId: EMP_A2 })]);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('a free-plan org can still import for its single existing employee', async () => {
+    const { sql } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A)],
+      shifts: [{ organization_id: ORG_A, employee_id: EMP_A1 }],
+    });
+    const saved = await upsertShifts(sql, { ...adminCtx, plan: 'free' }, [shiftInput({ employeeId: EMP_A1 })]);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('spoofed employeeId in an EMPLOYEE-role write is silently overridden, never a cross-employee write', async () => {
+    const { sql, calls } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A), employeeRow(EMP_A2, ORG_A)],
+      shifts: [{ organization_id: ORG_A, employee_id: EMP_A2 }],
+    });
+    await upsertShifts(sql, employeeCtx, [shiftInput({ employeeId: EMP_A2 })]);
+    const insert = calls.find((call) => call.text.startsWith('INSERT INTO shifts'));
+    expect(insert.values[2]).toBe(EMP_A1);
   });
 });
 

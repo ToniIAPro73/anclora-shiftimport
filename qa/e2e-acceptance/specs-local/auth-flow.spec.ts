@@ -185,3 +185,45 @@ test.describe('Caso 5 — Unauthorized', () => {
     expect(esc.status()).toBe(403);
   });
 });
+
+test.describe('Caso 6 — Role-aware unified import', () => {
+  test('single "Importar" entry point: no "Importar equipo" for any role, behavior branches by role', async ({ page }) => {
+    // EMPLOYEE: one "Importar" button, self-only identity, no team selector,
+    // no separate team-import action anywhere in the toolbar.
+    await loginAs(page, fixture.emails.emp);
+    await expect(page.getByRole('button', { name: 'Importar', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Importar equipo' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Importar', exact: true }).click();
+    // Locked identity: read-only name, no editable Name/ID inputs.
+    await expect(page.getByTestId('import-employee-name-locked')).toBeVisible();
+    await expect(page.getByPlaceholder('ID de empleado')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Salir' }).click();
+
+    // ADMIN: same single "Importar" button, opens the team roster flow instead.
+    await loginAs(page, fixture.emails.admin);
+    await expect(page.getByRole('button', { name: 'Importar', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Importar equipo' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Importar', exact: true }).click();
+    await expect(page.getByText('Sube el CSV de turnos del equipo')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Salir' }).click();
+  });
+
+  test('EMPLOYEE cannot use the org-directory match endpoint to probe a coworker\'s identity', async ({ page }) => {
+    await loginAs(page, fixture.emails.emp);
+
+    // Querying by a real coworker's exact name must never resolve to that
+    // coworker's row for an EMPLOYEE-role caller (server-side enforced,
+    // independent of what the UI would ever send).
+    const probe = await page.request.get('/api/employees', {
+      params: { match: '1', name: 'E2E Dos' },
+    });
+    expect(probe.status()).toBe(200);
+    const payload = await probe.json();
+    expect(payload.kind).not.toBe('recognized');
+    expect(payload.employees).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Salir' }).click();
+  });
+});
