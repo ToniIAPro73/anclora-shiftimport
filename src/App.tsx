@@ -572,6 +572,23 @@ function App() {
       );
     }
 
+    // Shared "the import actually landed" tail — must run whenever a
+    // reconciliation comes back PASS, whether that's discovered on the
+    // happy path or re-derived in the catch block below after a request
+    // that rejected but still committed server-side.
+    const applySuccessTail = () => {
+      setShifts(working);
+      setCurrentYear(targetPeriod.year);
+      setCurrentMonth(targetPeriod.month);
+      setIsImportOpen(false);
+      setOnboardingFile(null);
+      // TTFV funnel endpoint + onboarding completion on the first real import.
+      trackTtfvEvent('import_confirmed');
+      if (!loadOnboarding().completed) {
+        completeOnboarding();
+      }
+    };
+
     try {
       if (session && targetEmployeeId) {
         const { saved } = await syncRemoteShifts(targetEmployeeId, { upserts, deleteIds, importId });
@@ -590,16 +607,7 @@ function App() {
       } else {
         await syncShiftChanges(working, { upserts, deleteIds });
       }
-      setShifts(working);
-      setCurrentYear(targetPeriod.year);
-      setCurrentMonth(targetPeriod.month);
-      setIsImportOpen(false);
-      setOnboardingFile(null);
-      // TTFV funnel endpoint + onboarding completion on the first real import.
-      trackTtfvEvent('import_confirmed');
-      if (!loadOnboarding().completed) {
-        completeOnboarding();
-      }
+      applySuccessTail();
       return true;
     } catch (error) {
       console.error('Failed to persist imported shifts', error);
@@ -611,7 +619,19 @@ function App() {
       if (session && targetEmployeeId) {
         try {
           const persistedNow = await loadRemoteShifts(targetEmployeeId);
-          setImportResult(reconcileImport(upserts, persistedNow));
+          const reconciliation = reconcileImport(upserts, persistedNow);
+          setImportResult(reconciliation);
+          if (reconciliation.status === 'PASS') {
+            // The request that "failed" actually landed everything server-side
+            // (e.g. a lost response after a committed write) — the calendar,
+            // TTFV tracking and onboarding must reflect that real success,
+            // not the client-side exception.
+            if (targetEmployeeId !== selectedEmployeeId) {
+              setSelectedEmployeeId(targetEmployeeId);
+            }
+            applySuccessTail();
+            return true;
+          }
         } catch (verifyError) {
           console.error('Failed to verify partial import state after a save error', verifyError);
           window.alert(t('importConflict.importSaveFailed'));
