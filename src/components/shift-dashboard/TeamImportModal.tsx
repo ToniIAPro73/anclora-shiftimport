@@ -8,6 +8,8 @@ import {
   EmployeeMatchKind,
   matchRemoteEmployee,
   createRemoteEmployee,
+  bulkCreateRemoteEmployees,
+  BulkCreateResult,
   createRemoteImport,
   syncRemoteShifts,
   loadRemoteShifts,
@@ -117,6 +119,9 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
   // per-employee Import (unchanged, regression-safe).
   const [sourceFormat, setSourceFormat] = useState<'csv' | 'pdf'>('csv');
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ created: number; existing: number; failed: number } | null>(null);
 
   if (!isOpen) {
     return null;
@@ -131,6 +136,9 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
     setOutcomes([]);
     setImporting(false);
     setSourceFormat('csv');
+    setBulkConfirmOpen(false);
+    setBulkBusy(false);
+    setBulkResult(null);
   };
 
   const handleClose = () => {
@@ -217,6 +225,73 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
 
   const handleResolveAmbiguous = (row: TeamRow, employeeId: string) => {
     updateRow(row.key, { status: 'recognized', resolvedEmployeeId: employeeId, selected: true });
+  };
+
+  // "Crear todos los nuevos" — bulk-create every `new` row in one request
+  // instead of one window.confirm per row. The confirm panel below is a
+  // pure local render of rows already in state — nothing is created until
+  // the user explicitly confirms.
+  const newRows = rows.filter((row) => row.status === 'new');
+  const newRowNameValid = (row: TeamRow) => row.name.trim().length > 0;
+  const duplicateExternalIds = (() => {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const row of newRows) {
+      if (!row.externalEmployeeId) continue;
+      if (seen.has(row.externalEmployeeId)) {
+        dupes.add(row.externalEmployeeId);
+      }
+      seen.add(row.externalEmployeeId);
+    }
+    return dupes;
+  })();
+  const bulkCandidates = newRows.filter((row) => newRowNameValid(row) && !duplicateExternalIds.has(row.externalEmployeeId));
+
+  const handleBulkCreateConfirm = async () => {
+    setBulkBusy(true);
+    setBulkResult(null);
+    try {
+      const results = await bulkCreateRemoteEmployees(bulkCandidates.map((row) => ({
+        key: row.key,
+        name: row.name,
+        externalEmployeeId: row.externalEmployeeId || undefined,
+      })));
+      const byKey = new Map<string, BulkCreateResult>(results.map((result) => [result.key, result]));
+
+      // Counts come from `results` directly, never from mutating a closure
+      // variable inside the setRows updater below — that updater isn't
+      // guaranteed to run synchronously, so side-effecting it is unsafe.
+      let created = 0;
+      let existing = 0;
+      let failed = 0;
+      let hitPlanLimit = false;
+      for (const result of results) {
+        if (result.status === 'created') created += 1;
+        else if (result.status === 'existing') existing += 1;
+        else {
+          failed += 1;
+          if (result.reason === 'plan_limit') hitPlanLimit = true;
+        }
+      }
+
+      setRows((current) => current.map((row) => {
+        const result = byKey.get(row.key);
+        if (!result || !result.employee) {
+          return row;
+        }
+        return { ...row, status: 'recognized', resolvedEmployeeId: result.employee.id, selected: true };
+      }));
+      setBulkResult({ created, existing, failed });
+      setBulkConfirmOpen(false);
+      if (hitPlanLimit) {
+        setShowUpgrade(true);
+      }
+    } catch (err) {
+      console.error('Bulk employee creation failed', err);
+      setError(t('teamImport.uploadError'));
+    } finally {
+      setBulkBusy(false);
+    }
   };
 
   const selectedRows = rows.filter((row) => row.selected && row.status === 'recognized' && row.resolvedEmployeeId);
@@ -367,14 +442,69 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, currentPlan = nul
               <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
                 {t('teamImport.selectedCount', { selected: selectedRows.length, total: rosterCounts.total })}
               </span>
-              <button type="button" className="btn-outline" onClick={handleSelectAll} style={{ padding: '8px 14px', fontWeight: 700 }}>
-                {t('teamImport.selectAll')}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {rosterCounts.new > 0 && (
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => { setBulkResult(null); setBulkConfirmOpen(true); }}
+                    style={{ padding: '8px 14px', fontWeight: 700 }}
+                  >
+                    {t('teamImport.bulkCreateAction', { count: rosterCounts.new })}
+                  </button>
+                )}
+                <button type="button" className="btn-outline" onClick={handleSelectAll} style={{ padding: '8px 14px', fontWeight: 700 }}>
+                  {t('teamImport.selectAll')}
+                </button>
+              </div>
             </div>
             {noneEligible && (
               <p role="status" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-gold)' }}>
                 {t('teamImport.resolveBeforeSelect')}
               </p>
+            )}
+            {bulkResult && (
+              <p role="status" style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-accent)' }}>
+                {t('teamImport.bulkCreateResult', bulkResult)}
+              </p>
+            )}
+            {bulkConfirmOpen && (
+              <div
+                style={{
+                  display: 'grid', gap: '8px', padding: '12px', borderRadius: '10px',
+                  border: '1px solid var(--color-gold)', background: 'var(--gold-tint-bg)',
+                }}
+              >
+                <strong style={{ fontSize: '0.88rem' }}>{t('teamImport.bulkCreateConfirmTitle', { count: bulkCandidates.length })}</strong>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('teamImport.bulkCreateConfirmHint')}</span>
+                <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'grid', gap: '2px', fontSize: '0.78rem' }}>
+                  {newRows.map((row) => {
+                    const invalid = !newRowNameValid(row);
+                    const duplicate = row.externalEmployeeId ? duplicateExternalIds.has(row.externalEmployeeId) : false;
+                    return (
+                      <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                        <span>{row.name || '—'}{row.externalEmployeeId ? ` (ID ${row.externalEmployeeId})` : ''}</span>
+                        {invalid && <span style={{ color: 'var(--danger)' }}>{t('teamImport.bulkCreateInvalidRow')}</span>}
+                        {!invalid && duplicate && <span style={{ color: 'var(--danger)' }}>{t('teamImport.bulkCreateDuplicateRow')}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                  <button type="button" className="btn-outline" disabled={bulkBusy} onClick={() => setBulkConfirmOpen(false)} style={{ padding: '8px 14px', fontWeight: 700 }}>
+                    {t('teamImport.bulkCreateCancel')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-gold"
+                    disabled={bulkBusy || bulkCandidates.length === 0}
+                    onClick={() => void handleBulkCreateConfirm()}
+                    style={{ padding: '8px 14px', fontWeight: 800 }}
+                  >
+                    {bulkBusy ? t('teamImport.bulkCreateWorking') : t('teamImport.bulkCreateConfirm', { count: bulkCandidates.length })}
+                  </button>
+                </div>
+              </div>
             )}
             <div style={{ overflowY: 'auto', display: 'grid', gap: '8px', paddingRight: '4px' }}>
               {rows.map((row) => (

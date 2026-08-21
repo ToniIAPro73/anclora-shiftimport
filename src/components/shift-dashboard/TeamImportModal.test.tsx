@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
@@ -19,6 +19,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     ...actual,
     matchRemoteEmployee: vi.fn(),
     createRemoteEmployee: vi.fn(),
+    bulkCreateRemoteEmployees: vi.fn(),
     createRemoteImport: vi.fn(),
     syncRemoteShifts: vi.fn(),
     loadRemoteShifts: vi.fn(),
@@ -27,10 +28,14 @@ vi.mock('../../lib/remote', async (importOriginal) => {
 
 setupLocalStorageMock();
 afterEach(cleanup);
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 const mockedDetectTeamRoster = vi.mocked(detectTeamRoster);
 const mockedMatchRemoteEmployee = vi.mocked(remote.matchRemoteEmployee);
 const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
+const mockedBulkCreateRemoteEmployees = vi.mocked(remote.bulkCreateRemoteEmployees);
 const mockedCreateRemoteImport = vi.mocked(remote.createRemoteImport);
 const mockedSyncRemoteShifts = vi.mocked(remote.syncRemoteShifts);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
@@ -204,5 +209,102 @@ describe('TeamImportModal (Select-All feedback, not a silent no-op)', () => {
     expect(screen.getByText('1 seleccionados de 2')).toBeTruthy();
     // Not "none eligible" — a recognized row exists, so no guidance banner.
     expect(screen.queryByText('Resuelve los empleados nuevos antes de seleccionarlos.')).toBeNull();
+  });
+});
+
+describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
+  const rosterOf = (names: string[]) => ({
+    employees: names.map((name, index) => ({
+      key: `e${index}`,
+      externalEmployeeId: `EXT${index}`,
+      name,
+      shifts: [rosterShift('2026-03-04')],
+    })),
+  });
+
+  it('bulk-create button is hidden when there are 0 new rows', async () => {
+    mockedDetectTeamRoster.mockReturnValue(rosterOf(['Ana Martinez']));
+    mockedMatchRemoteEmployee.mockResolvedValue({
+      kind: 'recognized',
+      employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: 'EXT0' })],
+    });
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Seleccionar todos')).toBeTruthy());
+    expect(screen.queryByText(/Crear \d+ empleados nuevos/)).toBeNull();
+  });
+
+  it('shows the exact new-employee count, and the confirm panel lists rows with issues flagged', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e0', externalEmployeeId: 'EXT0', name: 'Ana Nueva', shifts: [rosterShift('2026-03-04')] },
+        { key: 'e1', externalEmployeeId: 'EXT1', name: 'Beto Nuevo', shifts: [rosterShift('2026-03-05')] },
+        { key: 'e2', externalEmployeeId: '', name: '', shifts: [rosterShift('2026-03-06')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Crear 3 empleados nuevos')).toBeTruthy());
+    fireEvent.click(screen.getByText('Crear 3 empleados nuevos'));
+
+    expect(screen.getByText('Crear 2 empleados nuevos')).toBeTruthy(); // confirm title excludes the invalid row
+    expect(screen.getByText('Fila sin nombre — se excluye')).toBeTruthy();
+    expect(screen.getByText('Crear 2 empleados')).toBeTruthy(); // confirm button count
+  });
+
+  it('confirm sends one bulk request, flips created/existing rows to recognized+selected, shows aggregated result', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e0', externalEmployeeId: 'EXT0', name: 'Ana Nueva', shifts: [rosterShift('2026-03-04')] },
+        { key: 'e1', externalEmployeeId: 'EXT1', name: 'Beto Nuevo', shifts: [rosterShift('2026-03-05')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    mockedBulkCreateRemoteEmployees.mockResolvedValue([
+      { key: 'e0', status: 'created', employee: remoteEmployee({ id: 'emp-e0', name: 'Ana Nueva', externalEmployeeId: 'EXT0' }) },
+      { key: 'e1', status: 'existing', employee: remoteEmployee({ id: 'emp-e1', name: 'Beto Nuevo', externalEmployeeId: 'EXT1' }) },
+    ]);
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Crear 2 empleados nuevos')).toBeTruthy());
+    fireEvent.click(screen.getByText('Crear 2 empleados nuevos'));
+    fireEvent.click(screen.getByText('Crear 2 empleados'));
+
+    await waitFor(() => expect(mockedBulkCreateRemoteEmployees).toHaveBeenCalledTimes(1));
+    expect(mockedBulkCreateRemoteEmployees).toHaveBeenCalledWith([
+      { key: 'e0', name: 'Ana Nueva', externalEmployeeId: 'EXT0' },
+      { key: 'e1', name: 'Beto Nuevo', externalEmployeeId: 'EXT1' },
+    ]);
+
+    await waitFor(() => expect(screen.getByText('1 creados · 1 ya existentes · 0 errores')).toBeTruthy());
+    // Both rows are now recognized+selected — no manual refresh needed.
+    expect(screen.getByText('2 detectados · 2 reconocidos · 0 nuevos · 0 ambiguos')).toBeTruthy();
+    expect(screen.getByText('2 seleccionados de 2')).toBeTruthy();
+  });
+
+  it('a plan_limit failure result opens the upgrade prompt', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [{ key: 'e0', externalEmployeeId: 'EXT0', name: 'Ana Nueva', shifts: [rosterShift('2026-03-04')] }],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    mockedBulkCreateRemoteEmployees.mockResolvedValue([
+      { key: 'e0', status: 'failed', reason: 'plan_limit' },
+    ]);
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Crear 1 empleados nuevos')).toBeTruthy());
+    fireEvent.click(screen.getByText('Crear 1 empleados nuevos'));
+    fireEvent.click(screen.getByText('Crear 1 empleados'));
+
+    await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
   });
 });

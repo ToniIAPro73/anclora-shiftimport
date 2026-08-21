@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, requireRole } from './auth.js';
-import { canUseFeature, requireFeature, requireWithinLimit } from './plans.js';
+import { canUseFeature, checkLimit, requireFeature, requireWithinLimit } from './plans.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -199,6 +199,88 @@ export async function createEmployee(sql, ctx, input) {
     RETURNING *
   `;
   return mapEmployeeRow(rows[0]);
+}
+
+/**
+ * MANAGER+ only: create many employees in one request (multi-employee import
+ * "create all new" flow). Every item is revalidated server-side against the
+ * org's CURRENT roster (never trusts what the client believed at upload
+ * time) and processed sequentially — no concurrency, so the plan-limit
+ * running count below can't race itself. Never creates a User; `user_id`
+ * is simply omitted from the INSERT, staying NULL per the schema default.
+ * Partial failure is the point: one bad row never aborts the rest.
+ */
+export async function bulkCreateEmployees(sql, ctx, items) {
+  requireRole(ctx, 'MANAGER');
+
+  const existingRows = await sql`
+    SELECT * FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
+  `;
+  const byExternalId = new Map();
+  const byName = new Map();
+  for (const row of existingRows) {
+    const employee = mapEmployeeRow(row);
+    if (employee.externalEmployeeId) {
+      byExternalId.set(employee.externalEmployeeId, employee);
+    }
+    const key = employee.name.trim().toLowerCase();
+    byName.set(key, byName.has(key) ? null : employee); // null = ambiguous, never auto-matched
+  }
+
+  let runningCount = existingRows.length;
+  const results = [];
+
+  for (const raw of Array.isArray(items) ? items : []) {
+    const key = String(raw?.key ?? '');
+    const name = String(raw?.name ?? '').trim();
+    const externalId = String(raw?.externalEmployeeId ?? '').trim() || null;
+
+    if (!name) {
+      results.push({ key, status: 'failed', reason: 'invalid' });
+      continue;
+    }
+
+    const matched = (externalId && byExternalId.get(externalId))
+      || (!externalId && byName.get(name.toLowerCase()));
+    if (matched) {
+      results.push({ key, status: 'existing', employee: matched });
+      continue;
+    }
+
+    if (!checkLimit(ctx.plan, 'maxEmployees', runningCount)) {
+      results.push({ key, status: 'failed', reason: 'plan_limit' });
+      continue;
+    }
+
+    try {
+      const inserted = await sql`
+        INSERT INTO employees (organization_id, external_employee_id, name)
+        VALUES (${ctx.organizationId}, ${externalId}, ${name})
+        ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+        RETURNING *
+      `;
+      if (inserted.length > 0) {
+        const employee = mapEmployeeRow(inserted[0]);
+        if (employee.externalEmployeeId) {
+          byExternalId.set(employee.externalEmployeeId, employee);
+        }
+        runningCount += 1;
+        results.push({ key, status: 'created', employee });
+      } else {
+        // Lost the race to an identical external id inserted earlier in
+        // this same batch (or concurrently) — never a duplicate, just late.
+        const rows = await sql`
+          SELECT * FROM employees
+          WHERE organization_id = ${ctx.organizationId} AND external_employee_id = ${externalId}
+        `;
+        results.push({ key, status: 'existing', employee: rows[0] ? mapEmployeeRow(rows[0]) : null });
+      }
+    } catch {
+      results.push({ key, status: 'failed', reason: 'error' });
+    }
+  }
+
+  return { results };
 }
 
 export async function updateEmployee(sql, ctx, input) {

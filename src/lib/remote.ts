@@ -125,6 +125,31 @@ export async function updateRemoteEmployee(input: {
   return payload.employee;
 }
 
+export type BulkCreateStatus = 'created' | 'existing' | 'failed';
+export type BulkCreateFailReason = 'invalid' | 'plan_limit' | 'error';
+
+export interface BulkCreateResult {
+  key: string;
+  status: BulkCreateStatus;
+  employee?: RemoteEmployee;
+  reason?: BulkCreateFailReason;
+}
+
+/** "Create all new employees" — one request, many rows. `key` is a
+ * caller-supplied correlation id (e.g. the TeamRow key) echoed back per
+ * result so the caller can map results back without parsing name/id. */
+export async function bulkCreateRemoteEmployees(items: {
+  key: string;
+  name: string;
+  externalEmployeeId?: string;
+}[]): Promise<BulkCreateResult[]> {
+  const payload = await apiFetch<{ results: BulkCreateResult[] }>('/api/employees/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ employees: items }),
+  });
+  return payload.results;
+}
+
 export async function createRemoteImport(input: {
   fileName: string;
   sourceFormat: string;

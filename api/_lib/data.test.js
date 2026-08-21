@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addMember,
+  bulkCreateEmployees,
   createEmployee,
   createImport,
   deleteShiftsByIds,
@@ -129,6 +130,20 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve(memberships.filter(
         (m) => m.organization_id === values[0] && m.user_id === values[1],
       ));
+    }
+    // bulkCreateEmployees INSERT ... ON CONFLICT ... DO NOTHING — models
+    // the real unique-index behavior the generic INSERT branch below can't.
+    if (text.startsWith('INSERT INTO employees') && text.includes('ON CONFLICT')) {
+      const [orgId, externalId, name] = values;
+      const conflict = Boolean(externalId) && employees.some(
+        (e) => e.organization_id === orgId && e.external_employee_id === externalId,
+      );
+      if (conflict) {
+        return Promise.resolve([]);
+      }
+      const row = employeeRow(`emp-bulk-${employees.length}`, orgId, { external_employee_id: externalId, name });
+      employees.push(row);
+      return Promise.resolve([row]);
     }
     if (text.startsWith('INSERT INTO employees')) {
       const row = employeeRow('emp-new', values[0], { external_employee_id: values[1], name: values[2] });
@@ -391,6 +406,98 @@ describe('role vs plan separation (multi-employee import)', () => {
     await upsertShifts(sql, employeeCtx, [shiftInput({ employeeId: EMP_A2 })]);
     const insert = calls.find((call) => call.text.startsWith('INSERT INTO shifts'));
     expect(insert.values[2]).toBe(EMP_A1);
+  });
+});
+
+describe('bulk employee creation ("Crear todos los nuevos")', () => {
+  it('classifies existing (by external id, by name) vs new, creates only new', async () => {
+    const { sql } = makeFakeSql({
+      employees: [
+        employeeRow(EMP_A1, ORG_A, { name: 'Existing By Id', external_employee_id: 'EXT1' }),
+        employeeRow(EMP_A2, ORG_A, { name: 'Existing By Name', external_employee_id: null }),
+      ],
+    });
+    const { results } = await bulkCreateEmployees(sql, adminCtx, [
+      { key: 'k1', name: 'Existing By Id', externalEmployeeId: 'EXT1' },
+      { key: 'k2', name: 'Existing By Name', externalEmployeeId: '' },
+      { key: 'k3', name: 'Brand New', externalEmployeeId: 'EXT3' },
+    ]);
+    expect(results.find((r) => r.key === 'k1')).toMatchObject({ status: 'existing' });
+    expect(results.find((r) => r.key === 'k2')).toMatchObject({ status: 'existing' });
+    expect(results.find((r) => r.key === 'k3')).toMatchObject({ status: 'created' });
+  });
+
+  it('never creates a User or membership — Employee only, user_id stays NULL', async () => {
+    const { sql, calls } = makeFakeSql();
+    const { results } = await bulkCreateEmployees(sql, adminCtx, [
+      { key: 'k1', name: 'Ana', externalEmployeeId: 'EXT1' },
+    ]);
+    expect(results[0].employee.userId).toBeNull();
+    expect(calls.some((c) => c.text.includes('INSERT INTO users') || c.text.includes('INSERT INTO memberships'))).toBe(false);
+  });
+
+  it('a row with no name fails as invalid, never reaches the DB write', async () => {
+    const { sql, calls } = makeFakeSql();
+    const { results } = await bulkCreateEmployees(sql, adminCtx, [{ key: 'k1', name: '', externalEmployeeId: 'EXT1' }]);
+    expect(results[0]).toMatchObject({ key: 'k1', status: 'failed', reason: 'invalid' });
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO employees'))).toBe(false);
+  });
+
+  it('is idempotent: running the identical batch twice creates nothing the second time', async () => {
+    const employeesStore = [];
+    const { sql } = makeFakeSql({ employees: employeesStore });
+    const items = [
+      { key: 'k1', name: 'Ana', externalEmployeeId: 'EXT1' },
+      { key: 'k2', name: 'Beto', externalEmployeeId: 'EXT2' },
+    ];
+    const first = await bulkCreateEmployees(sql, adminCtx, items);
+    expect(first.results.filter((r) => r.status === 'created')).toHaveLength(2);
+
+    const second = await bulkCreateEmployees(sql, adminCtx, items);
+    expect(second.results.filter((r) => r.status === 'created')).toHaveLength(0);
+    expect(second.results.filter((r) => r.status === 'existing')).toHaveLength(2);
+    expect(employeesStore.filter((e) => e.organization_id === ORG_A)).toHaveLength(2);
+  });
+
+  it('plan limit produces a partial failure — earlier rows within the cap still succeed', async () => {
+    const { sql } = makeFakeSql();
+    const { results } = await bulkCreateEmployees(sql, { ...adminCtx, plan: 'free' }, [
+      { key: 'k1', name: 'One', externalEmployeeId: 'EXT1' },
+      { key: 'k2', name: 'Two', externalEmployeeId: 'EXT2' },
+    ]);
+    expect(results.find((r) => r.key === 'k1')).toMatchObject({ status: 'created' });
+    expect(results.find((r) => r.key === 'k2')).toMatchObject({ status: 'failed', reason: 'plan_limit' });
+  });
+
+  it('a team-plan org has no cap — every row succeeds', async () => {
+    const { sql } = makeFakeSql();
+    const items = Array.from({ length: 5 }, (_, i) => ({ key: `k${i}`, name: `Person ${i}`, externalEmployeeId: `EXT${i}` }));
+    const { results } = await bulkCreateEmployees(sql, adminCtx, items);
+    expect(results.every((r) => r.status === 'created')).toBe(true);
+  });
+
+  it('EMPLOYEE role is rejected', async () => {
+    const { sql } = makeFakeSql();
+    await expect(bulkCreateEmployees(sql, employeeCtx, [{ key: 'k1', name: 'X' }])).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('MANAGER role is allowed (same rank as single createEmployee)', async () => {
+    const { sql } = makeFakeSql();
+    const { results } = await bulkCreateEmployees(sql, { ...adminCtx, role: 'MANAGER' }, [
+      { key: 'k1', name: 'Ana', externalEmployeeId: 'EXT1' },
+    ]);
+    expect(results[0].status).toBe('created');
+  });
+
+  it('never matches or leaks an employee from another organization (tenant isolation)', async () => {
+    const { sql } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_B, { name: 'Someone', external_employee_id: 'EXT1' })],
+    });
+    const { results } = await bulkCreateEmployees(sql, adminCtx, [
+      { key: 'k1', name: 'Someone', externalEmployeeId: 'EXT1' },
+    ]);
+    // Org A has no employee EXT1 of its own — org B's row must never match.
+    expect(results[0].status).toBe('created');
   });
 });
 
