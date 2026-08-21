@@ -620,7 +620,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
 
       {tab === 'employees' && (
         <>
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '18px', maxHeight: '220px', overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gap: '8px', marginBottom: '18px' }}>
             {employees.map((employee) => (
               <div
                 key={employee.id}
