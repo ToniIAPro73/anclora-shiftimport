@@ -12,7 +12,7 @@ describe('SettingsModal', () => {
   it('has no language control at all — locale is only ever changed via the global header toggle', () => {
     render(
       <I18nProvider>
-        <SettingsModal isOpen onClose={() => {}} />
+        <SettingsModal isOpen onClose={() => {}} session={null} />
       </I18nProvider>,
     );
     // The old duplicate controls: a <select> with 'Español'/'English' options,
@@ -26,7 +26,7 @@ describe('SettingsModal', () => {
   it('offers a curated IANA timezone dropdown with localized labels', () => {
     render(
       <I18nProvider>
-        <SettingsModal isOpen onClose={() => {}} />
+        <SettingsModal isOpen onClose={() => {}} session={null} />
       </I18nProvider>,
     );
     // Click the timezone selector to open the dropdown
@@ -45,7 +45,7 @@ describe('SettingsModal', () => {
     const onClose = vi.fn();
     render(
       <I18nProvider>
-        <SettingsModal isOpen onClose={onClose} />
+        <SettingsModal isOpen onClose={onClose} session={null} />
       </I18nProvider>,
     );
     const closeButton = screen.getByLabelText('Cerrar ajustes');

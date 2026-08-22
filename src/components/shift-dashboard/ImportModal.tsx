@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { analyzeDocumentFile, classifyDocument, DocumentAnalysisResult, extractDocumentItems, filterShiftsToContext } from '../../ingestion/parsers/file';
@@ -49,6 +49,8 @@ interface ImportModalProps {
    * account, not free text — Name/ID become read-only context, never a
    * selector the user can retype to import as someone else. */
   identityLocked?: boolean;
+  /** Current authenticated user ID for user-scoped profile loading. */
+  userId?: string | null;
 }
 
 /** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
@@ -231,7 +233,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -241,8 +243,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [periodConflictResolved, setPeriodConflictResolved] = useState(false);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
   const [scanTime, setScanTime] = useState<string | null>(null);
-  const [employeeName, setEmployeeName] = useState(() => loadUserProfile().displayName);
-  const [employeeId, setEmployeeId] = useState(() => loadUserProfile().employeeIdentifiers[0] ?? '');
+  const [employeeName, setEmployeeName] = useState(() => userId ? loadUserProfile(userId).displayName : '');
+  const [employeeId, setEmployeeId] = useState(() => userId ? loadUserProfile(userId).employeeIdentifiers[0] ?? '' : '');
   const [selectedMonth, setSelectedMonth] = useState(String(initialContext.month));
   const [selectedYear, setSelectedYear] = useState(String(initialContext.year));
   const [canStartFreshImport, setCanStartFreshImport] = useState(false);
@@ -337,12 +339,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   }, [isOpen, employeePreset]);
 
   const buildSelector = useCallback((): EmployeeSelector => {
-    const storedIdentifiers = loadUserProfile().employeeIdentifiers;
+    const storedIdentifiers = userId ? loadUserProfile(userId).employeeIdentifiers : [];
     return {
       employeeName,
       employeeIdentifiers: [...new Set([employeeId.trim(), ...storedIdentifiers].filter(Boolean))],
     };
-  }, [employeeName, employeeId]);
+  }, [employeeName, employeeId, userId]);
 
   const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext) => {
     setLoading(true);
@@ -588,9 +590,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     // identityLocked: identity is the account's, never local guest profile
     // text — don't let a locked/read-only field write into the local profile.
-    if (!identityLocked) {
-      const profile = loadUserProfile();
-      saveUserProfile({
+    if (!identityLocked && userId) {
+      const profile = loadUserProfile(userId);
+      saveUserProfile(userId, {
         ...profile,
         displayName: employeeName.trim() || profile.displayName,
         employeeIdentifiers: employeeId.trim() ? [employeeId.trim()] : profile.employeeIdentifiers,

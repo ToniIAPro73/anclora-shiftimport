@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, PlusCircle, Settings } from 'lucide-react';
-import { formatProfileIdentity, loadUserProfile } from '../../lib/profile';
+import { SessionInfo } from '../../lib/session';
+import { RemoteEmployee } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { TurnosLogo } from '../branding/TurnosLogo';
 import { ThemeToggle } from '../ui/ThemeToggle';
@@ -12,11 +13,53 @@ interface MonthHeaderProps {
   onAddShift: () => void;
   onImport: () => void;
   onOpenSettings: () => void;
+  session: SessionInfo | null;
+  employees: RemoteEmployee[];
 }
 
-export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onOpenSettings }: MonthHeaderProps) => {
+function resolveIdentity(session: SessionInfo | null, employees: RemoteEmployee[]): string {
+  if (!session) {
+    return '';
+  }
+
+  // 1. Prefer the linked employee's name (from backend, org-scoped)
+  if (session.employeeId) {
+    const employee = employees.find((e) => e.id === session.employeeId);
+    if (employee?.name) {
+      return employee.name;
+    }
+  }
+
+  // 2. Fallback to the authenticated user's display name (from backend)
+  if (session.user.displayName) {
+    return session.user.displayName;
+  }
+
+  // 3. Final fallback to email
+  return session.user.email;
+}
+
+function resolveOrganizationName(session: SessionInfo | null): string {
+  if (!session?.organizationId) {
+    return '';
+  }
+  const membership = session.memberships.find((m) => m.organizationId === session.organizationId);
+  return membership?.organizationName ?? '';
+}
+
+export const MonthHeader = ({
+  year,
+  month,
+  onNavigate,
+  onAddShift,
+  onImport,
+  onOpenSettings,
+  session,
+  employees,
+}: MonthHeaderProps) => {
   const { t, tl } = useI18n();
-  const identity = formatProfileIdentity(loadUserProfile());
+  const identity = resolveIdentity(session, employees);
+  const organizationName = resolveOrganizationName(session);
   const monthNames = tl('calendar.months');
 
   return (
@@ -31,7 +74,12 @@ export const MonthHeader = ({ year, month, onNavigate, onAddShift, onImport, onO
             Anclora ShiftImport
           </h1>
           <p className="dashboard-subtitle">{t('header.subtitle')}</p>
-          {identity && <p className="dashboard-identity">{identity}</p>}
+          {identity && (
+            <p className="dashboard-identity">
+              {identity}
+              {organizationName && <span style={{ marginLeft: '8px', opacity: 0.7 }}> · {organizationName}</span>}
+            </p>
+          )}
         </div>
       </div>
 

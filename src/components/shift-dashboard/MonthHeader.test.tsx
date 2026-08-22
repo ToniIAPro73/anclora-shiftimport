@@ -5,11 +5,25 @@ import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { ThemeProvider } from '../../lib/theme-react';
 import { MonthHeader } from './MonthHeader';
+import { SessionInfo } from '../../lib/session';
+import { RemoteEmployee } from '../../lib/remote';
 
 setupLocalStorageMock();
 afterEach(cleanup);
 
-function renderHeader() {
+function renderHeader(overrides?: { session?: SessionInfo | null; employees?: RemoteEmployee[] }) {
+  const defaultSession: SessionInfo = {
+    user: { id: 'user-1', email: 'test@test.com', displayName: 'Test User' },
+    organizationId: 'org-1',
+    role: 'ADMIN',
+    plan: 'team',
+    employeeId: 'emp-1',
+    memberships: [{ organizationId: 'org-1', organizationName: 'Test Org', organizationType: 'company', organizationPlan: 'team', role: 'ADMIN' }],
+  };
+  const defaultEmployees: RemoteEmployee[] = [
+    { id: 'emp-1', organizationId: 'org-1', externalEmployeeId: '1001', name: 'Test Employee', userId: 'user-1', status: 'active' },
+  ];
+
   return render(
     <ThemeProvider>
       <I18nProvider>
@@ -20,6 +34,8 @@ function renderHeader() {
           onAddShift={() => {}}
           onImport={() => {}}
           onOpenSettings={() => {}}
+          session={overrides?.session ?? defaultSession}
+          employees={overrides?.employees ?? defaultEmployees}
         />
       </I18nProvider>
     </ThemeProvider>,
@@ -53,5 +69,24 @@ describe('MonthHeader language toggle', () => {
     const themeEmojiBefore = themeToggle.textContent;
     fireEvent.click(screen.getByRole('button', { name: /Cambiar idioma/i }));
     expect(screen.getByRole('button', { name: /Change theme/i }).textContent).toBe(themeEmojiBefore);
+  });
+
+  it('shows identity from employee when available', () => {
+    renderHeader();
+    expect(screen.getByText('Test Employee')).toBeTruthy();
+    expect(screen.getByText(/Test Org/)).toBeTruthy();
+  });
+
+  it('falls back to user displayName when no employee', () => {
+    const session: SessionInfo = {
+      user: { id: 'user-1', email: 'test@test.com', displayName: 'Fallback User' },
+      organizationId: 'org-1',
+      role: 'ADMIN',
+      plan: 'team',
+      employeeId: null,
+      memberships: [{ organizationId: 'org-1', organizationName: 'Test Org', organizationType: 'company', organizationPlan: 'team', role: 'ADMIN' }],
+    };
+    renderHeader({ session, employees: [] });
+    expect(screen.getByText('Fallback User')).toBeTruthy();
   });
 });

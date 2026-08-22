@@ -885,6 +885,8 @@ function App() {
         }}
         onImport={() => setIsImportOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        session={session}
+        employees={employees}
       />
 
       <div className="dashboard-body">
@@ -1067,6 +1069,7 @@ function App() {
           setIsSettingsOpen(false);
           setIsOnboardingOpen(true);
         }}
+        session={session ? { user: session.user } : null}
       />
 
       <OnboardingModal
@@ -1077,6 +1080,7 @@ function App() {
           setOnboardingFile(chosen);
           setIsImportOpen(true);
         }}
+        userId={session?.user.id ?? null}
       />
 
       {(!session || session.role === 'EMPLOYEE') && (
@@ -1100,6 +1104,7 @@ function App() {
             return self ? { name: self.name, externalId: self.externalEmployeeId ?? '' } : null;
           })()}
           identityLocked={Boolean(session)}
+          userId={session?.user.id ?? null}
         />
       )}
 

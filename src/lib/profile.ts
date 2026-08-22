@@ -1,7 +1,6 @@
 export interface UserProfile {
   displayName: string;
   employeeIdentifiers: string[];
-  employerName?: string;
   timezone: string;
   locale: string;
 }
@@ -15,18 +14,22 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
   locale: 'es',
 };
 
+/** Build the user-scoped localStorage key. */
+function getProfileKey(userId: string): string {
+  return `${PROFILE_STORAGE_KEY}:${userId}`;
+}
+
 const normalizeProfile = (raw: Partial<UserProfile> | null | undefined): UserProfile => ({
   displayName: typeof raw?.displayName === 'string' ? raw.displayName.trim() : DEFAULT_USER_PROFILE.displayName,
   employeeIdentifiers: Array.isArray(raw?.employeeIdentifiers)
     ? raw.employeeIdentifiers.map((value) => String(value).trim()).filter(Boolean)
     : [...DEFAULT_USER_PROFILE.employeeIdentifiers],
-  employerName: typeof raw?.employerName === 'string' && raw.employerName.trim() ? raw.employerName.trim() : undefined,
   timezone: typeof raw?.timezone === 'string' && raw.timezone.trim() ? raw.timezone.trim() : DEFAULT_USER_PROFILE.timezone,
   locale: typeof raw?.locale === 'string' && raw.locale.trim() ? raw.locale.trim() : DEFAULT_USER_PROFILE.locale,
 });
 
-export const loadUserProfile = (): UserProfile => {
-  const data = localStorage.getItem(PROFILE_STORAGE_KEY);
+export const loadUserProfile = (userId: string): UserProfile => {
+  const data = localStorage.getItem(getProfileKey(userId));
   if (!data) {
     return { ...DEFAULT_USER_PROFILE };
   }
@@ -39,8 +42,8 @@ export const loadUserProfile = (): UserProfile => {
   }
 };
 
-export const saveUserProfile = (profile: UserProfile): void => {
-  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalizeProfile(profile)));
+export const saveUserProfile = (userId: string, profile: UserProfile): void => {
+  localStorage.setItem(getProfileKey(userId), JSON.stringify(normalizeProfile(profile)));
 };
 
 /**

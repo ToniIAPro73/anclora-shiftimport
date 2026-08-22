@@ -11,10 +11,10 @@ import { OnboardingModal } from './OnboardingModal';
 setupLocalStorageMock();
 afterEach(cleanup);
 
-function renderOnboarding(onFileChosen: (file: File) => void = () => {}, onClose: () => void = () => {}) {
+function renderOnboarding(userId: string | null = null, onFileChosen: (file: File) => void = () => {}, onClose: () => void = () => {}) {
   return render(
     <I18nProvider>
-      <OnboardingModal isOpen onClose={onClose} onFileChosen={onFileChosen} />
+      <OnboardingModal isOpen onClose={onClose} onFileChosen={onFileChosen} userId={userId} />
     </I18nProvider>,
   );
 }
@@ -28,7 +28,7 @@ function chooseFile() {
 
 describe('OnboardingModal', () => {
   it('renders the source step first and records the funnel start', () => {
-    renderOnboarding();
+    renderOnboarding('user-1');
     expect(screen.getByText('Bienvenido a Anclora ShiftImport')).toBeTruthy();
     expect(screen.getByText('¿Cómo recibes tu cuadrante?')).toBeTruthy();
     expect(screen.getByText('PDF')).toBeTruthy();
@@ -37,7 +37,7 @@ describe('OnboardingModal', () => {
   });
 
   it('advances to the upload step when a source option is chosen, and back', () => {
-    renderOnboarding();
+    renderOnboarding('user-1');
     fireEvent.click(screen.getByText('Excel'));
     expect(screen.getByText('Selecciona tu cuadrante')).toBeTruthy();
 
@@ -47,7 +47,7 @@ describe('OnboardingModal', () => {
 
   it('hands the chosen file to the caller and records document_selected', () => {
     const onFileChosen = vi.fn();
-    renderOnboarding(onFileChosen);
+    renderOnboarding('user-1', onFileChosen);
     fireEvent.click(screen.getByText('PDF'));
 
     const file = chooseFile();
@@ -60,7 +60,7 @@ describe('OnboardingModal', () => {
   it('lets a first user reach the import without any account or profile fields', () => {
     // No profile saved: no identity line, no name/id inputs anywhere.
     const onFileChosen = vi.fn();
-    renderOnboarding(onFileChosen);
+    renderOnboarding('user-1', onFileChosen);
     expect(screen.queryByText(/Usaremos tu perfil guardado/)).toBeNull();
 
     fireEvent.click(screen.getByText('Imagen'));
@@ -70,15 +70,15 @@ describe('OnboardingModal', () => {
   });
 
   it('shows the useExisting line when the profile already has an identity', () => {
-    saveUserProfile({ ...DEFAULT_USER_PROFILE, displayName: 'Ana' });
-    renderOnboarding();
+    saveUserProfile('user-1', { ...DEFAULT_USER_PROFILE, displayName: 'Ana' });
+    renderOnboarding('user-1');
     fireEvent.click(screen.getByText('CSV'));
     expect(screen.getByText('Usaremos tu perfil guardado (Ana)')).toBeTruthy();
   });
 
   it('closes via the top-right button inside the card', () => {
     const onClose = vi.fn();
-    renderOnboarding(() => {}, onClose);
+    renderOnboarding('user-1', () => {}, onClose);
     fireEvent.click(screen.getByLabelText('Cerrar la guía de inicio'));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

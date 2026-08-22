@@ -20,6 +20,8 @@ interface SettingsModalProps {
   onClose: () => void;
   /** Replays the first-run guide (resets the onboarding record and opens it). */
   onRestartOnboarding?: () => void;
+  /** Current authenticated session (for user-scoped profile). */
+  session: { user: { id: string } } | null;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -33,10 +35,10 @@ const labelStyle: React.CSSProperties = {
 
 const NEW_TYPE_DRAFT = { id: '', label: '', shortLabel: '', color: '#3b82f6', countsAsWork: true };
 
-function ProfileSection({ onRestartOnboarding }: { onRestartOnboarding?: () => void }) {
+function ProfileSection({ onRestartOnboarding, userId }: { onRestartOnboarding?: () => void; userId: string }) {
   const { locale, t } = useI18n();
-  const [profile, setProfile] = useState<UserProfile>(() => loadUserProfile());
-  const [identifiersText, setIdentifiersText] = useState(() => loadUserProfile().employeeIdentifiers.join(', '));
+  const [profile, setProfile] = useState<UserProfile>(() => loadUserProfile(userId));
+  const [identifiersText, setIdentifiersText] = useState(() => loadUserProfile(userId).employeeIdentifiers.join(', '));
   const [saved, setSaved] = useState(false);
 
   const handleSave = () => {
@@ -44,7 +46,7 @@ function ProfileSection({ onRestartOnboarding }: { onRestartOnboarding?: () => v
       ...profile,
       employeeIdentifiers: identifiersText.split(',').map((value) => value.trim()).filter(Boolean),
     };
-    saveUserProfile(next);
+    saveUserProfile(userId, next);
     setProfile(next);
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
@@ -72,14 +74,6 @@ function ProfileSection({ onRestartOnboarding }: { onRestartOnboarding?: () => v
         <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
           {t('settings.identifiersHint')}
         </p>
-      </div>
-      <div>
-        <label style={labelStyle}>{t('settings.employer')}</label>
-        <input
-          className="modal-input"
-          value={profile.employerName ?? ''}
-          onChange={(e) => setProfile({ ...profile, employerName: e.target.value })}
-        />
       </div>
       <div>
         <SearchableSelect
@@ -287,13 +281,15 @@ function ShiftTypesSection() {
   );
 }
 
-export const SettingsModal = ({ isOpen, onClose, onRestartOnboarding }: SettingsModalProps) => {
+export const SettingsModal = ({ isOpen, onClose, onRestartOnboarding, session }: SettingsModalProps) => {
   const { t } = useI18n();
   const [tab, setTab] = useState<'profile' | 'shiftTypes'>('profile');
 
   useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
+
+  const userId = session?.user.id ?? '';
 
   return (
     <div className="modal-overlay">
@@ -320,7 +316,7 @@ export const SettingsModal = ({ isOpen, onClose, onRestartOnboarding }: Settings
           </button>
         </div>
 
-        {tab === 'profile' ? <ProfileSection onRestartOnboarding={onRestartOnboarding} /> : <ShiftTypesSection />}
+        {tab === 'profile' ? <ProfileSection onRestartOnboarding={onRestartOnboarding} userId={userId} /> : <ShiftTypesSection />}
       </div>
     </div>
   );

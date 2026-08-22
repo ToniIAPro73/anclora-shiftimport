@@ -12,6 +12,8 @@ interface OnboardingModalProps {
   onClose: () => void;
   /** Hands the chosen file to the caller, which opens ImportModal with it. */
   onFileChosen: (file: File) => void;
+  /** Current authenticated user ID for user-scoped profile loading. */
+  userId?: string | null;
 }
 
 type WizardStep = 'source' | 'upload';
@@ -27,7 +29,7 @@ const SOURCE_OPTIONS = ['pdf', 'excel', 'csv', 'image', 'other'] as const;
  * state (onboarding step + TTFV events) is recorded here so the modal itself
  * stays a pure view.
  */
-export const OnboardingModal = ({ isOpen, onClose, onFileChosen }: OnboardingModalProps) => {
+export const OnboardingModal = ({ isOpen, onClose, onFileChosen, userId = null }: OnboardingModalProps) => {
   const { t } = useI18n();
   const [step, setStep] = useState<WizardStep>('source');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,7 +49,7 @@ export const OnboardingModal = ({ isOpen, onClose, onFileChosen }: OnboardingMod
     return null;
   }
 
-  const profile = loadUserProfile();
+  const profile = userId ? loadUserProfile(userId) : { displayName: '', employeeIdentifiers: [] };
   const existingIdentity = profile.displayName || profile.employeeIdentifiers[0] || '';
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
