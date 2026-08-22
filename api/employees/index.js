@@ -1,5 +1,5 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { createEmployee, deleteEmployee, findEmployeeMatch, listEmployees, updateEmployee } from '../_lib/data.js';
+import { createEmployee, deleteEmployee, findEmployeeMatch, listEmployees, updateEmployee, updateEmployeeName } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -10,6 +10,7 @@ import { handleError, sendJson } from '../_lib/http.js';
  * PATCH /api/employees               — update/deactivate/link user (ADMIN)
  * DELETE /api/employees              — permanent delete, only without shift
  *                                      history (ADMIN)
+ * PATCH /api/employees/self          — update own employee name (EMPLOYEE+)
  */
 export default async function handler(req, res) {
   try {
@@ -34,6 +35,18 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'PATCH') {
+      // /api/employees/self for EMPLOYEE to update their own name
+      if (String(req.query?.self ?? '') === 'true') {
+        if (!ctx.employeeId) {
+          return sendJson(res, 403, { error: 'No employee linked to this user' });
+        }
+        const name = String(req.body?.name ?? '').trim();
+        if (!name) {
+          return sendJson(res, 400, { error: 'Employee name is required' });
+        }
+        const employee = await updateEmployeeName(sql, ctx, ctx.employeeId, name);
+        return sendJson(res, 200, { employee });
+      }
       const employee = await updateEmployee(sql, ctx, req.body ?? {});
       return sendJson(res, 200, { employee });
     }

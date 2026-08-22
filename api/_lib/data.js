@@ -382,6 +382,28 @@ export async function updateEmployee(sql, ctx, input) {
 }
 
 /**
+ * EMPLOYEE (or ADMIN/MANAGER): update own employee's name.
+ * Only allows updating the name field, not status/externalId/userId.
+ */
+export async function updateEmployeeName(sql, ctx, employeeId, name) {
+  await assertEmployeeInOrg(sql, ctx, employeeId);
+  // EMPLOYEE can only update their own employee
+  if (ctx.role === 'EMPLOYEE' && employeeId !== ctx.employeeId) {
+    throw new HttpError(403, 'Cannot update another employee');
+  }
+  const rows = await sql`
+    UPDATE employees
+    SET name = ${name}, updated_at = NOW()
+    WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
+    RETURNING *
+  `;
+  if (rows.length === 0) {
+    throw new HttpError(404, 'Employee not found');
+  }
+  return mapEmployeeRow(rows[0]);
+}
+
+/**
  * ADMIN only: permanently delete an employee. Only possible when the
  * employee has NO shift history — shifts.employee_id is ON DELETE CASCADE,
  * so a raw delete would silently destroy it; employees with history must be

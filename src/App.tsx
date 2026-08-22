@@ -1077,7 +1077,20 @@ function App() {
           setIsSettingsOpen(false);
           setIsOnboardingOpen(true);
         }}
-        session={session ? { user: session.user, role: session.role } : null}
+        session={session ? { 
+          user: { id: session.user.id, email: session.user.email, displayName: session.user.displayName }, 
+          role: session.role, 
+          employeeId: session.employeeId, 
+          organizationId: session.organizationId, 
+          memberships: session.memberships 
+        } : null}
+        employees={employees}
+        selectedEmployeeId={selectedEmployeeId}
+        onEmployeeNameChange={() => {
+          if (session) {
+            void hydrateAuthenticated(session);
+          }
+        }}
       />
 
       <OnboardingModal

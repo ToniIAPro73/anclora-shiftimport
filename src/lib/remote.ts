@@ -133,6 +133,15 @@ export async function updateRemoteEmployee(input: {
   return payload.employee;
 }
 
+/** EMPLOYEE (or ADMIN/MANAGER): update own employee's name via /self endpoint. */
+export async function updateOwnEmployeeName(name: string): Promise<RemoteEmployee> {
+  const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees?self=true', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+  return payload.employee;
+}
+
 /** Hard delete (ADMIN only). The server rejects with 409
  * `EMPLOYEE_HAS_HISTORY` when the employee has shift history (kept; the
  * caller should offer deactivation instead) and 400 `LAST_ADMIN` when the
@@ -194,6 +203,15 @@ export interface RemoteMember {
 export async function listRemoteMembers(): Promise<RemoteMember[]> {
   const payload = await apiFetch<{ members: RemoteMember[] }>('/api/memberships');
   return payload.members;
+}
+
+/** Account-level: update current user's display_name. */
+export async function updateUserDisplayName(displayName: string): Promise<{ user: { id: string; email: string; displayName: string } }> {
+  const payload = await apiFetch<{ user: { id: string; email: string; displayName: string } }>('/api/user/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
+  });
+  return payload;
 }
 
 export interface AddedMember {
