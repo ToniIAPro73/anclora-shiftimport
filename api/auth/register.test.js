@@ -49,7 +49,7 @@ describe('register — email duplicate / user resolution', () => {
       const catchIdx = src.indexOf('catch (error)');
       const constraintIdx = src.indexOf('users_email_lower_idx');
       const errCodeIdx = src.search(/error\?\.\s*code/);
-      
+
       expect(catchIdx).toBeGreaterThan(-1);
       expect(constraintIdx).toBeGreaterThan(-1);
       expect(errCodeIdx).toBeGreaterThan(-1);
