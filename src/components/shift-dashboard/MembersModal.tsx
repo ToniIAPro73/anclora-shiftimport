@@ -15,6 +15,7 @@ import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv, UserCsvRow } from '..
 import { ModalShell } from '../ui/ModalShell';
 import { UpgradePrompt } from './UpgradePrompt';
 import { ApiError, PlanId } from '../../lib/session';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface MembersModalProps {
   isOpen: boolean;
@@ -461,18 +462,17 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                   {member.displayName || member.email}
                   <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}> · {member.email}</span>
                 </span>
-                <select
-                  className="modal-input"
+                <SearchableSelect
+                  label=""
                   value={member.role}
+                  onChange={(role) => void run(() => updateRemoteMemberRole(member.userId, role as RemoteMember['role']))}
+                  searchPlaceholder={t('members.searchPlaceholder')}
+                  emptyMessage={t('members.noRoles')}
+                  ariaLabel={t('members.roleLabel')}
+                  options={ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
                   disabled={busy || member.userId === currentUserId}
-                  aria-label={t('members.roleLabel')}
-                  onChange={(event) => void run(() => updateRemoteMemberRole(member.userId, event.target.value as RemoteMember['role']))}
-                  style={{ padding: '6px 10px' }}
-                >
-                  {ROLES.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
+                  style={{ width: 'auto' }}
+                />
                 {member.userId !== currentUserId && (
                   <button
                     type="button"
@@ -513,19 +513,35 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <input className="modal-input" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t('members.emailPlaceholder')} aria-label={t('auth.emailLabel')} style={{ padding: '10px 12px' }} />
               <input className="modal-input" type="text" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t('members.namePlaceholder')} aria-label={t('auth.nameLabel')} style={{ padding: '10px 12px' }} />
-              <select className="modal-input" value={role} onChange={(event) => setRole(event.target.value as RemoteMember['role'])} aria-label={t('members.roleLabel')} style={{ padding: '10px 12px' }}>
-                {ROLES.map((option) => (
-                  <option key={option} value={option}>{option}</option>
-                ))}
-              </select>
+              <SearchableSelect
+                label={t('members.roleLabel')}
+                value={role}
+                onChange={(value: string) => setRole(value as RemoteMember['role'])}
+                searchPlaceholder={t('members.searchPlaceholder')}
+                emptyMessage={t('members.noRoles')}
+                ariaLabel={t('members.roleLabel')}
+                options={ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
+                style={{ padding: '10px 12px' }}
+              />
               <input className="modal-input" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('members.passwordPlaceholder')} aria-label={t('auth.passwordLabel')} style={{ padding: '10px 12px' }} />
             </div>
-            <select className="modal-input" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} aria-label={t('members.linkEmployeeLabel')} style={{ padding: '10px 12px' }}>
-              <option value="">{t('members.noLink')}</option>
-              {unlinkedEmployees.map((employee) => (
-                <option key={employee.id} value={employee.id}>{employee.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              label={t('members.linkEmployeeLabel')}
+              value={employeeId}
+              onChange={setEmployeeId}
+              searchPlaceholder={t('members.searchPlaceholder')}
+              emptyMessage={t('members.noUnlinkedEmployees')}
+              ariaLabel={t('members.linkEmployeeLabel')}
+              options={[
+                { value: '', label: t('members.noLink'), searchText: '' },
+                ...unlinkedEmployees.map((employee) => ({
+                  value: employee.id,
+                  label: employee.name,
+                  searchText: employee.name.toLowerCase(),
+                })),
+              ]}
+              style={{ padding: '10px 12px' }}
+            />
             <p style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.78rem', lineHeight: 1.5 }}>
               {t('members.passwordHint')}
             </p>

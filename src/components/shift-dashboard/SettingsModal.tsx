@@ -13,6 +13,7 @@ import { translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
 import { useEscapeClose } from '../../lib/use-escape-close';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -81,18 +82,32 @@ function ProfileSection({ onRestartOnboarding }: { onRestartOnboarding?: () => v
         />
       </div>
       <div>
-        <label style={labelStyle}>{t('settings.timezone')}</label>
-        <select
-          className="modal-input"
+        <SearchableSelect
+          label={t('settings.timezone')}
           value={profile.timezone}
-          onChange={(e) => setProfile({ ...profile, timezone: e.target.value })}
-        >
-          {TIMEZONE_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {getTimezoneLabel(option.id, locale)}
-            </option>
-          ))}
-        </select>
+          onChange={(timezone) => setProfile({ ...profile, timezone })}
+          searchPlaceholder={t('settings.searchPlaceholder')}
+          emptyMessage={t('settings.noTimezones')}
+          ariaLabel={t('settings.timezone')}
+          options={(() => {
+            const baseOptions = TIMEZONE_OPTIONS.map((option) => ({
+              value: option.id,
+              label: getTimezoneLabel(option.id, locale),
+              searchText: `${option.id} ${getTimezoneLabel(option.id, locale)}`.toLowerCase(),
+            }));
+            // Ensure the currently stored timezone is always selectable,
+            // even if it's not in the curated TIMEZONE_OPTIONS list.
+            const currentValue = profile.timezone;
+            const hasCurrent = baseOptions.some((opt) => opt.value === currentValue);
+            if (!hasCurrent && currentValue) {
+              return [
+                { value: currentValue, label: currentValue, searchText: currentValue.toLowerCase() },
+                ...baseOptions,
+              ];
+            }
+            return baseOptions;
+          })()}
+        />
       </div>
       <button className="btn-gold" style={{ alignSelf: 'flex-start' }} onClick={handleSave}>
         {saved ? t('settings.saved') : t('settings.saveProfile')}

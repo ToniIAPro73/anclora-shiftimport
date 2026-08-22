@@ -6,6 +6,7 @@ import { translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { X, Trash2, Save, Calendar } from 'lucide-react';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface ShiftModalProps {
   isOpen: boolean;
@@ -110,11 +111,11 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
               {t('shiftModal.typeLabel')}
             </label>
-            <select
-              className="modal-input"
+            <SearchableSelect
+              label=""
               value={formData.location}
-              onChange={e => {
-                const nextType = normalizeShiftTypeLabel(e.target.value) || 'Regular';
+              onChange={(typeId) => {
+                const nextType = normalizeShiftTypeLabel(typeId) || 'Regular';
                 const isZeroDurationType = !shiftTypeCountsAsWork(nextType);
                 setFormData({
                   ...formData,
@@ -123,13 +124,18 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
                   endTime: isZeroDurationType ? '' : (formData.endTime || '15:00'),
                 });
               }}
-            >
-              {shiftTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              searchPlaceholder={t('shiftModal.searchPlaceholder')}
+              emptyMessage={t('shiftModal.noShiftTypes')}
+              ariaLabel={t('shiftModal.typeLabel')}
+              options={[
+                { value: '', label: t('shiftModal.typeLabel'), searchText: '' },
+                ...shiftTypeOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  searchText: `${option.label}`.toLowerCase(),
+                })),
+              ]}
+            />
           </div>
 
           <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>

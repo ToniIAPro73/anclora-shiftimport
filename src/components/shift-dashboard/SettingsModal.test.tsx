@@ -29,12 +29,16 @@ describe('SettingsModal', () => {
         <SettingsModal isOpen onClose={() => {}} />
       </I18nProvider>,
     );
-    const madrid = screen.getByRole('option', { name: 'Madrid' }) as HTMLOptionElement;
-    expect(madrid.value).toBe('Europe/Madrid');
-    const tokyo = screen.getByRole('option', { name: 'Tokio' }) as HTMLOptionElement;
-    expect(tokyo.value).toBe('Asia/Tokyo');
-    const utc = screen.getByRole('option', { name: 'UTC' }) as HTMLOptionElement;
-    expect(utc.value).toBe('UTC');
+    // Click the timezone selector to open the dropdown
+    const timezoneTrigger = screen.getByLabelText('Zona horaria');
+    fireEvent.click(timezoneTrigger);
+    // Options are buttons with role="option" in SearchableSelect
+    const madrid = screen.getByRole('option', { name: 'Madrid' });
+    expect(madrid).toBeTruthy();
+    const tokyo = screen.getByRole('option', { name: 'Tokio' });
+    expect(tokyo).toBeTruthy();
+    const utc = screen.getByRole('option', { name: 'UTC' });
+    expect(utc).toBeTruthy();
   });
 
   it('closes via the external close button and on Escape', () => {

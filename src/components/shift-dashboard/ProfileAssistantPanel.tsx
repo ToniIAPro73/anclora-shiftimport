@@ -30,6 +30,7 @@ import { ImportResult } from '../../lib/import-quality';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { getShiftTypes } from '../../lib/shift-types';
 import { useI18n } from '../../lib/use-i18n';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 export interface AssistantCompletion {
   shifts: ParsedCalendarShift[];
@@ -336,13 +337,10 @@ export const ProfileAssistantPanel = ({
             </div>
             {showTypeSelect && (
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <select
-                  className="modal-input"
-                  style={{ flex: '1 1 140px', minWidth: 120 }}
-                  aria-label={isOther ? t('assistant.otherTypeLabel') : t('assistant.shiftTypeLabel')}
+                <SearchableSelect
+                  label=""
                   value={meaning?.shiftTypeId ?? ''}
-                  onChange={(event) => {
-                    const typeId = event.target.value || undefined;
+                  onChange={(typeId) => {
                     const definition = shiftTypes.find((type) => type.id === typeId);
                     // "Otro" with a work-type pick becomes a work answer (and
                     // asks for times); an absence type stays a rest answer.
@@ -352,14 +350,19 @@ export const ProfileAssistantPanel = ({
                       setTokenMeaning(token, { shiftTypeId: typeId });
                     }
                   }}
-                >
-                  <option value="">{isOther ? t('assistant.otherTypeLabel') : t('assistant.shiftTypeLabel')}</option>
-                  {shiftTypes.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {translateShiftTypeLabel(type.id, locale, type.label)}
-                    </option>
-                  ))}
-                </select>
+                  searchPlaceholder={t('assistant.searchPlaceholder')}
+                  emptyMessage={t('assistant.noShiftTypes')}
+                  ariaLabel={isOther ? t('assistant.otherTypeLabel') : t('assistant.shiftTypeLabel')}
+                  options={[
+                    { value: '', label: isOther ? t('assistant.otherTypeLabel') : t('assistant.shiftTypeLabel'), searchText: '' },
+                    ...shiftTypes.map((type) => ({
+                      value: type.id,
+                      label: translateShiftTypeLabel(type.id, locale, type.label),
+                      searchText: `${type.label} ${type.id}`.toLowerCase(),
+                    })),
+                  ]}
+                  style={{ flex: '1 1 140px', minWidth: 120 }}
+                />
                 {meaning?.kind === 'work' && (
                   <>
                     <input

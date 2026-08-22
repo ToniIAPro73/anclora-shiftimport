@@ -17,6 +17,8 @@ interface SearchableSelectProps {
   searchPlaceholder?: string;
   emptyMessage?: string;
   ariaLabel?: string;
+  style?: React.CSSProperties;
+  disabled?: boolean;
 }
 
 /**
@@ -34,6 +36,8 @@ export const SearchableSelect = ({
   searchPlaceholder = '',
   emptyMessage = '',
   ariaLabel,
+  style,
+  disabled,
 }: SearchableSelectProps) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -105,17 +109,19 @@ export const SearchableSelect = ({
   };
 
   return (
-    <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--text-muted)', position: 'relative', minWidth: 0, flex: 1 }}>
+    <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--text-muted)', position: 'relative', minWidth: 0, flex: 1, ...style }}>
       <span>{label}</span>
       <button
         ref={triggerRef}
         type="button"
         className="modal-select-trigger"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => !disabled && setOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel ?? label}
-        style={{ minWidth: 0, fontWeight: 700 }}
+        aria-disabled={disabled}
+        disabled={disabled}
+        style={{ minWidth: 0, fontWeight: 700, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
       >
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedOption?.label ?? ''}</span>
         <ChevronDown size={16} style={{ flexShrink: 0 }} />

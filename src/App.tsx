@@ -945,19 +945,20 @@ function App() {
             <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
               {t('orgSelector.activeLabel')}
               {session.memberships.length > 1 ? (
-                <select
-                  className="modal-input"
+                <SearchableSelect
+                  label=""
                   value={session.organizationId ?? ''}
-                  onChange={(event) => void handleSwitchOrganization(event.target.value)}
-                  aria-label={t('orgSelector.title')}
-                  style={{ padding: '6px 10px', fontWeight: 700, width: 'auto' }}
-                >
-                  {session.memberships.map((membership) => (
-                    <option key={membership.organizationId} value={membership.organizationId}>
-                      {membership.organizationName} — {formatOrgContext(t, membership)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(organizationId) => void handleSwitchOrganization(organizationId)}
+                  searchPlaceholder={t('orgSelector.searchPlaceholder')}
+                  emptyMessage={t('orgSelector.noResults')}
+                  ariaLabel={t('orgSelector.title')}
+                  options={session.memberships.map((membership) => ({
+                    value: membership.organizationId,
+                    label: `${membership.organizationName} — ${formatOrgContext(t, membership)}`,
+                    searchText: `${membership.organizationName} ${formatOrgContext(t, membership)}`.toLowerCase(),
+                  }))}
+                  style={{ width: 'auto', fontWeight: 700 }}
+                />
               ) : (
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                   {(() => {

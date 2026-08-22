@@ -20,6 +20,7 @@ import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { Shift } from '../../lib/types';
 import { ApiError, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface TeamImportModalProps {
   isOpen: boolean;
@@ -609,23 +610,24 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
                   )}
                   {row.status === 'ambiguous' && (
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                      <select
-                        className="modal-input"
-                        style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
-                        defaultValue=""
-                        onChange={(event) => {
-                          if (event.target.value) {
-                            handleResolveAmbiguous(row, event.target.value);
+                      <SearchableSelect
+                        label=""
+                        value=""
+                        onChange={(candidateId) => {
+                          if (candidateId) {
+                            handleResolveAmbiguous(row, candidateId);
                           }
                         }}
-                      >
-                        <option value="" disabled>{t('teamImport.chooseMatch')}</option>
-                        {row.candidates.map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {candidate.name}{candidate.externalEmployeeId ? ` (ID ${candidate.externalEmployeeId})` : ''}{candidate.status === 'inactive' ? ` (${t('teamImport.statusRecognizedInactive')})` : ''}
-                          </option>
-                        ))}
-                      </select>
+                        searchPlaceholder={t('teamImport.searchPlaceholder')}
+                        emptyMessage={t('teamImport.noCandidates')}
+                        ariaLabel={t('teamImport.chooseMatch')}
+                        options={row.candidates.map((candidate) => ({
+                          value: candidate.id,
+                          label: `${candidate.name}${candidate.externalEmployeeId ? ` (ID ${candidate.externalEmployeeId})` : ''}${candidate.status === 'inactive' ? ` (${t('teamImport.statusRecognizedInactive')})` : ''}`,
+                          searchText: `${candidate.name} ${candidate.externalEmployeeId ?? ''}`.toLowerCase(),
+                        }))}
+                        style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
+                      />
                       <button
                         type="button"
                         className="btn-outline"
