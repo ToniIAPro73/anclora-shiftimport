@@ -884,7 +884,15 @@ function App() {
           setIsModalOpen(true);
         }}
         onImport={() => setIsImportOpen(true)}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={(role) => {
+          if (role === 'EMPLOYEE') {
+            // EMPLOYEE role: only profile tab is accessible
+            setIsSettingsOpen(true);
+          } else {
+            // ADMIN/MANAGER: full settings access
+            setIsSettingsOpen(true);
+          }
+        }}
         session={session}
         employees={employees}
       />
@@ -1069,7 +1077,7 @@ function App() {
           setIsSettingsOpen(false);
           setIsOnboardingOpen(true);
         }}
-        session={session ? { user: session.user } : null}
+        session={session ? { user: session.user, role: session.role } : null}
       />
 
       <OnboardingModal

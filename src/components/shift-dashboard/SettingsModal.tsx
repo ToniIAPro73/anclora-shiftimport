@@ -14,6 +14,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { SearchableSelect } from '../ui/SearchableSelect';
+import { SessionInfo } from '../../lib/session';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ interface SettingsModalProps {
   /** Replays the first-run guide (resets the onboarding record and opens it). */
   onRestartOnboarding?: () => void;
   /** Current authenticated session (for user-scoped profile). */
-  session: { user: { id: string } } | null;
+  session: { user: { id: string }; role: SessionInfo['role'] } | null;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -290,6 +291,15 @@ export const SettingsModal = ({ isOpen, onClose, onRestartOnboarding, session }:
   if (!isOpen) return null;
 
   const userId = session?.user.id ?? '';
+  const userRole = session?.role ?? null;
+  const isEmployee = userRole === 'EMPLOYEE';
+
+  // EMPLOYEE only sees profile tab
+  const availableTabs = isEmployee ? ['profile'] as const : ['profile', 'shiftTypes'] as const;
+  // If current tab is not available for this role, switch to profile
+  if (isEmployee && tab !== 'profile') {
+    setTab('profile');
+  }
 
   return (
     <div className="modal-overlay">
@@ -307,14 +317,16 @@ export const SettingsModal = ({ isOpen, onClose, onRestartOnboarding, session }:
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em' }}>{t('settings.title')}</h2>
         </div>
 
-        <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
-          <button className={tab === 'profile' ? 'btn-gold' : 'btn-outline'} onClick={() => setTab('profile')}>
-            {t('settings.tabProfile')}
-          </button>
-          <button className={tab === 'shiftTypes' ? 'btn-gold' : 'btn-outline'} onClick={() => setTab('shiftTypes')}>
-            {t('settings.tabShiftTypes')}
-          </button>
-        </div>
+        {availableTabs.length > 1 && (
+          <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
+            <button className={tab === 'profile' ? 'btn-gold' : 'btn-outline'} onClick={() => setTab('profile')}>
+              {t('settings.tabProfile')}
+            </button>
+            <button className={tab === 'shiftTypes' ? 'btn-gold' : 'btn-outline'} onClick={() => setTab('shiftTypes')}>
+              {t('settings.tabShiftTypes')}
+            </button>
+          </div>
+        )}
 
         {tab === 'profile' ? <ProfileSection onRestartOnboarding={onRestartOnboarding} userId={userId} /> : <ShiftTypesSection />}
       </div>

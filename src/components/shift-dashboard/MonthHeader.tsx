@@ -12,7 +12,7 @@ interface MonthHeaderProps {
   onNavigate: (delta: number) => void;
   onAddShift: () => void;
   onImport: () => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (role: SessionInfo['role']) => void;
   session: SessionInfo | null;
   employees: RemoteEmployee[];
 }
@@ -100,7 +100,7 @@ export const MonthHeader = ({
       <div className="dashboard-actions">
         <ThemeToggle />
         <LanguageToggle />
-        <button onClick={onOpenSettings} className="theme-toggle" title={t('settings.title')} aria-label={t('header.settingsAria')}>
+        <button onClick={() => onOpenSettings(session?.role ?? null)} className="theme-toggle" title={t('settings.title')} aria-label={t('header.settingsAria')}>
           <Settings size={18} />
         </button>
         <button onClick={onImport} className="btn-outline dashboard-action-button">
