@@ -1,22 +1,45 @@
+import { useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 
 interface OnboardingChoiceModalProps {
   isOpen: boolean;
-  onSelectPersonal: () => void;
-  onSelectCompany: () => void;
+  onConfirm: (organizationName: string, employeeName?: string) => Promise<void>;
   onLogout: () => void;
 }
 
 /**
- * Fase 1.2C.2: mandatory "Para mí" / "Para mi empresa" choice right after
- * signup, for a session with zero memberships (never shown to a user who
- * already onboarded — resolveContext returns memberships.length === 0 only
- * for that exact state). Blocking, same escape hatch pattern as
- * OrgSelectorModal: the only way out without choosing is logout.
+ * Unified onboarding choice after signup: organization name + optional employee name.
+ * Blocking modal — only way out without completing is logout.
  */
-export const OnboardingChoiceModal = ({ isOpen, onSelectPersonal, onSelectCompany, onLogout }: OnboardingChoiceModalProps) => {
+export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: OnboardingChoiceModalProps) => {
   const { t } = useI18n();
+  const [organizationName, setOrganizationName] = useState('');
+  const [employeeName, setEmployeeName] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+
+    const trimmedOrg = organizationName.trim();
+    const trimmedEmp = employeeName.trim();
+
+    if (!trimmedOrg) {
+      setError(t('onboardingChoice.orgNameRequired'));
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await onConfirm(trimmedOrg, trimmedEmp || undefined);
+    } catch {
+      setError(t('onboardingChoice.failed'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <ModalShell
@@ -29,40 +52,43 @@ export const OnboardingChoiceModal = ({ isOpen, onSelectPersonal, onSelectCompan
       <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', lineHeight: 1.5, fontSize: '0.9rem' }}>
         {t('onboardingChoice.description')}
       </p>
-      <div style={{ display: 'grid', gap: '10px' }}>
-        <button
-          type="button"
-          className="btn-outline"
-          onClick={onSelectPersonal}
-          style={{ padding: '14px 16px', fontWeight: 700, textAlign: 'left', display: 'grid', gap: '4px', width: '100%' }}
-        >
-          <span>{t('onboardingChoice.personalTitle')}</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-subtle)', fontWeight: 500 }}>
-            {t('onboardingChoice.personalDescription')}
-          </span>
-        </button>
-        <button
-          type="button"
-          className="btn-outline"
-          onClick={onSelectCompany}
-          style={{ padding: '14px 16px', fontWeight: 700, textAlign: 'left', display: 'grid', gap: '4px', width: '100%' }}
-        >
-          <span>{t('onboardingChoice.companyTitle')}</span>
-          <span style={{ fontSize: '0.78rem', color: 'var(--text-subtle)', fontWeight: 500 }}>
-            {t('onboardingChoice.companyDescription')}
-          </span>
-        </button>
-      </div>
-      <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-start' }}>
-        <button
-          type="button"
-          className="btn-outline"
-          onClick={onLogout}
-          style={{ padding: '10px 14px', fontWeight: 700, borderColor: 'var(--danger)', color: 'var(--danger)' }}
-        >
-          {t('auth.logoutAction')}
-        </button>
-      </div>
+      <form onSubmit={(event) => void handleSubmit(event)}>
+        <label style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
+          <span>{t('onboardingChoice.orgNameLabel')}</span>
+          <input
+            className="modal-input"
+            value={organizationName}
+            onChange={(event) => setOrganizationName(event.target.value)}
+            autoFocus
+          />
+        </label>
+        <label style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
+          <span>{t('onboardingChoice.employeeNameLabel')}</span>
+          <input
+            className="modal-input"
+            value={employeeName}
+            onChange={(event) => setEmployeeName(event.target.value)}
+            placeholder={t('onboardingChoice.employeeNamePlaceholder')}
+          />
+        </label>
+        {error && (
+          <p style={{ margin: '0 0 14px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={onLogout}
+            disabled={busy}
+            style={{ padding: '10px 14px', fontWeight: 700, borderColor: 'var(--danger)', color: 'var(--danger)' }}
+          >
+            {t('auth.logoutAction')}
+          </button>
+          <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '10px 16px', fontWeight: 800 }}>
+            {t('onboardingChoice.confirm')}
+          </button>
+        </div>
+      </form>
     </ModalShell>
   );
 };

@@ -16,9 +16,8 @@ function renderHeader(overrides?: { session?: SessionInfo | null; employees?: Re
     user: { id: 'user-1', email: 'test@test.com', displayName: 'Test User' },
     organizationId: 'org-1',
     role: 'ADMIN',
-    plan: 'team',
     employeeId: 'emp-1',
-    memberships: [{ organizationId: 'org-1', organizationName: 'Test Org', organizationType: 'company', organizationPlan: 'team', role: 'ADMIN' }],
+    memberships: [{ organizationId: 'org-1', organizationName: 'Test Org', role: 'ADMIN' }],
   };
   const defaultEmployees: RemoteEmployee[] = [
     { id: 'emp-1', organizationId: 'org-1', externalEmployeeId: '1001', name: 'Test Employee', userId: 'user-1', status: 'active' },
@@ -82,9 +81,8 @@ describe('MonthHeader language toggle', () => {
       user: { id: 'user-1', email: 'test@test.com', displayName: 'Fallback User' },
       organizationId: 'org-1',
       role: 'ADMIN',
-      plan: 'team',
       employeeId: null,
-      memberships: [{ organizationId: 'org-1', organizationName: 'Test Org', organizationType: 'company', organizationPlan: 'team', role: 'ADMIN' }],
+      memberships: [{ organizationId: 'org-1', organizationName: 'Test Org', role: 'ADMIN' }],
     };
     renderHeader({ session, employees: [] });
     expect(screen.getByText('Fallback User')).toBeTruthy();

@@ -3,7 +3,7 @@ import { bulkCreateEmployees } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * POST /api/employees/bulk — create many employees in one request (MANAGER+,
+ * POST /api/employees/bulk — create many employees in one request (ADMIN+,
  * "create all new employees" multi-import flow). Body: { employees: [{ key,
  * name, externalEmployeeId? }] }. `key` is a client-supplied correlation id,
  * echoed back per result, never stored. Never creates a User.

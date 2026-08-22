@@ -13,7 +13,7 @@
  * "from €19/mo" (Team) are commercial hypotheses pending market validation,
  * not decided pricing.
  */
-import { PlanId } from './session';
+export type PlanId = 'free' | 'personal' | 'team';
 
 export interface PlanLimits {
   maxEmployees: number | null;

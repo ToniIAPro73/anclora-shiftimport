@@ -51,9 +51,8 @@ const adminSession: SessionInfo = {
   user: { id: 'user-admin', email: 'admin@test.com', displayName: 'Admin' },
   organizationId: 'org-1',
   role: 'ADMIN',
-  plan: 'team',
   employeeId: null,
-  memberships: [{ organizationId: 'org-1', organizationName: 'Org', organizationType: 'company', organizationPlan: 'team', role: 'ADMIN' }],
+  memberships: [{ organizationId: 'org-1', organizationName: 'Org', role: 'ADMIN' }],
 };
 
 const employees: RemoteEmployee[] = [

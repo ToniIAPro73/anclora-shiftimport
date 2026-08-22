@@ -123,11 +123,11 @@ describe('parseUsersCsv', () => {
   it('parses the full format with role validation', () => {
     const csv = 'email,name,role,external_employee_id\n'
       + 'persona1@example.com,Adriana Molina,EMPLOYEE,SI120001\n'
-      + 'manager@example.com,Laura Riera,MANAGER,';
+      + 'admin@example.com,Laura Riera,ADMIN,';
     const rows = parseUsersCsv(csv);
     expect(rows).toEqual([
       { email: 'persona1@example.com', name: 'Adriana Molina', role: 'EMPLOYEE', externalEmployeeId: 'SI120001', rowError: undefined },
-      { email: 'manager@example.com', name: 'Laura Riera', role: 'MANAGER', externalEmployeeId: '', rowError: undefined },
+      { email: 'admin@example.com', name: 'Laura Riera', role: 'ADMIN', externalEmployeeId: '', rowError: undefined },
     ]);
   });
 

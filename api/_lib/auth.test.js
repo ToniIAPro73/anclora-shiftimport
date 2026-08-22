@@ -47,7 +47,7 @@ const baseSession = {
 };
 const membership = (org, role = 'EMPLOYEE') => ({
   user_id: 'user-1', organization_id: org, role,
-  organization_name: `Org ${org}`, organization_type: 'company',
+  organization_name: `Org ${org}`,
 });
 
 describe('parseSessionToken', () => {

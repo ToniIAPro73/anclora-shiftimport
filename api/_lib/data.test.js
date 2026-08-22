@@ -325,9 +325,9 @@ describe('multi-employee coexistence', () => {
 });
 
 describe('employee management', () => {
-  it('ADMIN/MANAGER can create employees; EMPLOYEE cannot', async () => {
+  it('ADMIN can create employees; EMPLOYEE cannot', async () => {
     const { sql } = makeFakeSql();
-    const created = await createEmployee(sql, { ...adminCtx, role: 'MANAGER' }, { name: 'Nueva Persona' });
+    const created = await createEmployee(sql, adminCtx, { name: 'Nueva Persona' });
     expect(created.name).toBe('Nueva Persona');
     await expect(createEmployee(sql, employeeCtx, { name: 'X' })).rejects.toMatchObject({ status: 403 });
   });
@@ -364,8 +364,8 @@ describe('employee management', () => {
 
   it('only ADMIN can edit/deactivate employees', async () => {
     const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
-    await expect(updateEmployee(sql, { ...adminCtx, role: 'MANAGER' }, { id: EMP_A1, status: 'inactive' }))
-      .rejects.toMatchObject({ status: 403 });
+    await expect(updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'inactive' })).resolves.toBeDefined();
+    await expect(updateEmployee(sql, employeeCtx, { id: EMP_A1, status: 'inactive' })).rejects.toMatchObject({ status: 403 });
   });
 
   it('user link requires membership in the same organization', async () => {
@@ -412,17 +412,14 @@ describe('employee lifecycle (deactivate/reactivate/delete)', () => {
     expect(update.values[4]).toBe(deactivatedAt);
   });
 
-  it('EMPLOYEE and MANAGER roles cannot deactivate, reactivate or delete', async () => {
+  it('EMPLOYEE role cannot deactivate, reactivate or delete', async () => {
     const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
-    const managerCtx = { ...adminCtx, role: 'MANAGER' };
-    for (const ctx of [employeeCtx, managerCtx]) {
-      await expect(updateEmployee(sql, ctx, { id: EMP_A1, status: 'inactive' }))
-        .rejects.toMatchObject({ status: 403 });
-      await expect(updateEmployee(sql, ctx, { id: EMP_A1, status: 'active' }))
-        .rejects.toMatchObject({ status: 403 });
-      await expect(deleteEmployee(sql, ctx, { id: EMP_A1 }))
-        .rejects.toMatchObject({ status: 403 });
-    }
+    await expect(updateEmployee(sql, employeeCtx, { id: EMP_A1, status: 'inactive' }))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(updateEmployee(sql, employeeCtx, { id: EMP_A1, status: 'active' }))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(deleteEmployee(sql, employeeCtx, { id: EMP_A1 }))
+      .rejects.toMatchObject({ status: 403 });
   });
 
   it('deactivating the employee linked to the last ADMIN user is blocked (LAST_ADMIN)', async () => {
@@ -700,14 +697,6 @@ describe('bulk employee creation ("Crear todos los nuevos")', () => {
     await expect(bulkCreateEmployees(sql, employeeCtx, [{ key: 'k1', name: 'X' }])).rejects.toMatchObject({ status: 403 });
   });
 
-  it('MANAGER role is allowed (same rank as single createEmployee)', async () => {
-    const { sql } = makeFakeSql();
-    const { results } = await bulkCreateEmployees(sql, { ...adminCtx, role: 'MANAGER' }, [
-      { key: 'k1', name: 'Ana', externalEmployeeId: 'EXT1' },
-    ]);
-    expect(results[0].status).toBe('created');
-  });
-
   it('never matches or leaks an employee from another organization (tenant isolation)', async () => {
     const { sql } = makeFakeSql({
       employees: [employeeRow(EMP_A1, ORG_B, { name: 'Someone', external_employee_id: 'EXT1' })],
@@ -741,27 +730,27 @@ describe('import persistence', () => {
 describe('membership management (B2B minimal)', () => {
   const membershipsFixture = () => [
     { user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' },
-    { user_id: 'user-mgr', organization_id: ORG_A, role: 'MANAGER' },
+    { user_id: 'user-emp', organization_id: ORG_A, role: 'EMPLOYEE' },
   ];
   const usersFixture = () => [
     { id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' },
-    { id: 'user-mgr', email: 'mgr@example.com', display_name: 'Mgr' },
+    { id: 'user-emp', email: 'emp@example.com', display_name: 'Emp' },
   ];
   const fakeHash = (password) => `hashed:${password}`;
 
-  it('only ADMIN lists members (MANAGER cannot)', async () => {
+  it('only ADMIN lists members (EMPLOYEE cannot)', async () => {
     const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
     const members = await listMembers(sql, adminCtx);
     expect(members).toHaveLength(2);
-    await expect(listMembers(sql, { ...adminCtx, role: 'MANAGER' }))
+    await expect(listMembers(sql, employeeCtx))
       .rejects.toMatchObject({ status: 403 });
   });
 
   it('adds an existing user without password; rejects duplicates', async () => {
     const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
-    const added = await addMember(sql, adminCtx, { email: 'mgr@example.com', role: 'EMPLOYEE' }, fakeHash)
+    const added = await addMember(sql, adminCtx, { email: 'emp@example.com', role: 'EMPLOYEE' }, fakeHash)
       .catch((error) => error);
-    // mgr is already a member → 409
+    // emp is already a member → 409
     expect(added).toMatchObject({ status: 409 });
 
     const fresh = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
@@ -802,9 +791,9 @@ describe('membership management (B2B minimal)', () => {
     const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
     await expect(addMember(sql, adminCtx, { email: 'x@example.com', role: 'SUPERADMIN', password: 'temporal-123' }, fakeHash))
       .rejects.toMatchObject({ status: 400 });
-    await expect(addMember(sql, { ...adminCtx, role: 'MANAGER' }, { email: 'x@example.com', role: 'ADMIN', password: 'temporal-123' }, fakeHash))
+    await expect(addMember(sql, employeeCtx, { email: 'x@example.com', role: 'ADMIN', password: 'temporal-123' }, fakeHash))
       .rejects.toMatchObject({ status: 403 });
-    await expect(updateMemberRole(sql, { ...adminCtx, role: 'MANAGER' }, { userId: 'user-mgr', role: 'ADMIN' }))
+    await expect(updateMemberRole(sql, employeeCtx, { userId: 'user-emp', role: 'ADMIN' }))
       .rejects.toMatchObject({ status: 403 });
   });
 
@@ -813,7 +802,7 @@ describe('membership management (B2B minimal)', () => {
       memberships: [{ user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' }],
       users: usersFixture(),
     });
-    await expect(updateMemberRole(single.sql, adminCtx, { userId: USER_ADMIN, role: 'MANAGER' }))
+    await expect(updateMemberRole(single.sql, adminCtx, { userId: USER_ADMIN, role: 'EMPLOYEE' }))
       .rejects.toMatchObject({ status: 400 });
     await expect(removeMember(single.sql, adminCtx, { userId: USER_ADMIN }))
       .rejects.toMatchObject({ status: 400 }); // self-removal
@@ -824,8 +813,8 @@ describe('membership management (B2B minimal)', () => {
     });
     await expect(removeMember(two.sql, adminCtx, { userId: USER_ADMIN }))
       .rejects.toMatchObject({ status: 400 }); // last ADMIN
-    const removed = await removeMember(two.sql, adminCtx, { userId: 'user-mgr' });
-    expect(removed.userId).toBe('user-mgr');
+    const removed = await removeMember(two.sql, adminCtx, { userId: 'user-emp' });
+    expect(removed.userId).toBe('user-emp');
   });
 });
 
@@ -964,11 +953,9 @@ describe('organization reset', () => {
     expect(fixtures.shifts.map((s) => s.organization_id)).toEqual([ORG_B]);
   });
 
-  it('MANAGER/EMPLOYEE cannot reset (403) and nothing is deleted', async () => {
+  it('EMPLOYEE cannot reset (403) and nothing is deleted', async () => {
     const fixtures = resetFixtures();
     const { sql, state } = makeFakeSql(fixtures);
-    await expect(resetOrganization(sql, { ...adminCtx, role: 'MANAGER' }))
-      .rejects.toMatchObject({ status: 403 });
     await expect(resetOrganization(sql, employeeCtx))
       .rejects.toMatchObject({ status: 403 });
     expect(state.transactionUsed).toBe(false);

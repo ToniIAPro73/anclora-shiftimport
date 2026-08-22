@@ -8,7 +8,7 @@ import { findShiftConflict } from './lib/shift-conflicts';
 import { fingerprintShift } from './lib/import-dedup';
 import { reconcileImport, ReconciliationReport } from './lib/import-reconciliation';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
-import { completeOnboarding, loadOnboarding, resetOnboarding, shouldShowOnboarding } from './lib/onboarding';
+import { loadOnboarding, resetOnboarding, shouldShowOnboarding, completeOnboarding as completeOnboardingGuide } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
 import {
   fetchResolvedSession,
@@ -16,8 +16,7 @@ import {
   logout,
   setUnauthorizedHandler,
   switchOrganization,
-  completePersonalOnboarding,
-  completeCompanyOnboarding,
+  completeOnboarding,
   SessionInfo,
 } from './lib/session';
 import {
@@ -39,7 +38,6 @@ import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
-import { CompanyOnboardingModal } from './components/shift-dashboard/CompanyOnboardingModal';
 import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
@@ -54,7 +52,6 @@ import { LandingPage } from './pages/LandingPage';
 import { PricingPage } from './pages/PricingPage';
 import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
-import { getPlanIntentFromUrl } from './lib/plans';
 import { formatOrgContext } from './lib/org-labels';
 import { SearchableSelect } from './components/ui/SearchableSelect';
 import { CalendarImportContext } from './lib/import-types';
@@ -111,9 +108,6 @@ function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
-  // Fase 1.2C.2: sub-step inside the zero-membership onboarding choice
-  // (needsOrgChoice + no memberships). Only meaningful while that state holds.
-  const [onboardingCompanyStep, setOnboardingCompanyStep] = useState(false);
   const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const now = new Date();
@@ -256,22 +250,7 @@ function App() {
     // local-import guide.
     setIsOnboardingOpen(false);
     if (!nextSession.organizationId) {
-      // Fase 1.2G.5: a brand-new (zero-membership) session honors the plan
-      // intent carried from /pricing (?plan=…) by skipping straight to the
-      // matching onboarding path instead of the manual choice modal. No
-      // intent (organic /signup) keeps today's OnboardingChoiceModal.
-      const planIntent = getPlanIntentFromUrl();
-      if (planIntent === 'team') {
-        setNeedsOrgChoice(true);
-        setOnboardingCompanyStep(true);
-        return;
-      }
-      if (planIntent === 'personal' || planIntent === 'free') {
-        setNeedsOrgChoice(true);
-        await handlePersonalOnboarding(planIntent);
-        return;
-      }
-      // Multi-org user: nothing loads until an explicit org choice.
+      // New user (zero memberships): show onboarding choice modal.
       setNeedsOrgChoice(true);
       return;
     }
@@ -281,7 +260,6 @@ function App() {
     } catch (error) {
       console.error('Failed to load remote data after login', error);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrateAuthenticated]);
 
   const handleSwitchOrganization = useCallback(async (organizationId: string) => {
@@ -299,31 +277,19 @@ function App() {
     }
   }, [hydrateAuthenticated]);
 
-  // Fase 1.2C.3: "Para mí" — creates the personal org for a zero-membership
-  // session and lands on Mis turnos. Fase 1.2G.5: an explicit plan carries
-  // the pricing-page intent (free vs personal); omitted defaults to free.
-  const handlePersonalOnboarding = useCallback(async (plan?: 'free' | 'personal') => {
+  // Unified onboarding: creates the organization, admin membership,
+  // and optionally a self-linked employee.
+  const handleOnboarding = useCallback(async (organizationName: string, employeeName?: string) => {
     try {
-      const nextSession = await completePersonalOnboarding(plan);
+      const nextSession = await completeOnboarding(organizationName, employeeName);
       setSession(nextSession);
       setNeedsOrgChoice(false);
-      setOnboardingCompanyStep(false);
       await hydrateAuthenticated(nextSession);
     } catch (error) {
-      console.error('Personal onboarding failed', error);
+      console.error('Onboarding failed', error);
       window.alert(t('onboardingChoice.failed'));
     }
   }, [hydrateAuthenticated, t]);
-
-  // Fase 1.2C.4: "Para mi empresa" — creates the company org and lands on
-  // Equipo. Errors propagate so CompanyOnboardingModal can show them inline.
-  const handleCompanyOnboarding = useCallback(async (companyName: string, adminName?: string) => {
-    const nextSession = await completeCompanyOnboarding(companyName, adminName);
-    setSession(nextSession);
-    setNeedsOrgChoice(false);
-    setOnboardingCompanyStep(false);
-    await hydrateAuthenticated(nextSession);
-  }, [hydrateAuthenticated]);
 
   /**
    * Single transition point into the unauthenticated state. Used by explicit
@@ -346,7 +312,6 @@ function App() {
       setEmployees([]);
       setSelectedEmployeeId(null);
       setNeedsOrgChoice(false);
-      setOnboardingCompanyStep(false);
       setMigrationPrompt(null);
       setIsMembersOpen(false);
       setIsAuthOpen(false);
@@ -431,7 +396,7 @@ function App() {
 
   // Fase 1.2A.2: post-login router. /app is one physical route that already
   // adapts by role; this only drives the page title from the same
-  // contractual resolver (EMPLOYEE → Mis turnos, MANAGER/ADMIN → Equipo,
+  // contractual resolver (EMPLOYEE → Mis turnos, ADMIN → Equipo,
   // multi-org unresolved → org selector) so it stays a single source of truth.
   useEffect(() => {
     if (route !== '/app' || !session) {
@@ -525,7 +490,7 @@ function App() {
    * employee directory (external id first, then normalized name).
    * - recognized → import under that employee;
    * - ambiguous → abort with explicit message (no silent matching);
-   * - new → MANAGER/ADMIN may create the employee inline and continue.
+   * - new → ADMIN may create the employee inline and continue.
    */
   const resolveImportEmployee = useCallback(async (
     selector?: { name: string; externalId: string },
@@ -693,10 +658,10 @@ function App() {
       setIsImportOpen(false);
       setOnboardingFile(null);
       // TTFV funnel endpoint + onboarding completion on the first real import.
-      trackTtfvEvent('import_confirmed');
-      if (!loadOnboarding().completed) {
-        completeOnboarding();
-      }
+          trackTtfvEvent('import_confirmed');
+          if (!loadOnboarding().completed) {
+            completeOnboardingGuide();
+          }
     };
 
     try {
@@ -858,19 +823,10 @@ function App() {
   // creation) — never show an ambiguous empty calendar for that.
   const activeMembership = session?.memberships.find((m) => m.organizationId === session.organizationId);
   const brokenPersonalOrg = Boolean(
-    session && !needsOrgChoice && activeMembership?.organizationType === 'personal'
+    session && !needsOrgChoice && activeMembership
       && !session.employeeId && employees.length === 0,
   );
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
-
-  // UpgradePrompt context: a sibling Team-plan org the user already belongs
-  // to, offered as "switch instead of upgrade" — never switched automatically.
-  const teamSwitchTarget = session?.memberships.find(
-    (m) => m.organizationPlan === 'team' && m.organizationId !== session.organizationId,
-  );
-  const switchTarget = teamSwitchTarget
-    ? { id: teamSwitchTarget.organizationId, name: teamSwitchTarget.organizationName }
-    : null;
 
   return (
     <div className="container">
@@ -889,7 +845,7 @@ function App() {
             // EMPLOYEE role: only profile tab is accessible
             setIsSettingsOpen(true);
           } else {
-            // ADMIN/MANAGER: full settings access
+            // ADMIN: full settings access
             setIsSettingsOpen(true);
           }
         }}
@@ -1151,7 +1107,7 @@ function App() {
         />
       )}
 
-      {session && (session.role === 'ADMIN' || session.role === 'MANAGER') && (
+      {session && session.role === 'ADMIN' && (
         <TeamImportModal
           isOpen={isImportOpen}
           onClose={() => setIsImportOpen(false)}
@@ -1159,8 +1115,6 @@ function App() {
             void hydrateAuthenticated(session);
           }}
           sessionRole={session.role}
-          currentPlan={session.plan}
-          switchTarget={switchTarget}
           onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         />
       )}
@@ -1181,17 +1135,9 @@ function App() {
       />
 
       <OnboardingChoiceModal
-        isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0 && !onboardingCompanyStep}
-        onSelectPersonal={() => void handlePersonalOnboarding()}
-        onSelectCompany={() => setOnboardingCompanyStep(true)}
+        isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0}
+        onConfirm={handleOnboarding}
         onLogout={() => void handleLogout()}
-      />
-
-      <CompanyOnboardingModal
-        isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0 && onboardingCompanyStep}
-        requireAdminName={!session?.user.displayName}
-        onConfirm={handleCompanyOnboarding}
-        onBack={() => setOnboardingCompanyStep(false)}
       />
 
       <LocalMigrationModal
@@ -1212,8 +1158,6 @@ function App() {
         onClose={() => setIsMembersOpen(false)}
         employees={employees}
         currentUserId={session?.user.id ?? ''}
-        currentPlan={session?.plan ?? null}
-        switchTarget={switchTarget}
         onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         onChanged={() => {
           if (session) {

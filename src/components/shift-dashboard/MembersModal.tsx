@@ -15,7 +15,8 @@ import {
 import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv, UserCsvRow } from '../../lib/bulk-import-csv';
 import { ModalShell } from '../ui/ModalShell';
 import { UpgradePrompt } from './UpgradePrompt';
-import { ApiError, PlanId } from '../../lib/session';
+import { ApiError } from '../../lib/session';
+import type { PlanId } from '../../lib/plans';
 import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface MembersModalProps {
@@ -30,7 +31,7 @@ interface MembersModalProps {
   onSwitchOrg?: (organizationId: string) => void;
 }
 
-const ROLES: RemoteMember['role'][] = ['ADMIN', 'MANAGER', 'EMPLOYEE'];
+const ROLES: RemoteMember['role'][] = ['ADMIN', 'EMPLOYEE'];
 type Tab = 'users' | 'employees';
 
 interface EmployeePreviewRow {
@@ -303,7 +304,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
   };
 
   const unlinkedEmployees = employees.filter(
-    (employee) => employee.status === 'active' && !employee.userId,
+    (employee) => (employee.status === 'active' || employee.status === 'pending_access') && !employee.userId,
   );
 
   // Members eligible for linking: not linked to any active employee (the
@@ -745,10 +746,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                       {employee.name}
                       {employee.externalEmployeeId && <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}> · ID {employee.externalEmployeeId}</span>}
                     </span>
-                    <span className={`status-badge ${employee.status === 'active' ? 'status-badge--active' : 'status-badge--inactive'}`}>
-                      {t(employee.status === 'active' ? 'members.statusActive' : 'members.statusInactive')}
+                    <span className={`status-badge ${employee.status === 'active' ? 'status-badge--active' : employee.status === 'pending_access' ? 'status-badge--pending' : 'status-badge--inactive'}`}>
+                      {t(employee.status === 'active' ? 'members.statusActive' : employee.status === 'pending_access' ? 'members.statusPendingAccess' : 'members.statusInactive')}
                     </span>
-                    {!employee.userId && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.noLink')}</span>}
+                    {!employee.userId && employee.status === 'pending_access' && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.pendingAccess')}</span>}
+                    {!employee.userId && employee.status === 'active' && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.noLink')}</span>}
                     {employee.userId && members.some((member) => member.userId === employee.userId) && (
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
                         {members.find((member) => member.userId === employee.userId)?.email}

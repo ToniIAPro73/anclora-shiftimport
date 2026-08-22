@@ -164,7 +164,7 @@ describe('MembersModal — bulk employees CSV import', () => {
 
 describe('MembersModal — bulk users CSV import', () => {
   const usersCsv = () => new File(
-    ['email,name,role,external_employee_id\npersona1@example.com,Adriana Molina,EMPLOYEE,\nmanager@example.com,Laura Riera,MANAGER,'],
+    ['email,name,role,external_employee_id\npersona1@example.com,Adriana Molina,EMPLOYEE,\nadmin@example.com,Laura Riera,ADMIN,'],
     'usuarios.csv',
     { type: 'text/csv' },
   );
@@ -180,7 +180,7 @@ describe('MembersModal — bulk users CSV import', () => {
 
     await waitFor(() => expect(screen.getByText('2 filas · 0 ya son miembros · 0 nuevas · 2 errores')).toBeTruthy());
     expect(screen.getByText('Falta el email')).toBeTruthy();
-    expect(screen.getByText('Rol no válido (usa ADMIN, MANAGER o EMPLOYEE)')).toBeTruthy();
+    expect(screen.getByText('Rol no válido (usa ADMIN o EMPLOYEE)')).toBeTruthy();
   });
 
   it('confirm creates new users and shows their one-time temporary passwords', async () => {
@@ -203,7 +203,7 @@ describe('MembersModal — bulk users CSV import', () => {
     await waitFor(() => expect(screen.getByText('Importación de usuarios completada')).toBeTruthy());
     expect(mockedAddRemoteMember).toHaveBeenCalledTimes(2);
     expect(screen.getByText(/temp-persona1@example.com/)).toBeTruthy();
-    expect(screen.getByText(/temp-manager@example.com/)).toBeTruthy();
+    expect(screen.getByText(/temp-admin@example.com/)).toBeTruthy();
   });
 
   it('never sends a password field from the CSV path — server always generates it', async () => {

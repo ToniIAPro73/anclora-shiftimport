@@ -26,9 +26,9 @@ interface SettingsModalProps {
   onRestartOnboarding?: () => void;
   /** Current authenticated session. */
   session: { user: { id: string; email: string; displayName: string }; role: SessionInfo['role']; employeeId: string | null; organizationId: string | null; memberships: SessionInfo['memberships'] } | null;
-  /** Org employees for employee selector (ADMIN/MANAGER). */
+  /** Org employees for employee selector (ADMIN). */
   employees?: RemoteEmployee[];
-  /** Selected employee in team bar (ADMIN/MANAGER). */
+  /** Selected employee in team bar (ADMIN). */
   selectedEmployeeId?: string | null;
   /** Callback when employee name changes (to refresh header). */
   onEmployeeNameChange?: () => void;
@@ -56,20 +56,14 @@ type Tab = 'profile' | 'team' | 'shiftTypes';
 function getAvailableTabs(session: SettingsModalProps['session']): Tab[] {
   if (!session) return ['profile'];
   
-  const { role, memberships } = session;
-  const activeMembership = memberships.find(m => m.organizationId === session.organizationId);
-  const isCompanyOrg = activeMembership?.organizationType === 'company';
+  const { role } = session;
   
   if (role === 'EMPLOYEE') {
     return ['profile'];
   }
   
-  // ADMIN/MANAGER
-  const tabs: Tab[] = ['profile'];
-  
-  if (isCompanyOrg) {
-    tabs.push('team');
-  }
+  // ADMIN - team tab available for all organizations (no personal/company distinction)
+  const tabs: Tab[] = ['profile', 'team'];
   
   tabs.push('shiftTypes');
   
@@ -94,7 +88,7 @@ function ProfileSection({
   onAccountNameChange?: () => void;
 }) {
   const { t, locale } = useI18n();
-  // Role and employee-linkage are independent dimensions: an ADMIN/MANAGER
+  // Role and employee-linkage are independent dimensions: an ADMIN
   // without a linked employee manages account data only; the employee
   // identity UI appears exclusively when the session has an employee.
   const hasEmployee = Boolean(session?.employeeId);
@@ -221,7 +215,7 @@ function ProfileSection({
     </div>
   );
 
-  // Authenticated user WITHOUT a linked employee (ADMIN/MANAGER): account
+  // Authenticated user WITHOUT a linked employee (ADMIN): account
   // data only — nothing employee-related is rendered in this case.
   if (session && !hasEmployee) {
     return (
@@ -382,14 +376,6 @@ function TeamSection({
           <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
             <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgName')}</span>
             <span style={{ fontWeight: 600 }}>{activeMembership?.organizationName}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgType')}</span>
-            <span>{t(activeMembership?.organizationType === 'personal' ? 'orgSelector.typePersonal' : 'orgSelector.typeCompany')}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgPlan')}</span>
-            <span style={{ textTransform: 'capitalize' }}>{activeMembership?.organizationPlan}</span>
           </div>
           <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
             <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.yourRole')}</span>

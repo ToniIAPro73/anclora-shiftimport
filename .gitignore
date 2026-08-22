@@ -7,11 +7,6 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -34,6 +29,7 @@ dist-ssr
 .next/
 out/
 build/
+*.local
 
 # acceptance corpus run artifact
 corpus-report.json
@@ -59,3 +55,7 @@ qa/e2e-acceptance/artifacts/local-fixture.json
 # local visual-QA screenshots — evidence kept on disk, never committed.
 design-reference/
 qa/1.2b-visual/
+
+# Agent task docs (temporary working docs)
+.agent-tasks/
+node_modules

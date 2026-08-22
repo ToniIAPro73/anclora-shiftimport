@@ -4,17 +4,11 @@
  * existing localStorage flow is untouched.
  */
 
-export type Role = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
-
-/** Fase 1.2G: commercial plan — orthogonal to Role. Role is "what can you
- * do inside this org"; Plan is "what can this org do at all". */
-export type PlanId = 'free' | 'personal' | 'team';
+export type Role = 'ADMIN' | 'EMPLOYEE';
 
 export interface SessionMembership {
   organizationId: string;
   organizationName: string;
-  organizationType: 'personal' | 'company';
-  organizationPlan: PlanId;
   role: Role;
 }
 
@@ -23,8 +17,6 @@ export interface SessionInfo {
   /** Null when the user has several orgs and none selected yet. */
   organizationId: string | null;
   role: Role | null;
-  /** Active organization's plan; null alongside organizationId when unresolved. */
-  plan: PlanId | null;
   /** Employee linked to this user in the active organization (if any). */
   employeeId: string | null;
   memberships: SessionMembership[];
@@ -215,31 +207,13 @@ export async function register(email: string, password: string, displayName: str
 }
 
 /**
- * Fase 1.2C.3: "Para mí" onboarding choice. Creates the personal org for
- * the current (freshly registered, zero-membership) user and re-resolves
- * the session so the caller lands with an active organization.
+ * Onboarding: creates the organization for the current (freshly registered, zero-membership) user
+ * and re-resolves the session so the caller lands with an active organization.
  */
-export async function completePersonalOnboarding(plan?: 'free' | 'personal'): Promise<SessionInfo> {
-  await apiFetch('/api/onboarding/personal', {
+export async function completeOnboarding(organizationName: string, adminName?: string): Promise<SessionInfo> {
+  await apiFetch('/api/onboarding', {
     method: 'POST',
-    body: JSON.stringify({ plan }),
-  });
-  const session = await fetchSession();
-  if (!session) {
-    throw new ApiError(401, 'Onboarding failed');
-  }
-  setRequestOrganizationId(resolveActiveOrganization(session.user.id, session.memberships));
-  return session;
-}
-
-/**
- * Fase 1.2C.4: "Para mi empresa" onboarding choice. adminName is only
- * required when the account has no display name yet.
- */
-export async function completeCompanyOnboarding(companyName: string, adminName?: string): Promise<SessionInfo> {
-  await apiFetch('/api/onboarding/company', {
-    method: 'POST',
-    body: JSON.stringify({ companyName, adminName }),
+    body: JSON.stringify({ organizationName, adminName }),
   });
   const session = await fetchSession();
   if (!session) {

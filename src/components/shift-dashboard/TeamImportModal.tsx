@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
-import { PlanId } from '../../lib/session';
+import type { PlanId } from '../../lib/plans';
 import { detectTeamRoster, DetectedTeamEmployee } from '../../ingestion/team-roster';
 import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
 import {

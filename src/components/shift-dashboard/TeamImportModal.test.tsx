@@ -42,7 +42,7 @@ const mockedCreateRemoteImport = vi.mocked(remote.createRemoteImport);
 const mockedSyncRemoteShifts = vi.mocked(remote.syncRemoteShifts);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 
-function renderTeamImportModal(onImported: () => void = () => {}, sessionRole: 'ADMIN' | 'MANAGER' = 'ADMIN') {
+function renderTeamImportModal(onImported: () => void = () => {}, sessionRole: 'ADMIN' | 'EMPLOYEE' = 'ADMIN') {
   return render(
     <I18nProvider>
       <TeamImportModal isOpen onClose={() => {}} onImported={onImported} sessionRole={sessionRole} />
@@ -354,7 +354,7 @@ describe('TeamImportModal — inactive employee awareness (Bloque E)', () => {
     mockedDetectTeamRoster.mockReturnValue(inactiveRoster());
     mockedMatchRemoteEmployee.mockResolvedValue(inactiveMatch());
 
-    renderTeamImportModal(() => {}, 'MANAGER');
+    renderTeamImportModal(() => {}, 'EMPLOYEE');
     await uploadRoster();
 
     expect(screen.queryByRole('button', { name: 'Reactivar' })).toBeNull();

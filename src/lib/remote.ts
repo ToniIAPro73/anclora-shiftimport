@@ -13,7 +13,7 @@ export interface RemoteEmployee {
   externalEmployeeId: string | null;
   name: string;
   userId: string | null;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'pending_access';
 }
 
 export interface RemoteImport {
@@ -124,7 +124,7 @@ export async function updateRemoteEmployee(input: {
   id: string;
   name?: string;
   externalEmployeeId?: string;
-  status?: 'active' | 'inactive';
+  status?: 'active' | 'inactive' | 'pending_access';
 }): Promise<RemoteEmployee> {
   const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees', {
     method: 'PATCH',
@@ -133,7 +133,7 @@ export async function updateRemoteEmployee(input: {
   return payload.employee;
 }
 
-/** EMPLOYEE (or ADMIN/MANAGER): update own employee's name via /self endpoint. */
+/** EMPLOYEE (or ADMIN): update own employee's name via /self endpoint. */
 export async function updateOwnEmployeeName(name: string): Promise<RemoteEmployee> {
   const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees?self=true', {
     method: 'PATCH',
@@ -209,7 +209,7 @@ export interface RemoteMember {
   userId: string;
   email: string;
   displayName: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
+  role: 'ADMIN' | 'EMPLOYEE';
 }
 
 export async function listRemoteMembers(): Promise<RemoteMember[]> {

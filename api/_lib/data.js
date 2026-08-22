@@ -179,7 +179,7 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
 }
 
 export async function createEmployee(sql, ctx, input) {
-  requireRole(ctx, 'MANAGER');
+  requireRole(ctx, 'ADMIN');
   const name = String(input?.name ?? '').trim();
   if (!name) {
     throw new HttpError(400, 'Employee name is required');
@@ -199,16 +199,20 @@ export async function createEmployee(sql, ctx, input) {
   );
 
   const externalId = String(input?.externalEmployeeId ?? '').trim() || null;
+  // PENDING_ACCESS: employees created without a user_id start as pending_access
+  // (no login access yet). The onboarding endpoint explicitly passes status='active'
+  // when creating a self-linked employee with user_id.
+  const status = input?.status === 'active' ? 'active' : 'pending_access';
   const rows = await sql`
-    INSERT INTO employees (organization_id, external_employee_id, name)
-    VALUES (${ctx.organizationId}, ${externalId}, ${name})
+    INSERT INTO employees (organization_id, external_employee_id, name, status)
+    VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${status})
     RETURNING *
   `;
   return mapEmployeeRow(rows[0]);
 }
 
 /**
- * MANAGER+ only: create many employees in one request (multi-employee import
+ * ADMIN only: create many employees in one request (multi-employee import
  * "create all new" flow). Every item is revalidated server-side against the
  * org's CURRENT roster (never trusts what the client believed at upload
  * time) and processed sequentially — no concurrency, so the plan-limit
@@ -217,7 +221,7 @@ export async function createEmployee(sql, ctx, input) {
  * Partial failure is the point: one bad row never aborts the rest.
  */
 export async function bulkCreateEmployees(sql, ctx, items) {
-  requireRole(ctx, 'MANAGER');
+  requireRole(ctx, 'ADMIN');
 
   // The roster index covers employees of ANY status so an inactive employee
   // is matched (reported as 'existing_inactive') instead of duplicated.
@@ -264,8 +268,8 @@ export async function bulkCreateEmployees(sql, ctx, items) {
 
     try {
       const inserted = await sql`
-        INSERT INTO employees (organization_id, external_employee_id, name)
-        VALUES (${ctx.organizationId}, ${externalId}, ${name})
+        INSERT INTO employees (organization_id, external_employee_id, name, status)
+        VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access')
         ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
         RETURNING *
       `;
@@ -331,24 +335,11 @@ export async function updateEmployee(sql, ctx, input) {
   const status = input?.status === undefined
     ? current.status
     : (input.status === 'inactive' ? 'inactive' : 'active');
-  if (status === 'inactive' && current.status !== 'inactive') {
-    await assertEmployeeNotLastAdmin(sql, ctx, current);
-  }
-  if (status === 'active' && current.status === 'inactive') {
-    const existing = await sql`
-      SELECT count(*) AS count FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
-    `;
-    requireWithinLimit(
-      ctx.plan,
-      'maxEmployees',
-      Number(existing[0]?.count ?? 0),
-      'This plan only allows 1 employee. Upgrade to Team to add more.',
-    );
-  }
-  // userId link: only a user that is a member of this org can be linked.
-  // The User ↔ Employee relation is 1:1 — a link is never silently replaced:
-  // both the employee and the user must be free (see guards below).
+  
+  // PENDING_ACCESS → ACTIVE transition: when linking a user to a pending_access employee,
+  // the status automatically becomes 'active' (employee now has access)
   let userId = current.userId;
+  let finalStatus = status;
   if (input?.userId !== undefined) {
     // Explicit null (the frontend's unlink signal) must stay an unlink —
     // String(null) would produce the literal 'null' and fail the member check.
@@ -375,13 +366,34 @@ export async function updateEmployee(sql, ctx, input) {
         error.code = 'USER_ALREADY_LINKED';
         throw error;
       }
+      // When linking a user to a pending_access employee, auto-transition to active
+      if (current.status === 'pending_access') {
+        finalStatus = 'active';
+      }
+    } else if (current.userId) {
+      // Unlinking: if employee was pending_access, it stays pending_access
+      // (no status change on unlink)
     }
+  }
+  if (finalStatus === 'inactive' && current.status !== 'inactive') {
+    await assertEmployeeNotLastAdmin(sql, ctx, current);
+  }
+  if (finalStatus === 'active' && current.status === 'inactive') {
+    const existing = await sql`
+      SELECT count(*) AS count FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
+    `;
+    requireWithinLimit(
+      ctx.plan,
+      'maxEmployees',
+      Number(existing[0]?.count ?? 0),
+      'This plan only allows 1 employee. Upgrade to Team to add more.',
+    );
   }
 
   let deactivatedAt = current.deactivatedAt;
-  if (status === 'inactive' && current.status !== 'inactive') {
+  if (finalStatus === 'inactive' && current.status !== 'inactive') {
     deactivatedAt = new Date();
-  } else if (status === 'active') {
+  } else if (finalStatus === 'active') {
     deactivatedAt = null;
   }
 
@@ -389,7 +401,7 @@ export async function updateEmployee(sql, ctx, input) {
     UPDATE employees
     SET name = ${name},
         external_employee_id = ${externalId},
-        status = ${status},
+        status = ${finalStatus},
         user_id = ${userId},
         deactivated_at = ${deactivatedAt},
         updated_at = NOW()
@@ -400,7 +412,7 @@ export async function updateEmployee(sql, ctx, input) {
 }
 
 /**
- * EMPLOYEE (or ADMIN/MANAGER): update own employee's name.
+ * EMPLOYEE (or ADMIN): update own employee's name.
  * Only allows updating the name field, not status/externalId/userId.
  */
 export async function updateEmployeeName(sql, ctx, employeeId, name) {
@@ -461,7 +473,7 @@ export async function deleteEmployee(sql, ctx, input) {
 
 // -------------------------------------------------------------- memberships
 
-const VALID_ROLES = ['ADMIN', 'MANAGER', 'EMPLOYEE'];
+const VALID_ROLES = ['ADMIN', 'EMPLOYEE'];
 
 function mapMemberRow(row) {
   return {
@@ -763,7 +775,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     await assertEmployeeInOrg(sql, ctx, employeeId);
 
     // Plan/role separation (Fase: role-aware import unification) — ROLE
-    // decides WHO an ADMIN/MANAGER may write for (any org employee, checked
+    // decides WHO an ADMIN may write for (any org employee, checked
     // above); PLAN decides whether the org may operate on more than one
     // distinct employee at all. DB-observed, not client-declared: a request
     // can't dodge this by spreading employees across separate calls.

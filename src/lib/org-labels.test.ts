@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { formatOrgContext } from './org-labels';
 
-const t = (key: string) => ({
-  'orgSelector.typePersonal': 'Personal',
-  'orgSelector.typeCompany': 'Empresa',
-}[key] ?? key);
+const t = (key: string): string => {
+  const map: Record<string, string> = {
+    'orgSelector.typePersonal': 'Personal',
+    'orgSelector.typeCompany': 'Empresa',
+  };
+  return map[key] ?? key;
+};
 
 describe('formatOrgContext', () => {
-  it('formats a personal/free org as "Personal · Free"', () => {
-    expect(formatOrgContext(t, { organizationType: 'personal', organizationPlan: 'free' })).toBe('Personal · Free');
-  });
-
-  it('formats a company/team org as "Empresa · Team"', () => {
-    expect(formatOrgContext(t, { organizationType: 'company', organizationPlan: 'team' })).toBe('Empresa · Team');
+  it('returns just the organization name', () => {
+    expect(formatOrgContext(t, { organizationName: 'Mi Empresa' })).toBe('Mi Empresa');
+    expect(formatOrgContext(t, { organizationName: 'Acme Corp' })).toBe('Acme Corp');
   });
 });

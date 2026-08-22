@@ -36,7 +36,7 @@ const makeSession = (over: Partial<SessionProp> = {}): SessionProp => ({
   employeeId: null,
   organizationId: 'org-1',
   memberships: [
-    { organizationId: 'org-1', organizationName: 'Acme', organizationType: 'company', organizationPlan: 'team', role: 'ADMIN' },
+    { organizationId: 'org-1', organizationName: 'Acme', role: 'ADMIN' },
   ],
   ...over,
 });
@@ -192,7 +192,7 @@ describe('SettingsModal — profile tab by role/employee linkage', () => {
         role: 'EMPLOYEE',
         employeeId: 'e1',
         memberships: [
-          { organizationId: 'org-1', organizationName: 'Acme', organizationType: 'company', organizationPlan: 'team', role: 'EMPLOYEE' },
+          { organizationId: 'org-1', organizationName: 'Acme', role: 'EMPLOYEE' },
         ],
       }),
       employees: [remoteEmployee()],
@@ -214,16 +214,17 @@ describe('SettingsModal — profile tab by role/employee linkage', () => {
 describe('SettingsModal — danger zone (organization reset)', () => {
   const openTeamTab = () => fireEvent.click(screen.getByText('Equipo'));
 
-  it('is not rendered for MANAGER', () => {
+  it('is not reachable for a user without admin role (no danger zone)', () => {
     renderSettings({
       session: makeSession({
-        role: 'MANAGER',
+        role: 'EMPLOYEE',
         memberships: [
-          { organizationId: 'org-1', organizationName: 'Acme', organizationType: 'company', organizationPlan: 'team', role: 'MANAGER' },
+          { organizationId: 'org-1', organizationName: 'Acme', role: 'EMPLOYEE' },
         ],
       }),
     });
-    openTeamTab();
+    // EMPLOYEE only sees profile tab — no team tab, no danger zone
+    expect(screen.queryByText('Equipo')).toBeNull();
     expect(screen.queryByText('Zona de peligro')).toBeNull();
   });
 
@@ -233,7 +234,7 @@ describe('SettingsModal — danger zone (organization reset)', () => {
         role: 'EMPLOYEE',
         employeeId: 'e1',
         memberships: [
-          { organizationId: 'org-1', organizationName: 'Acme', organizationType: 'company', organizationPlan: 'team', role: 'EMPLOYEE' },
+          { organizationId: 'org-1', organizationName: 'Acme', role: 'EMPLOYEE' },
         ],
       }),
       employees: [remoteEmployee()],

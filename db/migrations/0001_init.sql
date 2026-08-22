@@ -6,7 +6,6 @@
 CREATE TABLE organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('personal', 'company')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -25,7 +24,7 @@ CREATE UNIQUE INDEX users_email_lower_idx ON users (lower(email));
 CREATE TABLE memberships (
   user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   organization_id UUID NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'MANAGER', 'EMPLOYEE')),
+  role TEXT NOT NULL CHECK (role IN ('ADMIN', 'EMPLOYEE')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (user_id, organization_id)
 );
@@ -34,13 +33,15 @@ CREATE INDEX memberships_organization_idx ON memberships (organization_id);
 
 -- Employee = person appearing on a rota. user_id optional: an Employee does
 -- NOT require a login account. external_employee_id = payroll number from PDFs.
+-- status: pending_access = detected during import but no User linked yet;
+-- active = fully onboarded (Employee + User linked); inactive = offboarded.
 CREATE TABLE employees (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
   external_employee_id TEXT,
   name TEXT NOT NULL,
   user_id UUID REFERENCES users (id) ON DELETE SET NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('pending_access', 'active', 'inactive')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -51,7 +51,7 @@ describe('resolveInactiveEmployeeMatch (Bloque E)', () => {
     expect(mockedUpdateRemoteEmployee).not.toHaveBeenCalled();
   });
 
-  it.each(['MANAGER', 'EMPLOYEE', null] as const)('role %s: blocked without ever calling update', async (role) => {
+  it.each(['EMPLOYEE', null] as const)('role %s: blocked without ever calling update', async (role) => {
     const confirmReactivate = vi.fn(() => true);
     const result = await resolveInactiveEmployeeMatch({
       employee: inactiveEmployee(),

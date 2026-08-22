@@ -7,9 +7,8 @@ function makeSession(overrides: Partial<SessionInfo>): SessionInfo {
     user: { id: 'u1', email: 'u1@example.com', displayName: 'U1' },
     organizationId: 'org-1',
     role: 'EMPLOYEE',
-    plan: 'team',
     employeeId: 'emp-1',
-    memberships: [{ organizationId: 'org-1', organizationName: 'Org', organizationType: 'company', organizationPlan: 'team', role: 'EMPLOYEE' }],
+    memberships: [{ organizationId: 'org-1', organizationName: 'Org', role: 'EMPLOYEE' }],
     ...overrides,
   };
 }
@@ -20,7 +19,7 @@ describe('resolvePostLoginDestination', () => {
   });
 
   it('sends MANAGER to team', () => {
-    expect(resolvePostLoginDestination(makeSession({ role: 'MANAGER' }), false)).toBe('team');
+    expect(resolvePostLoginDestination(makeSession({ role: 'ADMIN' }), false)).toBe('team');
   });
 
   it('sends ADMIN to team', () => {

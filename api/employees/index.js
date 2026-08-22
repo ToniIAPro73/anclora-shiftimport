@@ -6,7 +6,7 @@ import { handleError, sendJson } from '../_lib/http.js';
  * GET  /api/employees                — org-scoped list (EMPLOYEE sees only self)
  * GET  /api/employees?match=1        — matching for the importer (body-less:
  *                                      externalId/name as query params)
- * POST /api/employees                — create (MANAGER+, inline alta flow)
+ * POST /api/employees                — create (ADMIN+, inline alta flow)
  * PATCH /api/employees               — update/deactivate/link user (ADMIN)
  * DELETE /api/employees              — permanent delete, only without shift
  *                                      history (ADMIN)

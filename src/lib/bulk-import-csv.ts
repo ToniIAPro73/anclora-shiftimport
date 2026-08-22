@@ -43,8 +43,8 @@ export function parseEmployeesCsv(text: string): EmployeeCsvRow[] | null {
     .filter((row) => row.externalEmployeeId || row.name);
 }
 
-export type UserCsvRole = 'ADMIN' | 'MANAGER' | 'EMPLOYEE';
-const VALID_ROLES: UserCsvRole[] = ['ADMIN', 'MANAGER', 'EMPLOYEE'];
+export type UserCsvRole = 'ADMIN' | 'EMPLOYEE';
+const VALID_ROLES: UserCsvRole[] = ['ADMIN', 'EMPLOYEE'];
 
 export interface UserCsvRow {
   email: string;
