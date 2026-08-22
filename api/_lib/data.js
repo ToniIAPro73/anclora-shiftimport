@@ -346,9 +346,13 @@ export async function updateEmployee(sql, ctx, input) {
     );
   }
   // userId link: only a user that is a member of this org can be linked.
+  // The User ↔ Employee relation is 1:1 — a link is never silently replaced:
+  // both the employee and the user must be free (see guards below).
   let userId = current.userId;
   if (input?.userId !== undefined) {
-    userId = String(input.userId).trim() || null;
+    // Explicit null (the frontend's unlink signal) must stay an unlink —
+    // String(null) would produce the literal 'null' and fail the member check.
+    userId = input.userId === null ? null : String(input.userId).trim() || null;
     if (userId) {
       const member = await sql`
         SELECT 1 FROM memberships
@@ -356,6 +360,20 @@ export async function updateEmployee(sql, ctx, input) {
       `;
       if (member.length === 0) {
         throw new HttpError(400, 'User is not a member of the organization');
+      }
+      if (current.userId && current.userId !== userId) {
+        const error = new HttpError(409, 'Employee is already linked to another user');
+        error.code = 'EMPLOYEE_ALREADY_LINKED';
+        throw error;
+      }
+      const occupied = await sql`
+        SELECT id FROM employees
+        WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId} AND id <> ${id}
+      `;
+      if (occupied.length > 0) {
+        const error = new HttpError(409, 'User is already linked to another employee');
+        error.code = 'USER_ALREADY_LINKED';
+        throw error;
       }
     }
   }
@@ -534,10 +552,30 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
     VALUES (${userId}, ${ctx.organizationId}, ${role})
   `;
 
-  // Optional User ↔ Employee link at creation time.
+  // Optional User ↔ Employee link at creation time. The relation is 1:1 and
+  // a link is never silently replaced: the employee must be free (user_id
+  // NULL) and the user must not be linked to any other employee in the org.
   const employeeId = String(input?.employeeId ?? '').trim();
   if (employeeId) {
     await assertEmployeeInOrg(sql, ctx, employeeId);
+    const employeeRows = await sql`
+      SELECT * FROM employees
+      WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
+    `;
+    if (employeeRows[0]?.user_id) {
+      const error = new HttpError(409, 'Employee is already linked to another user');
+      error.code = 'EMPLOYEE_ALREADY_LINKED';
+      throw error;
+    }
+    const occupied = await sql`
+      SELECT id FROM employees
+      WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId} AND id <> ${employeeId}
+    `;
+    if (occupied.length > 0) {
+      const error = new HttpError(409, 'User is already linked to another employee');
+      error.code = 'USER_ALREADY_LINKED';
+      throw error;
+    }
     await sql`
       UPDATE employees SET user_id = ${userId}, updated_at = NOW()
       WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
@@ -604,6 +642,50 @@ export async function removeMember(sql, ctx, input) {
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
   `;
   return { userId };
+}
+
+// ------------------------------------------------------------- organizations
+
+/**
+ * ADMIN only: full reset of the active organization's OPERATIONAL data.
+ * Deletes, org-scoped and inside ONE transaction (a mid-failure rolls
+ * everything back), in FK-safe order:
+ *   1) shifts   (shifts.employee_id → employees, shifts.import_id → imports)
+ *   2) imports  (no longer referenced once shifts are gone)
+ *   3) employees (operational/import data — see below)
+ *
+ * What is KEPT (never touched): organizations, users, memberships, sessions
+ * and plan — the account configuration. The admin's User row and membership
+ * survive, so the account can start over immediately.
+ *
+ * ALL employees are deleted, including one linked to the admin user:
+ * employees are operational/import data and the post-onboarding initial
+ * state has zero employees; the admin User and its membership are the
+ * account configuration and survive. (Memberships are unaffected, so this
+ * never conflicts with the LAST_ADMIN rule, which protects memberships.)
+ *
+ * Requires `sql` to expose `.transaction(fn)` — the real Neon HTTP client
+ * (@neondatabase/serverless) does; in tests the injected fake only needs a
+ * `transaction(fn)` method plus template-tag queries.
+ *
+ * Returns { reset: true, deleted: { shifts, imports, employees } } with the
+ * per-table deleted row counts (via RETURNING id).
+ */
+export async function resetOrganization(sql, ctx) {
+  requireRole(ctx, 'ADMIN');
+  const [shifts, imports, employees] = await sql.transaction((txn) => [
+    txn`DELETE FROM shifts WHERE organization_id = ${ctx.organizationId} RETURNING id`,
+    txn`DELETE FROM imports WHERE organization_id = ${ctx.organizationId} RETURNING id`,
+    txn`DELETE FROM employees WHERE organization_id = ${ctx.organizationId} RETURNING id`,
+  ]);
+  return {
+    reset: true,
+    deleted: {
+      shifts: shifts.length,
+      imports: imports.length,
+      employees: employees.length,
+    },
+  };
 }
 
 // ------------------------------------------------------------------ imports

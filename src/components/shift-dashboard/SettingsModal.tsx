@@ -14,9 +14,10 @@ import { useI18n } from '../../lib/use-i18n';
 import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { SearchableSelect } from '../ui/SearchableSelect';
+import { ModalShell } from '../ui/ModalShell';
 import { SessionInfo } from '../../lib/session';
 import { RemoteEmployee } from '../../lib/remote';
-import { updateUserDisplayName, updateOwnEmployeeName } from '../../lib/remote';
+import { resetOrganization, updateUserDisplayName, updateOwnEmployeeName } from '../../lib/remote';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -31,6 +32,12 @@ interface SettingsModalProps {
   selectedEmployeeId?: string | null;
   /** Callback when employee name changes (to refresh header). */
   onEmployeeNameChange?: () => void;
+  /** Opens the members management modal (closes settings first). */
+  onOpenMembers?: () => void;
+  /** Callback when the account display name changes (to refresh session). */
+  onAccountNameChange?: () => void;
+  /** Callback after a successful organization reset (reload org data). */
+  onOrganizationReset?: () => void;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -69,27 +76,35 @@ function getAvailableTabs(session: SettingsModalProps['session']): Tab[] {
   return tabs;
 }
 
-function ProfileSection({ 
-  session, 
+function ProfileSection({
+  session,
   employee,
   userProfile,
   onSaveProfile,
   onRestartOnboarding,
   onEmployeeNameChange,
-}: { 
+  onAccountNameChange,
+}: {
   session: SettingsModalProps['session'];
   employee: RemoteEmployee | null;
   userProfile: UserProfile;
   onSaveProfile: (profile: UserProfile) => void;
   onRestartOnboarding?: () => void;
   onEmployeeNameChange: () => void;
+  onAccountNameChange?: () => void;
 }) {
   const { t, locale } = useI18n();
+  // Role and employee-linkage are independent dimensions: an ADMIN/MANAGER
+  // without a linked employee manages account data only; the employee
+  // identity UI appears exclusively when the session has an employee.
+  const hasEmployee = Boolean(session?.employeeId);
   const [name, setName] = useState(employee?.name ?? '');
+  const [accountName, setAccountName] = useState(session?.user.displayName ?? '');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [accountSaved, setAccountSaved] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
+  const [accountError, setAccountError] = useState('');
   const [identifiersText, setIdentifiersText] = useState(() => userProfile.employeeIdentifiers.join(', '));
   const [timezone, setTimezone] = useState(userProfile.timezone);
 
@@ -109,14 +124,19 @@ function ProfileSection({
   };
 
   const handleSaveAccount = async () => {
-    if (!session || !name.trim()) return;
+    if (!session) return;
+    const trimmed = accountName.trim();
+    if (!trimmed || trimmed === session.user.displayName) return;
     setAccountSaving(true);
+    setAccountError('');
     try {
-      await updateUserDisplayName(name.trim());
+      await updateUserDisplayName(trimmed);
+      onAccountNameChange?.();
       setAccountSaved(true);
       setTimeout(() => setAccountSaved(false), 2000);
     } catch (error) {
       console.error('Failed to update account name', error);
+      setAccountError(t('settings.accountNameSaveError'));
     } finally {
       setAccountSaving(false);
     }
@@ -133,160 +153,221 @@ function ProfileSection({
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const hasAccountName = session?.user.displayName && session.user.displayName.trim().length > 0;
-  const canEditAccountName = session && session.role !== 'EMPLOYEE';
+  const roleLine = session && (
+    <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+      <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.yourRole')}</span>
+      <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t(`role.${(session.role ?? '').toLowerCase()}`)}</span>
+    </div>
+  );
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-      {/* Nombre que se ve en la cabecera/calendario */}
-      <div style={{ 
-        padding: 'var(--space-md)', 
-        borderRadius: 'var(--radius-lg)', 
-        background: 'var(--info-bg)', 
-        border: '1px solid var(--info-border)',
-        fontSize: '0.8rem',
-        color: 'var(--color-accent)'
-      }}>
-        <strong>{t('settings.nameSectionTitle')}</strong>
-        <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.nameSectionDesc')}</p>
-      </div>
+  const restartOnboardingBlock = onRestartOnboarding && (
+    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+      <button className="btn-outline" style={{ padding: '8px 14px', minHeight: 'auto' }} onClick={onRestartOnboarding}>
+        {t('onboarding.restart')}
+      </button>
+    </div>
+  );
+
+  const importPrefsBlock = (
+    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-lg)' }}>
+      <h3 style={{ margin: '0 0 var(--space-md)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.importPrefsTitle')}</h3>
+      <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+        {t('settings.importPrefsDesc')}
+      </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
         <div>
-          <label style={labelStyle}>{t('settings.yourName')}</label>
+          <label style={labelStyle}>{t('settings.identifiers')}</label>
           <input
             className="modal-input"
-            value={name}
-            placeholder={t('settings.yourNamePlaceholder')}
-            onChange={(e) => setName(e.target.value)}
-            disabled={saving}
+            value={identifiersText}
+            placeholder={t('settings.identifiersPlaceholder')}
+            onChange={(e) => setIdentifiersText(e.target.value)}
           />
-          {employee && (
+          <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+            {t('settings.identifiersHint')}
+          </p>
+        </div>
+        <div>
+          <SearchableSelect
+            label={t('settings.timezone')}
+            value={timezone}
+            onChange={setTimezone}
+            searchPlaceholder={t('settings.searchPlaceholder')}
+            emptyMessage={t('settings.noTimezones')}
+            ariaLabel={t('settings.timezone')}
+            options={(() => {
+              const baseOptions = TIMEZONE_OPTIONS.map((option) => ({
+                value: option.id,
+                label: getTimezoneLabel(option.id, locale),
+                searchText: `${option.id} ${getTimezoneLabel(option.id, locale)}`.toLowerCase(),
+              }));
+              const currentValue = timezone;
+              const hasCurrent = baseOptions.some((opt) => opt.value === currentValue);
+              if (!hasCurrent && currentValue) {
+                return [
+                  { value: currentValue, label: currentValue, searchText: currentValue.toLowerCase() },
+                  ...baseOptions,
+                ];
+              }
+              return baseOptions;
+            })()}
+          />
+        </div>
+        <button className="btn-gold" style={{ alignSelf: 'flex-start', width: 'fit-content' }} onClick={handleSaveProfile}>
+          {saved ? t('settings.saved') : t('settings.saveImportPrefs')}
+        </button>
+      </div>
+    </div>
+  );
+
+  // Authenticated user WITHOUT a linked employee (ADMIN/MANAGER): account
+  // data only — nothing employee-related is rendered in this case.
+  if (session && !hasEmployee) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+        <div style={{
+          padding: 'var(--space-md)',
+          borderRadius: 'var(--radius-lg)',
+          background: 'var(--info-bg)',
+          border: '1px solid var(--info-border)',
+          fontSize: '0.8rem',
+          color: 'var(--color-accent)'
+        }}>
+          <strong>{t('settings.nameSectionTitle')}</strong>
+          <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.nameSectionDesc')}</p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          <div>
+            <label style={labelStyle}>{t('settings.accountDisplayName')}</label>
+            <input
+              className="modal-input"
+              value={accountName}
+              placeholder={t('settings.accountDisplayNamePlaceholder')}
+              onChange={(e) => setAccountName(e.target.value)}
+              disabled={accountSaving}
+            />
+          </div>
+          {roleLine}
+          <div>
+            <button
+              className="btn-gold"
+              style={{ width: 'fit-content' }}
+              onClick={handleSaveAccount}
+              disabled={accountSaving || !accountName.trim() || accountName.trim() === session.user.displayName}
+            >
+              {accountSaving ? t('auth.working') : accountSaved ? t('settings.saved') : t('settings.saveChanges')}
+            </button>
+            {accountError && <p role="alert" style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--danger)' }}>{accountError}</p>}
+          </div>
+        </div>
+
+        {restartOnboardingBlock}
+      </div>
+    );
+  }
+
+  // Authenticated user WITH a linked employee (any role): the profile is the
+  // employee identity. The account displayName stays internal-only here.
+  if (session && hasEmployee) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          <div>
+            <label style={labelStyle}>{t('settings.employeeName')}</label>
+            <input
+              className="modal-input"
+              value={name}
+              placeholder={t('settings.yourNamePlaceholder')}
+              onChange={(e) => setName(e.target.value)}
+              disabled={saving}
+            />
             <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
               {t('settings.nameEmployeeHint')}
             </p>
+          </div>
+          {employee?.externalEmployeeId && (
+            <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap', fontSize: '0.85rem' }}>
+              <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.employeeIds')}</span>
+              <span style={{ fontWeight: 600 }}>{employee.externalEmployeeId}</span>
+            </div>
           )}
-        </div>
-
-        {canEditAccountName && hasAccountName && (
-                  <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
-                    <label style={labelStyle}>{t('settings.accountDisplayName')}</label>
-                    <input
-                      className="modal-input"
-                      value={session.user.displayName}
-                      placeholder={t('settings.accountDisplayNamePlaceholder')}
-                      onChange={() => { /* read-only display of account name */ }}
-                      disabled
-                    />
-                    <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
-                      {t('settings.accountDisplayNameHint')}
-                    </p>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
-          <button 
-            className="btn-gold" 
-            style={{ width: 'fit-content' }} 
-            onClick={handleSaveName}
-            disabled={saving || !name.trim() || name === employee?.name}
-          >
-            {saving ? t('auth.working') : saved ? t('settings.saved') : t('settings.saveName')}
-          </button>
-          {canEditAccountName && hasAccountName && (
-            <button 
-              className="btn-outline" 
-              style={{ width: 'fit-content' }} 
-              onClick={handleSaveAccount}
-              disabled={accountSaving}
+          {roleLine}
+          <div>
+            <button
+              className="btn-gold"
+              style={{ width: 'fit-content' }}
+              onClick={handleSaveName}
+              disabled={saving || !name.trim() || name === employee?.name}
             >
-              {accountSaving ? t('auth.working') : accountSaved ? t('settings.saved') : t('settings.saveAccount')}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Preferencias de importación (solo locale storage) */}
-      <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-lg)' }}>
-        <h3 style={{ margin: '0 0 var(--space-md)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.importPrefsTitle')}</h3>
-        <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-          {t('settings.importPrefsDesc')}
-        </p>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <div>
-            <label style={labelStyle}>{t('settings.identifiers')}</label>
-            <input
-              className="modal-input"
-              value={identifiersText}
-              placeholder={t('settings.identifiersPlaceholder')}
-              onChange={(e) => setIdentifiersText(e.target.value)}
-            />
-            <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-              {t('settings.identifiersHint')}
-            </p>
-          </div>
-          <div>
-            <SearchableSelect
-              label={t('settings.timezone')}
-              value={timezone}
-              onChange={setTimezone}
-              searchPlaceholder={t('settings.searchPlaceholder')}
-              emptyMessage={t('settings.noTimezones')}
-              ariaLabel={t('settings.timezone')}
-              options={(() => {
-                const baseOptions = TIMEZONE_OPTIONS.map((option) => ({
-                  value: option.id,
-                  label: getTimezoneLabel(option.id, locale),
-                  searchText: `${option.id} ${getTimezoneLabel(option.id, locale)}`.toLowerCase(),
-                }));
-                const currentValue = timezone;
-                const hasCurrent = baseOptions.some((opt) => opt.value === currentValue);
-                if (!hasCurrent && currentValue) {
-                  return [
-                    { value: currentValue, label: currentValue, searchText: currentValue.toLowerCase() },
-                    ...baseOptions,
-                  ];
-                }
-                return baseOptions;
-              })()}
-            />
-          </div>
-          <button className="btn-gold" style={{ alignSelf: 'flex-start', width: 'fit-content' }} onClick={handleSaveProfile}>
-            {saved ? t('settings.saved') : t('settings.saveImportPrefs')}
-          </button>
-        </div>
-
-        {onRestartOnboarding && (
-          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)', marginTop: 'var(--space-lg)' }}>
-            <button className="btn-outline" style={{ padding: '8px 14px', minHeight: 'auto' }} onClick={onRestartOnboarding}>
-              {t('onboarding.restart')}
+              {saving ? t('auth.working') : saved ? t('settings.saved') : t('settings.saveName')}
             </button>
           </div>
-        )}
+        </div>
+
+        {importPrefsBlock}
+        {restartOnboardingBlock}
       </div>
+    );
+  }
+
+  // Guest (local-first, no session): import preferences only.
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+      {importPrefsBlock}
+      {restartOnboardingBlock}
     </div>
   );
 }
 
-function TeamSection({ 
-  session, 
+function TeamSection({
+  session,
   employees,
   selectedEmployeeId,
-}: { 
+  onOpenMembers,
+  onOrganizationReset,
+}: {
   session: SettingsModalProps['session'];
   employees: RemoteEmployee[];
   selectedEmployeeId: string | null;
+  onOpenMembers?: () => void;
+  onOrganizationReset?: () => void;
 }) {
   const { t } = useI18n();
   const activeMembership = session?.memberships.find(m => m.organizationId === session.organizationId);
+  const [isResetOpen, setIsResetOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState('');
+
+  const closeResetModal = () => {
+    setIsResetOpen(false);
+    setResetConfirmText('');
+    setResetError('');
+  };
+
+  const handleResetConfirm = async () => {
+    setResetBusy(true);
+    setResetError('');
+    try {
+      await resetOrganization();
+      closeResetModal();
+      onOrganizationReset?.();
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : t('settings.resetFailed'));
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-      <div style={{ 
-        padding: 'var(--space-md)', 
-        borderRadius: 'var(--radius-lg)', 
-        background: 'var(--info-bg)', 
+      <div style={{
+        padding: 'var(--space-md)',
+        borderRadius: 'var(--radius-lg)',
+        background: 'var(--info-bg)',
         border: '1px solid var(--info-border)',
         fontSize: '0.8rem',
         color: 'var(--color-accent)'
@@ -315,13 +396,13 @@ function TeamSection({
             <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t(`role.${(session?.role ?? '').toLowerCase()}`)}</span>
           </div>
         </div>
-        
+
         <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
           <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.teamManagement')}</h3>
           <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
             {t('settings.teamManagementDesc')}
           </p>
-          <button className="btn-gold" style={{ width: 'fit-content' }}>
+          <button className="btn-gold" style={{ width: 'fit-content' }} onClick={onOpenMembers}>
             {t('settings.openMembers')}
           </button>
         </div>
@@ -355,8 +436,68 @@ function TeamSection({
             />
           </div>
         )}
+
+        {session?.role === 'ADMIN' && (
+          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+            <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--danger)' }}>{t('settings.dangerZoneTitle')}</h3>
+            <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+              {t('settings.resetDesc')}
+            </p>
+            <button
+              className="btn-outline"
+              style={{ width: 'fit-content', padding: '8px 14px', minHeight: 'auto', borderColor: 'var(--danger-border)', color: 'var(--danger)' }}
+              onClick={() => setIsResetOpen(true)}
+            >
+              {t('settings.resetAction')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
+
+    <ModalShell
+      isOpen={isResetOpen}
+      onClose={closeResetModal}
+      title={t('settings.resetModalTitle')}
+      blocking
+      closeAriaLabel={t('common.close')}
+      footer={
+        <>
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={closeResetModal}
+            disabled={resetBusy}
+            style={{ padding: '10px 14px', fontWeight: 700 }}
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => void handleResetConfirm()}
+            disabled={resetBusy || resetConfirmText !== t('settings.resetConfirmWord')}
+            style={{ padding: '10px 14px', fontWeight: 800, borderColor: 'var(--danger-border)', color: 'var(--danger)' }}
+          >
+            {resetBusy ? t('auth.working') : t('settings.resetConfirmAction')}
+          </button>
+        </>
+      }
+    >
+      <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+        {t('settings.resetModalWarning')}
+      </p>
+      <label style={labelStyle}>{t('settings.resetConfirmLabel')}</label>
+      <input
+        className="modal-input"
+        value={resetConfirmText}
+        placeholder={t('settings.resetConfirmWord')}
+        onChange={(event) => setResetConfirmText(event.target.value)}
+        disabled={resetBusy}
+      />
+      {resetError && <p role="alert" style={{ margin: '8px 0 0', fontSize: '0.8rem', color: 'var(--danger)' }}>{resetError}</p>}
+    </ModalShell>
+    </>
   );
 }
 
@@ -524,14 +665,17 @@ function ShiftTypesSection() {
   );
 }
 
-export const SettingsModal = ({ 
-  isOpen, 
-  onClose, 
-  onRestartOnboarding, 
-  session, 
+export const SettingsModal = ({
+  isOpen,
+  onClose,
+  onRestartOnboarding,
+  session,
   employees = [],
   selectedEmployeeId = null,
   onEmployeeNameChange,
+  onOpenMembers,
+  onAccountNameChange,
+  onOrganizationReset,
 }: SettingsModalProps) => {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('profile');
@@ -587,6 +731,7 @@ export const SettingsModal = ({
             onSaveProfile={handleSaveProfile}
             onRestartOnboarding={onRestartOnboarding}
             onEmployeeNameChange={handleEmployeeNameChange}
+            onAccountNameChange={onAccountNameChange}
           />
         );
       case 'team':
@@ -595,6 +740,8 @@ export const SettingsModal = ({
             session={session}
             employees={employees}
             selectedEmployeeId={selectedEmployeeId}
+            onOpenMembers={onOpenMembers}
+            onOrganizationReset={onOrganizationReset}
           />
         );
       case 'shiftTypes':

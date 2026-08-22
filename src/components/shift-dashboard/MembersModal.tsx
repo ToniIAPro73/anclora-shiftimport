@@ -4,6 +4,7 @@ import {
   addRemoteMember,
   createRemoteEmployee,
   deleteRemoteEmployee,
+  linkEmployeeUser,
   listRemoteMembers,
   RemoteMember,
   removeRemoteMember,
@@ -81,6 +82,10 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
   const [editName, setEditName] = useState('');
   const [editExternalId, setEditExternalId] = useState('');
 
+  // Inline "link existing user" row (Bloque: user↔employee link management).
+  const [linkingEmployeeId, setLinkingEmployeeId] = useState<string | null>(null);
+  const [linkingUserId, setLinkingUserId] = useState('');
+
   // Bulk Users CSV.
   const usersFileRef = useRef<HTMLInputElement>(null);
   const [usersPreview, setUsersPreview] = useState<UserPreviewRow[] | null>(null);
@@ -117,6 +122,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
       setEmployeesResult(null);
       setOpenMenuId(null);
       setEditingEmployeeId(null);
+      setLinkingEmployeeId(null);
     }
   }, [isOpen, reload]);
 
@@ -234,6 +240,24 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
     void run(() => updateRemoteEmployee({ id: employee.id, status: 'active' }));
   };
 
+  const startLinkEmployee = (employee: RemoteEmployee) => {
+    setOpenMenuId(null);
+    setLinkingEmployeeId(employee.id);
+    setLinkingUserId('');
+  };
+
+  const handleLinkEmployeeSave = (employee: RemoteEmployee) => {
+    if (!linkingUserId) {
+      return;
+    }
+    // On 409 EMPLOYEE_ALREADY_LINKED / USER_ALREADY_LINKED run() surfaces the
+    // server message in the modal's error area.
+    void run(async () => {
+      await linkEmployeeUser(employee.id, linkingUserId);
+      setLinkingEmployeeId(null);
+    });
+  };
+
   const handleDeleteEmployee = async (employee: RemoteEmployee) => {
     setOpenMenuId(null);
     if (!window.confirm(t('members.deleteConfirm', { name: employee.name }))) {
@@ -280,6 +304,12 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
 
   const unlinkedEmployees = employees.filter(
     (employee) => employee.status === 'active' && !employee.userId,
+  );
+
+  // Members eligible for linking: not linked to any active employee (the
+  // server's USER_ALREADY_LINKED guard stays authoritative either way).
+  const unlinkedMembers = members.filter(
+    (member) => !employees.some((employee) => employee.status === 'active' && employee.userId === member.userId),
   );
 
   // ---------------------------------------------------------- Employees CSV
@@ -646,7 +676,42 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                   padding: '10px 12px', background: 'var(--panel-muted-bg)', fontSize: '0.85rem',
                 }}
               >
-                {editingEmployeeId === employee.id ? (
+                {linkingEmployeeId === employee.id ? (
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
+                    <SearchableSelect
+                      label={t('members.linkUserLabel')}
+                      value={linkingUserId}
+                      onChange={setLinkingUserId}
+                      searchPlaceholder={t('members.searchPlaceholder')}
+                      emptyMessage={t('members.noUnlinkedUsers')}
+                      ariaLabel={t('members.linkUserLabel')}
+                      options={unlinkedMembers.map((member) => ({
+                        value: member.userId,
+                        label: member.displayName || member.email,
+                        searchText: `${member.displayName} ${member.email}`.toLowerCase(),
+                      }))}
+                      style={{ flex: 1, minWidth: '200px' }}
+                    />
+                    <button
+                      type="button"
+                      className="btn-gold"
+                      disabled={busy || !linkingUserId}
+                      onClick={() => handleLinkEmployeeSave(employee)}
+                      style={{ padding: '6px 10px', fontWeight: 800 }}
+                    >
+                      {t('members.linkUserConfirm')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      disabled={busy}
+                      onClick={() => setLinkingEmployeeId(null)}
+                      style={{ padding: '6px 10px', fontWeight: 700 }}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                ) : editingEmployeeId === employee.id ? (
                   <form onSubmit={(event) => handleEditEmployeeSave(employee, event)} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
                     <input
                       className="modal-input"
@@ -684,6 +749,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                       {t(employee.status === 'active' ? 'members.statusActive' : 'members.statusInactive')}
                     </span>
                     {!employee.userId && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.noLink')}</span>}
+                    {employee.userId && members.some((member) => member.userId === employee.userId) && (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                        {members.find((member) => member.userId === employee.userId)?.email}
+                      </span>
+                    )}
                     <div className="employee-menu" data-employee-menu>
                       <button
                         type="button"
@@ -701,6 +771,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                           <button type="button" role="menuitem" className="employee-menu-item" onClick={() => startEditEmployee(employee)}>
                             {t('common.edit')}
                           </button>
+                          {!employee.userId && (
+                            <button type="button" role="menuitem" className="employee-menu-item" onClick={() => startLinkEmployee(employee)}>
+                              {t('members.linkExistingUser')}
+                            </button>
+                          )}
                           {employee.status === 'active' ? (
                             <button type="button" role="menuitem" className="employee-menu-item" onClick={() => handleDeactivateEmployee(employee)}>
                               {t('members.deactivateAction')}

@@ -1091,6 +1091,28 @@ function App() {
             void hydrateAuthenticated(session);
           }
         }}
+        onOpenMembers={() => {
+          setIsSettingsOpen(false);
+          setIsMembersOpen(true);
+        }}
+        onAccountNameChange={() => {
+          // The session object is held in App state and hydrateAuthenticated
+          // does not refresh it — re-fetch so the MonthHeader displayName
+          // fallback (and any other session-driven UI) updates immediately.
+          void (async () => {
+            const fresh = await fetchSession();
+            if (fresh) {
+              setSession(fresh);
+            }
+          })();
+        }}
+        onOrganizationReset={() => {
+          setIsSettingsOpen(false);
+          setSelectedEmployeeId(null);
+          if (session) {
+            void hydrateAuthenticated(session);
+          }
+        }}
       />
 
       <OnboardingModal

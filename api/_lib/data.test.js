@@ -11,6 +11,7 @@ import {
   listMembers,
   listShifts,
   removeMember,
+  resetOrganization,
   updateEmployee,
   updateMemberRole,
   upsertShifts,
@@ -75,6 +76,13 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve([{
         count: String(employees.filter((e) => e.organization_id === values[0] && e.status === 'active').length),
       }]);
+    }
+    // 1:1 link guard (updateEmployee / addMember): any OTHER employee in the
+    // org already linked to this user? values: [organizationId, userId, excludeEmployeeId]
+    if (text.startsWith('SELECT id FROM employees') && text.includes('user_id')) {
+      return Promise.resolve(employees.filter(
+        (e) => e.organization_id === values[0] && e.user_id === values[1] && e.id !== values[2],
+      ));
     }
     // assertEmployeeInOrg (values: [id, organizationId])
     if (text.startsWith('SELECT id FROM employees')) {
@@ -175,6 +183,14 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       imports.push(row);
       return Promise.resolve([row]);
     }
+    // resetOrganization: org-scoped delete-all (values: [organizationId])
+    if (text.startsWith('DELETE FROM imports')) {
+      const removed = imports.filter((i) => i.organization_id === values[0]);
+      for (const row of removed) {
+        imports.splice(imports.indexOf(row), 1);
+      }
+      return Promise.resolve(removed.map((row) => ({ id: row.id })));
+    }
     if (text.includes('FROM imports')) {
       return Promise.resolve(imports.filter((i) => i.organization_id === values[0]));
     }
@@ -185,6 +201,14 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve([employeeRow(values[5] ?? 'emp-a1', ORG_A, { name: values[0] })]);
     }
     if (text.startsWith('DELETE FROM employees')) {
+      // resetOrganization: org-scoped delete-all (values: [organizationId])
+      if (!text.includes('WHERE id')) {
+        const removed = employees.filter((e) => e.organization_id === values[0]);
+        for (const row of removed) {
+          employees.splice(employees.indexOf(row), 1);
+        }
+        return Promise.resolve(removed.map((row) => ({ id: row.id })));
+      }
       const hasShifts = shifts.some((s) => s.employee_id === values[0]);
       if (hasShifts) {
         return Promise.resolve([]);
@@ -197,11 +221,26 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve([]);
     }
     if (text.startsWith('DELETE FROM shifts')) {
+      // resetOrganization: org-scoped delete-all (values: [organizationId])
+      if (!text.includes('WHERE id')) {
+        const removed = shifts.filter((s) => s.organization_id === values[0]);
+        for (const row of removed) {
+          shifts.splice(shifts.indexOf(row), 1);
+        }
+        return Promise.resolve(removed.map((row) => ({ id: row.id })));
+      }
       return Promise.resolve([{ id: values[0] }]);
     }
     return Promise.resolve([]);
   };
-  return { sql, calls, employees };
+  // resetOrganization runs its DELETEs through the non-interactive Neon HTTP
+  // transaction; the fake only needs to flag usage and run the queries.
+  const state = { transactionUsed: false };
+  sql.transaction = async (fn) => {
+    state.transactionUsed = true;
+    return Promise.all(fn(sql));
+  };
+  return { sql, calls, employees, state };
 }
 
 // plan: 'team' (unlimited) by default so pre-existing tests are unaffected
@@ -787,5 +826,154 @@ describe('membership management (B2B minimal)', () => {
       .rejects.toMatchObject({ status: 400 }); // last ADMIN
     const removed = await removeMember(two.sql, adminCtx, { userId: 'user-mgr' });
     expect(removed.userId).toBe('user-mgr');
+  });
+});
+
+describe('1:1 user ↔ employee link guards (updateEmployee)', () => {
+  const memberFixtures = () => ({
+    employees: [employeeRow(EMP_A1, ORG_A)],
+    memberships: [
+      { user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' },
+      { user_id: USER_EMP, organization_id: ORG_A, role: 'EMPLOYEE' },
+    ],
+  });
+
+  it('links a free employee to a free member user', async () => {
+    const { sql, calls } = makeFakeSql(memberFixtures());
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, userId: USER_EMP });
+    const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(update.values[3]).toBe(USER_EMP);
+  });
+
+  it('relinking an already-linked employee to a different user → 409 EMPLOYEE_ALREADY_LINKED', async () => {
+    const { sql, calls } = makeFakeSql({
+      ...memberFixtures(),
+      employees: [employeeRow(EMP_A1, ORG_A, { user_id: 'user-old' })],
+    });
+    await expect(updateEmployee(sql, adminCtx, { id: EMP_A1, userId: USER_EMP }))
+      .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_ALREADY_LINKED' });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+
+  it('linking a user already linked to another employee → 409 USER_ALREADY_LINKED', async () => {
+    const { sql, calls } = makeFakeSql({
+      ...memberFixtures(),
+      employees: [employeeRow(EMP_A1, ORG_A), employeeRow(EMP_A2, ORG_A, { user_id: USER_EMP })],
+    });
+    await expect(updateEmployee(sql, adminCtx, { id: EMP_A1, userId: USER_EMP }))
+      .rejects.toMatchObject({ status: 409, code: 'USER_ALREADY_LINKED' });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+
+  it('relinking to the SAME user is idempotent, not a conflict', async () => {
+    const { sql, calls } = makeFakeSql({
+      ...memberFixtures(),
+      employees: [employeeRow(EMP_A1, ORG_A, { user_id: USER_EMP })],
+    });
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, userId: USER_EMP });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(true);
+  });
+
+  it('unlink (userId null) stays allowed with no link guards', async () => {
+    const { sql, calls } = makeFakeSql({
+      employees: [employeeRow(EMP_A1, ORG_A, { user_id: USER_EMP })],
+      memberships: [],
+    });
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, userId: null });
+    const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(update.values[3]).toBeNull();
+  });
+});
+
+describe('1:1 link guards (addMember employeeId)', () => {
+  const fixtures = (employees) => ({
+    employees,
+    memberships: [{ user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' }],
+    users: [{ id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' }],
+  });
+  const fakeHash = (password) => `hashed:${password}`;
+
+  it('links a free employee to the newly added member user', async () => {
+    const { sql, calls } = makeFakeSql(fixtures([employeeRow(EMP_A1, ORG_A)]));
+    const added = await addMember(sql, adminCtx, {
+      email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123', employeeId: EMP_A1,
+    }, fakeHash);
+    const link = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(link.values).toEqual([added.userId, EMP_A1, ORG_A]);
+  });
+
+  it('linking to an occupied employee → 409 EMPLOYEE_ALREADY_LINKED, no UPDATE', async () => {
+    const { sql, calls } = makeFakeSql(fixtures([employeeRow(EMP_A1, ORG_A, { user_id: 'user-old' })]));
+    await expect(addMember(sql, adminCtx, {
+      email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123', employeeId: EMP_A1,
+    }, fakeHash)).rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_ALREADY_LINKED' });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+
+  it('linking when the new user is already linked to another employee → 409 USER_ALREADY_LINKED', async () => {
+    const users = [{ id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' }];
+    // The fake's INSERT INTO users assigns id `user-new-${users.length}`.
+    const newUserId = `user-new-${users.length}`;
+    const { sql, calls } = makeFakeSql(fixtures([
+      employeeRow(EMP_A1, ORG_A),
+      employeeRow(EMP_A2, ORG_A, { user_id: newUserId }),
+    ]));
+    await expect(addMember(sql, adminCtx, {
+      email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123', employeeId: EMP_A1,
+    }, fakeHash)).rejects.toMatchObject({ status: 409, code: 'USER_ALREADY_LINKED' });
+    expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+});
+
+describe('organization reset', () => {
+  const resetFixtures = () => ({
+    employees: [
+      employeeRow(EMP_A1, ORG_A),
+      employeeRow(EMP_A2, ORG_A),
+      employeeRow('emp-b1', ORG_B),
+    ],
+    imports: [
+      { id: 'imp-a1', organization_id: ORG_A },
+      { id: 'imp-b1', organization_id: ORG_B },
+    ],
+    shifts: [
+      { id: 's1', organization_id: ORG_A, employee_id: EMP_A1 },
+      { id: 's2', organization_id: ORG_A, employee_id: EMP_A2 },
+      { id: 's3', organization_id: ORG_B, employee_id: 'emp-b1' },
+    ],
+  });
+
+  it('deletes shifts/imports/employees of ctx.organizationId only, in FK-safe order, inside a transaction', async () => {
+    const fixtures = resetFixtures();
+    const { sql, calls, state } = makeFakeSql(fixtures);
+    const result = await resetOrganization(sql, adminCtx);
+
+    expect(result).toEqual({ reset: true, deleted: { shifts: 2, imports: 1, employees: 2 } });
+    expect(state.transactionUsed).toBe(true);
+
+    const deletes = calls.filter((call) => call.text.startsWith('DELETE FROM'));
+    expect(deletes.map((call) => call.text.split(' ')[2])).toEqual(['shifts', 'imports', 'employees']);
+    for (const call of deletes) {
+      expect(call.text).toContain('organization_id');
+      expect(call.values).toEqual([ORG_A]);
+    }
+
+    // Tenant isolation: org B's rows survive untouched.
+    expect(fixtures.employees.map((e) => e.organization_id)).toEqual([ORG_B]);
+    expect(fixtures.imports.map((i) => i.organization_id)).toEqual([ORG_B]);
+    expect(fixtures.shifts.map((s) => s.organization_id)).toEqual([ORG_B]);
+  });
+
+  it('MANAGER/EMPLOYEE cannot reset (403) and nothing is deleted', async () => {
+    const fixtures = resetFixtures();
+    const { sql, state } = makeFakeSql(fixtures);
+    await expect(resetOrganization(sql, { ...adminCtx, role: 'MANAGER' }))
+      .rejects.toMatchObject({ status: 403 });
+    await expect(resetOrganization(sql, employeeCtx))
+      .rejects.toMatchObject({ status: 403 });
+    expect(state.transactionUsed).toBe(false);
+    expect(fixtures.employees).toHaveLength(3);
+    expect(fixtures.imports).toHaveLength(2);
+    expect(fixtures.shifts).toHaveLength(3);
   });
 });

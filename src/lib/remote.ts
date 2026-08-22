@@ -142,6 +142,18 @@ export async function updateOwnEmployeeName(name: string): Promise<RemoteEmploye
   return payload.employee;
 }
 
+/** ADMIN only: link an existing org member user to a free employee (or
+ * unlink with null). The server rejects with 409 `EMPLOYEE_ALREADY_LINKED`
+ * when the employee already has another user and 409 `USER_ALREADY_LINKED`
+ * when the user already has another employee. */
+export async function linkEmployeeUser(employeeId: string, userId: string | null): Promise<RemoteEmployee> {
+  const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees', {
+    method: 'PATCH',
+    body: JSON.stringify({ id: employeeId, userId }),
+  });
+  return payload.employee;
+}
+
 /** Hard delete (ADMIN only). The server rejects with 409
  * `EMPLOYEE_HAS_HISTORY` when the employee has shift history (kept; the
  * caller should offer deactivation instead) and 400 `LAST_ADMIN` when the
@@ -249,4 +261,11 @@ export async function removeRemoteMember(userId: string): Promise<void> {
     method: 'DELETE',
     body: JSON.stringify({ userId }),
   });
+}
+
+/** ADMIN only: restore the organization to its initial operational state
+ * (deletes shifts, imports, employees and user↔employee links; keeps the
+ * organization and the admin account). Org-scoped, irreversible. */
+export async function resetOrganization(): Promise<{ reset: boolean; deleted: { shifts: number; imports: number; employees: number } }> {
+  return apiFetch('/api/organizations/reset', { method: 'POST' });
 }
