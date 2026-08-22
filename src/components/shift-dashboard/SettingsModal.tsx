@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Settings, X, User, Briefcase, Building2 } from 'lucide-react';
+import { Settings, X, User, Users } from 'lucide-react';
 import { DEFAULT_USER_PROFILE, loadUserProfile, saveUserProfile, UserProfile } from '../../lib/profile';
 import {
   DEFAULT_SHIFT_TYPES,
@@ -23,7 +23,7 @@ interface SettingsModalProps {
   onClose: () => void;
   /** Replays the first-run guide (resets the onboarding record and opens it). */
   onRestartOnboarding?: () => void;
-  /** Current authenticated session (for user-scoped profile). */
+  /** Current authenticated session. */
   session: { user: { id: string; email: string; displayName: string }; role: SessionInfo['role']; employeeId: string | null; organizationId: string | null; memberships: SessionInfo['memberships'] } | null;
   /** Org employees for employee selector (ADMIN/MANAGER). */
   employees?: RemoteEmployee[];
@@ -44,69 +44,75 @@ const labelStyle: React.CSSProperties = {
 
 const NEW_TYPE_DRAFT = { id: '', label: '', shortLabel: '', color: '#3b82f6', countsAsWork: true };
 
-type Tab = 'account' | 'employee' | 'shiftTypes' | 'organization';
+type Tab = 'profile' | 'team' | 'shiftTypes';
 
 function getAvailableTabs(session: SettingsModalProps['session']): Tab[] {
-  if (!session) return ['account'];
+  if (!session) return ['profile'];
   
-  const { role, employeeId, memberships } = session;
+  const { role, memberships } = session;
   const activeMembership = memberships.find(m => m.organizationId === session.organizationId);
-  const isPersonalOrg = activeMembership?.organizationType === 'personal';
   const isCompanyOrg = activeMembership?.organizationType === 'company';
   
   if (role === 'EMPLOYEE') {
-    // Employee: account + their employee record
-    return ['account', 'employee'];
+    return ['profile'];
   }
   
   // ADMIN/MANAGER
-  const tabs: Tab[] = ['account'];
-  
-  if (employeeId && isPersonalOrg) {
-    // Admin in personal org: also has their own employee record
-    tabs.push('employee');
-  }
+  const tabs: Tab[] = ['profile'];
   
   if (isCompanyOrg) {
-    // Admin in company org: organization management
-    tabs.push('organization');
+    tabs.push('team');
   }
   
-  // Shift types always available for ADMIN/MANAGER
   tabs.push('shiftTypes');
   
   return tabs;
 }
 
-function AccountSection({ 
+function ProfileSection({ 
   session, 
+  employee,
   userProfile,
   onSaveProfile,
-  onRestartOnboarding 
+  onRestartOnboarding,
+  onEmployeeNameChange,
 }: { 
   session: SettingsModalProps['session'];
+  employee: RemoteEmployee | null;
   userProfile: UserProfile;
   onSaveProfile: (profile: UserProfile) => void;
   onRestartOnboarding?: () => void;
+  onEmployeeNameChange: () => void;
 }) {
-  const { t } = useI18n();
-  const [displayName, setDisplayName] = useState(session?.user.displayName ?? '');
+  const { t, locale } = useI18n();
+  const [name, setName] = useState(employee?.name ?? '');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [accountSaved, setAccountSaved] = useState(false);
   const [accountSaving, setAccountSaving] = useState(false);
+  const [identifiersText, setIdentifiersText] = useState(() => userProfile.employeeIdentifiers.join(', '));
+  const [timezone, setTimezone] = useState(userProfile.timezone);
 
-  const handleSaveProfile = () => {
-    onSaveProfile({ ...userProfile, displayName });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSaveName = async () => {
+    if (!name.trim() || !employee) return;
+    setSaving(true);
+    try {
+      await updateOwnEmployeeName(name.trim());
+      onEmployeeNameChange();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error('Failed to update employee name', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveAccount = async () => {
-    if (!session || !displayName.trim()) return;
+    if (!session || !name.trim()) return;
     setAccountSaving(true);
     try {
-      await updateUserDisplayName(displayName.trim());
-      // Update session user displayName optimistically
+      await updateUserDisplayName(name.trim());
       setAccountSaved(true);
       setTimeout(() => setAccountSaved(false), 2000);
     } catch (error) {
@@ -116,8 +122,23 @@ function AccountSection({
     }
   };
 
+  const handleSaveProfile = () => {
+    const next: UserProfile = {
+      ...userProfile,
+      employeeIdentifiers: identifiersText.split(',').map((value) => value.trim()).filter(Boolean),
+      timezone,
+    };
+    onSaveProfile(next);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const hasAccountName = session?.user.displayName && session.user.displayName.trim().length > 0;
+  const canEditAccountName = session && session.role !== 'EMPLOYEE';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+      {/* Nombre que se ve en la cabecera/calendario */}
       <div style={{ 
         padding: 'var(--space-md)', 
         borderRadius: 'var(--radius-lg)', 
@@ -126,49 +147,118 @@ function AccountSection({
         fontSize: '0.8rem',
         color: 'var(--color-accent)'
       }}>
-        <strong>{t('settings.accountSectionTitle')}</strong>
-        <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.accountSectionDesc')}</p>
+        <strong>{t('settings.nameSectionTitle')}</strong>
+        <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.nameSectionDesc')}</p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
         <div>
-          <label style={labelStyle}>{t('settings.accountDisplayName')}</label>
+          <label style={labelStyle}>{t('settings.yourName')}</label>
           <input
             className="modal-input"
-            value={displayName}
-            placeholder={t('settings.accountDisplayNamePlaceholder')}
-            onChange={(e) => setDisplayName(e.target.value)}
-            disabled={accountSaving}
+            value={name}
+            placeholder={t('settings.yourNamePlaceholder')}
+            onChange={(e) => setName(e.target.value)}
+            disabled={saving}
           />
-          <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
-            {t('settings.accountDisplayNameHint')}
-          </p>
+          {employee && (
+            <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
+              {t('settings.nameEmployeeHint')}
+            </p>
+          )}
         </div>
-        
-        <button 
-          className="btn-gold" 
-          style={{ alignSelf: 'flex-start', width: 'fit-content' }} 
-          onClick={handleSaveAccount}
-          disabled={accountSaving || !displayName.trim() || displayName === session?.user.displayName}
-        >
-          {accountSaving ? t('auth.working') : accountSaved ? t('settings.saved') : t('settings.saveAccount')}
-        </button>
+
+        {canEditAccountName && hasAccountName && (
+                  <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+                    <label style={labelStyle}>{t('settings.accountDisplayName')}</label>
+                    <input
+                      className="modal-input"
+                      value={session.user.displayName}
+                      placeholder={t('settings.accountDisplayNamePlaceholder')}
+                      onChange={() => { /* read-only display of account name */ }}
+                      disabled
+                    />
+                    <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
+                      {t('settings.accountDisplayNameHint')}
+                    </p>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+          <button 
+            className="btn-gold" 
+            style={{ width: 'fit-content' }} 
+            onClick={handleSaveName}
+            disabled={saving || !name.trim() || name === employee?.name}
+          >
+            {saving ? t('auth.working') : saved ? t('settings.saved') : t('settings.saveName')}
+          </button>
+          {canEditAccountName && hasAccountName && (
+            <button 
+              className="btn-outline" 
+              style={{ width: 'fit-content' }} 
+              onClick={handleSaveAccount}
+              disabled={accountSaving}
+            >
+              {accountSaving ? t('auth.working') : accountSaved ? t('settings.saved') : t('settings.saveAccount')}
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Preferencias de importación (solo locale storage) */}
       <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-lg)' }}>
-        <h3 style={{ margin: '0 0 var(--space-md)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.localProfileTitle')}</h3>
+        <h3 style={{ margin: '0 0 var(--space-md)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.importPrefsTitle')}</h3>
         <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-          {t('settings.localProfileDesc')}
+          {t('settings.importPrefsDesc')}
         </p>
         
-        <ProfileFields 
-          userProfile={userProfile} 
-          onSave={handleSaveProfile} 
-          saved={saved} 
-        />
-        
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+          <div>
+            <label style={labelStyle}>{t('settings.identifiers')}</label>
+            <input
+              className="modal-input"
+              value={identifiersText}
+              placeholder={t('settings.identifiersPlaceholder')}
+              onChange={(e) => setIdentifiersText(e.target.value)}
+            />
+            <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+              {t('settings.identifiersHint')}
+            </p>
+          </div>
+          <div>
+            <SearchableSelect
+              label={t('settings.timezone')}
+              value={timezone}
+              onChange={setTimezone}
+              searchPlaceholder={t('settings.searchPlaceholder')}
+              emptyMessage={t('settings.noTimezones')}
+              ariaLabel={t('settings.timezone')}
+              options={(() => {
+                const baseOptions = TIMEZONE_OPTIONS.map((option) => ({
+                  value: option.id,
+                  label: getTimezoneLabel(option.id, locale),
+                  searchText: `${option.id} ${getTimezoneLabel(option.id, locale)}`.toLowerCase(),
+                }));
+                const currentValue = timezone;
+                const hasCurrent = baseOptions.some((opt) => opt.value === currentValue);
+                if (!hasCurrent && currentValue) {
+                  return [
+                    { value: currentValue, label: currentValue, searchText: currentValue.toLowerCase() },
+                    ...baseOptions,
+                  ];
+                }
+                return baseOptions;
+              })()}
+            />
+          </div>
+          <button className="btn-gold" style={{ alignSelf: 'flex-start', width: 'fit-content' }} onClick={handleSaveProfile}>
+            {saved ? t('settings.saved') : t('settings.saveImportPrefs')}
+          </button>
+        </div>
+
         {onRestartOnboarding && (
-          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)', marginTop: 'var(--space-lg)' }}>
             <button className="btn-outline" style={{ padding: '8px 14px', minHeight: 'auto' }} onClick={onRestartOnboarding}>
               {t('onboarding.restart')}
             </button>
@@ -179,121 +269,17 @@ function AccountSection({
   );
 }
 
-function ProfileFields({ userProfile, onSave, saved }: { userProfile: UserProfile; onSave: (profile: UserProfile) => void; saved: boolean }) {
-  const { locale, t } = useI18n();
-  const [profile, setProfile] = useState<UserProfile>(userProfile);
-  const [identifiersText, setIdentifiersText] = useState(() => userProfile.employeeIdentifiers.join(', '));
-  const [timezone, setTimezone] = useState(userProfile.timezone);
-
-  const handleSave = () => {
-    const next: UserProfile = {
-      ...profile,
-      employeeIdentifiers: identifiersText.split(',').map((value) => value.trim()).filter(Boolean),
-      timezone,
-    };
-    onSave(next);
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-      <div>
-        <label style={labelStyle}>{t('settings.displayName')}</label>
-        <input
-          className="modal-input"
-          value={profile.displayName}
-          placeholder={t('settings.displayNamePlaceholder')}
-          onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-        />
-        <p style={{ margin: '4px 0 0', fontSize: '0.7rem', color: 'var(--text-subtle)' }}>
-          {t('settings.localDisplayNameHint')}
-        </p>
-      </div>
-      <div>
-        <label style={labelStyle}>{t('settings.identifiers')}</label>
-        <input
-          className="modal-input"
-          value={identifiersText}
-          placeholder={t('settings.identifiersPlaceholder')}
-          onChange={(e) => setIdentifiersText(e.target.value)}
-        />
-        <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-          {t('settings.identifiersHint')}
-        </p>
-      </div>
-      <div>
-        <SearchableSelect
-          label={t('settings.timezone')}
-          value={timezone}
-          onChange={setTimezone}
-          searchPlaceholder={t('settings.searchPlaceholder')}
-          emptyMessage={t('settings.noTimezones')}
-          ariaLabel={t('settings.timezone')}
-          options={(() => {
-            const baseOptions = TIMEZONE_OPTIONS.map((option) => ({
-              value: option.id,
-              label: getTimezoneLabel(option.id, locale),
-              searchText: `${option.id} ${getTimezoneLabel(option.id, locale)}`.toLowerCase(),
-            }));
-            const currentValue = timezone;
-            const hasCurrent = baseOptions.some((opt) => opt.value === currentValue);
-            if (!hasCurrent && currentValue) {
-              return [
-                { value: currentValue, label: currentValue, searchText: currentValue.toLowerCase() },
-                ...baseOptions,
-              ];
-            }
-            return baseOptions;
-          })()}
-        />
-      </div>
-      <button className="btn-gold" style={{ alignSelf: 'flex-start' }} onClick={handleSave}>
-        {saved ? t('settings.saved') : t('settings.saveProfile')}
-      </button>
-    </div>
-  );
-}
-
-function EmployeeSection({ 
-  employee,
-  onNameChange,
+function TeamSection({ 
+  session, 
+  employees,
+  selectedEmployeeId,
 }: { 
-  employee: RemoteEmployee | null;
-  onNameChange: (name: string) => void;
+  session: SettingsModalProps['session'];
+  employees: RemoteEmployee[];
+  selectedEmployeeId: string | null;
 }) {
   const { t } = useI18n();
-  const [name, setName] = useState(employee?.name ?? '');
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const handleSave = async () => {
-    if (!name.trim() || !employee) return;
-    setSaving(true);
-    try {
-      await updateOwnEmployeeName(name.trim());
-      onNameChange(name.trim());
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (error) {
-      console.error('Failed to update employee name', error);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!employee) {
-    return (
-      <div style={{ 
-        padding: 'var(--space-lg)', 
-        borderRadius: 'var(--radius-lg)', 
-        background: 'var(--panel-muted-bg)', 
-        border: '1px solid var(--glass-border)',
-        textAlign: 'center',
-        color: 'var(--text-muted)'
-      }}>
-        {t('settings.noEmployeeLinked')}
-      </div>
-    );
-  }
+  const activeMembership = session?.memberships.find(m => m.organizationId === session.organizationId);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
@@ -305,36 +291,70 @@ function EmployeeSection({
         fontSize: '0.8rem',
         color: 'var(--color-accent)'
       }}>
-        <strong>{t('settings.employeeSectionTitle')}</strong>
-        <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.employeeSectionDesc')}</p>
+        <strong>{t('settings.teamSectionTitle')}</strong>
+        <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.teamSectionDesc')}</p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-        <div>
-          <label style={labelStyle}>{t('settings.employeeName')}</label>
-          <input
-            className="modal-input"
-            value={name}
-            placeholder={t('settings.employeeNamePlaceholder')}
-            onChange={(e) => setName(e.target.value)}
-            disabled={saving}
-          />
+        <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.organizationInfo')}</h3>
+        <div style={{ display: 'grid', gap: 'var(--space-sm)', fontSize: '0.85rem' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgName')}</span>
+            <span style={{ fontWeight: 600 }}>{activeMembership?.organizationName}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgType')}</span>
+            <span>{t(activeMembership?.organizationType === 'personal' ? 'orgSelector.typePersonal' : 'orgSelector.typeCompany')}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgPlan')}</span>
+            <span style={{ textTransform: 'capitalize' }}>{activeMembership?.organizationPlan}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.yourRole')}</span>
+            <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t(`role.${(session?.role ?? '').toLowerCase()}`)}</span>
+          </div>
         </div>
         
-        <div style={{ display: 'flex', gap: 'var(--space-sm)', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
-          <span>{t('settings.employeeExternalId')}: {employee.externalEmployeeId || t('common.none')}</span>
-          <span>{t('settings.employeeStatus')}: {t(`members.status${employee.status === 'active' ? 'Active' : 'Inactive'}`)}</span>
-          {employee.userId && <span>{t('settings.employeeLinked')}</span>}
+        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+          <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.teamManagement')}</h3>
+          <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+            {t('settings.teamManagementDesc')}
+          </p>
+          <button className="btn-gold" style={{ width: 'fit-content' }}>
+            {t('settings.openMembers')}
+          </button>
         </div>
-        
-        <button 
-          className="btn-gold" 
-          style={{ alignSelf: 'flex-start', width: 'fit-content' }} 
-          onClick={handleSave}
-          disabled={saving || !name.trim() || name === employee.name}
-        >
-          {saving ? t('auth.working') : saved ? t('settings.saved') : t('settings.saveEmployee')}
-        </button>
+
+        {/* Selector de empleado activo (para ADMIN ver otros empleados) */}
+        {employees.length > 1 && (
+          <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+            <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.activeEmployee')}</h3>
+            <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+              {t('settings.activeEmployeeDesc')}
+            </p>
+            <SearchableSelect
+              label={t('team.employeeLabel')}
+              value={selectedEmployeeId ?? ''}
+              onChange={(employeeId) => {
+                window.dispatchEvent(new CustomEvent('anclora:select-employee', { detail: employeeId }));
+              }}
+              searchPlaceholder={t('employeeSelect.searchPlaceholder')}
+              emptyMessage={employees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
+              ariaLabel={t('team.employeeLabel')}
+              options={employees
+                .filter((employee) => employee.status === 'active')
+                .map((employee) => ({
+                  value: employee.id,
+                  label: employee.externalEmployeeId
+                    ? `${employee.name} · ID ${employee.externalEmployeeId}`
+                    : employee.name,
+                  searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
+                }))}
+              style={{ width: '100%', maxWidth: '320px' }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -504,115 +524,6 @@ function ShiftTypesSection() {
   );
 }
 
-function OrganizationSection({ 
-  session, 
-  employees,
-  selectedEmployeeId,
-}: { 
-  session: SettingsModalProps['session'];
-  employees: RemoteEmployee[];
-  selectedEmployeeId: string | null;
-}) {
-  const { t } = useI18n();
-  const activeMembership = session?.memberships.find(m => m.organizationId === session.organizationId);
-  const isPersonalOrg = activeMembership?.organizationType === 'personal';
-
-  if (isPersonalOrg) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
-        <div style={{ 
-          padding: 'var(--space-md)', 
-          borderRadius: 'var(--radius-lg)', 
-          background: 'var(--info-bg)', 
-          border: '1px solid var(--info-border)',
-          fontSize: '0.8rem',
-          color: 'var(--color-accent)'
-        }}>
-          <strong>{t('settings.personalOrgTitle')}</strong>
-          <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.personalOrgDesc')}</p>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-          <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.activeEmployee')}</h3>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-            {t('settings.activeEmployeeDesc')}
-          </p>
-          
-          <SearchableSelect
-            label={t('team.employeeLabel')}
-            value={selectedEmployeeId ?? ''}
-            onChange={(employeeId) => {
-              window.dispatchEvent(new CustomEvent('anclora:select-employee', { detail: employeeId }));
-            }}
-            searchPlaceholder={t('employeeSelect.searchPlaceholder')}
-            emptyMessage={employees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
-            ariaLabel={t('team.employeeLabel')}
-            options={employees
-              .filter((employee) => employee.status === 'active')
-              .map((employee) => ({
-                value: employee.id,
-                label: employee.externalEmployeeId
-                  ? `${employee.name} · ID ${employee.externalEmployeeId}`
-                  : employee.name,
-                searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
-              }))}
-            style={{ width: '100%', maxWidth: '320px' }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Company org: show organization info + members link
-  return (
-    <>
-      <div style={{ 
-        padding: 'var(--space-md)', 
-        borderRadius: 'var(--radius-lg)', 
-        background: 'var(--info-bg)', 
-        border: '1px solid var(--info-border)',
-        fontSize: '0.8rem',
-        color: 'var(--color-accent)'
-      }}>
-        <strong>{t('settings.companyOrgTitle')}</strong>
-        <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.companyOrgDesc')}</p>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-        <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.organizationInfo')}</h3>
-        <div style={{ display: 'grid', gap: 'var(--space-sm)', fontSize: '0.85rem' }}>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgName')}</span>
-            <span style={{ fontWeight: 600 }}>{activeMembership?.organizationName}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgType')}</span>
-            <span>{t(activeMembership?.organizationType === 'personal' ? 'orgSelector.typePersonal' : 'orgSelector.typeCompany')}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgPlan')}</span>
-            <span style={{ textTransform: 'capitalize' }}>{activeMembership?.organizationPlan}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.yourRole')}</span>
-            <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t(`role.${(session?.role ?? '').toLowerCase()}`)}</span>
-          </div>
-        </div>
-        
-        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
-          <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.teamManagement')}</h3>
-          <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
-            {t('settings.teamManagementDesc')}
-          </p>
-          <button className="btn-gold" style={{ width: 'fit-content' }}>
-            {t('settings.openMembers')}
-          </button>
-        </div>
-      </div>
-    </>
-  );
-}
-
 export const SettingsModal = ({ 
   isOpen, 
   onClose, 
@@ -623,7 +534,7 @@ export const SettingsModal = ({
   onEmployeeNameChange,
 }: SettingsModalProps) => {
   const { t } = useI18n();
-  const [tab, setTab] = useState<Tab>('account');
+  const [tab, setTab] = useState<Tab>('profile');
   const [userProfile, setUserProfile] = useState<UserProfile>(() => 
     session ? loadUserProfile(session.user.id) : DEFAULT_USER_PROFILE
   );
@@ -660,39 +571,34 @@ export const SettingsModal = ({
 
   if (!isOpen) return null;
 
+  // Find the employee for current user
+  const employee = session?.employeeId 
+    ? employees.find(e => e.id === session.employeeId) ?? null
+    : null;
+
   const renderTab = (tabName: Tab) => {
     switch (tabName) {
-      case 'account':
+      case 'profile':
         return (
-          <AccountSection
+          <ProfileSection
             session={session}
+            employee={employee}
             userProfile={userProfile}
             onSaveProfile={handleSaveProfile}
             onRestartOnboarding={onRestartOnboarding}
+            onEmployeeNameChange={handleEmployeeNameChange}
           />
         );
-      case 'employee': {
-        // Find the employee for current user
-        const employee = session?.employeeId
-          ? employees.find(e => e.id === session.employeeId) ?? null
-          : null;
+      case 'team':
         return (
-          <EmployeeSection
-            employee={employee}
-            onNameChange={handleEmployeeNameChange}
-          />
-        );
-      }
-      case 'shiftTypes':
-        return <ShiftTypesSection />;
-      case 'organization':
-        return (
-          <OrganizationSection
+          <TeamSection
             session={session}
             employees={employees}
             selectedEmployeeId={selectedEmployeeId}
           />
         );
+      case 'shiftTypes':
+        return <ShiftTypesSection />;
       default:
         return null;
     }
@@ -718,16 +624,14 @@ export const SettingsModal = ({
           <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
             {availableTabs.map((tabName) => {
               const icons: Record<Tab, React.ReactNode> = {
-                account: <User size={16} />,
-                employee: <Briefcase size={16} />,
+                profile: <User size={16} />,
+                team: <Users size={16} />,
                 shiftTypes: <Settings size={16} />,
-                organization: <Building2 size={16} />,
               };
               const labels: Record<Tab, string> = {
-                account: t('settings.tabAccount'),
-                employee: t('settings.tabEmployee'),
+                profile: t('settings.tabProfile'),
+                team: t('settings.tabTeam'),
                 shiftTypes: t('settings.tabShiftTypes'),
-                organization: t('settings.tabOrganization'),
               };
               return (
                 <button
