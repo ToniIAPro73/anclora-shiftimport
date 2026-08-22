@@ -51,6 +51,14 @@ export default async function handler(req, res) {
       user: { id: user.id, email: user.email, displayName: user.display_name },
     });
   } catch (error) {
+    // Unique constraint violation for email — possible race between SELECT and INSERT
+    if (error?.code === '23505') {
+      // Verify this is the email constraint, not another unique index
+      if (error?.details?.includes('users_email_lower_idx') ||
+          error?.details?.includes('email')) {
+        return sendJson(res, 409, { error: 'Email already registered' });
+      }
+    }
     return handleError(res, error);
   }
 }
