@@ -169,6 +169,21 @@ describe('SettingsModal — profile tab by role/employee linkage', () => {
     expect(screen.getByText('Preferencias de importación')).toBeTruthy();
   });
 
+  it('ADMIN with employee: "Equipo" tab visible and danger zone accessible (role=ADMIN is sufficient, employeeId does not reduce admin perms)', () => {
+    renderSettings({
+      session: makeSession({ employeeId: 'e1' }),
+      employees: [remoteEmployee({ externalEmployeeId: 'SI-9' })],
+    });
+
+    // Tab "Equipo" must be present for ADMIN in company org
+    expect(screen.getByText('Equipo')).toBeTruthy();
+    fireEvent.click(screen.getByText('Equipo'));
+
+    // Danger zone (organization reset) must be accessible
+    expect(screen.getByText('Zona de peligro')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Restaurar estado inicial' })).toBeTruthy();
+  });
+
   it('EMPLOYEE with employee: profile-only tabs and editable employee name', async () => {
     mockedUpdateOwnEmployeeName.mockResolvedValue(remoteEmployee({ name: 'Nombre Nuevo' }));
     const onEmployeeNameChange = vi.fn();
