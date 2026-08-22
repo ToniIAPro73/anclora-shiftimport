@@ -29,6 +29,7 @@ lerna-debug.log*
 .next/
 out/
 build/
+dist/
 *.local
 
 # acceptance corpus run artifact

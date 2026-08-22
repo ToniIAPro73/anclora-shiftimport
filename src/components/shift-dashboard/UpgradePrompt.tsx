@@ -6,15 +6,16 @@ import type { PlanId } from '../../lib/plans';
 interface UpgradePromptProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Active organization's plan — always 'unrestricted' now. */
+  /** Active organization's plan — may be free/personal/team depending on subscription state. */
   currentPlan?: PlanId | null;
   switchTarget?: { id: string; name: string } | null;
   onSwitchOrg?: (organizationId: string) => void;
 }
 
 /**
- * Shown when a feature gate is hit. Since all plans are unrestricted,
- * PLAN_LIMIT errors no longer occur, but the component stays for backward compat.
+ * Shown when a feature gate (e.g. PLAN_LIMIT) is hit after other upgrade paths
+ * have been attempted. The component stays for backward compatibility with routes
+ that may still render it if limits apply on the deployed plan tier.
  */
 export const UpgradePrompt = ({ isOpen, onClose }: UpgradePromptProps) => {
   const { t } = useI18n();

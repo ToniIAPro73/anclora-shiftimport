@@ -335,7 +335,7 @@ export async function updateEmployee(sql, ctx, input) {
   const status = input?.status === undefined
     ? current.status
     : (input.status === 'inactive' ? 'inactive' : 'active');
-  
+
   // PENDING_ACCESS → ACTIVE transition: when linking a user to a pending_access employee,
   // the status automatically becomes 'active' (employee now has access)
   let userId = current.userId;

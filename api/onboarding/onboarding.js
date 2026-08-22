@@ -6,6 +6,9 @@ import { handleError, sendJson } from '../_lib/http.js';
  * and optionally a self-linked Employee (when employeeName is provided).
  * Idempotency guard: a user with any existing membership has already
  * onboarded and cannot repeat this step.
+ *
+ * All steps run inside a single DB transaction — if any step fails,
+ * everything rolls back so no partial state remains.
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -33,27 +36,42 @@ export default async function handler(req, res) {
     // Use displayName or employeeName as the organization label if not provided
     const orgLabel = organizationName || ctx.user.displayName || ctx.user.email;
 
-    const orgRows = await sql`
-      INSERT INTO organizations (name)
-      VALUES (${orgLabel})
-      RETURNING id
-    `;
-    const organizationId = orgRows[0].id;
+    // All steps inside a single DB transaction — no partial state on failure
+    const result = await new Promise((resolve, reject) => {
+      sql.transaction(async (txn) => {
+        try {
+          // Step 1: create Organization
+          const orgRows = await txn`
+            INSERT INTO organizations (name) VALUES (${orgLabel}) RETURNING id
+          `;
+          const organizationId = orgRows[0].id;
 
-    await sql`
-      INSERT INTO memberships (user_id, organization_id, role)
-      VALUES (${ctx.user.id}, ${organizationId}, 'ADMIN')
-    `;
+          // Step 2: create Membership ADMIN (depends on org.id)
+          await txn`
+            INSERT INTO memberships (user_id, organization_id, role)
+            VALUES (${ctx.user.id}, ${organizationId}, 'ADMIN')
+          `;
 
-    // Create self-linked employee if employeeName provided
-    if (employeeName) {
-      await sql`
-        INSERT INTO employees (organization_id, name, user_id, status)
-        VALUES (${organizationId}, ${employeeName}, ${ctx.user.id}, 'active')
-      `;
+          // Step 3: optional self-linked Employee ACTIVE
+          if (employeeName) {
+            await txn`
+              INSERT INTO employees (organization_id, name, user_id, status)
+              VALUES (${organizationId}, ${employeeName}, ${ctx.user.id}, 'active')
+            `;
+          }
+
+          resolve({ ok: true, organizationId });
+        } catch (err) {
+          reject(err);
+        }
+      }).catch(reject);
+    });
+
+    if (!result.ok) {
+      throw new Error('Transaction failed');
     }
 
-    return sendJson(res, 201, { organizationId });
+    return sendJson(res, 201, { organizationId: result.organizationId });
   } catch (error) {
     return handleError(res, error);
   }
