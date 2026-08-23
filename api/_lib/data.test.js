@@ -54,11 +54,38 @@ const shiftRow = (over = {}) => ({
   ...over,
 });
 
-function makeFakeSql({ employees = [], memberships = [], imports = [], users = [], shifts = [] } = {}) {
+function makeFakeSql({ employees = [], memberships = [], imports = [], users = [], shifts = [], areas = [] } = {}) {
   const calls = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
+
+    // Area lookups (assertAreaInOrg / resolveAreaIdByName / bulk roster index)
+    if (text.startsWith('SELECT id, name, code FROM areas')) {
+      return Promise.resolve(areas.filter((a) => a.organization_id === values[0] && a.active !== false));
+    }
+    if (text.startsWith('SELECT id FROM areas') && text.includes('lower(trim(name))')) {
+      const normalized = values[1];
+      return Promise.resolve(areas.filter(
+        (a) => a.organization_id === values[0] && a.active !== false
+          && (a.name.trim().toLowerCase() === normalized
+            || (a.code && a.code.trim().toLowerCase() === normalized)),
+      ).map((a) => ({ id: a.id })));
+    }
+    if (text.startsWith('SELECT id FROM areas')) {
+      return Promise.resolve(areas.filter(
+        (a) => a.id === values[0] && a.organization_id === values[1] && a.active !== false,
+      ).map((a) => ({ id: a.id })));
+    }
+    // upsertShifts area snapshot: import/employee area lookups
+    if (text.startsWith('SELECT area_id FROM imports')) {
+      const found = imports.find((i) => i.id === values[0] && i.organization_id === values[1]);
+      return Promise.resolve(found ? [{ area_id: found.area_id ?? null }] : []);
+    }
+    if (text.startsWith('SELECT area_id FROM employees')) {
+      const found = employees.find((e) => e.id === values[0] && e.organization_id === values[1]);
+      return Promise.resolve(found ? [{ area_id: found.area_id ?? null }] : []);
+    }
 
     // deleteEmployee history gate (values: [employeeId, organizationId])
     if (text.startsWith('SELECT count(*)::int AS n FROM shifts')) {
@@ -159,16 +186,28 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       if (conflict) {
         return Promise.resolve([]);
       }
-      const row = employeeRow(`emp-bulk-${employees.length}`, orgId, { external_employee_id: externalId, name });
+      const row = employeeRow(`emp-bulk-${employees.length}`, orgId, {
+        external_employee_id: externalId,
+        name,
+        // Area-aware INSERT carries area_id as the 4th value (status is a
+        // SQL literal in the bulk path, not a parameter).
+        area_id: text.includes(', area_id') ? values[3] : null,
+      });
       employees.push(row);
       return Promise.resolve([row]);
     }
     if (text.startsWith('INSERT INTO employees')) {
-      const row = employeeRow('emp-new', values[0], { external_employee_id: values[1], name: values[2] });
+      const row = employeeRow('emp-new', values[0], {
+        external_employee_id: values[1],
+        name: values[2],
+        area_id: text.includes('area_id') ? values[4] : null,
+      });
       employees.push(row);
       return Promise.resolve([row]);
     }
     if (text.startsWith('INSERT INTO imports')) {
+      // 'completed' is a SQL literal; area_id (when present) is values[6].
+      const hasArea = text.includes(', area_id');
       const row = {
         id: `import-${calls.length}`,
         organization_id: values[0],
@@ -178,6 +217,7 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         period_year: values[4],
         period_month: values[5],
         status: 'completed',
+        area_id: hasArea ? values[6] : null,
         created_at: new Date(),
       };
       imports.push(row);
@@ -195,10 +235,17 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve(imports.filter((i) => i.organization_id === values[0]));
     }
     if (text.startsWith('INSERT INTO shifts')) {
-      return Promise.resolve([shiftRow({ id: values[0], organization_id: values[1], employee_id: values[2], date: values[4] })]);
+      return Promise.resolve([shiftRow({
+        id: values[0],
+        organization_id: values[1],
+        employee_id: values[2],
+        import_id: values[3],
+        area_id: values[4],
+        date: values[5],
+      })]);
     }
     if (text.startsWith('UPDATE employees')) {
-      return Promise.resolve([employeeRow(values[5] ?? 'emp-a1', ORG_A, { name: values[0] })]);
+      return Promise.resolve([employeeRow(values[6] ?? 'emp-a1', ORG_A, { name: values[0], area_id: values[4] })]);
     }
     if (text.startsWith('DELETE FROM employees')) {
       // resetOrganization: org-scoped delete-all (values: [organizationId])
@@ -311,8 +358,8 @@ describe('multi-employee coexistence', () => {
     expect(inserts).toHaveLength(2);
     expect(inserts[0].values[2]).toBe(EMP_A1);
     expect(inserts[1].values[2]).toBe(EMP_A2);
-    expect(inserts[0].values[4]).toBe('2026-09-04');
-    expect(inserts[1].values[4]).toBe('2026-09-04');
+    expect(inserts[0].values[5]).toBe('2026-09-04');
+    expect(inserts[1].values[5]).toBe('2026-09-04');
   });
 
   it('re-import deletes stay inside the target employee', async () => {
@@ -387,8 +434,8 @@ describe('employee lifecycle (deactivate/reactivate/delete)', () => {
     const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
     expect(update.text).toContain('deactivated_at');
     expect(update.values[2]).toBe('inactive');
-    expect(update.values[5]).toBe(EMP_A1);
-    expect(update.values[6]).toBe(ORG_A);
+    expect(update.values[6]).toBe(EMP_A1);
+    expect(update.values[7]).toBe(ORG_A);
   });
 
   it('ADMIN reactivates: status active + deactivated_at reset to NULL', async () => {
@@ -398,7 +445,7 @@ describe('employee lifecycle (deactivate/reactivate/delete)', () => {
     await updateEmployee(sql, adminCtx, { id: EMP_A1, status: 'active' });
     const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
     expect(update.values[2]).toBe('active');
-    expect(update.values[4]).toBeNull();
+    expect(update.values[5]).toBeNull();
   });
 
   it('editing an inactive employee without touching status preserves deactivated_at', async () => {
@@ -409,7 +456,7 @@ describe('employee lifecycle (deactivate/reactivate/delete)', () => {
     await updateEmployee(sql, adminCtx, { id: EMP_A1, name: 'Renamed' });
     const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
     expect(update.values[2]).toBe('inactive');
-    expect(update.values[4]).toBe(deactivatedAt);
+    expect(update.values[5]).toBe(deactivatedAt);
   });
 
   it('EMPLOYEE role cannot deactivate, reactivate or delete', async () => {

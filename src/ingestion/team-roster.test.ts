@@ -52,7 +52,7 @@ describe('detectTeamRoster', () => {
 
   it('parses the real reference dataset (40 pre-existing + 2 new employees)', () => {
     const path = fileURLToPath(
-      new URL('../../test-data/synthetic/shiftimport-v1/04_turnos_septiembre_2026.csv', import.meta.url),
+      new URL('../../test-data/fixtures/parser-regression/04_turnos_septiembre_2026.csv', import.meta.url),
     );
     const text = readFileSync(path, 'utf8');
     const result = detectTeamRoster(text);

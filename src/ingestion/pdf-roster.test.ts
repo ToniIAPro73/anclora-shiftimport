@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');
 
 const FIXTURE_PATH = new URL(
-  '../../test-data/synthetic/shiftimport-v1/03_cuadrante_agosto_2026.pdf',
+  '../../test-data/fixtures/parser-regression/03_cuadrante_agosto_2026.pdf',
   import.meta.url,
 );
 

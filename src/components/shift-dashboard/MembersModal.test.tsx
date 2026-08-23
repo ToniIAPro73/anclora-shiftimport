@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { I18nProvider } from '../../lib/i18n-react';
 import * as remote from '../../lib/remote';
-import { RemoteEmployee } from '../../lib/remote';
+import { RemoteArea, RemoteEmployee } from '../../lib/remote';
 import { MembersModal } from './MembersModal';
 
 vi.mock('../../lib/remote', async (importOriginal) => {
@@ -41,13 +41,27 @@ const remoteEmployee = (over: Partial<RemoteEmployee> = {}): RemoteEmployee => (
   ...over,
 });
 
-function renderMembersModal(employees: RemoteEmployee[] = [], onChanged: () => void = () => {}) {
+const remoteArea = (over: Partial<RemoteArea> = {}): RemoteArea => ({
+  id: 'area-n',
+  name: 'Norte',
+  code: 'N',
+  active: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  ...over,
+});
+
+function renderMembersModal(
+  employees: RemoteEmployee[] = [],
+  onChanged: () => void = () => {},
+  areas: RemoteArea[] = [],
+) {
   return render(
     <I18nProvider>
       <MembersModal
         isOpen
         onClose={() => {}}
         employees={employees}
+        areas={areas}
         currentUserId="user-admin"
         onChanged={onChanged}
       />
@@ -350,6 +364,47 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
       name: 'Bea Nueva',
       externalEmployeeId: 'SI2',
       status: 'inactive',
+    }));
+  });
+
+  it('manual add employee can assign an optional area when areas exist', async () => {
+    mockedCreateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e1', name: 'Ana Nueva', areaId: 'area-s' }));
+    renderMembersModal([], () => {}, [remoteArea(), remoteArea({ id: 'area-s', name: 'Sur', code: null })]);
+    await openEmployeesTab();
+
+    fireEvent.change(screen.getByPlaceholderText('Nombre del empleado'), { target: { value: 'Ana Nueva' } });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Área' })[0]);
+    fireEvent.click(screen.getByRole('option', { name: 'Sur' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir' }));
+
+    await waitFor(() => expect(mockedCreateRemoteEmployee).toHaveBeenCalledWith({
+      name: 'Ana Nueva',
+      externalEmployeeId: undefined,
+      areaId: 'area-s',
+    }));
+  });
+
+  it('inline edit can move an employee to another area', async () => {
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e2', name: 'Bea', areaId: 'area-s' }));
+    renderMembersModal(
+      [remoteEmployee({ id: 'e2', name: 'Bea', status: 'active', areaId: 'area-n' })],
+      () => {},
+      [remoteArea(), remoteArea({ id: 'area-s', name: 'Sur', code: null })],
+    );
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Bea' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Editar' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Área' })[0]);
+    fireEvent.click(screen.getByRole('option', { name: 'Sur' }));
+    fireEvent.click(screen.getByText('Guardar'));
+
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({
+      id: 'e2',
+      name: 'Bea',
+      externalEmployeeId: '',
+      areaId: 'area-s',
+      status: 'active',
     }));
   });
 });

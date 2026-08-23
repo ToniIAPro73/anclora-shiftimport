@@ -1,0 +1,41 @@
+{
+  "scenario": "new-company-onboarding-anclora",
+  "starting_database": {
+    "organizations": 0,
+    "organization_scoped_employees": 0,
+    "organization_scoped_shifts": 0,
+    "organization_scoped_imports": 0
+  },
+  "after_manual_onboarding": {
+    "organization": "Anclora",
+    "admin": "Toni",
+    "admin_employee": null,
+    "areas": [
+      "Operaciones",
+      "Administración"
+    ],
+    "roster_imported_employees": 30,
+    "manual_employee": "Marta Vives Roca",
+    "total_employees": 31,
+    "imported_pending_access": 5,
+    "manual_employee_expected_status": "active"
+  },
+  "imports": {
+    "Operaciones": {
+      "format": "PDF",
+      "filename": "shifts_operaciones_september_2026.pdf",
+      "employees_expected": 21
+    },
+    "Administración": {
+      "format": "CSV",
+      "filename": "shifts_administracion_september_2026.csv",
+      "employees_expected": 10,
+      "shift_rows_expected": 216
+    }
+  },
+  "areas_optional_contract": {
+    "areas_required": false,
+    "no_area_fixture": "roster_no_area_smoke.csv",
+    "expected": "An organization with zero areas must still support roster and shift workflows organization-scoped."
+  }
+}

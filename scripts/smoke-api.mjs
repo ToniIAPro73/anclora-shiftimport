@@ -10,8 +10,9 @@ import employeesHandler from '../api/employees/index.js';
 import shiftsHandler from '../api/shifts/index.js';
 import importsHandler from '../api/imports/index.js';
 import membershipsHandler from '../api/memberships/index.js';
-import personalOnboardingHandler from '../api/onboarding/personal.js';
-import companyOnboardingHandler from '../api/onboarding/company.js';
+import onboardingHandler from '../api/onboarding/onboarding.js';
+import areasHandler from '../api/areas/index.js';
+import bulkEmployeesHandler from '../api/employees/bulk.js';
 import requestResetHandler from '../api/auth/request-reset.js';
 import resetPasswordHandler from '../api/auth/reset-password.js';
 
@@ -82,9 +83,14 @@ const run = async () => {
   check('register A', regA.statusCode === 201);
   const cookieA = String(regA.headers['set-cookie']).split(';')[0];
 
-  // Fase 1.2C: register no longer auto-creates an org — the "Para mí"
-  // onboarding choice does, explicitly, right after signup.
-  const onboardA = await call(personalOnboardingHandler, req('POST', { cookie: cookieA }));
+  // Unified onboarding (api/onboarding/onboarding.js): register no longer
+  // auto-creates an org — the explicit onboarding step does. Personal flow =
+  // organizationName + employeeName (creates org + ADMIN membership + self
+  // employee); company flow = organizationName only (no self employee).
+  const onboardA = await call(onboardingHandler, req('POST', {
+    cookie: cookieA,
+    body: { organizationName: 'Smoke Org A', employeeName: 'Smoke A' },
+  }));
   check('personal onboarding creates org+employee', onboardA.statusCode === 201);
 
   // Tenant B
@@ -92,9 +98,15 @@ const run = async () => {
     body: { email: `smoke-b-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke B' },
   }));
   const cookieB = String(regB.headers['set-cookie']).split(';')[0];
-  const onboardB = await call(personalOnboardingHandler, req('POST', { cookie: cookieB }));
+  const onboardB = await call(onboardingHandler, req('POST', {
+    cookie: cookieB,
+    body: { organizationName: 'Smoke Org B', employeeName: 'Smoke B' },
+  }));
   check('personal onboarding is idempotency-guarded per user', onboardB.statusCode === 201);
-  const onboardBAgain = await call(personalOnboardingHandler, req('POST', { cookie: cookieB }));
+  const onboardBAgain = await call(onboardingHandler, req('POST', {
+    cookie: cookieB,
+    body: { organizationName: 'Smoke Org B bis', employeeName: 'Smoke B' },
+  }));
   check('repeating onboarding after completion is rejected (409)', onboardBAgain.statusCode === 409);
 
   const meA = await call(meHandler, req('GET', { cookie: cookieA }));
@@ -102,6 +114,8 @@ const run = async () => {
   check('personal onboarding defaults plan to free', meA.body.plan === 'free');
   const orgA = meA.body.organizationId;
   const selfA = meA.body.employeeId;
+  const [orgARow] = await sql`SELECT type FROM organizations WHERE id = ${orgA}`;
+  check('personal onboarding sets org type personal', orgARow?.type === 'personal');
   const meBInitial = await call(meHandler, req('GET', { cookie: cookieB }));
   check('personal onboarding (B) defaults plan to free', meBInitial.body.plan === 'free');
   const orgB = meBInitial.body.organizationId;
@@ -162,6 +176,80 @@ const run = async () => {
   const anon = await call(shiftsHandler, req('GET', { query: {} }));
   check('anonymous request blocked (401)', anon.statusCode === 401);
 
+  // ---- Areas (migration 0008): optional org-scoped areas -------------------
+  // Org A is on plan team at this point; B still has a single membership
+  // (org B, free plan), so its session doubles as the foreign-tenant probe.
+  const areaOps = await call(areasHandler, req('POST', { cookie: cookieA, body: { name: 'Operaciones', code: 'OPS' } }));
+  check('ADMIN creates area (201)', areaOps.statusCode === 201 && areaOps.body.area.active === true);
+  const areaOpsId = areaOps.body.area.id;
+  const areaAdm = await call(areasHandler, req('POST', { cookie: cookieA, body: { name: 'Administración' } }));
+  check('ADMIN creates second area (code optional)', areaAdm.statusCode === 201 && areaAdm.body.area.code === null);
+  const areaAdmId = areaAdm.body.area.id;
+
+  const areaDup = await call(areasHandler, req('POST', { cookie: cookieA, body: { name: '  OPERACIONES ' } }));
+  check('normalized duplicate area name rejected (409)', areaDup.statusCode === 409);
+
+  const areaList = await call(areasHandler, req('GET', { cookie: cookieA }));
+  check('GET areas lists the org areas', areaList.statusCode === 200 && areaList.body.areas.length === 2);
+
+  const areaRenamed = await call(areasHandler, req('PATCH', { cookie: cookieA, body: { id: areaAdmId, name: 'Administración y Finanzas' } }));
+  check('PATCH renames area', areaRenamed.statusCode === 200 && areaRenamed.body.area.name === 'Administración y Finanzas');
+
+  // Employee assigned to an area at creation (inline alta).
+  const empArea = await call(employeesHandler, req('POST', { cookie: cookieA, body: { name: 'Empleado Area Ops', areaId: areaOpsId } }));
+  check('employee created with areaId', empArea.statusCode === 201 && empArea.body.employee.areaId === areaOpsId);
+
+  // Roster bulk: areaName resolution; an unknown area fails only its own row
+  // and is never auto-created.
+  const bulk = await call(bulkEmployeesHandler, req('POST', {
+    cookie: cookieA,
+    body: {
+      employees: [
+        { key: 'b1', name: 'Bulk Conocida', areaName: ' operaciones ' },
+        { key: 'b2', name: 'Bulk Desconocida', areaName: 'Logística' },
+      ],
+    },
+  }));
+  const bulkResults = bulk.body?.results ?? [];
+  check(
+    'bulk resolves known areaName (normalized)',
+    bulk.statusCode === 200 && bulkResults[0]?.status === 'created' && bulkResults[0]?.employee?.areaId === areaOpsId,
+  );
+  check(
+    'bulk unknown area fails only that row (unknown_area)',
+    bulkResults[1]?.status === 'failed' && bulkResults[1]?.reason === 'unknown_area',
+  );
+
+  // Area-scoped import + area-filtered history.
+  const areaImport = await call(importsHandler, req('POST', {
+    cookie: cookieA,
+    body: { fileName: 'smoke-ops.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 9, areaId: areaOpsId },
+  }));
+  check('area-scoped import registered', areaImport.statusCode === 201 && areaImport.body.import.areaId === areaOpsId);
+  const importsOps = await call(importsHandler, req('GET', { cookie: cookieA, query: { areaId: areaOpsId } }));
+  check('imports filtered by areaId', importsOps.statusCode === 200 && importsOps.body.imports.some((i) => i.id === areaImport.body.import.id));
+  const importsAdm = await call(importsHandler, req('GET', { cookie: cookieA, query: { areaId: areaAdmId } }));
+  check('area filter excludes other areas', importsAdm.statusCode === 200 && importsAdm.body.imports.length === 0);
+
+  const employeesOps = await call(employeesHandler, req('GET', { cookie: cookieA, query: { areaId: areaOpsId } }));
+  check(
+    'employees filtered by areaId',
+    employeesOps.statusCode === 200 && employeesOps.body.employees.length === 2
+      && employeesOps.body.employees.every((e) => e.areaId === areaOpsId),
+  );
+
+  // Tenant isolation: org B session wielding org A's area id.
+  const crossImport = await call(importsHandler, req('POST', { cookie: cookieB, body: { fileName: 'evil.pdf', sourceFormat: 'pdf', areaId: areaOpsId } }));
+  check('foreign areaId on import blocked (403)', crossImport.statusCode === 403);
+  const crossPatch = await call(areasHandler, req('PATCH', { cookie: cookieB, body: { id: areaOpsId, name: 'Hackeada' } }));
+  check('PATCH area of another org is 404 (no leak)', crossPatch.statusCode === 404);
+
+  // No hard DELETE: deactivation only, historical rows keep the snapshot.
+  const areaDeactivated = await call(areasHandler, req('PATCH', { cookie: cookieA, body: { id: areaAdmId, deactivate: true } }));
+  check('area deactivated (no hard delete)', areaDeactivated.statusCode === 200 && areaDeactivated.body.area.active === false);
+  const areaListAfter = await call(areasHandler, req('GET', { cookie: cookieA }));
+  check('deactivated area remains listed', areaListAfter.body.areas.some((a) => a.id === areaAdmId && a.active === false));
+
   // Login/logout roundtrip for A
   const loginA = await call(loginHandler, req('POST', { body: { email: `smoke-a-${suffix}@example.com`, password: 'smoke-pass-1234' } }));
   check('login A', loginA.statusCode === 200);
@@ -173,6 +261,16 @@ const run = async () => {
     body: { email: `smoke-b-${suffix}@example.com`, role: 'EMPLOYEE', employeeId: emp2 },
   }));
   check('ADMIN adds existing user as member + employee link', addB.statusCode === 201);
+
+  // addMember links user↔employee but leaves the employee pending_access;
+  // the PATCH /api/employees link path performs the pending_access → active
+  // transition ("employee now has access"), which is what lets B's session
+  // resolve the linked employee.
+  const linkActivate = await call(employeesHandler, req('PATCH', {
+    cookie: cookieA,
+    body: { id: emp2, userId: addB.body.member.userId },
+  }));
+  check('linking the member activates the pending employee', linkActivate.statusCode === 200 && linkActivate.body.employee.status === 'active');
 
   const membersA = await call(membershipsHandler, req('GET', { cookie: cookieA }));
   check('membership list org-scoped', membersA.statusCode === 200 && membersA.body.members.length === 2);
@@ -214,32 +312,36 @@ const run = async () => {
   const meBafter = await call(meHandler, req('GET', { cookie: cookieB, orgHeader: orgA }));
   check('revoked membership no longer activates org', meBafter.statusCode === 200 && meBafter.body.organizationId === null);
 
-  // ---- Fase 1.2C.4: company onboarding ("Para mi empresa") --------------
+  // ---- Company-style onboarding ("Para mi empresa") -----------------------
+  // Unified endpoint: organizationName only → org + ADMIN membership, no
+  // self-linked employee. (The legacy company.js granted plan team / org type
+  // company; the unified endpoint sets neither — org starts on the DB
+  // default 'free' plan.)
   const regC = await call(registerHandler, req('POST', {
     body: { email: `smoke-c-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: '' },
   }));
   const cookieC = String(regC.headers['set-cookie']).split(';')[0];
 
-  const companyMissingAdmin = await call(companyOnboardingHandler, req('POST', {
+  const companyMissingName = await call(onboardingHandler, req('POST', {
     cookie: cookieC,
-    body: { companyName: 'Smoke Co' },
+    body: {},
   }));
-  check('company onboarding requires admin name when account has none', companyMissingAdmin.statusCode === 400);
+  check('onboarding requires an organization name (400)', companyMissingName.statusCode === 400);
 
-  const companyOk = await call(companyOnboardingHandler, req('POST', {
+  const companyOk = await call(onboardingHandler, req('POST', {
     cookie: cookieC,
-    body: { companyName: 'Smoke Co', adminName: 'Smoke Admin' },
+    body: { organizationName: 'Smoke Co' },
   }));
   check('company onboarding creates org (no self employee)', companyOk.statusCode === 201);
   const orgC = companyOk.body.organizationId;
 
   const meC = await call(meHandler, req('GET', { cookie: cookieC }));
   check(
-    'company onboarding: ADMIN role, org type company, no self employee',
-    meC.body.role === 'ADMIN' && meC.body.employeeId === null
-      && meC.body.memberships[0]?.organizationType === 'company',
+    'company onboarding: ADMIN role, no self employee, default free plan',
+    meC.body.role === 'ADMIN' && meC.body.employeeId === null && meC.body.plan === 'free',
   );
-  check('company onboarding grants plan team (pre-billing trial grant, §4 pricing-hypothesis.md)', meC.body.plan === 'team');
+  const [orgCRow] = await sql`SELECT type FROM organizations WHERE id = ${orgC}`;
+  check('company onboarding sets org type company', orgCRow?.type === 'company');
 
   // ---- Fase 1.2G: plan model & entitlement enforcement -------------------
   // Org B is still on its default 'free' plan (untouched above) — use it to
@@ -261,15 +363,18 @@ const run = async () => {
   const allowedTeamInvite = await call(membershipsHandler, req('POST', { cookie: cookieB, body: { email: `smoke-invite-${suffix}@example.com`, role: 'EMPLOYEE', password: 'temporal-123' } }));
   check('TEAM plan allows inviting a member', allowedTeamInvite.statusCode === 201);
 
-  // Commercial-intent routing (§1.2G.15): the client can send any plan it
-  // likes, but personal onboarding only ever whitelists free|personal.
+  // Commercial-intent routing: the unified onboarding endpoint ignores any
+  // client-sent plan entirely — the org always starts on the DB default.
   const regD = await call(registerHandler, req('POST', {
     body: { email: `smoke-d-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke D' },
   }));
   const cookieD = String(regD.headers['set-cookie']).split(';')[0];
-  const onboardD = await call(personalOnboardingHandler, req('POST', { cookie: cookieD, body: { plan: 'team' } }));
+  const onboardD = await call(onboardingHandler, req('POST', {
+    cookie: cookieD,
+    body: { organizationName: 'Smoke Org D', employeeName: 'Smoke D', plan: 'team' },
+  }));
   const meD = await call(meHandler, req('GET', { cookie: cookieD }));
-  check('personal onboarding never grants team even if the client requests it', onboardD.statusCode === 201 && meD.body.plan === 'free');
+  check('onboarding never grants team even if the client requests it', onboardD.statusCode === 201 && meD.body.plan === 'free');
   const orgD = meD.body.organizationId;
 
   // ---- Fase 1.2D: password recovery ---------------------------------
@@ -309,7 +414,10 @@ const run = async () => {
 
   const regRL = await call(registerHandler, req('POST', { body: { email: rlEmail, password: 'rl-correct-pass1', displayName: 'RL' } }));
   const cookieRL = String(regRL.headers['set-cookie']).split(';')[0];
-  const onboardRL = await call(personalOnboardingHandler, req('POST', { cookie: cookieRL }));
+  const onboardRL = await call(onboardingHandler, req('POST', {
+    cookie: cookieRL,
+    body: { organizationName: 'Smoke Org RL', employeeName: 'RL' },
+  }));
   const orgRL = onboardRL.body.organizationId;
 
   // Allowed: attempts under the per-email threshold (10) all get a normal

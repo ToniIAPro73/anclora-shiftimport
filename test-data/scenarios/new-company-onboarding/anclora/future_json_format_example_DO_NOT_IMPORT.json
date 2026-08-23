@@ -1,0 +1,411 @@
+{
+  "note": "Fixture futuro. No debe utilizarse como import de producto hasta que JSON esté soportado oficialmente.",
+  "organization": "Anclora",
+  "area": "Administración",
+  "period": {
+    "from": "2026-09-01",
+    "to": "2026-09-30"
+  },
+  "shifts": [
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-01",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-02",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-03",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-04",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-05",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-08",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-09",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-10",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-11",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-12",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-15",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-16",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-17",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-18",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-19",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-22",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-23",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-24",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-25",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-26",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-29",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-001",
+      "employee_name": "Valeria Martí Serra",
+      "date": "2026-09-30",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-01",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-02",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-03",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-04",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-07",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-08",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-09",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-10",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-11",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-14",
+      "shift_code": "T",
+      "shift_type": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-15",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-16",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-17",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-18",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-21",
+      "shift_code": "C",
+      "shift_type": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-22",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-23",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    },
+    {
+      "external_employee_id": "ANC-ADM-002",
+      "employee_name": "Xavier Llompart Roig",
+      "date": "2026-09-24",
+      "shift_code": "M",
+      "shift_type": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00",
+      "area": "Administración"
+    }
+  ]
+}

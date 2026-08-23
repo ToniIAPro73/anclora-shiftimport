@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { neon } from '@neondatabase/serverless';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-export const DATASET_PATH = join(ROOT, 'test-data/synthetic/shiftimport-v1/02_team_preloaded_40_employees.json');
+export const DATASET_PATH = join(ROOT, 'test-data/fixtures/parser-regression/02_team_preloaded_40_employees.json');
 export const EXPECTED_EMPLOYEE_COUNT = 40;
 
 export class SeedAbortError extends Error {}

@@ -1,0 +1,62 @@
+{
+  "organization": {
+    "name": "Anclora",
+    "plan": "team"
+  },
+  "admin": {
+    "display_name": "Toni",
+    "email": "toni@anclora.test",
+    "role": "ADMIN",
+    "employee": null
+  },
+  "areas": [
+    {
+      "name": "Operaciones",
+      "code": "OPS"
+    },
+    {
+      "name": "Administración",
+      "code": "ADM"
+    }
+  ],
+  "shift_types": [
+    {
+      "code": "M",
+      "name": "Mañana",
+      "start_time": "07:00",
+      "end_time": "15:00"
+    },
+    {
+      "code": "T",
+      "name": "Tarde",
+      "start_time": "15:00",
+      "end_time": "23:00"
+    },
+    {
+      "code": "N",
+      "name": "Noche",
+      "start_time": "23:00",
+      "end_time": "07:00"
+    },
+    {
+      "code": "C",
+      "name": "Central",
+      "start_time": "09:00",
+      "end_time": "17:00"
+    },
+    {
+      "code": "L",
+      "name": "Libre",
+      "start_time": null,
+      "end_time": null
+    }
+  ],
+  "manual_employee": {
+    "external_employee_id": "ANC-OPS-021",
+    "employee_code": "OPS021",
+    "name": "Marta Vives Roca",
+    "email": "marta.vives.roca@shiftimport.test",
+    "area": "Operaciones",
+    "expected_status": "active"
+  }
+}

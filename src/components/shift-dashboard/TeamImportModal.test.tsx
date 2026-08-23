@@ -5,7 +5,7 @@ import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { detectTeamRoster } from '../../ingestion/team-roster';
 import * as remote from '../../lib/remote';
-import { RemoteEmployee } from '../../lib/remote';
+import { RemoteArea, RemoteEmployee } from '../../lib/remote';
 import { TeamImportModal } from './TeamImportModal';
 
 vi.mock('../../ingestion/team-roster', async (importOriginal) => {
@@ -42,10 +42,22 @@ const mockedCreateRemoteImport = vi.mocked(remote.createRemoteImport);
 const mockedSyncRemoteShifts = vi.mocked(remote.syncRemoteShifts);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 
-function renderTeamImportModal(onImported: () => void = () => {}, sessionRole: 'ADMIN' | 'EMPLOYEE' = 'ADMIN') {
+function renderTeamImportModal(
+  onImported: () => void = () => {},
+  sessionRole: 'ADMIN' | 'EMPLOYEE' = 'ADMIN',
+  options: { areas?: RemoteArea[]; currentAreaId?: string | null; allowAreaChoice?: boolean } = {},
+) {
   return render(
     <I18nProvider>
-      <TeamImportModal isOpen onClose={() => {}} onImported={onImported} sessionRole={sessionRole} />
+      <TeamImportModal
+        isOpen
+        onClose={() => {}}
+        onImported={onImported}
+        sessionRole={sessionRole}
+        areas={options.areas ?? []}
+        currentAreaId={options.currentAreaId ?? null}
+        allowAreaChoice={options.allowAreaChoice ?? false}
+      />
     </I18nProvider>,
   );
 }
@@ -59,6 +71,15 @@ const remoteEmployee = (over: Partial<RemoteEmployee> = {}): RemoteEmployee => (
   name: 'X',
   userId: null,
   status: 'active',
+  ...over,
+});
+
+const remoteArea = (over: Partial<RemoteArea> = {}): RemoteArea => ({
+  id: 'area-n',
+  name: 'Norte',
+  code: 'N',
+  active: true,
+  createdAt: '2026-01-01T00:00:00.000Z',
   ...over,
 });
 
@@ -308,6 +329,68 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
     fireEvent.click(screen.getByText('Crear 1 empleados'));
 
     await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
+  });
+
+  it('2+ areas: bulk-create new employees inherits the selected import areaId', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [{ key: 'e0', externalEmployeeId: 'EXT0', name: 'Ana Nueva', shifts: [rosterShift('2026-03-04')] }],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    mockedBulkCreateRemoteEmployees.mockResolvedValue([
+      { key: 'e0', status: 'created', employee: remoteEmployee({ id: 'emp-e0', name: 'Ana Nueva', externalEmployeeId: 'EXT0', areaId: 'area-s' }) },
+    ]);
+    renderTeamImportModal(() => {}, 'ADMIN', {
+      areas: [remoteArea(), remoteArea({ id: 'area-s', name: 'Sur', code: null })],
+      allowAreaChoice: true,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Área de la importación' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Sur' }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByText('Crear 1 empleados nuevos')).toBeTruthy());
+    fireEvent.click(screen.getByText('Crear 1 empleados nuevos'));
+    fireEvent.click(screen.getByText('Crear 1 empleados'));
+
+    await waitFor(() => expect(mockedBulkCreateRemoteEmployees).toHaveBeenCalledWith([
+      { key: 'e0', name: 'Ana Nueva', externalEmployeeId: 'EXT0', areaId: 'area-s' },
+    ]));
+  });
+
+  it('area-scoped team import stores areaId on the import record', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [{ key: 'e1', externalEmployeeId: '1001', name: 'Ana Martinez', shifts: [rosterShift('2026-03-04')] }],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({
+      kind: 'recognized',
+      employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: '1001', areaId: 'area-s' })],
+    });
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+    mockedCreateRemoteImport.mockResolvedValue({ id: 'import-1', fileName: '', sourceFormat: 'csv', periodYear: 2026, periodMonth: 2, status: 'completed', areaId: 'area-s' });
+    mockedSyncRemoteShifts.mockResolvedValue({ saved: [], deleted: 0 });
+    renderTeamImportModal(() => {}, 'ADMIN', {
+      areas: [remoteArea(), remoteArea({ id: 'area-s', name: 'Sur', code: null })],
+      currentAreaId: 'area-s',
+      allowAreaChoice: true,
+    });
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
+    fireEvent.click(screen.getByText('Importar'));
+
+    await waitFor(() => expect(mockedCreateRemoteImport).toHaveBeenCalledWith({
+      fileName: '',
+      sourceFormat: 'csv',
+      periodYear: 2026,
+      periodMonth: 2,
+      areaId: 'area-s',
+    }));
   });
 });
 

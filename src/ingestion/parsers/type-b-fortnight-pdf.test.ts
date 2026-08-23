@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
  * Regression coverage for Fase 1.2F-PDF: the reference synthetic PDF
- * (test-data/synthetic/shiftimport-v1/03_cuadrante_agosto_2026.pdf) splits
+ * (test-data/fixtures/parser-regression/03_cuadrante_agosto_2026.pdf) splits
  * one employee's month across TWO pages, one per fortnight (quincena), with
  * weekday-initial day headers in an alphabet that doesn't match the old
  * Spanish-only L/M/X/J/V/S/D pattern. This file proves both fixes:
@@ -22,7 +22,7 @@ const require = createRequire(import.meta.url);
 GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');
 
 const FIXTURE_PATH = new URL(
-  '../../../test-data/synthetic/shiftimport-v1/03_cuadrante_agosto_2026.pdf',
+  '../../../test-data/fixtures/parser-regression/03_cuadrante_agosto_2026.pdf',
   import.meta.url,
 );
 const CONTEXT: CalendarImportContext = { month: 7, year: 2026 }; // August 2026
