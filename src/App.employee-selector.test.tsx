@@ -137,4 +137,21 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     await waitFor(() => expect(screen.getByText('Mis turnos')).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Empleado:' })).toBeNull();
   });
+
+  it('renders the active organization name once in the organization header', async () => {
+    const organizationSession: SessionInfo = {
+      ...adminSession,
+      memberships: [{ organizationId: 'org-1', organizationName: 'Anclora Group', role: 'ADMIN' }],
+    };
+    mockedFetchResolvedSession.mockResolvedValue({ session: organizationSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedLoadRemoteShifts.mockImplementation(shiftsFor);
+
+    renderApp();
+
+    await waitFor(() => expect(document.querySelector('.team-bar')).toBeTruthy());
+    const teamBar = document.querySelector('.team-bar');
+    expect(teamBar?.textContent).toContain('OrganizaciónAnclora Group');
+    expect(teamBar?.textContent).not.toContain('Anclora Group — Anclora Group');
+  });
 });

@@ -56,7 +56,6 @@ import { LandingPage } from './pages/LandingPage';
 import { PricingPage } from './pages/PricingPage';
 import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
-import { formatOrgContext } from './lib/org-labels';
 import { SearchableSelect } from './components/ui/SearchableSelect';
 import { CalendarImportContext } from './lib/import-types';
 import { translateShiftTypeLabel } from './lib/i18n';
@@ -1028,8 +1027,8 @@ function App() {
                   ariaLabel={t('orgSelector.title')}
                   options={session.memberships.map((membership) => ({
                     value: membership.organizationId,
-                    label: `${membership.organizationName} — ${formatOrgContext(t, membership)}`,
-                    searchText: `${membership.organizationName} ${formatOrgContext(t, membership)}`.toLowerCase(),
+                    label: membership.organizationName,
+                    searchText: membership.organizationName.toLowerCase(),
                   }))}
                   style={{ width: 'auto', fontWeight: 700 }}
                 />
@@ -1037,7 +1036,7 @@ function App() {
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                   {(() => {
                     const active = session.memberships.find((m) => m.organizationId === session.organizationId);
-                    return active ? `${active.organizationName} — ${formatOrgContext(t, active)}` : '';
+                    return active?.organizationName ?? '';
                   })()}
                 </span>
               )}
@@ -1390,7 +1389,6 @@ function App() {
 }
 
 export default App;
-
 
 
 
