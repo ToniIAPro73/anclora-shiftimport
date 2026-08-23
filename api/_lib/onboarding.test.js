@@ -6,6 +6,16 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('onboarding atomicity', () => {
+  it('exposes the frontend onboarding route at /api/onboarding', async () => {
+    // Vercel maps api/onboarding.js to /api/onboarding. The frontend calls
+    // that exact route; api/onboarding/onboarding.js alone would deploy as
+    // /api/onboarding/onboarding and return a platform 404.
+    const routePath = path.resolve(__dirname, '..', 'onboarding.js');
+    const content = await fs.readFile(routePath, 'utf8');
+
+    expect(content).toContain("./onboarding/onboarding.js");
+  });
+
   it('onboarding handler uses .transaction()', async () => {
     // Handler is in api/onboarding/onboarding.js (parent dir of this test location)
     const handlerPath = path.resolve(__dirname, '..', 'onboarding', 'onboarding.js');
