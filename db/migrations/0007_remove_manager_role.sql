@@ -20,18 +20,10 @@ WHERE role = 'MANAGER';
 
 -- Step 2: Drop old constraint (if it still exists — after migration it won't
 -- because we've already removed all MANAGER rows, but the constraint itself
--- remains until we drop+add it)
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT FROM information_schema.table_constraints
-    WHERE constraint_name = 'memberships_role_check'
-    AND table_name = 'memberships'
-  ) THEN
-    ALTER TABLE memberships DROP CONSTRAINT memberships_role_check;
-  END IF;
-END
-$$;
+-- remains until we drop+add it). No DO $$ block: db/migrate.mjs splits
+-- statements on ";" at end-of-line, which shatters PL/pgSQL bodies —
+-- DROP CONSTRAINT IF EXISTS is the splitter-safe equivalent.
+ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_role_check;
 
 -- Step 3: Add new constraint
 ALTER TABLE memberships

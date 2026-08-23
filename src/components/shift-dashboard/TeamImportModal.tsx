@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import type { PlanId } from '../../lib/plans';
 import { detectTeamRoster, DetectedTeamEmployee } from '../../ingestion/team-roster';
 import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
 import {
   RemoteEmployee,
+  RemoteArea,
   EmployeeMatchKind,
   matchRemoteEmployee,
   createRemoteEmployee,
@@ -34,6 +35,12 @@ interface TeamImportModalProps {
   /** A sibling Team-plan org to offer switching to instead of upgrading. */
   switchTarget?: { id: string; name: string } | null;
   onSwitchOrg?: (organizationId: string) => void;
+  /** Active org areas. Empty means area-less org and no area UI. */
+  areas?: RemoteArea[];
+  /** Dashboard area context inherited by default (null = whole company). */
+  currentAreaId?: string | null;
+  /** ADMIN with 2+ areas may choose import target. */
+  allowAreaChoice?: boolean;
 }
 
 interface TeamRow {
@@ -99,8 +106,20 @@ const statusLabelKey: Record<EmployeeMatchKind, string> = {
  * individually/all → preview (new/conflicting/unchanged per employee,
  * conflicts are never silently overwritten) → import → results summary.
  */
-export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = null, currentPlan = null, switchTarget = null, onSwitchOrg }: TeamImportModalProps) => {
+export const TeamImportModal = ({
+  isOpen,
+  onClose,
+  onImported,
+  sessionRole = null,
+  currentPlan = null,
+  switchTarget = null,
+  onSwitchOrg,
+  areas = [],
+  currentAreaId = null,
+  allowAreaChoice = false,
+}: TeamImportModalProps) => {
   const { t } = useI18n();
+  const defaultImportAreaId = currentAreaId ?? (areas.length === 1 ? areas[0].id : null);
   const [step, setStep] = useState<Step>('upload');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -124,14 +143,31 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
   // employee (one document, one source event); CSV keeps its existing
   // per-employee Import (unchanged, regression-safe).
   const [sourceFormat, setSourceFormat] = useState<'csv' | 'pdf'>('csv');
+  const [importAreaId, setImportAreaId] = useState<string | null>(defaultImportAreaId);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ created: number; existing: number; failed: number } | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setImportAreaId(defaultImportAreaId);
+    }
+  }, [defaultImportAreaId, isOpen]);
+
   if (!isOpen) {
     return null;
   }
+
+  const currentAreaName = areas.find((area) => area.id === importAreaId)?.name ?? null;
+  const areaSelectOptions = [
+    { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
+    ...areas.map((area) => ({
+      value: area.id,
+      label: area.name,
+      searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
+    })),
+  ];
 
   const reset = () => {
     setStep('upload');
@@ -142,6 +178,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
     setOutcomes([]);
     setImporting(false);
     setSourceFormat('csv');
+    setImportAreaId(defaultImportAreaId);
     setBulkConfirmOpen(false);
     setBulkBusy(false);
     setBulkResult(null);
@@ -168,6 +205,21 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
 
       const matched = await Promise.all(detection.employees.map(async (employee): Promise<TeamRow> => {
         const match = await matchRemoteEmployee({ name: employee.name, externalId: employee.externalEmployeeId });
+        const recognized = match.kind === 'recognized' ? match.employees[0] : null;
+        const crossArea = importAreaId && recognized?.areaId && recognized.areaId !== importAreaId;
+        if (crossArea) {
+          return {
+            key: employee.key,
+            externalEmployeeId: employee.externalEmployeeId,
+            name: employee.name,
+            detected: employee,
+            status: 'ambiguous',
+            candidates: match.employees,
+            resolvedEmployeeId: null,
+            selected: false,
+            busy: false,
+          };
+        }
         return {
           key: employee.key,
           externalEmployeeId: employee.externalEmployeeId,
@@ -219,6 +271,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
       const created = await createRemoteEmployee({
         name: row.name,
         externalEmployeeId: row.externalEmployeeId || undefined,
+        areaId: importAreaId ?? undefined,
       });
       updateRow(row.key, { status: 'recognized', resolvedEmployeeId: created.id, selected: true, busy: false });
     } catch (err) {
@@ -289,6 +342,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
         key: row.key,
         name: row.name,
         externalEmployeeId: row.externalEmployeeId || undefined,
+        areaId: importAreaId ?? undefined,
       })));
       const byKey = new Map<string, BulkCreateResult>(results.map((result) => [result.key, result]));
 
@@ -384,6 +438,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
             sourceFormat: 'pdf',
             periodYear: period.year,
             periodMonth: period.month,
+            areaId: importAreaId ?? null,
           });
           sharedImportId = created.id;
         } catch (err) {
@@ -406,6 +461,7 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
               sourceFormat,
               periodYear: period.year,
               periodMonth: period.month,
+              areaId: importAreaId ?? null,
             });
             importId = created.id;
           }
@@ -448,6 +504,27 @@ export const TeamImportModal = ({ isOpen, onClose, onImported, sessionRole = nul
 
         {step === 'upload' && (
           <div style={{ display: 'grid', gap: '12px' }}>
+            {areas.length === 1 && (
+              <p data-testid="team-import-area-context" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.82rem' }}>
+                {t('areas.contextLabel')}: <strong>{areas[0].name}</strong>
+              </p>
+            )}
+            {areas.length >= 2 && allowAreaChoice && (
+              <SearchableSelect
+                label={t('importModal.areaLabel')}
+                value={importAreaId ?? ''}
+                onChange={(value) => setImportAreaId(value || null)}
+                searchPlaceholder={t('orgSelector.searchPlaceholder')}
+                emptyMessage={t('orgSelector.noResults')}
+                ariaLabel={t('importModal.areaLabel')}
+                options={areaSelectOptions}
+              />
+            )}
+            {areas.length >= 2 && !allowAreaChoice && currentAreaName && (
+              <p data-testid="team-import-area-context" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.82rem' }}>
+                {t('areas.contextLabel')}: <strong>{currentAreaName}</strong>
+              </p>
+            )}
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.88rem' }}>{t('teamImport.uploadHint')}</p>
             <label className="btn-gold" style={{ padding: '12px 18px', fontWeight: 800, textAlign: 'center', cursor: 'pointer' }}>
               {loading ? t('teamImport.matching') : t('teamImport.chooseFile')}

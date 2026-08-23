@@ -70,7 +70,8 @@ export async function destroyAllSessions(sql, userId) {
  * organization itself.
  *
  * Returns null when unauthenticated. Shape:
- * { user, organizationId, role, employeeId, memberships }
+ * { user, organizationId, role, plan, employeeId, memberships }
+ * - plan: the active organization's commercial plan (null without active org).
  * - employeeId: the Employee linked to this user inside the active org, when
  *   one exists. EMPLOYEE-role requests are always forced through it.
  */
@@ -93,13 +94,13 @@ export async function resolveContext(req, sql) {
   const user = { id: rows[0].id, email: rows[0].email, displayName: rows[0].display_name };
 
   const memberships = await sql`
-    SELECT m.organization_id, m.role, o.name AS organization_name
+    SELECT m.organization_id, m.role, o.name AS organization_name, o.plan AS organization_plan
     FROM memberships m
     JOIN organizations o ON o.id = m.organization_id
     WHERE m.user_id = ${user.id}
   `;
   if (memberships.length === 0) {
-    return { user, organizationId: null, role: null, employeeId: null, memberships: [] };
+    return { user, organizationId: null, role: null, plan: null, employeeId: null, memberships: [] };
   }
 
   // Client may request an org via header, but only one it actually belongs to.
@@ -126,6 +127,9 @@ export async function resolveContext(req, sql) {
     user,
     organizationId: membership?.organization_id ?? null,
     role: membership?.role ?? null,
+    // Plan of the ACTIVE organization — the single backend authority for
+    // entitlement checks (plans.js); null when no organization is selected.
+    plan: membership?.organization_plan ?? null,
     employeeId,
     memberships: memberships.map((m) => ({
       organizationId: m.organization_id,

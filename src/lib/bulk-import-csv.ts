@@ -21,9 +21,14 @@ function columnIndex(headers: string[], name: string): number {
 export interface EmployeeCsvRow {
   externalEmployeeId: string;
   name: string;
+  /** Optional `area` column (Anclora roster format) — resolved server-side
+   * by the bulk endpoint against the org's active areas; an unknown area
+   * fails only that row and is never auto-created. */
+  areaName?: string;
 }
 
-/** Format: `external_employee_id,name` (extra columns are ignored). Null when
+/** Format: `external_employee_id,name` (extra columns are ignored; optional
+ * `area` column is captured for area-scoped roster imports). Null when
  * the file isn't a recognizable table or is missing a required column. */
 export function parseEmployeesCsv(text: string): EmployeeCsvRow[] | null {
   const table = parseRosterTable(text);
@@ -35,10 +40,12 @@ export function parseEmployeesCsv(text: string): EmployeeCsvRow[] | null {
   if (idIndex === -1 || nameIndex === -1) {
     return null;
   }
+  const areaIndex = columnIndex(table.headers, 'area');
   return table.rows
     .map((row) => ({
       externalEmployeeId: (row[idIndex] ?? '').trim(),
       name: (row[nameIndex] ?? '').trim(),
+      ...(areaIndex >= 0 ? { areaName: (row[areaIndex] ?? '').trim() } : {}),
     }))
     .filter((row) => row.externalEmployeeId || row.name);
 }

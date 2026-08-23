@@ -13,6 +13,7 @@ export interface RemoteEmployee {
   externalEmployeeId: string | null;
   name: string;
   userId: string | null;
+  areaId?: string | null;
   status: 'active' | 'inactive' | 'pending_access';
 }
 
@@ -23,6 +24,7 @@ export interface RemoteImport {
   periodYear: number | null;
   periodMonth: number | null;
   status: string;
+  areaId?: string | null;
 }
 
 /** `recognized_inactive`: the single match exists but its status is
@@ -84,8 +86,9 @@ export async function syncRemoteShifts(
   return { saved: payload.saved.map(toShift), deleted: payload.deleted };
 }
 
-export async function listRemoteEmployees(): Promise<RemoteEmployee[]> {
-  const payload = await apiFetch<{ employees: RemoteEmployee[] }>('/api/employees');
+export async function listRemoteEmployees(areaId?: string | null): Promise<RemoteEmployee[]> {
+  const query = areaId ? `?areaId=${encodeURIComponent(areaId)}` : '';
+  const payload = await apiFetch<{ employees: RemoteEmployee[] }>(`/api/employees${query}`);
   return payload.employees;
 }
 
@@ -109,6 +112,8 @@ export async function matchRemoteEmployee(
 export async function createRemoteEmployee(input: {
   name: string;
   externalEmployeeId?: string;
+  areaId?: string | null;
+  areaName?: string;
 }): Promise<RemoteEmployee> {
   const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees', {
     method: 'POST',
@@ -124,6 +129,8 @@ export async function updateRemoteEmployee(input: {
   id: string;
   name?: string;
   externalEmployeeId?: string;
+  areaId?: string | null;
+  areaName?: string;
   status?: 'active' | 'inactive' | 'pending_access';
 }): Promise<RemoteEmployee> {
   const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees', {
@@ -166,13 +173,15 @@ export async function deleteRemoteEmployee(id: string): Promise<void> {
 }
 
 export type BulkCreateStatus = 'created' | 'existing' | 'existing_inactive' | 'failed';
-export type BulkCreateFailReason = 'invalid' | 'plan_limit' | 'error';
+export type BulkCreateFailReason = 'invalid' | 'plan_limit' | 'unknown_area' | 'error';
 
 export interface BulkCreateResult {
   key: string;
   status: BulkCreateStatus;
   employee?: RemoteEmployee;
   reason?: BulkCreateFailReason;
+  /** Present when areaName was provided but could not be resolved */
+  areaError?: string;
 }
 
 /** "Create all new employees" — one request, many rows. `key` is a
@@ -182,6 +191,8 @@ export async function bulkCreateRemoteEmployees(items: {
   key: string;
   name: string;
   externalEmployeeId?: string;
+  areaId?: string | null;
+  areaName?: string;
 }[]): Promise<BulkCreateResult[]> {
   const payload = await apiFetch<{ results: BulkCreateResult[] }>('/api/employees/bulk', {
     method: 'POST',
@@ -195,12 +206,57 @@ export async function createRemoteImport(input: {
   sourceFormat: string;
   periodYear: number;
   periodMonth: number;
+  areaId?: string | null;
 }): Promise<RemoteImport> {
   const payload = await apiFetch<{ import: RemoteImport }>('/api/imports', {
     method: 'POST',
     body: JSON.stringify(input),
   });
   return payload.import;
+}
+
+// ------------------------------------------------------------ areas
+
+/**
+ * Organization areas (optional, 0..N per org). Listing is allowed for any
+ * role (EMPLOYEE needs it to resolve its own area context); create/update
+ * are ADMIN-only — the server enforces it, the client simply surfaces 403s.
+ */
+export interface RemoteArea {
+  id: string;
+  name: string;
+  code: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+export async function listRemoteAreas(): Promise<RemoteArea[]> {
+  const payload = await apiFetch<{ areas: RemoteArea[] }>('/api/areas');
+  return payload.areas;
+}
+
+export async function createRemoteArea(input: { name: string; code?: string }): Promise<RemoteArea> {
+  const payload = await apiFetch<{ area: RemoteArea }>('/api/areas', {
+    method: 'POST',
+    body: JSON.stringify({ name: input.name, ...(input.code ? { code: input.code } : {}) }),
+  });
+  return payload.area;
+}
+
+/** Rename / change code / deactivate (ADMIN). No DELETE exists server-side:
+ * historical shifts/imports keep referencing the area, so removal is always
+ * `deactivate: true`. Send `code: ''` to clear an existing code. */
+export async function updateRemoteArea(input: {
+  id: string;
+  name?: string;
+  code?: string;
+  deactivate?: boolean;
+}): Promise<RemoteArea> {
+  const payload = await apiFetch<{ area: RemoteArea }>('/api/areas', {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+  return payload.area;
 }
 
 // ------------------------------------------------------------ memberships

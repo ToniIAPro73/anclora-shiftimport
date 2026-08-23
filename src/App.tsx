@@ -22,12 +22,15 @@ import {
 import {
   createRemoteEmployee,
   createRemoteImport,
+  listRemoteAreas,
   listRemoteEmployees,
   loadRemoteShifts,
   matchRemoteEmployee,
+  RemoteArea,
   RemoteEmployee,
   syncRemoteShifts,
 } from './lib/remote';
+import { findAreaMismatch } from './lib/areas';
 import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
@@ -40,6 +43,7 @@ import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal'
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
 import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
+import { AreasModal } from './components/shift-dashboard/AreasModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
 import { AuthScreen } from './components/AuthScreen';
@@ -105,11 +109,21 @@ function App() {
   useEffect(() => {
     selectedEmployeeIdRef.current = selectedEmployeeId;
   }, [selectedEmployeeId]);
+  // Areas opcionales (0..N por org): loaded with the authenticated bootstrap,
+  // always empty in guest mode. selectedAreaId only matters with 2+ active
+  // areas (null = whole company); 0/1-area orgs derive their context instead.
+  const [areas, setAreas] = useState<RemoteArea[]>([]);
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const selectedAreaIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedAreaIdRef.current = selectedAreaId;
+  }, [selectedAreaId]);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
   const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
+  const [isAreasOpen, setIsAreasOpen] = useState(false);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -130,24 +144,39 @@ function App() {
   // is never deleted.
   const hydrateAuthenticated = useCallback(async (nextSession: SessionInfo): Promise<void> => {
     const epoch = authEpochRef.current;
-    const orgEmployees = await listRemoteEmployees();
+    const [orgEmployees, orgAreas] = await Promise.all([
+      listRemoteEmployees(),
+      listRemoteAreas(),
+    ]);
     if (epoch !== authEpochRef.current) {
       return; // logged out (or session invalidated) while this was in flight
     }
     setEmployees(orgEmployees);
+    setAreas(orgAreas);
 
     // Prefer keeping whatever employee was already selected (e.g. a
     // TeamImportModal import refresh, or a plain reload) as long as it's
     // still a valid active employee of THIS org's fresh roster — never a
     // stale id from a previous organization, since activeIds is always
     // scoped to orgEmployees just fetched for the current org.
-    const activeIds = new Set(orgEmployees.filter((employee) => employee.status === 'active').map((employee) => employee.id));
+    // Area context narrows the candidate pool the same way the team-bar
+    // selector does: 1 active area ⇒ that area; 2+ ⇒ the chosen one.
+    const activeAreas = orgAreas.filter((area) => area.active);
+    const effectiveAreaId = activeAreas.length === 1
+      ? activeAreas[0].id
+      : (selectedAreaIdRef.current && activeAreas.some((area) => area.id === selectedAreaIdRef.current)
+        ? selectedAreaIdRef.current
+        : null);
+    const areaEmployees = nextSession.role === 'EMPLOYEE' || effectiveAreaId === null
+      ? orgEmployees
+      : orgEmployees.filter((employee) => employee.areaId === effectiveAreaId);
+    const activeIds = new Set(areaEmployees.filter((employee) => employee.status === 'active').map((employee) => employee.id));
     const previousSelection = selectedEmployeeIdRef.current;
     const initialEmployeeId = nextSession.role === 'EMPLOYEE'
       ? nextSession.employeeId
       : (previousSelection && activeIds.has(previousSelection)
         ? previousSelection
-        : (nextSession.employeeId ?? orgEmployees[0]?.id ?? null));
+        : (nextSession.employeeId ?? areaEmployees[0]?.id ?? null));
     setSelectedEmployeeId(initialEmployeeId);
 
     if (!initialEmployeeId) {
@@ -270,6 +299,9 @@ function App() {
     setSession(nextSession);
     setNeedsOrgChoice(false);
     setShifts([]);
+    // Org switch: the area context belongs to the previous organization.
+    setAreas([]);
+    setSelectedAreaId(null);
     try {
       await hydrateAuthenticated(nextSession);
     } catch (error) {
@@ -311,9 +343,12 @@ function App() {
       setSession(null);
       setEmployees([]);
       setSelectedEmployeeId(null);
+      setAreas([]);
+      setSelectedAreaId(null);
       setNeedsOrgChoice(false);
       setMigrationPrompt(null);
       setIsMembersOpen(false);
+      setIsAreasOpen(false);
       setIsAuthOpen(false);
     });
     setShifts(await loadShifts());
@@ -370,6 +405,62 @@ function App() {
       setShifts(await loadRemoteShifts(employeeId));
     } catch (error) {
       console.error('Failed to load employee shifts', error);
+    }
+  }, []);
+
+  // ------------------------------------------------------- area context
+  // 0 active areas → no area UI at all; 1 → implicit context (text only);
+  // 2+ → selectedAreaId (null = whole company). EMPLOYEE never gets a
+  // selector: their context is their own employee's area.
+  const activeAreas = useMemo(() => areas.filter((area) => area.active), [areas]);
+  const selfEmployee = session?.role === 'EMPLOYEE'
+    ? employees.find((employee) => employee.id === session.employeeId) ?? null
+    : null;
+  const effectiveAreaId = session?.role === 'EMPLOYEE'
+    ? (selfEmployee?.areaId ?? null)
+    : (activeAreas.length === 1
+      ? activeAreas[0].id
+      : (selectedAreaId && activeAreas.some((area) => area.id === selectedAreaId) ? selectedAreaId : null));
+  // Roster offered in the team-bar selector (ADMIN): narrowed to the area
+  // when one is in context; the full org roster otherwise.
+  const visibleEmployees = useMemo(
+    () => (session && session.role !== 'EMPLOYEE' && effectiveAreaId !== null
+      ? employees.filter((employee) => employee.areaId === effectiveAreaId)
+      : employees),
+    [session, effectiveAreaId, employees],
+  );
+
+  // Keep the working employee consistent with the area context: when the
+  // area changes (or an area is deactivated), a selected employee outside
+  // the area is replaced by the first active one inside it — never kept
+  // silently, or the calendar would show cross-area data.
+  useEffect(() => {
+    if (!session || session.role === 'EMPLOYEE') {
+      return;
+    }
+    const candidates = visibleEmployees.filter((employee) => employee.status === 'active');
+    if (selectedEmployeeId && candidates.some((employee) => employee.id === selectedEmployeeId)) {
+      return;
+    }
+    const next = candidates[0]?.id ?? null;
+    if (next === selectedEmployeeId) {
+      return;
+    }
+    setSelectedEmployeeId(next);
+    if (next) {
+      loadRemoteShifts(next)
+        .then(setShifts)
+        .catch((error) => console.error('Failed to load employee shifts', error));
+    } else {
+      setShifts([]);
+    }
+  }, [session, visibleEmployees, selectedEmployeeId]);
+
+  const refreshAreas = useCallback(async () => {
+    try {
+      setAreas(await listRemoteAreas());
+    } catch (error) {
+      console.error('Failed to refresh areas', error);
     }
   }, []);
 
@@ -494,6 +585,7 @@ function App() {
    */
   const resolveImportEmployee = useCallback(async (
     selector?: { name: string; externalId: string },
+    areaId?: string | null,
   ): Promise<RemoteEmployee | null> => {
     if (!session) {
       return null;
@@ -546,7 +638,8 @@ function App() {
       return null;
     }
 
-    // kind === 'new': inline alta, never leaves the import flow.
+    // kind === 'new': inline alta, never leaves the import flow. The new
+    // employee inherits the import's area context (never a cross-area row).
     const label = externalId ? `${name || externalId} (ID ${externalId})` : name;
     if (!name) {
       return null;
@@ -554,7 +647,7 @@ function App() {
     if (!window.confirm(t('team.createEmployeeConfirm', { employee: label }))) {
       return null;
     }
-    const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined });
+    const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined, areaId: areaId ?? undefined });
     setEmployees((current) => [...current, created]);
     return created;
   }, [session, employees, selectedEmployeeId, t]);
@@ -563,6 +656,7 @@ function App() {
     newShifts: Shift[],
     targetPeriod: CalendarImportContext,
     selector?: { name: string; externalId: string },
+    areaId?: string | null,
   ): Promise<boolean> => {
     // Authenticated mode: resolve the target employee first; switching the
     // working set keeps each employee's calendar isolated.
@@ -571,7 +665,7 @@ function App() {
     if (session) {
       let targetEmployee: RemoteEmployee | null;
       try {
-        targetEmployee = await resolveImportEmployee(selector);
+        targetEmployee = await resolveImportEmployee(selector, areaId);
       } catch (error) {
         console.error('Failed to resolve import employee', error);
         window.alert(t('team.resolveEmployeeFailed'));
@@ -580,6 +674,19 @@ function App() {
       if (!targetEmployee) {
         return false;
       }
+
+      // Area-scoped import: a matched employee belonging to a DIFFERENT area
+      // is never imported silently — explicit "import anyway" or cancel.
+      // Org-scoped imports (no area selected) never mismatch.
+      const mismatch = findAreaMismatch(targetEmployee, areaId, areas);
+      if (mismatch && !window.confirm(t('team.areaMismatchConfirm', {
+        name: mismatch.employeeName,
+        employeeArea: mismatch.employeeAreaName,
+        targetArea: mismatch.targetAreaName,
+      }))) {
+        return false;
+      }
+
       targetEmployeeId = targetEmployee.id;
 
       try {
@@ -588,6 +695,7 @@ function App() {
           sourceFormat: newShifts[0]?.sourceFormat ?? '',
           periodYear: targetPeriod.year,
           periodMonth: targetPeriod.month,
+          areaId: areaId ?? null,
         });
         importId = created.id;
       } catch (error) {
@@ -940,6 +1048,40 @@ function App() {
                 <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t(`role.${session.role.toLowerCase()}`)}</span>
               </label>
             )}
+            {session.role !== 'EMPLOYEE' && activeAreas.length === 1 && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                {t('areas.contextLabel')}
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{activeAreas[0].name}</span>
+              </label>
+            )}
+            {session.role !== 'EMPLOYEE' && activeAreas.length >= 2 && (
+              <div style={{ minWidth: '180px', maxWidth: '260px' }}>
+                <SearchableSelect
+                  label={t('areas.contextLabel')}
+                  value={selectedAreaId ?? ''}
+                  onChange={(value) => setSelectedAreaId(value || null)}
+                  searchPlaceholder={t('orgSelector.searchPlaceholder')}
+                  emptyMessage={t('orgSelector.noResults')}
+                  ariaLabel={t('areas.contextLabel')}
+                  options={[
+                    { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
+                    ...activeAreas.map((area) => ({
+                      value: area.id,
+                      label: area.name,
+                      searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
+                    })),
+                  ]}
+                />
+              </div>
+            )}
+            {session.role === 'EMPLOYEE' && selfEmployee?.areaId && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                {t('areas.contextLabel')}
+                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {areas.find((area) => area.id === selfEmployee.areaId)?.name ?? ''}
+                </span>
+              </label>
+            )}
             <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--glass-border)' }} aria-hidden="true" />
             {session.role === 'EMPLOYEE' ? (
               <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
@@ -950,9 +1092,9 @@ function App() {
                   value={selectedEmployeeId ?? ''}
                   onChange={(employeeId) => void handleSelectEmployee(employeeId)}
                   searchPlaceholder={t('employeeSelect.searchPlaceholder')}
-                  emptyMessage={employees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
+                  emptyMessage={visibleEmployees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
                   ariaLabel={t('team.employeeLabel')}
-                  options={employees
+                  options={visibleEmployees
                     .filter((employee) => employee.status === 'active')
                     .map((employee) => ({
                       value: employee.id,
@@ -972,6 +1114,16 @@ function App() {
                 style={{ padding: '6px 12px', fontWeight: 700 }}
               >
                 {t('members.title')}
+              </button>
+            )}
+            {session.role === 'ADMIN' && (
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setIsAreasOpen(true)}
+                style={{ padding: '6px 12px', fontWeight: 700 }}
+              >
+                {t('areas.manage')}
               </button>
             )}
             <button
@@ -1104,6 +1256,9 @@ function App() {
           })()}
           identityLocked={Boolean(session)}
           userId={session?.user.id ?? null}
+          areas={activeAreas}
+          currentAreaId={effectiveAreaId}
+          allowAreaChoice={session?.role === 'ADMIN'}
         />
       )}
 
@@ -1116,6 +1271,9 @@ function App() {
           }}
           sessionRole={session.role}
           onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
+          areas={activeAreas}
+          currentAreaId={effectiveAreaId}
+          allowAreaChoice={session.role === 'ADMIN'}
         />
       )}
 
@@ -1157,6 +1315,7 @@ function App() {
         isOpen={isMembersOpen}
         onClose={() => setIsMembersOpen(false)}
         employees={employees}
+        areas={activeAreas}
         currentUserId={session?.user.id ?? ''}
         onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         onChanged={() => {
@@ -1164,6 +1323,12 @@ function App() {
             void hydrateAuthenticated(session);
           }
         }}
+      />
+
+      <AreasModal
+        isOpen={isAreasOpen}
+        onClose={() => setIsAreasOpen(false)}
+        onChanged={() => void refreshAreas()}
       />
 
       {importConflictState && (
@@ -1225,8 +1390,6 @@ function App() {
 }
 
 export default App;
-
-
 
 
 

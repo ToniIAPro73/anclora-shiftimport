@@ -4,10 +4,14 @@ import { handleError, sendJson } from '../_lib/http.js';
 
 /**
  * GET  /api/employees                — org-scoped list (EMPLOYEE sees only self)
+ * GET  /api/employees?areaId=X       — list filtered by area (ADMIN dashboard
+ *                                      area context; ignored for EMPLOYEE)
  * GET  /api/employees?match=1        — matching for the importer (body-less:
  *                                      externalId/name as query params)
- * POST /api/employees                — create (ADMIN+, inline alta flow)
- * PATCH /api/employees               — update/deactivate/link user (ADMIN)
+ * POST /api/employees                — create (ADMIN+, inline alta flow);
+ *                                      optional areaId / areaName assignment
+ * PATCH /api/employees               — update/deactivate/link user (ADMIN);
+ *                                      optional area move via areaId/areaName
  * DELETE /api/employees              — permanent delete, only without shift
  *                                      history (ADMIN)
  * PATCH /api/employees/self          — update own employee name (EMPLOYEE+)
@@ -25,7 +29,9 @@ export default async function handler(req, res) {
         });
         return sendJson(res, 200, result);
       }
-      const employees = await listEmployees(sql, ctx);
+      const employees = await listEmployees(sql, ctx, {
+        areaId: String(req.query?.areaId ?? '').trim() || null,
+      });
       return sendJson(res, 200, { employees });
     }
 

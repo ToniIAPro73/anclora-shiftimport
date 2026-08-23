@@ -33,6 +33,7 @@ function normalizeShiftInput(raw) {
     endTime: String(raw?.endTime ?? '').trim(),
     location: String(raw?.location ?? '').trim(),
     origin: raw?.origin === 'MAN' ? 'MAN' : 'IMP',
+    areaId: raw?.areaId ? String(raw.areaId).trim() || null : null,
   };
 }
 
@@ -45,6 +46,7 @@ function mapEmployeeRow(row) {
     externalEmployeeId: row.external_employee_id,
     name: row.name,
     userId: row.user_id,
+    areaId: row.area_id ?? null,
     status: row.status,
     deactivatedAt: row.deactivated_at,
   };
@@ -60,6 +62,7 @@ function mapImportRow(row) {
     periodYear: row.period_year,
     periodMonth: row.period_month,
     status: row.status,
+    areaId: row.area_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -70,6 +73,7 @@ function mapShiftRow(row) {
     organizationId: row.organization_id,
     employeeId: row.employee_id,
     importId: row.import_id,
+    areaId: row.area_id ?? null,
     date: row.date,
     startTime: row.start_time,
     endTime: row.end_time,
@@ -99,9 +103,45 @@ async function assertEmployeeInOrg(sql, ctx, employeeId) {
   }
 }
 
+/**
+ * Areas are optional (0..N per organization). An area id sent by the client
+ * is only ever accepted when the row belongs to ctx.organizationId — same
+ * no-cross-tenant convention as assertEmployeeInOrg (403, no existence leak).
+ */
+async function assertAreaInOrg(sql, ctx, areaId) {
+  const rows = await sql`
+    SELECT id FROM areas
+    WHERE id = ${areaId} AND organization_id = ${ctx.organizationId} AND active = TRUE
+  `;
+  if (rows.length === 0) {
+    throw new HttpError(403, 'Area does not belong to the organization');
+  }
+}
+
+/**
+ * Resolve an area by normalized (trim + lowercase) name or code within the
+ * session org. Returns the area id, or null when the name/code is unknown —
+ * callers decide whether unknown means "store null" (never) or "fail the
+ * row" (roster bulk) — unknown areas are NEVER auto-created here.
+ */
+async function resolveAreaIdByName(sql, ctx, areaName) {
+  const normalized = String(areaName ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  const rows = await sql`
+    SELECT id FROM areas
+    WHERE organization_id = ${ctx.organizationId}
+      AND active = TRUE
+      AND (lower(trim(name)) = ${normalized}
+        OR (code IS NOT NULL AND lower(trim(code)) = ${normalized}))
+  `;
+  return rows[0]?.id ?? null;
+}
+
 // ---------------------------------------------------------------- employees
 
-export async function listEmployees(sql, ctx) {
+export async function listEmployees(sql, ctx, { areaId = null } = {}) {
   if (ctx.role === 'EMPLOYEE') {
     const rows = await sql`
       SELECT * FROM employees
@@ -111,11 +151,20 @@ export async function listEmployees(sql, ctx) {
     `;
     return rows.map(mapEmployeeRow);
   }
-  const rows = await sql`
-    SELECT * FROM employees
-    WHERE organization_id = ${ctx.organizationId}
-    ORDER BY name ASC
-  `;
+  // Optional area filter (ADMIN dashboard area context). A foreign area id
+  // simply matches nothing — no cross-tenant leak through list filters.
+  const rows = areaId
+    ? await sql`
+        SELECT * FROM employees
+        WHERE organization_id = ${ctx.organizationId}
+          AND area_id = ${areaId}
+        ORDER BY name ASC
+      `
+    : await sql`
+        SELECT * FROM employees
+        WHERE organization_id = ${ctx.organizationId}
+        ORDER BY name ASC
+      `;
   return rows.map(mapEmployeeRow);
 }
 
@@ -203,11 +252,31 @@ export async function createEmployee(sql, ctx, input) {
   // (no login access yet). The onboarding endpoint explicitly passes status='active'
   // when creating a self-linked employee with user_id.
   const status = input?.status === 'active' ? 'active' : 'pending_access';
-  const rows = await sql`
-    INSERT INTO employees (organization_id, external_employee_id, name, status)
-    VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${status})
-    RETURNING *
-  `;
+
+  // Optional area assignment: by id (validated against the session org) or by
+  // name/code (unknown name is a client error, never an auto-create).
+  let areaId = null;
+  if (input?.areaId !== undefined && input.areaId !== null && String(input.areaId).trim()) {
+    areaId = String(input.areaId).trim();
+    await assertAreaInOrg(sql, ctx, areaId);
+  } else if (input?.areaName !== undefined && String(input.areaName).trim()) {
+    areaId = await resolveAreaIdByName(sql, ctx, input.areaName);
+    if (!areaId) {
+      throw new HttpError(400, `Unknown area: ${String(input.areaName).trim()}`);
+    }
+  }
+
+  const rows = areaId
+    ? await sql`
+        INSERT INTO employees (organization_id, external_employee_id, name, status, area_id)
+        VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${status}, ${areaId})
+        RETURNING *
+      `
+    : await sql`
+        INSERT INTO employees (organization_id, external_employee_id, name, status)
+        VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${status})
+        RETURNING *
+      `;
   return mapEmployeeRow(rows[0]);
 }
 
@@ -239,6 +308,37 @@ export async function bulkCreateEmployees(sql, ctx, items) {
     byName.set(key, byName.has(key) ? null : employee); // null = ambiguous, never auto-matched
   }
 
+  // Roster `area` column resolution: one lookup of the org's active areas,
+  // matched per row by normalized name OR code. Empty cell → area_id NULL
+  // (employee belongs directly to the org). Unknown area → the row FAILS
+  // with reason 'unknown_area' — unknown areas are never auto-created, so
+  // "Operaciones"/"operaciones"/" OPERACIONES" can never spawn duplicates.
+  const areaRows = await sql`
+    SELECT id, name, code FROM areas
+    WHERE organization_id = ${ctx.organizationId} AND active = TRUE
+  `;
+  const areaIdByKey = new Map();
+  for (const area of areaRows) {
+    areaIdByKey.set(area.name.trim().toLowerCase(), area.id);
+    if (area.code) {
+      areaIdByKey.set(area.code.trim().toLowerCase(), area.id);
+    }
+  }
+  const resolveRosterArea = (raw) => {
+    const explicitAreaId = String(raw?.areaId ?? '').trim();
+    if (explicitAreaId) {
+      const known = areaRows.some((area) => area.id === explicitAreaId);
+      return known ? { areaId: explicitAreaId } : { unknown: true, label: explicitAreaId };
+    }
+    const areaName = raw?.areaName;
+    const normalized = String(areaName ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return { areaId: null };
+    }
+    const areaId = areaIdByKey.get(normalized);
+    return areaId ? { areaId } : { unknown: true, label: String(areaName ?? '').trim() };
+  };
+
   // Plan-limit semantics (maxEmployees) count ACTIVE employees only, same as
   // createEmployee — inactive rows never consume the quota.
   let runningCount = existingRows.filter((row) => row.status === 'active').length;
@@ -266,13 +366,26 @@ export async function bulkCreateEmployees(sql, ctx, items) {
       continue;
     }
 
+    const area = resolveRosterArea(raw);
+    if (area.unknown) {
+      results.push({ key, status: 'failed', reason: 'unknown_area', areaError: `Unknown area: ${area.label}` });
+      continue;
+    }
+
     try {
-      const inserted = await sql`
-        INSERT INTO employees (organization_id, external_employee_id, name, status)
-        VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access')
-        ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
-        RETURNING *
-      `;
+      const inserted = area.areaId
+        ? await sql`
+            INSERT INTO employees (organization_id, external_employee_id, name, status, area_id)
+            VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access', ${area.areaId})
+            ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+            RETURNING *
+          `
+        : await sql`
+            INSERT INTO employees (organization_id, external_employee_id, name, status)
+            VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access')
+            ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+            RETURNING *
+          `;
       if (inserted.length > 0) {
         const employee = mapEmployeeRow(inserted[0]);
         if (employee.externalEmployeeId) {
@@ -335,6 +448,28 @@ export async function updateEmployee(sql, ctx, input) {
   const status = input?.status === undefined
     ? current.status
     : (input.status === 'inactive' ? 'inactive' : 'active');
+
+  // Area move (ADMIN): explicit areaId (null = back to organization-direct),
+  // or areaName resolved within the org. Only employees.area_id changes —
+  // historical shifts.area_id / imports.area_id are snapshots, never
+  // recalculated retroactively.
+  let areaId = current.areaId;
+  if (input?.areaId !== undefined) {
+    areaId = input.areaId === null ? null : String(input.areaId).trim() || null;
+    if (areaId) {
+      await assertAreaInOrg(sql, ctx, areaId);
+    }
+  } else if (input?.areaName !== undefined) {
+    const areaName = String(input.areaName ?? '').trim();
+    if (areaName) {
+      areaId = await resolveAreaIdByName(sql, ctx, areaName);
+      if (!areaId) {
+        throw new HttpError(400, `Unknown area: ${areaName}`);
+      }
+    } else {
+      areaId = null;
+    }
+  }
 
   // PENDING_ACCESS → ACTIVE transition: when linking a user to a pending_access employee,
   // the status automatically becomes 'active' (employee now has access)
@@ -403,6 +538,7 @@ export async function updateEmployee(sql, ctx, input) {
         external_employee_id = ${externalId},
         status = ${finalStatus},
         user_id = ${userId},
+        area_id = ${areaId},
         deactivated_at = ${deactivatedAt},
         updated_at = NOW()
     WHERE id = ${id} AND organization_id = ${ctx.organizationId}
@@ -702,58 +838,108 @@ export async function resetOrganization(sql, ctx) {
 
 // ------------------------------------------------------------------ imports
 
-export async function listImports(sql, ctx) {
-  const rows = await sql`
-    SELECT * FROM imports
-    WHERE organization_id = ${ctx.organizationId}
-    ORDER BY created_at DESC
-  `;
+export async function listImports(sql, ctx, { areaId = null } = {}) {
+  const rows = areaId
+    ? await sql`
+        SELECT * FROM imports
+        WHERE organization_id = ${ctx.organizationId}
+          AND area_id = ${areaId}
+        ORDER BY created_at DESC
+      `
+    : await sql`
+        SELECT * FROM imports
+        WHERE organization_id = ${ctx.organizationId}
+        ORDER BY created_at DESC
+      `;
   return rows.map(mapImportRow);
 }
 
 export async function createImport(sql, ctx, input) {
-  const rows = await sql`
-    INSERT INTO imports (
-      organization_id, imported_by_user_id, file_name, source_format,
-      period_year, period_month, status
-    )
-    VALUES (
-      ${ctx.organizationId}, ${ctx.user.id},
-      ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
-      ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-      'completed'
-    )
-    RETURNING *
-  `;
+  // areaId NULL = organization-scoped import; set = area-scoped import. The
+  // area must belong to the session org (403 otherwise, no existence leak).
+  const areaId = input?.areaId ? String(input.areaId).trim() || null : null;
+  if (areaId) {
+    await assertAreaInOrg(sql, ctx, areaId);
+  }
+  const rows = areaId
+    ? await sql`
+        INSERT INTO imports (
+          organization_id, imported_by_user_id, file_name, source_format,
+          period_year, period_month, status, area_id
+        )
+        VALUES (
+          ${ctx.organizationId}, ${ctx.user.id},
+          ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
+          ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
+          'completed', ${areaId}
+        )
+        RETURNING *
+      `
+    : await sql`
+        INSERT INTO imports (
+          organization_id, imported_by_user_id, file_name, source_format,
+          period_year, period_month, status
+        )
+        VALUES (
+          ${ctx.organizationId}, ${ctx.user.id},
+          ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
+          ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
+          'completed'
+        )
+        RETURNING *
+      `;
   return mapImportRow(rows[0]);
 }
 
 // ------------------------------------------------------------------- shifts
 
-export async function listShifts(sql, ctx, requestedEmployeeId) {
+export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null } = {}) {
   const employeeId = effectiveEmployeeId(ctx, requestedEmployeeId);
   if (employeeId) {
     await assertEmployeeInOrg(sql, ctx, employeeId);
-    const rows = await sql`
-      SELECT id, organization_id, employee_id, import_id,
-             TO_CHAR(date, 'YYYY-MM-DD') AS date,
-             start_time, end_time, location, origin
-      FROM shifts
-      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-      ORDER BY date ASC, start_time ASC, id ASC
-    `;
+    // EMPLOYEE role is always forced to self above; the area filter only
+    // applies to ADMIN/Manager browsing an area context.
+    const rows = areaId && ctx.role !== 'EMPLOYEE'
+      ? await sql`
+          SELECT id, organization_id, employee_id, import_id, area_id,
+                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
+                 start_time, end_time, location, origin
+          FROM shifts
+          WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+            AND area_id = ${areaId}
+          ORDER BY date ASC, start_time ASC, id ASC
+        `
+      : await sql`
+          SELECT id, organization_id, employee_id, import_id, area_id,
+                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
+                 start_time, end_time, location, origin
+          FROM shifts
+          WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+          ORDER BY date ASC, start_time ASC, id ASC
+        `;
     return rows.map(mapShiftRow);
   }
 
-  // Manager/Admin without filter: whole organization.
-  const rows = await sql`
-    SELECT id, organization_id, employee_id, import_id,
-           TO_CHAR(date, 'YYYY-MM-DD') AS date,
-           start_time, end_time, location, origin
-    FROM shifts
-    WHERE organization_id = ${ctx.organizationId}
-    ORDER BY date ASC, start_time ASC, id ASC
-  `;
+  // Manager/Admin without employee filter: whole organization, optionally
+  // narrowed to one area (dashboard area context).
+  const rows = areaId
+    ? await sql`
+        SELECT id, organization_id, employee_id, import_id, area_id,
+               TO_CHAR(date, 'YYYY-MM-DD') AS date,
+               start_time, end_time, location, origin
+        FROM shifts
+        WHERE organization_id = ${ctx.organizationId}
+          AND area_id = ${areaId}
+        ORDER BY date ASC, start_time ASC, id ASC
+      `
+    : await sql`
+        SELECT id, organization_id, employee_id, import_id, area_id,
+               TO_CHAR(date, 'YYYY-MM-DD') AS date,
+               start_time, end_time, location, origin
+        FROM shifts
+        WHERE organization_id = ${ctx.organizationId}
+        ORDER BY date ASC, start_time ASC, id ASC
+      `;
   return rows.map(mapShiftRow);
 }
 
@@ -774,6 +960,28 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     const employeeId = effectiveEmployeeId(ctx, shift.employeeId);
     await assertEmployeeInOrg(sql, ctx, employeeId);
 
+    // Area snapshot rule (single rule, tested): explicit shift.areaId (org-
+    // validated) wins; else the import's area when the import is area-scoped;
+    // else the employee's CURRENT area at write time; else NULL (org-scoped).
+    // Historical rows are never recalculated when an employee moves areas.
+    let shiftAreaId = shift.areaId;
+    if (shiftAreaId) {
+      await assertAreaInOrg(sql, ctx, shiftAreaId);
+    } else if (shift.importId) {
+      const importRows = await sql`
+        SELECT area_id FROM imports
+        WHERE id = ${shift.importId} AND organization_id = ${ctx.organizationId}
+      `;
+      shiftAreaId = importRows[0]?.area_id ?? null;
+    }
+    if (!shiftAreaId) {
+      const employeeRows = await sql`
+        SELECT area_id FROM employees
+        WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
+      `;
+      shiftAreaId = employeeRows[0]?.area_id ?? null;
+    }
+
     // Plan/role separation (Fase: role-aware import unification) — ROLE
     // decides WHO an ADMIN may write for (any org employee, checked
     // above); PLAN decides whether the org may operate on more than one
@@ -791,10 +999,10 @@ export async function upsertShifts(sql, ctx, rawShifts) {
 
     const id = shift.id && UUID_RE.test(shift.id) ? shift.id : randomUUID();
     const rows = await sql`
-      INSERT INTO shifts (id, organization_id, employee_id, import_id, date,
+      INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
                           start_time, end_time, location, origin, updated_at)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
-              ${shift.date}, ${shift.startTime}, ${shift.endTime},
+              ${shiftAreaId}, ${shift.date}, ${shift.startTime}, ${shift.endTime},
               ${shift.location}, ${shift.origin}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         date = EXCLUDED.date,
@@ -802,10 +1010,11 @@ export async function upsertShifts(sql, ctx, rawShifts) {
         end_time = EXCLUDED.end_time,
         location = EXCLUDED.location,
         origin = EXCLUDED.origin,
+        area_id = EXCLUDED.area_id,
         updated_at = NOW()
       WHERE shifts.organization_id = ${ctx.organizationId}
         AND shifts.employee_id = ${employeeId}
-      RETURNING id, organization_id, employee_id, import_id,
+      RETURNING id, organization_id, employee_id, import_id, area_id,
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
                 start_time, end_time, location, origin
     `;

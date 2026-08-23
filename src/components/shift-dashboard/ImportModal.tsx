@@ -28,6 +28,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
+import { RemoteArea } from '../../lib/remote';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -36,6 +37,8 @@ interface ImportModalProps {
     shifts: Shift[],
     targetPeriod: CalendarImportContext,
     selector?: { name: string; externalId: string },
+    /** Area the import belongs to (null = org-scoped). Guests never send one. */
+    areaId?: string | null,
   ) => Promise<boolean>;
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
@@ -51,6 +54,13 @@ interface ImportModalProps {
   identityLocked?: boolean;
   /** Current authenticated user ID for user-scoped profile loading. */
   userId?: string | null;
+  /** Active areas of the org (empty for guests / area-less orgs → no area UI). */
+  areas?: RemoteArea[];
+  /** Area context inherited from the dashboard (null = whole company). */
+  currentAreaId?: string | null;
+  /** ADMIN may re-target the import to another area before confirming;
+   * EMPLOYEE/guest never get a selector (their context is read-only). */
+  allowAreaChoice?: boolean;
 }
 
 /** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
@@ -233,7 +243,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, areas = [], currentAreaId = null, allowAreaChoice = false }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -247,6 +257,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [employeeId, setEmployeeId] = useState(() => userId ? loadUserProfile(userId).employeeIdentifiers[0] ?? '' : '');
   const [selectedMonth, setSelectedMonth] = useState(String(initialContext.month));
   const [selectedYear, setSelectedYear] = useState(String(initialContext.year));
+  // Area the import will be registered under: inherited from the dashboard
+  // context, re-targetable only when allowAreaChoice (ADMIN, 2+ areas).
+  const [importAreaId, setImportAreaId] = useState<string | null>(currentAreaId);
   const [canStartFreshImport, setCanStartFreshImport] = useState(false);
   const [detectedFormat, setDetectedFormat] = useState<string | null>(null);
   // Phase 1A: analysis-driven quality state + inline assistant session.
@@ -270,6 +283,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     () => availableYears.map((yearOption) => ({ value: yearOption, label: yearOption })),
     [availableYears],
   );
+  const areaSelectOptions = useMemo(
+    () => [
+      { value: '', label: t('areas.allCompany') },
+      ...areas.map((area) => ({ value: area.id, label: area.name })),
+    ],
+    [areas, t],
+  );
+  const currentAreaName = areas.find((area) => area.id === currentAreaId)?.name ?? null;
 
   const importDiff = useMemo(() => {
     const readyForDiff = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
@@ -328,6 +349,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setSelectedMonth(String(initialContext.month));
     setSelectedYear(String(initialContext.year));
   }, [initialContext.month, initialContext.year, isOpen]);
+
+  // The import area follows the dashboard context on open / area switch.
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    setImportAreaId(currentAreaId);
+  }, [currentAreaId, isOpen]);
 
   // Authenticated mode: prefill the parse identity from the selected employee.
   useEffect(() => {
@@ -613,7 +642,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
       : { name: employeeName.trim(), externalId: employeeId.trim() };
 
-    onConfirmImport(finalShifts, importContext, selector);
+    onConfirmImport(finalShifts, importContext, selector, importAreaId);
     onClose();
   };
 
@@ -722,6 +751,30 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               <ModalSelect label={t('importModal.monthLabel')} value={selectedMonth} options={monthSelectOptions} onChange={setSelectedMonth} />
 
               <ModalSelect label={t('importModal.yearLabel')} value={selectedYear} options={yearSelectOptions} onChange={setSelectedYear} />
+
+              {/* Area context: 1 area → fixed read-only context; 2+ → ADMIN
+                  chooses, other roles see their own area as read-only text.
+                  0 areas → no area UI at all. */}
+              {areas.length === 1 && (
+                <span data-testid="import-area-context" style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <span>{t('areas.contextLabel')}</span>
+                  <span style={{ padding: '10px 0', fontWeight: 700, color: 'var(--text-primary)' }}>{areas[0].name}</span>
+                </span>
+              )}
+              {areas.length >= 2 && allowAreaChoice && (
+                <ModalSelect
+                  label={t('importModal.areaLabel')}
+                  value={importAreaId ?? ''}
+                  options={areaSelectOptions}
+                  onChange={(value) => setImportAreaId(value || null)}
+                />
+              )}
+              {areas.length >= 2 && !allowAreaChoice && currentAreaName && (
+                <span data-testid="import-area-context" style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  <span>{t('areas.contextLabel')}</span>
+                  <span style={{ padding: '10px 0', fontWeight: 700, color: 'var(--text-primary)' }}>{currentAreaName}</span>
+                </span>
+              )}
             </div>
 
             <button

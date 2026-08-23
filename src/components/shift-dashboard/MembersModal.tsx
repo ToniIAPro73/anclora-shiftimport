@@ -6,6 +6,7 @@ import {
   deleteRemoteEmployee,
   linkEmployeeUser,
   listRemoteMembers,
+  RemoteArea,
   RemoteMember,
   removeRemoteMember,
   updateRemoteMemberRole,
@@ -13,6 +14,7 @@ import {
   RemoteEmployee,
 } from '../../lib/remote';
 import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv, UserCsvRow } from '../../lib/bulk-import-csv';
+import { findActiveArea } from '../../lib/areas';
 import { ModalShell } from '../ui/ModalShell';
 import { UpgradePrompt } from './UpgradePrompt';
 import { ApiError } from '../../lib/session';
@@ -24,6 +26,9 @@ interface MembersModalProps {
   onClose: () => void;
   /** Org employees for the User ↔ Employee link select and the Employees tab. */
   employees: RemoteEmployee[];
+  /** Org's ACTIVE areas — used to pre-validate the CSV `area` column before
+   * confirming (the server stays authoritative). */
+  areas?: RemoteArea[];
   currentUserId: string;
   onChanged: () => void;
   currentPlan?: PlanId | null;
@@ -38,6 +43,9 @@ interface EmployeePreviewRow {
   row: EmployeeCsvRow;
   status: 'existing' | 'new' | 'error';
   matchedId?: string;
+  /** Row-level validation message (missing id, unknown area) shown instead
+   * of the generic "Error" badge — never silently dropped. */
+  errorMessage?: string;
 }
 
 interface UserPreviewRow {
@@ -56,7 +64,7 @@ interface UserPreviewRow {
  * returns it once — shown here for the ADMIN to hand over out-of-band.
  * Never logged, never persisted in plaintext, never re-fetchable.
  */
-export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChanged, currentPlan = null, switchTarget = null, onSwitchOrg }: MembersModalProps) => {
+export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUserId, onChanged, currentPlan = null, switchTarget = null, onSwitchOrg }: MembersModalProps) => {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('users');
   const [members, setMembers] = useState<RemoteMember[]>([]);
@@ -76,12 +84,14 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
   // Manual "add employee" form.
   const [newEmployeeName, setNewEmployeeName] = useState('');
   const [newEmployeeExternalId, setNewEmployeeExternalId] = useState('');
+  const [newEmployeeAreaId, setNewEmployeeAreaId] = useState('');
 
   // Employee lifecycle (Bloque D): per-row contextual menu + inline edit.
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editExternalId, setEditExternalId] = useState('');
+  const [editAreaId, setEditAreaId] = useState('');
 
   // Inline "link existing user" row (Bloque: user↔employee link management).
   const [linkingEmployeeId, setLinkingEmployeeId] = useState<string | null>(null);
@@ -196,9 +206,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
       await createRemoteEmployee({
         name: newEmployeeName,
         externalEmployeeId: newEmployeeExternalId || undefined,
+        ...(areas.length > 0 ? { areaId: newEmployeeAreaId || null } : {}),
       });
       setNewEmployeeName('');
       setNewEmployeeExternalId('');
+      setNewEmployeeAreaId('');
     });
   };
 
@@ -209,6 +221,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
     setEditingEmployeeId(employee.id);
     setEditName(employee.name);
     setEditExternalId(employee.externalEmployeeId ?? '');
+    setEditAreaId(employee.areaId ?? '');
   };
 
   const handleEditEmployeeSave = (employee: RemoteEmployee, event: FormEvent) => {
@@ -220,6 +233,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
         id: employee.id,
         name: editName.trim(),
         externalEmployeeId: editExternalId.trim(),
+        ...(areas.length > 0 ? { areaId: editAreaId || null } : {}),
         status: employee.status,
       });
       setEditingEmployeeId(null);
@@ -313,6 +327,17 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
     (member) => !employees.some((employee) => employee.status === 'active' && employee.userId === member.userId),
   );
 
+  const employeeAreaOptions = [
+    { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
+    ...areas.map((area) => ({
+      value: area.id,
+      label: area.name,
+      searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
+    })),
+  ];
+  const areaLabel = (areaId: string | null | undefined) =>
+    areaId ? areas.find((area) => area.id === areaId)?.name ?? areaId : t('areas.allCompany');
+
   // ---------------------------------------------------------- Employees CSV
 
   const handleEmployeesFile = async (file: File) => {
@@ -326,7 +351,12 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
     const byExternalId = new Map(employees.map((employee) => [employee.externalEmployeeId ?? '', employee]));
     setEmployeesPreview(rows.map((row) => {
       if (!row.externalEmployeeId) {
-        return { row, status: 'error' };
+        return { row, status: 'error', errorMessage: t('members.rowErrorMissingId') };
+      }
+      // Early area validation: an unknown area is a row error BEFORE
+      // confirming — the server's unknown_area rejection stays authoritative.
+      if (row.areaName && !findActiveArea(areas, row.areaName)) {
+        return { row, status: 'error', errorMessage: t('members.rowErrorUnknownArea', { area: row.areaName }) };
       }
       const match = byExternalId.get(row.externalEmployeeId);
       return match ? { row, status: 'existing', matchedId: match.id } : { row, status: 'new' };
@@ -354,7 +384,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
             failed += 1;
             continue;
           }
-          await createRemoteEmployee({ name: entry.row.name, externalEmployeeId: entry.row.externalEmployeeId });
+          await createRemoteEmployee({
+            name: entry.row.name,
+            externalEmployeeId: entry.row.externalEmployeeId,
+            ...(entry.row.areaName ? { areaName: entry.row.areaName } : {}),
+          });
           created += 1;
         } else {
           const current = employees.find((employee) => employee.id === entry.matchedId);
@@ -733,6 +767,18 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                       aria-label={t('members.employeeIdPlaceholder')}
                       style={{ padding: '6px 10px', width: '140px' }}
                     />
+                    {areas.length > 0 && (
+                      <SearchableSelect
+                        label={t('areas.contextLabel')}
+                        value={editAreaId}
+                        onChange={setEditAreaId}
+                        searchPlaceholder={t('members.searchPlaceholder')}
+                        emptyMessage={t('orgSelector.noResults')}
+                        ariaLabel={t('members.employeeAreaLabel')}
+                        options={employeeAreaOptions}
+                        style={{ width: '180px' }}
+                      />
+                    )}
                     <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '6px 10px', fontWeight: 800 }}>
                       {t('common.save')}
                     </button>
@@ -746,6 +792,11 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
                       {employee.name}
                       {employee.externalEmployeeId && <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}> · ID {employee.externalEmployeeId}</span>}
                     </span>
+                    {areas.length > 0 && (
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
+                        {areaLabel(employee.areaId)}
+                      </span>
+                    )}
                     <span className={`status-badge ${employee.status === 'active' ? 'status-badge--active' : employee.status === 'pending_access' ? 'status-badge--pending' : 'status-badge--inactive'}`}>
                       {t(employee.status === 'active' ? 'members.statusActive' : employee.status === 'pending_access' ? 'members.statusPendingAccess' : 'members.statusInactive')}
                     </span>
@@ -807,6 +858,18 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
               <input className="modal-input" type="text" required value={newEmployeeName} onChange={(event) => setNewEmployeeName(event.target.value)} placeholder={t('members.employeeNamePlaceholder')} style={{ padding: '10px 12px' }} />
             </label>
             <input className="modal-input" type="text" value={newEmployeeExternalId} onChange={(event) => setNewEmployeeExternalId(event.target.value)} placeholder={t('members.employeeIdPlaceholder')} style={{ padding: '10px 12px', width: '160px' }} />
+            {areas.length > 0 && (
+              <SearchableSelect
+                label={t('areas.contextLabel')}
+                value={newEmployeeAreaId}
+                onChange={setNewEmployeeAreaId}
+                searchPlaceholder={t('members.searchPlaceholder')}
+                emptyMessage={t('orgSelector.noResults')}
+                ariaLabel={t('members.employeeAreaLabel')}
+                options={employeeAreaOptions}
+                style={{ minWidth: '180px' }}
+              />
+            )}
             <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
               {busy ? t('auth.working') : t('members.addEmployeeAction')}
             </button>
@@ -815,6 +878,7 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
           {!employeesPreview && !employeesResult && (
             <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '14px' }}>
               <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>{t('members.csvUploadHint')}</p>
+              <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('members.csvEmployeesNoAccessHint')}</p>
               <input
                 ref={employeesFileRef}
                 type="file"
@@ -848,8 +912,12 @@ export const MembersModal = ({ isOpen, onClose, employees, currentUserId, onChan
               <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: '4px' }}>
                 {employeesPreview.map((entry, index) => (
                   <div key={`${entry.row.externalEmployeeId}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.8rem', padding: '4px 0' }}>
-                    <span>{entry.row.name || '—'}{entry.row.externalEmployeeId ? ` · ID ${entry.row.externalEmployeeId}` : ''}</span>
-                    <span>{t(statusLabelKey[entry.status])}</span>
+                    <span>
+                      {entry.row.name || '—'}
+                      {entry.row.externalEmployeeId ? ` · ID ${entry.row.externalEmployeeId}` : ''}
+                      {entry.row.areaName ? ` · ${entry.row.areaName}` : ''}
+                    </span>
+                    <span>{entry.errorMessage ?? t(statusLabelKey[entry.status])}</span>
                   </div>
                 ))}
               </div>

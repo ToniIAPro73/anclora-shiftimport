@@ -14,7 +14,7 @@
  * registry: a row with both start and end times is a worked (Regular)
  * shift; anything else (DL, AJ, blank) is treated as Libre. That keeps
  * this module dependency-light and matches the reference dataset
- * (test-data/synthetic/shiftimport-v1/04_turnos_septiembre_2026.csv).
+ * (test-data/fixtures/parser-regression/04_turnos_septiembre_2026.csv).
  */
 import { ParsedCalendarShift } from '../lib/import-types';
 import { findHeaderColumnIndex, parseRosterTable, parseTableDate } from './tabular-assistant';
