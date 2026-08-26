@@ -179,3 +179,48 @@ work surfaces a gap.
 
 Next step: FM-04 — local and remote stores
 (`src/lib/format-profile-store.ts`).
+
+---
+
+## 2026-08-26 — small fix + FM-04 PASS
+
+HEAD before commit: `033bfab` (list-shape fix commit, folded into the FM-03
+lineage above).
+
+Fix: `api/_lib/format-profiles.js` `listFormatProfiles` was returning a
+partial summary shape; corrected to return full records
+(`mapProfileRow`), matching what `02_DATA_API_CONTRACT.md` already
+documented ("API returns full record to authenticated org members") and
+what FM-04's remote store needs to match/apply a profile without an extra
+per-profile GET. 19/19 API tests still green after the change.
+
+Subtask: FM-04 — local and remote stores.
+Files created: `src/lib/format-profile-store.ts`
+(`FormatProfileStore` interface; `LocalFormatProfileStore` wraps the
+existing localStorage functions unchanged, guest behavior byte-identical;
+`RemoteOrganizationFormatProfileStore` talks to `/api/format-profiles` via
+the existing `apiFetch` helper from `src/lib/session.ts`, in-memory cache
+per instance; `getFormatProfileStore(organizationId)` factory — new
+instance, cache reset, whenever the org-id key changes, which is the
+logout/org-switch invalidation point), `src/lib/format-profile-store.test.ts`
+(13 tests).
+
+Tests: `npx vitest run src/lib/format-profile-store.test.ts` → 13/13
+passed. Covers: local save+match+recordUse+rename+deprecate, local store
+never calls the network, remote list caching (single network call across
+two `list()` calls), remote findMatch scores off the cached list, remote
+saveCandidate invalidates cache, remote confirm/deprecate/reactivate/rename
+PATCH with correct `action` + echoed `updatedAt`, a failed remote
+`saveCandidate` never touches `localStorage`, store-factory identity
+(same org → same instance; different org / guest↔auth → new instance).
+`npx tsc --noEmit` clean, `npx eslint ... --ext ts` clean.
+
+Decisions: local store's lifecycle methods (`confirm`/`reactivate`) are
+identity no-ops (local profiles behave as always-`validated`); `deprecate`
+deletes the underlying local profile (no separate deprecated state exists
+locally, matches pre-existing `deleteFormatProfile` semantics).
+
+Deviations: none.
+Risks: none new.
+
+Next step: FM-05 — local-to-organization migration UX.

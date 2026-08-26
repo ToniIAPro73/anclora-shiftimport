@@ -103,7 +103,7 @@ Tests dirigidos: `npx vitest run src/lib/format-profile-store.test.ts`.
 
 Gate: store tests green.
 
-Estado: PENDING
+Estado: PASS (13/13 tests green, tsc clean, eslint clean)
 Commit previsto: `feat(format-memory): add local and remote profile stores`
 
 ---
