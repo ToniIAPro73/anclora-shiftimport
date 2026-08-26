@@ -67,8 +67,10 @@ export default async function handler(req, res) {
 
       requireRole(ctx, 'ADMIN');
       const updatedAt = req.body?.updatedAt;
-      if (!updatedAt) {
-        return sendJson(res, 400, { error: 'updatedAt is required for this action' });
+      // Validated here (not left to the SQL cast) so a malformed value is a
+      // clean 400, never a raw Postgres cast error surfacing as a 500.
+      if (!updatedAt || Number.isNaN(new Date(updatedAt).getTime())) {
+        return sendJson(res, 400, { error: 'A valid updatedAt is required for this action' });
       }
 
       if (action === 'rename') {

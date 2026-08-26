@@ -438,12 +438,19 @@ describe('PATCH — confirm / drift-supersede legacy demotion / reactivate', () 
     expect(res.body.profile.status).toBe('validated');
   });
 
-  it('deprecate is idempotent (already-deprecated is a 200 no-op, not an error)', async () => {
+  it('deprecate is idempotent (already-deprecated is a 200 no-op, not an error, even with a stale updatedAt)', async () => {
     const row = profileRow({ organization_id: ORG_A, status: 'deprecated' });
     state.profiles.push(row);
-    const res = await call('PATCH', { body: { id: row.id, action: 'deprecate', updatedAt: 'stale' } });
+    const res = await call('PATCH', { body: { id: row.id, action: 'deprecate', updatedAt: '2000-01-01T00:00:00.000Z' } });
     expect(res.statusCode).toBe(200);
     expect(res.body.profile.status).toBe('deprecated');
+  });
+
+  it('rejects a malformed (non-date) updatedAt with 400, never a raw SQL cast error', async () => {
+    const row = profileRow({ organization_id: ORG_A });
+    state.profiles.push(row);
+    const res = await call('PATCH', { body: { id: row.id, action: 'confirm', updatedAt: 'not-a-date' } });
+    expect(res.statusCode).toBe(400);
   });
 });
 

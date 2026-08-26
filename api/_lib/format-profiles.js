@@ -347,7 +347,8 @@ export async function renameFormatProfile(sql, ctx, id, displayName, updatedAt) 
   }
   const rows = await sql`
     UPDATE format_profiles SET display_name = ${trimmed}, updated_at = NOW()
-    WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND updated_at = ${updatedAt}
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+      AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', ${updatedAt}::timestamptz)
     RETURNING *
   `;
   if (rows.length === 0) {
@@ -395,7 +396,8 @@ export async function confirmFormatProfile(sql, ctx, id, updatedAt) {
   const rows = await sql`
     UPDATE format_profiles SET status = 'validated', updated_at = NOW()
     WHERE id = ${id} AND organization_id = ${ctx.organizationId}
-      AND updated_at = ${updatedAt} AND status = 'candidate'
+      AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', ${updatedAt}::timestamptz)
+      AND status = 'candidate'
     RETURNING *
   `;
   if (rows.length === 0) {
@@ -420,7 +422,8 @@ export async function deprecateFormatProfile(sql, ctx, id, updatedAt) {
   requireRole(ctx, 'ADMIN');
   const rows = await sql`
     UPDATE format_profiles SET status = 'deprecated', updated_at = NOW()
-    WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND updated_at = ${updatedAt}
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+      AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', ${updatedAt}::timestamptz)
     RETURNING *
   `;
   if (rows.length === 0) {
@@ -442,7 +445,8 @@ export async function reactivateFormatProfile(sql, ctx, id, updatedAt) {
   requireRole(ctx, 'ADMIN');
   const rows = await sql`
     UPDATE format_profiles SET status = 'validated', updated_at = NOW()
-    WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND updated_at = ${updatedAt}
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+      AND date_trunc('milliseconds', updated_at) = date_trunc('milliseconds', ${updatedAt}::timestamptz)
       AND status IN ('legacy', 'deprecated')
     RETURNING *
   `;
