@@ -145,45 +145,69 @@ had two >500kB chunks before this work).
 
 ## P. E2E Acceptance
 
-Real, unmocked acceptance script (`qa/e2e-acceptance/format-memory-acceptance.mjs`)
-run twice against the live dev DB: run 1 found a genuine optimistic-
-concurrency bug (see Residual Risks / the fix below); run 2, **29/29
-passed**, covering scenarios A (learning), B/C (reuse by a second EMPLOYEE
-of the same organization), D (cross-tenant isolation — 404 + list
-exclusion), F (drift creates a new version without touching the stable
-one, confirming demotes the prior to `legacy` with data intact), G
-(rollback via reactivate), ADMIN-only metadata actions, H (privacy — see
-above), I (adversarial payload rejection, role-gating), and idempotent
-create. Script verified to leave zero leftover rows after cleanup.
+**Superseded 2026-08-27**: full browser-driven Playwright E2E was completed
+this follow-up session, closing the `ENVIRONMENT_BLOCKED` warning below —
+see the full account in `05_PROGRESS_LOG.md`'s 2026-08-27 entries. Summary:
 
-Full browser-driven Playwright coverage of the multi-step assistant UI
-(file upload → question rounds → confirm) was **not attempted** this
-session. `vercel whoami` confirmed CLI auth works and Chromium is
-installed, so this is not a hard environment block — the decision was that
-authoring a reliable blind Playwright spec for that specific multi-step
-flow, without iterative in-browser verification, was not a safe use of the
-remaining session budget (risk of many unproductive retries against
-guessed selectors). The flow it would exercise is covered by the existing
-Vitest UI suites (`ImportModal.test.tsx`, `ProfileAssistantPanel.test.tsx`,
-and their `.fallback`/`.areas` variants) plus the new FM-06/FM-07
-integration tests. **Classification: `ENVIRONMENT_BLOCKED`** for this one
-layer specifically, substituted per `04_ACCEPTANCE_TEST_PLAN.md`'s own
-"Execution notes" allowance.
+- Real, unmocked acceptance script (`qa/e2e-acceptance/format-memory-acceptance.mjs`,
+  2026-08-26 session) against the live dev DB, calling the data-access
+  functions directly (no HTTP layer): **29/29 passed**, found and fixed a
+  genuine optimistic-concurrency timestamp-precision bug. This is
+  **integration-level** evidence (real DB, real SQL, no HTTP/browser) —
+  labeled as such here since the original report's wording ("acceptance
+  script") did not distinguish it clearly from true E2E.
+- **Real browser-driven E2E** (`qa/e2e-acceptance/specs-local/format-memory.spec.ts`,
+  2026-08-27 session): Chromium, the real app served via `vercel dev`, the
+  real API, the real dev DB, a synthetic PII-free fixture
+  (`GS-03_hospitality/source.pdf`, already used elsewhere in this repo's
+  acceptance corpus) — no mocks anywhere. Covers the mandated flow: ADMIN
+  login is not reachable for single-employee import (ImportModal only
+  renders for `!session || role==='EMPLOYEE'`; ADMIN's "Importar" opens the
+  unrelated `TeamImportModal`, which — per FM-06's progress log — never
+  touches format-profile logic), so the flow was run as EMPLOYEE teach +
+  ADMIN confirm, which is the actually-designed permission split (EMPLOYEE
+  teaches/reuses, ADMIN governs) and a closer test of the real product than
+  forcing ADMIN through a path it doesn't have. Full sequence: EMPLOYEE
+  (Ana) imports the unknown fixture → resolves the assistant (row-selection
+  + 2 shift-code questions) → confirms → candidate persisted (verified via
+  the real API) → ADMIN opens "Formatos aprendidos" → confirms → status
+  `validated` → EMPLOYEE logs out, logs back in → imports the identical
+  fixture → **zero assistant questions**, quality chip still runs
+  (`Listo`), confirms → `use_count`/`successful_use_count` increment
+  (verified via the real API). Plus: a second EMPLOYEE (Nora) of the same
+  org reuses the profile with zero questions; a different organization's
+  ADMIN gets an empty profile list (isolation, verified via the real API).
+  **Not attempted**: a synthetic drift-variant fixture (no such asset
+  exists in the repo; generating one reliably was judged out of scope for
+  this follow-up — drift/versioning already has real-DB coverage via the
+  2026-08-26 acceptance script and unit/integration tests from FM-07).
+- Two real defects were found and fixed during this browser E2E work (not
+  application-logic bugs — build/tooling): see `05_PROGRESS_LOG.md` for the
+  `vercel dev` bundler-crash root cause and the `.vercelignore` fix.
+- Gate: 3 consecutive full final runs, all 5/5 green, zero leftover DB rows
+  after each (verified by direct query), `retries: 0` throughout.
 
 ## Q. Metrics
 
 Measured directly (not simulated) in the FM-09 acceptance run:
-- `questions_first_import` > 0 / `questions_second_import` = 0 — covered at
-  the unit level by the pre-existing ImportModal "known-profile fast path"
-  test (no repeated assistant questions on a matched profile); the FM-09
-  script demonstrates the underlying server-side mechanics (zero-question
-  reuse depends on the store returning a match, proven end-to-end at the
-  data layer).
-- `successful_use_count` incremented exactly on confirmed use, verified
-  both by unit test (FM-03) and the real-DB script (FM-09: `useCount === 1
-  && successfulUseCount === 1` after one `recordFormatProfileUse` call).
-- Cross-tenant denial: 100% across every API test case and the real-DB run
-  (no leak case found).
+- `questions_first_import` > 0 / `questions_second_import` = 0 — **measured
+  directly in the browser** (2026-08-27): a real run recorded
+  `questions_first_import=2, questions_second_import=0`, printed to the
+  Playwright report as a `console.log` JSON line for the required-flow
+  test, reproduced identically across all 3 final gate runs. Also covered
+  at the unit level by the pre-existing ImportModal "known-profile fast
+  path" test.
+- `successful_use_count` incremented exactly on confirmed use — measured
+  directly in the browser (`profile_use_count=1, successful_use_count=1`
+  after the second confirmed import), and by unit test (FM-03) and the
+  integration-level real-DB script (FM-09, 2026-08-26).
+- `second_import_outcome` — measured directly: the quality chip read
+  `Listo` (READY-equivalent) on the second import, asserted against the
+  exact rendered text, not inferred from absence of an error.
+- Cross-tenant denial: 100% across every API test case, the integration-
+  level real-DB script, and the browser E2E (Scenario B: a different
+  organization's ADMIN receives an empty profile list via the real API,
+  measured through a real browser session).
 
 ## R. Documentation
 
@@ -232,10 +256,22 @@ report`) to follow.
 
 ## U. Residual Risks
 
-- **Full browser-driven E2E of the assistant UI is not covered** (see §P).
-  Mitigated by extensive Vitest UI coverage of the same code paths, but a
-  genuine gap in true end-to-end (real browser, real file upload) proof for
-  the teaching flow specifically.
+- **Drift/versioning has no synthetic browser-E2E fixture.** The
+  2026-08-27 browser E2E covers learning, org-shared reuse, and isolation
+  end-to-end in a real browser; drift-and-versioning is proven at the
+  integration level (2026-08-26 real-DB script) and unit/API level (FM-07)
+  but not through an actual browser upload of a drift-variant document,
+  since no such synthetic fixture exists in the repo and generating one
+  reliably was out of scope for this follow-up.
+- **`vercel dev`'s function bundler is fragile for functions with a sibling
+  `*.test.js` file** — intermittently threw `FUNCTION_INVOCATION_FAILED`
+  for `/api/areas` and `/api/format-profiles` (reproduced on both, so not
+  specific to this feature's code) until `.vercelignore` excluded
+  `api/**/*.test.js` from the function bundle. This was invisible to every
+  previous gate (unit tests use fakes, never `vercel dev`; the 2026-08-26
+  acceptance script calls functions directly, bypassing the HTTP/bundler
+  layer entirely) — another concrete example of why the browser-E2E layer
+  was worth completing rather than leaving `ENVIRONMENT_BLOCKED`.
 - **`AreaProfileBinding` (M:N area↔profile)** does not exist — explicitly
   out of scope for this feature (Phase 3 of the architecture spec), noted
   so it isn't mistaken for an oversight.
@@ -256,11 +292,16 @@ report`) to follow.
 ## V. Final Repository State
 
 Branch `development`, working tree clean after each commit, 0 divergence
-from `origin/development` other than the local commits made this session
-(not pushed). No `staging`/`production`/`main` branch touched. No stash
-created or modified. Dev DB (`.env.development.local` target) contains the
-new `format_profiles` table with zero leftover test rows (verified by
-direct query after the FM-09 script's cleanup).
+from `origin/development` other than the local commits made across both
+sessions (not pushed). No `staging`/`production`/`main` branch touched. No
+stash created or modified. Dev DB contains the `format_profiles` table with
+zero leftover test rows — verified by direct query after every cleanup
+(2026-08-26 acceptance script and every 2026-08-27 E2E run, including the 3
+final gate runs). Two new files added in the 2026-08-27 follow-up:
+`.vercelignore` (excludes `api/**/*.test.js` from the Vercel function
+bundle — the `vercel dev` crash fix) and
+`qa/e2e-acceptance/specs-local/format-memory.spec.ts` (the new browser
+E2E spec, self-contained fixture, own cleanup).
 
 ## W. Final Classification
 
@@ -275,8 +316,8 @@ direct query after the FM-09 script's cleanup).
 | FM-06 — Reuse | PASS | 716/716 full suite, zero regressions |
 | FM-07 — Drift | PASS | 719/719 full suite, 3 new drift tests |
 | FM-08 — UI | PASS | 8/8 UI tests, internals-redaction asserted, 727/727 full suite |
-| FM-09 — E2E | PASS | 29/29 real-DB acceptance run; 1 real bug found and fixed; Playwright browser layer ENVIRONMENT_BLOCKED (substituted per plan's own allowance) |
-| FM-10 — Documentation | PASS | Architecture spec updated, this report completed |
+| FM-09 — E2E | PASS | Integration: 29/29 real-DB script (2026-08-26), 1 bug found+fixed. Browser E2E: 5/5 real Chromium/API/DB run (2026-08-27), 3 consecutive final runs green, 2 tooling defects found+fixed, zero DB residue |
+| FM-10 — Documentation | PASS | Architecture spec updated; this report + acceptance plan + progress log corrected to distinguish unit/integration/real-DB/browser-E2E evidence |
 | Global regression | PASS | 728/728 tests, lint clean, tsc clean, build succeeds |
 
 ```text
@@ -285,11 +326,16 @@ EXTERNAL PROVIDER USED: NO
 PUSH PERFORMED: NO
 BRANCH PROMOTION PERFORMED: NO
 READY FOR OWNER REVIEW: YES
-FINAL CLASSIFICATION: FORMAT_MEMORY_V1_PASS_WITH_WARNINGS
+FINAL CLASSIFICATION: FORMAT_MEMORY_V1_PASS
 ```
 
-The single warning is the ENVIRONMENT_BLOCKED classification on full
-browser-driven Playwright E2E of the assistant UI (§P, §U) — every other
-gate is an unqualified PASS with measured evidence, including a real,
-unmocked acceptance run against the live database that caught and fixed
-one genuine bug.
+The prior `ENVIRONMENT_BLOCKED` warning on browser-driven Playwright E2E is
+resolved: `vercel dev` is authenticated and Chromium is installed in this
+environment, and a real browser/API/DB E2E now exists and passes
+reproducibly (3/3 consecutive final runs, zero residual test data). Two
+real defects were found and fixed along the way — a `vercel dev`
+bundler-crash trigger (`.vercelignore` fix) and a test-timing race in the
+new spec itself — neither is an application-logic regression. The one
+acknowledged, honestly-scoped gap is the absence of a browser-driven drift
+fixture (§U), which does not block PASS since drift is proven at the
+integration and unit/API levels.

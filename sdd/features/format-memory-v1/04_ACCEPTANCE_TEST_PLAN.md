@@ -95,12 +95,30 @@ mock/import path updated (documented in progress log if it happens).
 
 ## Execution notes
 
-E2E scenarios C/D/F/G/H/K require a reachable Postgres (Neon dev branch or
-local Postgres) and a working `resolveContext` session flow. If no DB is
-reachable in this execution environment, these are implemented as
-`api/**/*.test.js` Vitest integration tests against a test DB connection
-(same pattern as any existing `api/**/*.test.js` file with DB access) rather
-than full Playwright E2E, and classified `ENVIRONMENT_BLOCKED` for the
-Playwright layer specifically (with the Vitest-level equivalent still
-required to pass) — this substitution is recorded in
-`05_PROGRESS_LOG.md`/`06_FINAL_REPORT.md`, not silently assumed.
+**Updated 2026-08-27**: a real dev DB and a working `vercel dev` (Chromium
+installed, CLI authenticated) are both reachable in this environment — full
+browser-driven Playwright E2E was completed and is not blocked. The prior
+version of this note anticipated a possible `ENVIRONMENT_BLOCKED`
+substitution to Vitest integration tests if no DB were reachable; that
+substitution was never actually needed for DB reachability, but was used
+once anyway on 2026-08-26 for the deeper acceptance scenarios (C/D/F/G/H/I)
+via `qa/e2e-acceptance/format-memory-acceptance.mjs`, which calls the real
+data-access functions directly against the real DB (no HTTP layer, no
+mocks) — this is **integration-level** evidence, not browser E2E.
+
+**Browser E2E** (`qa/e2e-acceptance/specs-local/format-memory.spec.ts`,
+2026-08-27): covers the mandated required flow (teach → confirm → reuse
+with zero questions → metrics) plus Scenario A (second user, same org,
+reuse) and Scenario B (different org, isolation) through a real Chromium
+browser against the real app, real API, and real dev DB. Scenario C
+(drift) is **not** covered at the browser level — no synthetic drift-variant
+fixture exists in this repo, and generating one reliably was judged out of
+scope for the follow-up session; drift remains covered at the integration
+(2026-08-26 script) and unit/API (FM-07) levels. This gap is recorded
+honestly in `06_FINAL_REPORT.md`, not silently dropped.
+
+Two real defects were found and fixed while building the browser E2E
+layer — see `05_PROGRESS_LOG.md`'s 2026-08-27 entries — neither is an
+application-logic regression (one is a `vercel dev` bundler quirk fixed via
+`.vercelignore`, the other a test-timing race around fire-and-forget
+persistence calls, fixed in the spec itself).

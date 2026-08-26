@@ -614,3 +614,154 @@ PASS.
 Next step: FM-10 — documentation and closure (update architecture spec's
 Phase 2 status, complete `06_FINAL_REPORT.md`, then the global regression
 gate per §11 of the mandate).
+
+---
+
+## 2026-08-27 — Follow-up session: browser-driven Playwright E2E (closes the FM-09 warning)
+
+HEAD at session start: `aacc760` (12 local commits, matching the prior
+session's close). Preflight confirmed: branch `development`, tree clean,
+0 behind origin, 12 commits ahead — all conditions met, proceeded.
+
+Objective: replace the `ENVIRONMENT_BLOCKED` classification on browser-
+driven Playwright E2E from the previous session with a real, passing run.
+
+### Discovery (targeted, no re-discovery of the whole feature)
+
+Read `04_ACCEPTANCE_TEST_PLAN.md`, `05_PROGRESS_LOG.md`, `06_FINAL_REPORT.md`,
+`qa/e2e-acceptance/` (TEST-MATRIX.md, `local-setup.ts`/`local-teardown.ts`,
+`playwright.local.config.ts`, `specs-local/auth-flow.spec.ts` and
+`import-integrity.spec.ts` as selector/pattern references),
+`ImportModal.tsx`/`ProfileAssistantPanel.tsx`/`FormatProfilesModal.tsx`
+source (for exact button text/DOM structure — every selector in the new
+spec is grounded in source, not guessed), and `src/lib/i18n.ts`. Confirmed
+`vercel whoami` → authenticated (`tonipalma73`); Playwright Chromium
+binaries present in `~/.cache/ms-playwright`. Decided the `vercel dev`
+running-cwd for the local Playwright package must be
+`qa/e2e-acceptance/node_modules/.bin/playwright` — running `npx playwright`
+from the repo root pulled a mismatched global npx-cached version
+(different `@playwright/test` identity) and crashed with "Playwright Test
+did not expect test.beforeAll() to be called here."
+
+### Architectural finding, not a deviation: ADMIN cannot reach the
+teach-capable ImportModal
+
+`ImportModal` (the component with the format-learning assistant) renders
+only for `!session || session.role === 'EMPLOYEE'` (`App.tsx`); ADMIN's
+"Importar" button opens `TeamImportModal` instead, which — confirmed in
+FM-06's own progress log — never touches format-profile logic at all. The
+mandate's literal wording ("ADMIN login → importar fixture...") does not
+match the actual permission model. Rather than modify the architecture
+(forbidden) or fabricate a path that doesn't exist, the flow was
+implemented as **EMPLOYEE teaches + reuses, ADMIN confirms/promotes in
+"Formatos aprendidos"** — which is exactly the real role split documented
+in `00_PRODUCT_SPEC.md`'s permissions table, and arguably a more faithful
+test of the actual product than forcing ADMIN through a UI path it doesn't
+have. Recorded here explicitly rather than silently reinterpreting the
+mandate.
+
+### Fixture
+
+Reused `src/ingestion/fixtures/acceptance-corpus/fixtures/GS-03_hospitality/source.pdf`
+(TYPE_LEGEND, synthetic codes M/T/N/L, two synthetic employees "Ana López"
+H-201 and "Nora Gil" H-301 sharing the same document — already part of the
+repo's acceptance corpus, no new binary fixture added). New spec file:
+`qa/e2e-acceptance/specs-local/format-memory.spec.ts` — self-contained
+`test.beforeAll`/`test.afterAll` SQL fixture (own org(s)/users, timestamp-
+namespaced emails, own cleanup), independent of the shared
+`local-setup.ts` fixture so this file can run and be diagnosed in
+isolation, per the mandate's requirement.
+
+### Real defects found and fixed (both build/tooling, neither application logic)
+
+1. **`vercel dev` function-bundler crash.** `GET /api/format-profiles` (and,
+   confirmed independently, the pre-existing `GET /api/areas`) intermittently
+   crashed with `FUNCTION_INVOCATION_FAILED` under `vercel dev`, logging
+   `Error: Vitest mocker was not initialized in this environment.
+   vi.queueMock() is forbidden.` — invisible to every previous gate because
+   unit tests use fakes (never `vercel dev`) and the 2026-08-26 acceptance
+   script calls the data-access functions directly, bypassing the HTTP/
+   bundler layer entirely. Isolated by direct `curl` + a throwaway debug
+   fixture: reproduced identically for `api/areas/index.js` (pre-existing,
+   untouched-this-session code), ruling out a Format-Memory-specific
+   application bug. Renaming `api/format-profiles/index.test.js` first
+   appeared to fix it, but a later clean-restart test showed `api/areas`
+   (same `index.js`+`index.test.js` shape) flaking again — proving the
+   rename was coincidental, not the true fix. **Root-caused and fixed**
+   with a new `.vercelignore` (`api/**/*.test.js`), which excludes test
+   files from the Vercel function bundle entirely; verified stable across
+   repeated hits on both routes with the original `index.test.js` filename
+   restored. This is a build/tooling config fix, not an architecture or
+   application-logic change.
+2. **Test-timing race on fire-and-forget persistence.** FM-06 deliberately
+   made `saveCandidate`/`recordUse` fire-and-forget from the UI (never
+   block the import). The new spec's own assertions occasionally read the
+   API via `page.request.get(...)` before that in-flight network call had
+   landed, causing one flaky `useCount` mismatch. Fixed in the spec (not
+   the app) by registering `page.waitForResponse(...)` for the specific
+   POST/PATCH calls before the UI action that triggers them (same pattern
+   `local-setup.ts`'s `loginAs` already uses for the login response),
+   awaiting them explicitly instead of assuming completion by the time the
+   modal closes.
+
+### Runs
+
+Debugging iterations (selector/flow fixes, not counted toward the gate):
+initial run found 0 questions (MONTH_MISMATCH blocked everything — the
+document's period, October 2026, didn't match the environment's current
+month, August 2026; fixed by setting the calendar month/year selects before
+processing) and a missed row-selection round (the assistant needs a row
+picked before it reveals token questions — `ProfileAssistantPanel`'s
+follow-up-round mechanism); then the bundler-crash defect (above); then the
+timing-race defect (above).
+
+**Final gate — 3 consecutive full runs, `retries: 0`, all green, zero DB
+residue after each** (verified by direct query before/after every run):
+
+| Run | Result | Metrics (from the required-flow test's own log line) |
+|---|---|---|
+| 1 (post-fix baseline) | 5/5 passed (3.9m) | `questions_first_import=2, questions_second_import=0, profile_use_count=1, successful_use_count=1` |
+| 2 (gate 1/2) | 5/5 passed (3.9m) | same |
+| 3 (gate 2/2, explicit `--retries=0`) | 5/5 passed (3.7m) | same |
+
+All three runs printed `[e2e] fixtures seeded` / `[e2e] fixtures removed`
+cleanly; a direct SQL query after the final run confirmed zero rows
+matching `FM-E2E%`/`E2E %` orgs or `%e2e.test` users remained.
+
+### Global regression (post-fix)
+
+- `npx vitest run api/format-profiles` → 20/20 (with `index.test.js`
+  restored to its original name).
+- `npx vitest run` (full suite): first attempt showed 2 unrelated timeouts
+  (`App.logout.test.tsx`, `App.employee-selector.test.tsx`) while the
+  `vercel dev` + Chromium processes from the E2E gate were still running in
+  the background — killed them and reran in isolation: both files 10/10
+  green. Reran the full suite clean: **728/728 passed across 77 files**
+  (one harmless post-test console error logged by a stray timer in
+  `SettingsModal.test.tsx`, does not affect the pass/fail result or exit
+  code). Classified the initial 2 timeouts as resource-contention flake
+  (`ENVIRONMENT_PROBLEM`, not `REGRESSION`) — confirmed, not assumed, by
+  the clean isolated rerun.
+- `npm run lint` → clean. `npx tsc --noEmit` → clean. `npm run build` →
+  succeeds (same pre-existing chunk-size warning as every prior gate).
+
+### Documentation corrections
+
+Updated `04_ACCEPTANCE_TEST_PLAN.md` (Execution notes: browser E2E is no
+longer blocked; documented the Scenario C / drift-fixture gap honestly) and
+`06_FINAL_REPORT.md` (§P rewritten to distinguish integration-level
+evidence — the 2026-08-26 script — from real browser E2E; §Q's metrics
+marked as directly measured where they now are; §U residual risks updated;
+§W gate table and closing block updated; classification changed from
+`FORMAT_MEMORY_V1_PASS_WITH_WARNINGS` to `FORMAT_MEMORY_V1_PASS`).
+
+Files changed this session: `.vercelignore` (new), `qa/e2e-acceptance/specs-local/format-memory.spec.ts`
+(new), `sdd/features/format-memory-v1/04_ACCEPTANCE_TEST_PLAN.md`,
+`sdd/features/format-memory-v1/05_PROGRESS_LOG.md` (this file),
+`sdd/features/format-memory-v1/06_FINAL_REPORT.md`. No application source
+file under `src/` or `api/` was modified this session — the two real
+defects found were both fixed outside application logic (build config,
+test code).
+
+Next step: none — FM-09's browser-E2E gap is closed. Single commit to
+follow: `test(format-memory): complete browser-driven e2e acceptance`.

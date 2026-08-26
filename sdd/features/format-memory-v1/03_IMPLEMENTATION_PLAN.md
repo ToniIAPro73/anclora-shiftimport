@@ -228,8 +228,8 @@ per-scenario in `05_PROGRESS_LOG.md`).
 
 Gate: FM-09 gate per `04_ACCEPTANCE_TEST_PLAN.md`.
 
-Estado: PASS (real-DB acceptance script 29/29 against dev DB, one real concurrency bug found+fixed, full suite 728/728, lint/build clean; browser-driven Playwright coverage of the assistant UI is ENVIRONMENT_BLOCKED — see progress log)
-Commit previsto: `test(format-memory): add end-to-end acceptance coverage`
+Estado: PASS (real-DB acceptance script 29/29 against dev DB, one real concurrency bug found+fixed; browser-driven Playwright E2E 5/5, 3 consecutive final runs green, zero DB residue, two tooling defects found+fixed — see 05_PROGRESS_LOG.md 2026-08-27 entry; full suite 728/728, lint/build clean)
+Commit previsto: `test(format-memory): add end-to-end acceptance coverage`, `test(format-memory): complete browser-driven e2e acceptance`
 
 ---
 
