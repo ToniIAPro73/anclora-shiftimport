@@ -50,3 +50,37 @@ GATE_0_PASS (pending 06_FINAL_REPORT.md skeleton creation — next action).
 
 Next step: create empty `06_FINAL_REPORT.md` skeleton, then start FM-01
 (canonical model + sanitization in `src/lib/format-profiles.ts`).
+
+---
+
+## 2026-08-26 — FM-01 PASS
+
+HEAD before commit: `267e701` (docs commit).
+
+Subtask: FM-01 — canonical model and sanitization.
+Files modified: `src/lib/format-profiles.ts` (additive: `FormatProfile`,
+`CandidateProfileInput`, `FormatProfileStatus`, `UseOutcome`, `ProfileMatch`,
+`sanitizeFormatProfileForPersistence`, `matchFormatProfileList`,
+`detectServerProfileDrift`), `src/lib/format-profiles.test.ts` (added 21 new
+tests: sanitize accept/reject matrix incl. email/name/payroll-id heuristics,
+oversize fields, unknown-field rejection, malformed times, missing
+signature, uuid validation on `supersedesLogicalProfileId`, server-profile
+match/drift parity).
+
+Tests: `npx vitest run src/lib/format-profiles.test.ts` → 27/27 passed.
+`npx tsc --noEmit` → clean, no errors.
+
+Decisions: sanitize is allowlist + fail-closed (any unknown key rejects the
+whole payload, matches `02_DATA_API_CONTRACT.md`). PII heuristic covers
+email/long-digit-run/"Firstname Lastname" shape on `displayName`,
+`tokenAliases` keys+values, `offTokens`, `codeTimes` keys — matches product
+spec §Privacy adversarial list (heuristic, documented as best-effort, not
+cryptographic).
+
+Deviations: none from plan.
+Risks: none new.
+
+Next step: FM-02 — `db/migrations/0009_format_profiles.sql` +
+`resetOrganization` docstring update. Dev DB reachable
+(`.env.development.local` has `DATABASE_URL`), so migration will be applied
+for real, not just statically reviewed.

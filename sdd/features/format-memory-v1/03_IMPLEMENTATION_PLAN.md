@@ -24,7 +24,7 @@ Tests dirigidos: `npx vitest run src/lib/format-profiles.test.ts`.
 Gate: unit tests green, adversarial payloads covered, no regression in
 existing profile tests.
 
-Estado: PENDING
+Estado: PASS (27/27 tests green, tsc --noEmit clean)
 Commit previsto: `feat(format-memory): add canonical profile model and sanitization`
 
 ---

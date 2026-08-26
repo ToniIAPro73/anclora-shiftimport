@@ -5,12 +5,15 @@ import {
   computeLayoutSignature,
   deleteFormatProfile,
   detectProfileDrift,
+  detectServerProfileDrift,
   loadFormatProfiles,
   matchFormatProfile,
+  matchFormatProfileList,
+  sanitizeFormatProfileForPersistence,
   saveFormatProfile,
   touchFormatProfile,
 } from './format-profiles';
-import type { UserFormatProfile } from './format-profiles';
+import type { FormatProfile, UserFormatProfile } from './format-profiles';
 
 setupLocalStorageMock();
 
@@ -148,5 +151,189 @@ describe('format-profiles', () => {
     expect(serialized).not.toContain(coworkerId.toLowerCase());
     // The signature still matches structurally despite holding no clear text.
     expect(matchFormatProfile(signature)?.score).toBe(1);
+  });
+});
+
+const validCandidatePayload = () => ({
+  displayName: 'Cuadrante mensual',
+  sourceType: 'pdf' as const,
+  signature: computeLayoutSignature(baseSignatureInput),
+  tokenAliases: { DL: 'libre', M: 'regular' },
+  codeTimes: { M: { startTime: '08:00', endTime: '16:00' } },
+  offTokens: ['DL'],
+  employeeRowStrategy: 'manual-row' as const,
+  employeeRowIndex: 3,
+  dayColumnMap: { 0: 1, 1: 2 },
+  tabularMemory: null,
+  parserConfig: { clusterTolerance: 4, columnMatchMaxDistance: 12 },
+});
+
+describe('sanitizeFormatProfileForPersistence', () => {
+  it('accepts a well-formed candidate payload', () => {
+    const result = sanitizeFormatProfileForPersistence(validCandidatePayload());
+    expect(result.ok).toBe(true);
+    expect(result.rejections).toEqual([]);
+    expect(result.value?.displayName).toBe('Cuadrante mensual');
+  });
+
+  it('rejects a non-object payload', () => {
+    expect(sanitizeFormatProfileForPersistence(null).ok).toBe(false);
+    expect(sanitizeFormatProfileForPersistence('nope').ok).toBe(false);
+    expect(sanitizeFormatProfileForPersistence([1, 2]).ok).toBe(false);
+  });
+
+  it('rejects any field outside the allowlist', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      employeeName: 'María García',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.rejections.some((r) => r.field === 'employeeName')).toBe(true);
+  });
+
+  it('rejects an email-shaped displayName', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      displayName: 'someone@example.com',
+    });
+    expect(result.ok).toBe(false);
+    expect(result.rejections.some((r) => r.field === 'displayName')).toBe(true);
+  });
+
+  it('rejects a person-name-shaped displayName', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      displayName: 'María García López',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a payroll-id-shaped displayName (long digit run)', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      displayName: 'Formato EMP778899',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a tokenAlias value that looks like a name', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      tokenAliases: { DL: 'Juan Pérez Ruiz' },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an oversize displayName', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      displayName: 'x'.repeat(81),
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects too many tokenAliases entries', () => {
+    const tokenAliases = Object.fromEntries(
+      Array.from({ length: 61 }, (_, i) => [`T${i}`, 'regular']),
+    );
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      tokenAliases,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an invalid employeeRowStrategy', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      employeeRowStrategy: 'raw-text',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a malformed codeTimes entry', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      codeTimes: { M: { startTime: 'not-a-time', endTime: '16:00' } },
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a missing signature', () => {
+    const { signature, ...rest } = validCandidatePayload();
+    const result = sanitizeFormatProfileForPersistence(rest);
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a non-uuid supersedesLogicalProfileId', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      supersedesLogicalProfileId: 'not-a-uuid',
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts a valid supersedesLogicalProfileId', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      supersedesLogicalProfileId: '11111111-1111-1111-1111-111111111111',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value?.supersedesLogicalProfileId).toBe('11111111-1111-1111-1111-111111111111');
+  });
+
+  it('rejects raw document text disguised as offTokens (name-shaped)', () => {
+    const result = sanitizeFormatProfileForPersistence({
+      ...validCandidatePayload(),
+      offTokens: ['Ana Torres'],
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+const buildServerProfile = (overrides: Partial<FormatProfile> = {}): FormatProfile => ({
+  id: 'p1',
+  organizationId: 'org1',
+  logicalProfileId: 'lp1',
+  version: 1,
+  status: 'validated',
+  signature: computeLayoutSignature(baseSignatureInput),
+  sourceType: 'pdf',
+  displayName: 'Cuadrante mensual',
+  parserConfig: { clusterTolerance: 4, columnMatchMaxDistance: 12 },
+  tokenAliases: {},
+  codeTimes: {},
+  offTokens: [],
+  employeeRowStrategy: 'manual-row',
+  employeeRowIndex: 3,
+  dayColumnMap: null,
+  tabularMemory: null,
+  useCount: 0,
+  successfulUseCount: 0,
+  lastUsedAt: null,
+  createdByUserId: null,
+  supersedesProfileId: null,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  ...overrides,
+});
+
+describe('matchFormatProfileList / detectServerProfileDrift', () => {
+  it('matches exact structure at score 1.0 and skips deprecated rows', () => {
+    const good = buildServerProfile({ id: 'good' });
+    const deprecated = buildServerProfile({ id: 'dep', status: 'deprecated' });
+    const match = matchFormatProfileList([deprecated, good], computeLayoutSignature(baseSignatureInput));
+    expect(match?.profile.id).toBe('good');
+    expect(match?.score).toBe(1);
+  });
+
+  it('detects drift on a server profile the same way as the local variant', () => {
+    const profile = buildServerProfile();
+    const observed = computeLayoutSignature({
+      ...baseSignatureInput,
+      columnCount: 99,
+      structureTokens: ['algo', 'distinto'],
+    });
+    expect(detectServerProfileDrift(profile, observed).drifted).toBe(true);
   });
 });
