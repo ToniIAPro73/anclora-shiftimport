@@ -19,7 +19,7 @@ import { detectTeamRoster } from '../../ingestion/team-roster';
 import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
-import { getFormatProfileStore, toProfileHintList } from '../../lib/format-profile-store';
+import { createDriftCandidate, getFormatProfileStore, toProfileHintList } from '../../lib/format-profile-store';
 import { ImportResult, ImportWarningCode } from '../../lib/import-quality';
 import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
@@ -643,7 +643,17 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     // on preview/match — matching the pre-existing touchFormatProfile timing.
     const matchedProfileId = quality?.profileId ?? analysis?.structure?.matchedProfile?.profile.id;
     if (matchedProfileId) {
-      void formatProfileStore.recordUse(matchedProfileId, 'success').catch(() => {});
+      // Drift-safe versioning (organization sessions only — the local/guest
+      // store has no version lifecycle, see LocalFormatProfileStore): the
+      // template changed but the old aliases still parsed this import, so a
+      // new candidate version is created instead of silently reusing/
+      // overwriting the stable profile. Idempotent per FM-03: repeat drifted
+      // imports of the same changed template resolve to the same candidate.
+      if (organizationId && analysis?.structure?.drift?.drifted) {
+        void createDriftCandidate(formatProfileStore, matchedProfileId, analysis.structure.signature).catch(() => {});
+      } else {
+        void formatProfileStore.recordUse(matchedProfileId, 'success').catch(() => {});
+      }
     }
 
     const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);

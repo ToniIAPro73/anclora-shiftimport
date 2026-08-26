@@ -178,7 +178,7 @@ Tests dirigidos: API + ingestion drift test files.
 
 Gate: drift scenario passes end-to-end.
 
-Estado: PENDING
+Estado: PASS (719/719 full suite green, lint/tsc/build clean)
 Commit previsto: `feat(format-memory): add drift-safe versioning`
 
 ---

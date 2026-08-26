@@ -375,3 +375,76 @@ Next step: FM-07 — drift and versioning (wire the client's existing
 `detectProfileDrift`/analysis drift branch to FM-03's
 `supersedesLogicalProfileId` create path end-to-end; confirm/legacy/
 rollback flow).
+
+---
+
+## 2026-08-26 — FM-07 PASS
+
+HEAD before commit: `ea2d4ab` (FM-06 commit).
+
+Subtask: FM-07 — drift and versioning.
+
+Key design decision, made explicit before implementing: the existing,
+tested client-side drift UX (`analysis.test.ts`: "drifted day headers:
+PROFILE_DRIFT warning, never CORRECT" — the pipeline still silently applies
+the OLD profile's learned aliases to a drifted document and just downgrades
+the quality state + adds a warning) is untouched. That behavior is a
+per-import UX signal and is orthogonal to FM-07's actual job, which is
+server-side: whether a drifted-but-successful import should also write new
+organizational knowledge. Scoped the new "create a candidate version"
+behavior to **organization sessions only** (`organizationId` truthy) —
+matches FM-04's earlier decision that local/guest profiles have no
+lifecycle at all, so drift-versioning has nothing meaningful to do there.
+
+Files modified:
+- `src/lib/format-profile-store.ts`: new exported
+  `createDriftCandidate(store, driftedProfileId, observedSignature)` —
+  fetches the drifted profile's current full record from the store,
+  builds a `CandidateProfileInput` carrying its SAME `tokenAliases`/
+  `codeTimes`/`offTokens`/`employeeRowStrategy`/`parserConfig`/etc. (they
+  parsed this import successfully, just under a changed layout) bound to
+  the NEWLY OBSERVED signature, with `supersedesLogicalProfileId` set to
+  the old profile's `logicalProfileId`. Idempotent by construction (relies
+  on FM-03's create-candidate idempotency on structureHash — a repeat call
+  for the same still-drifted template returns the same candidate, not a
+  duplicate).
+- `src/components/shift-dashboard/ImportModal.tsx`: `handleConfirm`'s
+  profile-use branch now checks `organizationId && analysis?.structure?.drift?.drifted`
+  — when true, calls `createDriftCandidate(...)` instead of
+  `formatProfileStore.recordUse(...)` (the old profile's use-count is
+  deliberately NOT touched on drift; the new candidate starts its own
+  evidence trail from zero, per the product spec's "never overwrite
+  stable, create new candidate" framing).
+
+Tests: `src/lib/format-profile-store.test.ts` — 2 new tests: builds a
+candidate carrying the previous aliases under the new signature with
+`supersedesLogicalProfileId` set correctly (asserted on the actual POST
+body sent to the mocked `apiFetch`), and returns `null` when the drifted
+profile id is no longer found (15/15 total in that file).
+`src/components/shift-dashboard/ImportModal.test.tsx` — 1 new integration
+test: renders with `organizationId` set, mocks a drifted match result,
+confirms, and asserts the resulting network call is a POST create-candidate
+with `supersedesLogicalProfileId` + the carried-over `tokenAliases` +
+the new `structureHash`, and explicitly that NO PATCH ("use") call fires
+against the old profile (18/18 total in that file). Full suite:
+`npx vitest run` → **719/719 passed across 76 files** (3 new since FM-06's
+716). `npm run lint` clean, `npx tsc --noEmit` clean, `npm run build`
+succeeds.
+
+Decisions: already covered above (scope to organization sessions only;
+old profile's use-count untouched on drift, not incremented alongside the
+new candidate's creation).
+
+Deviations: none from the plan. FM-03's existing confirm/legacy-demotion/
+reactivate/rollback API coverage (from the FM-03 commit) already
+satisfies the "confirm/legacy/rollback flow" half of this subtask's
+acceptance criteria — no new API code was needed, only the client-side
+trigger built here.
+
+Risks: none new. The drift-candidate creation path only fires on a
+CONFIRMED import (never on preview), consistent with the rest of the
+feature's "never speculative-write" discipline.
+
+Next step: FM-08 — "Formatos aprendidos" management UI (new settings
+section listing org profiles with permitted actions per role, internals
+redacted at the UI layer).

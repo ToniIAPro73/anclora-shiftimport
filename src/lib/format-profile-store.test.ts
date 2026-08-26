@@ -16,6 +16,7 @@ const {
   LocalFormatProfileStore,
   RemoteOrganizationFormatProfileStore,
   getFormatProfileStore,
+  createDriftCandidate,
 } = await import('./format-profile-store');
 
 const baseSignatureInput = {
@@ -190,5 +191,60 @@ describe('getFormatProfileStore', () => {
     expect(guest).not.toBe(org);
     expect(guest).toBeInstanceOf(LocalFormatProfileStore);
     expect(org).toBeInstanceOf(RemoteOrganizationFormatProfileStore);
+  });
+});
+
+describe('createDriftCandidate', () => {
+  const previousRemote = () => ({
+    id: 'old-1',
+    organizationId: 'org1',
+    logicalProfileId: 'lp-1',
+    version: 1,
+    status: 'validated',
+    signature: computeLayoutSignature(baseSignatureInput),
+    sourceType: 'pdf',
+    displayName: 'Cuadrante mensual',
+    parserConfig: { clusterTolerance: 4, columnMatchMaxDistance: 12 },
+    tokenAliases: { DL: 'libre' },
+    codeTimes: {},
+    offTokens: ['DL'],
+    employeeRowStrategy: 'manual-row',
+    employeeRowIndex: 3,
+    dayColumnMap: null,
+    tabularMemory: null,
+    useCount: 5,
+    successfulUseCount: 5,
+    lastUsedAt: '2026-01-01T00:00:00Z',
+    createdByUserId: null,
+    supersedesProfileId: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+  });
+
+  it('builds a candidate carrying the previous aliases under the new signature, linked via supersedesLogicalProfileId', async () => {
+    apiFetchMock.mockResolvedValueOnce({ profiles: [previousRemote()] });
+    const newCandidate = { ...previousRemote(), id: 'new-1', version: 2, status: 'candidate', supersedesProfileId: 'old-1' };
+    apiFetchMock.mockResolvedValueOnce({ profile: newCandidate });
+
+    const observed = computeLayoutSignature({
+      documentType: 'TYPE_A', dayHeaderCount: 31, columnCount: 40, hasLegend: true,
+      structureTokens: ['LUNES', 'MARTES', 'Empleado', 'Horario'],
+    });
+    const store = new RemoteOrganizationFormatProfileStore();
+    const result = await createDriftCandidate(store, 'old-1', observed);
+
+    expect(result?.status).toBe('candidate');
+    const [, options] = apiFetchMock.mock.calls[1] as [string, RequestInit];
+    const body = JSON.parse(options.body as string) as CandidateProfileInput;
+    expect(body.tokenAliases).toEqual({ DL: 'libre' });
+    expect(body.signature.structureHash).toBe(observed.structureHash);
+    expect(body.supersedesLogicalProfileId).toBe('lp-1');
+  });
+
+  it('returns null when the drifted profile id is no longer found', async () => {
+    apiFetchMock.mockResolvedValueOnce({ profiles: [] });
+    const store = new RemoteOrganizationFormatProfileStore();
+    const result = await createDriftCandidate(store, 'missing', computeLayoutSignature(baseSignatureInput));
+    expect(result).toBeNull();
   });
 });

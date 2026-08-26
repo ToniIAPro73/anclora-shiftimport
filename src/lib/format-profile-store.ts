@@ -283,6 +283,46 @@ export class RemoteOrganizationFormatProfileStore implements FormatProfileStore 
 
 export { detectServerProfileDrift };
 
+/**
+ * Drift-safe versioning entry point (FM-07): called when an import matched
+ * an existing profile but `detectServerProfileDrift`/`detectProfileDrift`
+ * found the observed layout signature differs. Never overwrites the
+ * existing (stable) profile — creates a new `candidate` version carrying
+ * the SAME learned aliases/config (they were good enough to parse this
+ * import, just under a changed layout) bound to the newly observed
+ * signature, linked via `supersedesLogicalProfileId`. Idempotent: a repeat
+ * call for the same still-drifted template returns the same candidate row
+ * (FM-03's create-candidate idempotency on structureHash), never a
+ * duplicate. Only meaningful for a store with real version history — the
+ * local (guest) store has no lifecycle (see LocalFormatProfileStore) and
+ * this is intentionally never called for guests (see ImportModal).
+ */
+export async function createDriftCandidate(
+  store: FormatProfileStore,
+  driftedProfileId: string,
+  observedSignature: LayoutSignature,
+): Promise<FormatProfile | null> {
+  const profiles = await store.list();
+  const previous = profiles.find((p) => p.id === driftedProfileId);
+  if (!previous) {
+    return null;
+  }
+  return store.saveCandidate({
+    displayName: previous.displayName,
+    sourceType: previous.sourceType,
+    signature: observedSignature,
+    tokenAliases: previous.tokenAliases,
+    codeTimes: previous.codeTimes,
+    offTokens: previous.offTokens,
+    employeeRowStrategy: previous.employeeRowStrategy,
+    employeeRowIndex: previous.employeeRowIndex,
+    dayColumnMap: previous.dayColumnMap,
+    tabularMemory: previous.tabularMemory,
+    parserConfig: previous.parserConfig,
+    supersedesLogicalProfileId: previous.logicalProfileId,
+  });
+}
+
 let activeStore: FormatProfileStore | null = null;
 let activeStoreKey: string | null = null;
 
