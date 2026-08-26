@@ -84,3 +84,41 @@ Next step: FM-02 — `db/migrations/0009_format_profiles.sql` +
 `resetOrganization` docstring update. Dev DB reachable
 (`.env.development.local` has `DATABASE_URL`), so migration will be applied
 for real, not just statically reviewed.
+
+---
+
+## 2026-08-26 — FM-02 PASS
+
+HEAD before commit: `4ba7d87` (FM-01 commit).
+
+Subtask: FM-02 — database migration.
+Files created/modified: `db/migrations/0009_format_profiles.sql` (new
+table, 5 indexes, 5 CHECK constraints, 2 FKs, no `DO $$` blocks — reused
+`0008_areas_optional.sql`'s `BEGIN;`/`COMMIT;` + `IF NOT EXISTS` style);
+`api/_lib/data.js` (docstring only — recorded the reset-policy decision:
+`format_profiles`, like `areas`, survives `resetOrganization`; no code
+change to the delete list since the function never touched
+areas/profiles).
+
+Tests: applied against real dev DB via
+`node --env-file=.env.development.local db/migrate.mjs` → applied cleanly
+(8 statements). Verified via direct SQL inspection: all 24 columns present
+with correct types/nullability, 6 indexes present (pkey +
+organization/org+logical/org+logical+version-unique/org+status/
+org+structureHash), 23 constraints present (5 CHECK/FK, rest NOT NULL).
+Re-ran migrate.mjs → `skip 0009_format_profiles.sql (already applied)`,
+confirming idempotence via the `_migrations` tracking table (not
+re-execution idempotence of the SQL itself, which is also true given
+`IF NOT EXISTS` throughout).
+
+Decisions: reset policy = format profiles survive org data reset
+(configuration, not operational data) — matches `01_TECHNICAL_DESIGN.md`.
+
+Deviations: none.
+Risks: cross-org `supersedes_profile_id` integrity (same org, same logical
+family) is enforced at the application layer only, not a DB constraint —
+documented in `02_DATA_API_CONTRACT.md`, must be covered by FM-03 API
+tests.
+
+Next step: FM-03 — secure multi-tenant API
+(`api/_lib/format-profiles.js` + `api/format-profiles/**`).

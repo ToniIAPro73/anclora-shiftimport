@@ -804,7 +804,12 @@ export async function removeMember(sql, ctx, input) {
  *
  * What is KEPT (never touched): organizations, users, memberships, sessions
  * and plan — the account configuration. The admin's User row and membership
- * survive, so the account can start over immediately.
+ * survive, so the account can start over immediately. `areas` and
+ * `format_profiles` are also kept: both are organizational configuration
+ * (how the org is structured, how it reads its own roster templates), not
+ * operational history, so a data reset does not erase them. See
+ * sdd/features/format-memory-v1/01_TECHNICAL_DESIGN.md (Reset policy) for
+ * the decision record.
  *
  * ALL employees are deleted, including one linked to the admin user:
  * employees are operational/import data and the post-onboarding initial

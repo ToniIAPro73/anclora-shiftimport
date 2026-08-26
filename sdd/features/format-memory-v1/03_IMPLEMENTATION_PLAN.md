@@ -51,7 +51,7 @@ static SQL review + any `db/**/*.test.mjs` migration tests present.
 Gate: migration applies (or `ENVIRONMENT_BLOCKED` if no dev DB reachable,
 documented with evidence), constraints verified by inspection.
 
-Estado: PENDING
+Estado: PASS (applied to dev DB, columns/constraints/indexes verified, re-run is a no-op skip)
 Commit previsto: `feat(format-memory): add organization profile persistence`
 
 ---
