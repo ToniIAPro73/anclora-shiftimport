@@ -45,6 +45,7 @@ import { LocalMigrationModal } from './components/shift-dashboard/LocalMigration
 import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { AreasModal } from './components/shift-dashboard/AreasModal';
+import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
 import { AuthScreen } from './components/AuthScreen';
@@ -131,6 +132,7 @@ function App() {
   const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isAreasOpen, setIsAreasOpen] = useState(false);
+  const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -1141,6 +1143,14 @@ function App() {
             <button
               type="button"
               className="btn-outline"
+              onClick={() => setIsFormatProfilesOpen(true)}
+              style={{ padding: '6px 12px', fontWeight: 700 }}
+            >
+              {t('formatProfiles.manage')}
+            </button>
+            <button
+              type="button"
+              className="btn-outline"
               onClick={() => void handleLogout()}
               style={{ padding: '6px 12px', fontWeight: 700, marginLeft: 'auto' }}
             >
@@ -1357,6 +1367,13 @@ function App() {
         isOpen={isAreasOpen}
         onClose={() => setIsAreasOpen(false)}
         onChanged={() => void refreshAreas()}
+      />
+
+      <FormatProfilesModal
+        isOpen={isFormatProfilesOpen}
+        onClose={() => setIsFormatProfilesOpen(false)}
+        store={getFormatProfileStore(session?.organizationId ?? null)}
+        canManage={session?.role === 'ADMIN'}
       />
 
       {importConflictState && (

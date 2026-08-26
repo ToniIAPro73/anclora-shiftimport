@@ -202,7 +202,7 @@ Tests dirigidos: new component test file(s).
 Gate: component tests green, no internals in rendered output (assert via
 test), i18n present both languages.
 
-Estado: PENDING
+Estado: PASS (8/8 tests green, 727/727 full suite, lint/tsc/build clean, internals-redaction asserted in test)
 Commit previsto: `feat(format-memory): add learned formats management UI`
 
 ---

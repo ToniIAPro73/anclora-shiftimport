@@ -448,3 +448,60 @@ feature's "never speculative-write" discipline.
 Next step: FM-08 — "Formatos aprendidos" management UI (new settings
 section listing org profiles with permitted actions per role, internals
 redacted at the UI layer).
+
+---
+
+## 2026-08-26 — FM-08 PASS
+
+HEAD before commit: `4e91585` (FM-07 commit).
+
+Subtask: FM-08 — "Formatos aprendidos" management UI.
+
+Files created:
+- `src/components/shift-dashboard/FormatProfilesModal.tsx`: mirrors
+  `AreasModal.tsx`'s structure (`ModalShell`, reload-on-open, `run()`
+  busy/error wrapper). Groups profiles by `logicalProfileId`; shows the
+  latest version always, older versions behind a "Ver versiones
+  anteriores (N)" toggle. Renders only: display name, version number,
+  status badge (candidate/validated/verified/legacy/deprecated, color-
+  coded), source type (PDF/image vs CSV/table), "toda la organización"
+  scope label, last-used date, successful-use count, and a note when a row
+  supersedes an earlier version. Deliberately never renders: id,
+  logicalProfileId, structureHash/signature, parserConfig, tokenAliases,
+  or any other internal field. Actions gated on a `canManage` prop
+  (`session.role === 'ADMIN'`): rename (inline form), confirm (only on
+  `candidate`), deprecate (any non-`deprecated` status), reactivate (only
+  on `legacy`/`deprecated`) — EMPLOYEE sees the list read-only, no action
+  buttons at all.
+- `src/components/shift-dashboard/FormatProfilesModal.test.tsx` (8 tests).
+- `formatProfiles` i18n namespace (es + en) added to `src/lib/i18n.ts`.
+
+Files modified: `src/App.tsx` — new `isFormatProfilesOpen` state, a
+"Formatos aprendidos" trigger button visible to ANY authenticated role
+(EMPLOYEE and ADMIN both — a sibling of the ADMIN-only Members/Areas
+buttons, not nested inside their role guard), `<FormatProfilesModal>`
+rendered with `store={getFormatProfileStore(session?.organizationId ?? null)}`
+and `canManage={session?.role === 'ADMIN'}`.
+
+Tests: `npx vitest run src/components/shift-dashboard/FormatProfilesModal.test.tsx`
+→ 8/8 passed. Covers: empty state, list rendering with an explicit
+assertion that the rendered DOM does NOT contain `logicalProfileId`,
+`structureHash`, or `clusterTolerance` (internals-redaction proof, not
+just an eyeball check), EMPLOYEE (`canManage=false`) sees no action
+buttons at all, ADMIN sees rename always + confirm only on `candidate` +
+deprecate on any non-deprecated + reactivate only on legacy/deprecated,
+version grouping/toggle, rename submission, load-error surfacing. Full
+suite: **727/727 passed across 77 files**. `npm run lint` clean,
+`npx tsc --noEmit` clean, `npm run build` succeeds.
+
+Decisions: accessibility (focus trap, ESC close, ARIA dialog role, focus
+return) and responsive/theme behavior are inherited for free from the
+shared `ModalShell` component (same one every other modal in the app
+uses) — no bespoke a11y/responsive code was needed or written for this
+modal, consistent with the rest of the codebase's pattern.
+
+Deviations: none from the plan.
+Risks: none new.
+
+Next step: FM-09 — integration and E2E acceptance (scenarios A-G from
+`04_ACCEPTANCE_TEST_PLAN.md`).
