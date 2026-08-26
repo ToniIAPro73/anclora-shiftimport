@@ -122,3 +122,60 @@ tests.
 
 Next step: FM-03 — secure multi-tenant API
 (`api/_lib/format-profiles.js` + `api/format-profiles/**`).
+
+---
+
+## 2026-08-26 — FM-03 PASS
+
+HEAD before commit: `41fcfed` (FM-02 commit).
+
+Subtask: FM-03 — secure multi-tenant API.
+Files created: `api/_lib/format-profiles.js` (data access: independent
+server-side `sanitizeCandidateInput` allowlist validator — deliberately not
+importing the TS version from `src/lib/`, since no existing `api/*.js` file
+imports from `src/`; `listFormatProfiles`, `getFormatProfile`,
+`createCandidateFormatProfile` idempotent-on-structureHash,
+`renameFormatProfile`/`confirmFormatProfile`/`deprecateFormatProfile`/
+`reactivateFormatProfile` all ADMIN-gated + optimistic-concurrency via
+`updated_at` compare, `recordFormatProfileUse` any-role atomic counter),
+`api/format-profiles/index.js` (single flat-file route, GET/POST/PATCH,
+mirrors `api/areas/index.js` convention — deviates from
+`02_DATA_API_CONTRACT.md`'s route-per-action sketch since the repo has no
+`[id].js` nested-route precedent anywhere; doc updated to match),
+`api/format-profiles/index.test.js` (19 tests).
+
+Tests: `npx vitest run api/format-profiles` → 19/19 passed. Covers: create
+as EMPLOYEE (teaching not admin-gated), unknown-field rejection (400
+INVALID_PROFILE_PAYLOAD), name-shaped displayName rejection, idempotent
+create (identical structureHash → 200 not 201, same id), org-scoped list,
+EMPLOYEE read access, anonymous 401, get-by-id + foreign-org 404 (no leak),
+EMPLOYEE 403 on rename/confirm/deprecate/reactivate, EMPLOYEE allowed on
+`use`, ADMIN rename, use-outcome counters (success vs failure), foreign-org
+404 on use, stale-`updatedAt` 409 PROFILE_CONFLICT, confirm requires
+`status=candidate` (409 otherwise), **drift-supersede confirm demotes the
+prior version to legacy while leaving its signature/data untouched**,
+reactivate legacy→validated, deprecate idempotent no-op, DELETE 405.
+Additionally ran a real INSERT/JSONB round-trip against the dev DB directly
+(bypassing the fake) to confirm the actual SQL (not just the test fake)
+works — inserted and cleaned up one row, all JSONB columns round-tripped
+correctly. `tsc --noEmit` clean (no TS changes this subtask, sanity only).
+
+Decisions: `api/_lib/format-profiles.js` re-implements the allowlist/PII
+sanitizer independently rather than importing `src/lib/format-profiles.ts`
+— matches mandate's explicit instruction that "la API debe repetir la
+validación; no confíes en el frontend," and avoids introducing a
+cross-boundary TS-from-JS import pattern not used anywhere else in `api/`.
+
+Deviations: `02_DATA_API_CONTRACT.md` updated post-hoc to reflect the
+single-flat-file + action-dispatch routing actually used (doc originally
+sketched separate per-action route files).
+
+Risks: none new. `supersedes_profile_id` same-org/same-logical-family
+integrity is enforced in `createCandidateFormatProfile` at the app layer
+(404 if the referenced family doesn't belong to the caller's org) — covered
+implicitly by the org-scoped WHERE clause, not yet unit-tested with an
+explicit cross-org-supersede-attempt case; flagged for FM-07 to add if drift
+work surfaces a gap.
+
+Next step: FM-04 — local and remote stores
+(`src/lib/format-profile-store.ts`).

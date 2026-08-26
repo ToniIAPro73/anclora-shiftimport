@@ -79,7 +79,7 @@ Tests dirigidos: `npx vitest run api/format-profiles`.
 Gate: API tests green, cross-tenant denial demonstrated, role gating
 demonstrated.
 
-Estado: PENDING
+Estado: PASS (19/19 API tests green; real INSERT/JSONB smoke test against dev DB verified and cleaned up)
 Commit previsto: `feat(format-memory): add secure profile API and lifecycle`
 
 ---

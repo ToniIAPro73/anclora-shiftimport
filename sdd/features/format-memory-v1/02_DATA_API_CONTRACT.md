@@ -99,12 +99,16 @@ blocks.
 ## Endpoints
 
 Base path `api/format-profiles/`. All require `resolveContext` +
-`requireOrgContext`; specific role gates noted per endpoint. Vercel routing:
-`index.js` (collection), `[id].js` (item + sub-actions via method+body, or
-nested files as the repo's existing convention allows — mirrors
-`api/areas/index.js`'s single-file method-dispatch pattern extended with an
-`[id]` file for item-scoped operations, consistent with existing
-`api/employees/[id].js`-style routes already in the repo).
+`requireOrgContext`; specific role gates noted per endpoint. **Actual
+implementation** (confirmed during FM-03: the repo has no `[id].js`
+nested-route precedent anywhere — every resource is a single flat
+`index.js` with method + body/query dispatch, e.g. `api/areas/index.js`'s
+`deactivate` body flag): a single `api/format-profiles/index.js` handles
+GET (list, or full record via `?id=`), POST (create candidate), and PATCH
+(`body.id` + `body.action` selects the lifecycle mutation: `rename`,
+`confirm`, `deprecate`, `reactivate`, `use`). The route-per-action sketch
+below describes the *behavior*; the actual dispatch is by `action` field,
+not by URL path.
 
 ### `GET /api/format-profiles`
 
