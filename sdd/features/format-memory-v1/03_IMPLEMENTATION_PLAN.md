@@ -252,5 +252,5 @@ Tests dirigidos: none (doc review) + final full regression run.
 
 Gate: global regression gate per §11 of the mandate.
 
-Estado: PENDING
+Estado: PASS (architecture spec updated, final report complete, global regression green)
 Commit previsto: `docs(format-memory): complete implementation report`
