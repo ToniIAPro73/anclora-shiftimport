@@ -235,23 +235,6 @@ function mapProfileRow(row) {
   };
 }
 
-function mapProfileSummaryRow(row) {
-  return {
-    id: row.id,
-    logicalProfileId: row.logical_profile_id,
-    version: row.version,
-    status: row.status,
-    displayName: row.display_name,
-    sourceType: row.source_type,
-    useCount: row.use_count,
-    successfulUseCount: row.successful_use_count,
-    lastUsedAt: row.last_used_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    supersedesProfileId: row.supersedes_profile_id,
-  };
-}
-
 export async function listFormatProfiles(sql, ctx, { logicalProfileId = null, status = null } = {}) {
   const rows = await sql`
     SELECT * FROM format_profiles
@@ -260,7 +243,7 @@ export async function listFormatProfiles(sql, ctx, { logicalProfileId = null, st
       AND (${status}::text IS NULL OR status = ${status})
     ORDER BY logical_profile_id ASC, version DESC
   `;
-  return rows.map(mapProfileSummaryRow);
+  return rows.map(mapProfileRow);
 }
 
 export async function getFormatProfile(sql, ctx, id) {
