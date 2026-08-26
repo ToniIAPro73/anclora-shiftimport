@@ -224,3 +224,51 @@ Deviations: none.
 Risks: none new.
 
 Next step: FM-05 — local-to-organization migration UX.
+
+---
+
+## 2026-08-26 — FM-05 PASS
+
+HEAD before commit: `5b20ef3` (FM-04 commit).
+
+Subtask: FM-05 — local-to-organization migration UX.
+Files created: `src/components/shift-dashboard/FormatProfileMigrationModal.tsx`
+(mirrors the existing `LocalMigrationModal.tsx` pattern — same `ModalShell`,
+same button/footer conventions; migrates each local `UserFormatProfile` via
+`remoteStore.saveCandidate`, sequential per-profile try/catch so one
+failure doesn't abort the rest, surfaces a partial-result summary with
+retry, never deletes the local copy), `src/components/shift-dashboard/
+FormatProfileMigrationModal.test.tsx` (5 tests), plus a new `formatMigration`
+i18n namespace (es + en) added to `src/lib/i18n.ts` alongside the existing
+`migration` namespace (kept separate — that one is for shift-data
+migration, this one is format-profile-specific).
+
+Tests: `npx vitest run src/components/shift-dashboard/
+FormatProfileMigrationModal.test.tsx` → 5/5 passed. Covers: found-local
+count + explanation strings rendered (structure/no-documents/no-personal-
+data/local-copy-kept, all ES since default locale), migration calls
+`saveCandidate` once per local profile with an allowlist-only field set (no
+PII fields — asserted via exact key list) and calls `onDone` on full
+success, repeated migration calls `saveCandidate` again (dedup is a
+server-side responsibility per FM-03's idempotent-on-structureHash create,
+not reimplemented client-side), partial failure surfaces
+"N of M migrated" + retry affordance, keep-local/postpone never call
+`saveCandidate`. `tsc --noEmit` and `eslint --ext ts,tsx` both clean.
+
+Decisions: **dedup is enforced server-side** (FM-03's
+`createCandidateFormatProfile` idempotency on `(organization_id,
+structureHash)`), not client-side — the modal always attempts
+`saveCandidate` for every local profile on migrate/retry; repeating the
+action is safe because the API returns the existing row instead of
+creating a duplicate. This matches the product spec's "idempotent" acceptance
+criterion without needing the UI to track migration state itself.
+
+Deviations: none.
+Risks: this component is not yet wired into `App.tsx` (no trigger
+condition, no render call) — that wiring belongs to FM-06 (automatic reuse
+integration), since it needs the same session/store plumbing. Noted so
+FM-06 doesn't forget it.
+
+Next step: FM-06 — automatic reuse in the ingestion pipeline (wire
+`analysis.ts`/`ImportModal.tsx`/`ProfileAssistantPanel.tsx` to the FM-04
+store; wire the FM-05 migration prompt into `App.tsx`).

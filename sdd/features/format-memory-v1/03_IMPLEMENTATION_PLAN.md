@@ -128,7 +128,7 @@ Tests dirigidos: component test file for the new migration prompt.
 
 Gate: UI tests green, dedup verified, i18n verified.
 
-Estado: PENDING
+Estado: PASS (5/5 tests green, tsc/eslint clean; dedup relies on API idempotency, not client-side)
 Commit previsto: `feat(format-memory): add local profile migration`
 
 ---
