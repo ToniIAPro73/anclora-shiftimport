@@ -223,9 +223,11 @@ before deciding to skip, not assumed).
 
 ## S. Files Changed
 
-26 files changed since baseline, +5102/-10 lines. Full list: `db/migrations/0009_format_profiles.sql`
-(new); `api/_lib/data.js`, `api/_lib/format-profiles.js` (new), `api/format-profiles/index.js`
-(new), `api/format-profiles/index.test.js` (new); `src/lib/format-profiles.ts`,
+29 files changed since baseline (`2c466e8`), +5844/-15 lines
+(`git diff --stat 2c466e8 HEAD`). Full list, session 1 (2026-08-26):
+`db/migrations/0009_format_profiles.sql` (new); `api/_lib/data.js`,
+`api/_lib/format-profiles.js` (new), `api/format-profiles/index.js` (new),
+`api/format-profiles/index.test.js` (new); `src/lib/format-profiles.ts`,
 `src/lib/format-profiles.test.ts`, `src/lib/format-profile-store.ts` (new),
 `src/lib/format-profile-store.test.ts` (new), `src/lib/i18n.ts`; `src/App.tsx`,
 `src/components/shift-dashboard/{ImportModal.tsx,ImportModal.test.tsx,
@@ -234,11 +236,14 @@ FormatProfileMigrationModal.test.tsx (new),FormatProfilesModal.tsx (new),
 FormatProfilesModal.test.tsx (new)}`; `qa/e2e-acceptance/format-memory-acceptance.mjs`
 (new); `sdd/features/format-memory-v1/*` (7 spec docs, this report);
 `sdd/features/multi-format-ingestion/architecture-multi-format-ingestion-spec-v1.md`.
+Session 2 follow-up (2026-08-27): `.vercelignore` (new),
+`qa/e2e-acceptance/specs-local/format-memory.spec.ts` (new), plus the same
+4 `sdd/features/format-memory-v1/` docs updated again (03/04/05/06).
 No file outside the authorized path list in the mandate's §3 was touched.
 
 ## T. Commits Created
 
-11 commits on `development`, all local, none pushed:
+13 commits on `development`, all local:
 1. `267e701` docs(format-memory): add product and technical specifications
 2. `4ba7d87` feat(format-memory): add canonical profile model and sanitization
 3. `41fcfed` feat(format-memory): add organization profile persistence
@@ -250,9 +255,11 @@ No file outside the authorized path list in the mandate's §3 was touched.
 9. `4e91585` feat(format-memory): add drift-safe versioning
 10. `174405d` feat(format-memory): add learned formats management UI
 11. `f85929c` test(format-memory): add end-to-end acceptance coverage
+12. `aacc760` docs(format-memory): complete implementation report
+13. `8a9cfb7` test(format-memory): complete browser-driven e2e acceptance
 
-Plus this closing commit (`docs(format-memory): complete implementation
-report`) to follow.
+None pushed as of this report; pushed only after this pre-push review's
+own gates pass (see the pre-push review addendum below, if present).
 
 ## U. Residual Risks
 
