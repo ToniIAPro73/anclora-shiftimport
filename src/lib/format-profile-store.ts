@@ -65,6 +65,57 @@ const localToFormatProfile = (profile: UserFormatProfile): FormatProfile => ({
   updatedAt: profile.updatedAt,
 });
 
+/**
+ * Adapts a just-learned local profile (assistant output) into the
+ * candidate-input shape the store interface accepts. Shared by the assistant
+ * panel (teach flow) and the local→organization migration modal so the
+ * allowlist field set is defined in exactly one place.
+ */
+export const candidateInputFromLocalProfile = (profile: UserFormatProfile): CandidateProfileInput => ({
+  displayName: profile.label,
+  sourceType: localSourceType(profile),
+  signature: profile.signature,
+  tokenAliases: profile.tokenAliases,
+  codeTimes: profile.codeTimes ?? {},
+  offTokens: profile.offTokens,
+  employeeRowStrategy: profile.employeeRow.strategy,
+  employeeRowIndex: profile.employeeRow.rowIndex ?? null,
+  dayColumnMap: profile.dayColumnMap ?? null,
+  tabularMemory: profile.tabular ?? null,
+  parserConfig: profile.parserParams,
+});
+
+/**
+ * Adapts server FormatProfile rows into the local UserFormatProfile shape
+ * consumed by the (unchanged) matching/drift/code-override functions in
+ * `src/ingestion/analysis.ts` — the ingestion pipeline's `profilesHint`
+ * parameter already exists precisely to accept a pre-loaded list instead of
+ * reading localStorage itself, so this is the only integration point
+ * FM-06 needs (see 01_TECHNICAL_DESIGN.md).
+ */
+export const toProfileHintList = (profiles: FormatProfile[]): UserFormatProfile[] =>
+  profiles
+    .filter((p) => p.status !== 'deprecated')
+    .map((p) => ({
+      profileVersion: 1,
+      id: p.id,
+      label: p.displayName,
+      signature: p.signature,
+      tokenAliases: p.tokenAliases,
+      ...(Object.keys(p.codeTimes).length > 0 ? { codeTimes: p.codeTimes } : {}),
+      offTokens: p.offTokens,
+      employeeRow: {
+        strategy: p.employeeRowStrategy,
+        ...(p.employeeRowIndex !== null ? { rowIndex: p.employeeRowIndex } : {}),
+      },
+      parserParams: p.parserConfig,
+      ...(p.dayColumnMap ? { dayColumnMap: p.dayColumnMap } : {}),
+      ...(p.tabularMemory ? { tabular: p.tabularMemory } : {}),
+      createdAt: p.createdAt,
+      updatedAt: p.updatedAt,
+      useCount: p.useCount,
+    }));
+
 const candidateInputToLocalProfile = (input: CandidateProfileInput): UserFormatProfile => ({
   profileVersion: 1,
   id: '',

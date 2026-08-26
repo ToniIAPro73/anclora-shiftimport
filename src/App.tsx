@@ -42,6 +42,7 @@ import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
 import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
+import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { AreasModal } from './components/shift-dashboard/AreasModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
@@ -58,11 +59,17 @@ import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { SearchableSelect } from './components/ui/SearchableSelect';
 import { CalendarImportContext } from './lib/import-types';
+import { loadFormatProfiles } from './lib/format-profiles';
+import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
 
 /** localStorage flag: local→remote one-shot migration already done (Fase 1). */
 const MIGRATION_DONE_KEY = 'anclora_shiftimport_migrated_v1';
+/** localStorage flag: local→org format-profile migration already resolved
+ * (Format Memory v1). Separate from MIGRATION_DONE_KEY — shift data and
+ * format profiles migrate independently. */
+const FORMAT_PROFILE_MIGRATION_DONE_KEY = 'anclora_shiftimport_format_profiles_migrated_v1';
 
 function insertShift(current: Shift[], incoming: Shift): Shift[] {
   return [...current.filter((shift) => shift.id !== incoming.id), normalizeShift(incoming)];
@@ -121,6 +128,7 @@ function App() {
   // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
   const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
+  const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isAreasOpen, setIsAreasOpen] = useState(false);
   const now = new Date();
@@ -196,6 +204,11 @@ function App() {
       if (localShifts.length > 0) {
         setMigrationPrompt({ count: localShifts.length });
       }
+    }
+
+    const formatProfileMigrationState = window.localStorage.getItem(FORMAT_PROFILE_MIGRATION_DONE_KEY);
+    if (!formatProfileMigrationState && loadFormatProfiles().length > 0) {
+      setFormatProfileMigrationOpen(true);
     }
   }, []);
 
@@ -1255,6 +1268,7 @@ function App() {
           })()}
           identityLocked={Boolean(session)}
           userId={session?.user.id ?? null}
+          organizationId={session?.organizationId ?? null}
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
           allowAreaChoice={session?.role === 'ADMIN'}
@@ -1308,6 +1322,21 @@ function App() {
           setMigrationPrompt(null);
         }}
         onCancel={() => setMigrationPrompt(null)}
+      />
+
+      <FormatProfileMigrationModal
+        isOpen={formatProfileMigrationOpen}
+        localProfiles={loadFormatProfiles()}
+        remoteStore={getFormatProfileStore(session?.organizationId ?? null)}
+        onDone={() => {
+          window.localStorage.setItem(FORMAT_PROFILE_MIGRATION_DONE_KEY, 'done');
+          setFormatProfileMigrationOpen(false);
+        }}
+        onKeepLocal={() => {
+          window.localStorage.setItem(FORMAT_PROFILE_MIGRATION_DONE_KEY, 'local-only');
+          setFormatProfileMigrationOpen(false);
+        }}
+        onCancel={() => setFormatProfileMigrationOpen(false)}
       />
 
       <MembersModal

@@ -260,8 +260,9 @@ describe('sanitizeFormatProfileForPersistence', () => {
   });
 
   it('rejects a missing signature', () => {
-    const { signature, ...rest } = validCandidatePayload();
-    const result = sanitizeFormatProfileForPersistence(rest);
+    const payload = validCandidatePayload() as Record<string, unknown>;
+    delete payload.signature;
+    const result = sanitizeFormatProfileForPersistence(payload);
     expect(result.ok).toBe(false);
   });
 

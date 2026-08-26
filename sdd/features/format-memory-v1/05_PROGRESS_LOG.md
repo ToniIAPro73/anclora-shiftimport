@@ -272,3 +272,106 @@ FM-06 doesn't forget it.
 Next step: FM-06 — automatic reuse in the ingestion pipeline (wire
 `analysis.ts`/`ImportModal.tsx`/`ProfileAssistantPanel.tsx` to the FM-04
 store; wire the FM-05 migration prompt into `App.tsx`).
+
+---
+
+## 2026-08-26 — FM-06 PASS
+
+HEAD before commit: `cf14f77` (FM-05 commit).
+
+Subtask: FM-06 — automatic reuse in the ingestion pipeline.
+
+Key discovery that simplified this subtask: `src/ingestion/analysis.ts` and
+`src/ingestion/parsers/file.ts`'s `analyzeDocumentFile` already accept an
+optional `profilesHint?: UserFormatProfile[]` parameter (pre-existing,
+pre-Format-Memory-v1 — "performance hint" so the caller can supply a
+pre-loaded list instead of the pipeline reading `localStorage` itself). This
+was the exact integration seam needed: no change to the matching/drift math
+itself, only to what feeds it.
+
+Files modified:
+- `src/lib/format-profile-store.ts`: added two exported adapters —
+  `candidateInputFromLocalProfile` (extracted from the inline mapping that
+  was duplicated in `FormatProfileMigrationModal.tsx`, now shared) and
+  `toProfileHintList` (server `FormatProfile[]` → local `UserFormatProfile[]`
+  shape, filtering out `deprecated` rows, feeding the pipeline's existing
+  hint parameter).
+- `src/components/shift-dashboard/FormatProfileMigrationModal.tsx`: now
+  calls the shared `candidateInputFromLocalProfile` instead of its own
+  inline mapping (dedup, no behavior change — same 5 tests still pass).
+- `src/components/shift-dashboard/ProfileAssistantPanel.tsx`: new optional
+  `store?: FormatProfileStore` prop (defaults to a module-level
+  `LocalFormatProfileStore` singleton, preserving guest/no-prop behavior
+  byte-for-byte); both teach-flow save call sites now call
+  `store.saveCandidate(candidateInputFromLocalProfile(profile))` instead of
+  the direct `saveFormatProfile(profile)` import. Fire-and-forget
+  (`void ... .catch(() => {})`), not awaited by `handleConfirm` — kept it
+  synchronous on purpose (see Decisions).
+- `src/components/shift-dashboard/ImportModal.tsx`: new `organizationId`
+  prop; `formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId])`;
+  `runAnalysis` now does `const profilesHint = toProfileHintList(await formatProfileStore.list().catch(() => []))`
+  before calling `analyzeDocumentFile(..., profilesHint, ...)` (previously
+  passed `undefined`, silently falling back to a local-storage read that
+  would have been wrong for authenticated sessions); the confirm-time
+  `touchFormatProfile(matchedProfileId)` call replaced with
+  `void formatProfileStore.recordUse(matchedProfileId, 'success').catch(() => {})`;
+  `store={formatProfileStore}` passed down to `<ProfileAssistantPanel>`.
+- `src/App.tsx`: `organizationId={session?.organizationId ?? null}` passed
+  to `<ImportModal>`; new `FORMAT_PROFILE_MIGRATION_DONE_KEY` localStorage
+  flag (separate from the existing shift-data `MIGRATION_DONE_KEY` — they
+  migrate independently) and `formatProfileMigrationOpen` state, checked
+  inside `hydrateAuthenticated` right after the existing shift-migration
+  check (mirrors that exact pattern); `<FormatProfileMigrationModal>` wired
+  in next to `<LocalMigrationModal>` with `onDone`/`onKeepLocal` setting the
+  flag and `onCancel` (postpone) leaving it unset so it asks again next
+  session.
+
+Tests: full suite `npx vitest run` → **716/716 passed across 76 files**,
+zero regressions (this includes all pre-existing `ImportModal.test.tsx`,
+`ImportModal.areas.test.tsx`, `ProfileAssistantPanel.test.tsx`,
+`ProfileAssistantPanel.fallback.test.tsx`, `App.test.tsx` suites, unchanged
+— the local/guest path stayed synchronously-effective despite the store's
+async interface, since `LocalFormatProfileStore`'s methods have no `await`
+before their synchronous side effect, so fire-and-forget calls still land
+before the caller's next line runs). `npm run lint` clean (fixed one
+`react-hooks/exhaustive-deps` warning by adding `formatProfileStore` to
+`runAnalysis`'s dependency array, and one `no-unused-vars` in a
+`format-profiles.test.ts` destructure, unrelated pre-existing test tweak
+needed for the FM-01 test file). `npx tsc --noEmit` clean. `npm run build`
+succeeds (pre-existing chunk-size warning only, unrelated to this feature).
+
+Decisions:
+- **Fire-and-forget persistence, not awaited.** Both the teach-flow save
+  (`ProfileAssistantPanel`) and the use-count record
+  (`ImportModal.handleConfirm`) call the store without `await`, wrapped in
+  `.catch(() => {})`. This keeps `handleConfirm` synchronous (no behavior
+  change to its call signature or the confirm button's UX) and matches the
+  pre-existing UX: the import completes immediately: a slow/failed remote
+  profile-persistence call never blocks or fails the shift import itself.
+  A failed remote save is silently dropped for this import (the user simply
+  gets asked the assistant questions again next time); this trade-off is
+  consistent with format learning being a convenience layered on top of
+  import, never a precondition for it.
+- **Remote-fetch failure for the match hint degrades gracefully.**
+  `formatProfileStore.list().catch(() => [])` before analysis: a network
+  hiccup means "no hint this attempt" (falls through to the assistant like
+  an unrecognized format), never a thrown error that would block the import
+  flow.
+- `touchFormatProfile` (the old direct localStorage function) is now
+  unreferenced by `ImportModal.tsx`/`ProfileAssistantPanel.tsx` but is left
+  exported from `format-profiles.ts` since `format-profiles.test.ts` still
+  exercises it directly (guest-mode unit coverage) and
+  `LocalFormatProfileStore.recordUse` calls it internally — still load-
+  bearing, not dead code.
+
+Deviations: none from the plan.
+Risks: none new. The `profilesHint`-degrades-to-`[]`-on-remote-failure path
+is exercised implicitly (store methods are covered in FM-04's own tests)
+but not by a dedicated ImportModal-level "remote list fetch throws" test;
+low risk since the behavior is a strict subset of the existing "no hint"
+path that was already exercised pre-Format-Memory-v1.
+
+Next step: FM-07 — drift and versioning (wire the client's existing
+`detectProfileDrift`/analysis drift branch to FM-03's
+`supersedesLogicalProfileId` create path end-to-end; confirm/legacy/
+rollback flow).

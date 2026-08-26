@@ -154,7 +154,7 @@ src/components/shift-dashboard/ProfileAssistantPanel.test.tsx src/ingestion`.
 
 Gate: full ingestion+UI test subset green, reuse metrics demonstrated.
 
-Estado: PENDING
+Estado: PASS (716/716 full suite green, lint clean, tsc clean, build succeeds)
 Commit previsto: `feat(format-memory): reuse learned profiles across organization`
 
 ---

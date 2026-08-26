@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 import type { UserFormatProfile } from '../../lib/format-profiles';
+import { candidateInputFromLocalProfile } from '../../lib/format-profile-store';
 import type { FormatProfileStore } from '../../lib/format-profile-store';
 
 interface FormatProfileMigrationModalProps {
@@ -46,19 +47,7 @@ export const FormatProfileMigrationModal = ({
     let migrated = 0;
     for (const profile of localProfiles) {
       try {
-        await remoteStore.saveCandidate({
-          displayName: profile.label,
-          sourceType: profile.tabular ? 'tabular' : 'pdf',
-          signature: profile.signature,
-          tokenAliases: profile.tokenAliases,
-          codeTimes: profile.codeTimes ?? {},
-          offTokens: profile.offTokens,
-          employeeRowStrategy: profile.employeeRow.strategy,
-          employeeRowIndex: profile.employeeRow.rowIndex ?? null,
-          dayColumnMap: profile.dayColumnMap ?? null,
-          tabularMemory: profile.tabular ?? null,
-          parserConfig: profile.parserParams,
-        });
+        await remoteStore.saveCandidate(candidateInputFromLocalProfile(profile));
         migrated += 1;
       } catch {
         failed.push(profile.id);
