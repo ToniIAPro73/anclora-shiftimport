@@ -155,7 +155,7 @@ function ProfileSection({
   );
 
   const restartOnboardingBlock = onRestartOnboarding && (
-    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-sm)' }}>
       <button className="btn-outline" style={{ padding: '8px 14px', minHeight: 'auto' }} onClick={onRestartOnboarding}>
         {t('onboarding.restart')}
       </button>
@@ -163,9 +163,9 @@ function ProfileSection({
   );
 
   const importPrefsBlock = (
-    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-sm)' }}>
       <h3 style={{ margin: '0 0 var(--space-xs)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.importPrefsTitle')}</h3>
-      <p style={{ margin: '0 0 var(--space-sm)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+      <p style={{ margin: '0 0 var(--space-xs)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
         {t('settings.importPrefsDesc')}
       </p>
 
@@ -219,7 +219,7 @@ function ProfileSection({
   // data only — nothing employee-related is rendered in this case.
   if (session && !hasEmployee) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
         <div style={{
           padding: 'var(--space-md)',
           borderRadius: 'var(--radius-lg)',
@@ -232,7 +232,7 @@ function ProfileSection({
           <p style={{ margin: 'var(--space-xs) 0 0' }}>{t('settings.nameSectionDesc')}</p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
           <div>
             <label style={labelStyle}>{t('settings.accountDisplayName')}</label>
             <input
@@ -266,8 +266,8 @@ function ProfileSection({
   // employee identity. The account displayName stays internal-only here.
   if (session && hasEmployee) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
           <div>
             <label style={labelStyle}>{t('settings.employeeName')}</label>
             <input
@@ -308,7 +308,7 @@ function ProfileSection({
 
   // Guest (local-first, no session): import preferences only.
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
       {importPrefsBlock}
       {restartOnboardingBlock}
     </div>
@@ -739,7 +739,7 @@ export const SettingsModal = ({
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: 640, maxHeight: '85vh', overflowY: 'auto' }}>
+      <div className="modal-content" style={{ maxWidth: 640, maxHeight: '85vh', overflowY: 'auto', padding: 'var(--space-lg) var(--space-xl)' }}>
         <button
           onClick={onClose}
           style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -748,13 +748,13 @@ export const SettingsModal = ({
           <X size={24} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>
           <Settings className="text-gold" size={24} />
           <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em' }}>{t('settings.title')}</h2>
         </div>
 
         {availableTabs.length > 1 && (
-          <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-lg)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', flexWrap: 'wrap' }}>
             {availableTabs.map((tabName) => {
               const icons: Record<Tab, React.ReactNode> = {
                 profile: <User size={16} />,
