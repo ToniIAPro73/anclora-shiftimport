@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addMember,
+  bulkAddMembers,
   bulkCreateEmployees,
   createEmployee,
   createImport,
@@ -958,6 +959,185 @@ describe('1:1 link guards (addMember employeeId)', () => {
       email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'temporal-123', employeeId: EMP_A1,
     }, fakeHash)).rejects.toMatchObject({ status: 409, code: 'USER_ALREADY_LINKED' });
     expect(calls.some((call) => call.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+});
+
+describe('bulk user provisioning + automatic linking (bulkAddMembers)', () => {
+  const fakeHash = (password) => `hashed:${password}`;
+  const adminOnly = () => ({
+    memberships: [{ user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' }],
+    users: [{ id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' }],
+  });
+
+  it('case A: new email + valid free external id -> creates user, membership and link', async () => {
+    const { sql, calls } = makeFakeSql({ ...adminOnly(), employees: [employeeRow(EMP_A1, ORG_A, { external_employee_id: 'X1' })] });
+    const { results, summary } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'nueva@example.com', name: 'Nueva', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'created_and_linked', employeeId: EMP_A1 });
+    expect(results[0].temporaryPassword).toBeTruthy();
+    expect(summary).toEqual({ created: 1, linked: 1, existing: 0, failed: 0 });
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO memberships'))).toBe(true);
+    const link = calls.find((c) => c.text.startsWith('UPDATE employees'));
+    expect(link.values).toEqual([results[0].userId, EMP_A1, ORG_A]);
+  });
+
+  it('case B: new email + empty external id -> creates user and membership, no link', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    const { results, summary } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'sinempleado@example.com', role: 'EMPLOYEE', externalEmployeeId: '' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'created', employeeId: null });
+    expect(summary).toEqual({ created: 1, linked: 0, existing: 0, failed: 0 });
+  });
+
+  it('case C: existing member email + free employee -> reuses user/membership, links employee', async () => {
+    const { sql, calls } = makeFakeSql({
+      memberships: [
+        { user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' },
+        { user_id: USER_EMP, organization_id: ORG_A, role: 'EMPLOYEE' },
+      ],
+      users: [
+        { id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' },
+        { id: USER_EMP, email: 'emp@example.com', display_name: 'Emp' },
+      ],
+      employees: [employeeRow(EMP_A1, ORG_A, { external_employee_id: 'X1' })],
+    });
+    const { results, summary } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'emp@example.com', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'linked', userId: USER_EMP, employeeId: EMP_A1 });
+    expect(summary).toEqual({ created: 0, linked: 1, existing: 1, failed: 0 });
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO users'))).toBe(false);
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO memberships'))).toBe(false);
+  });
+
+  it('case D: unknown external id -> row fails EMPLOYEE_NOT_FOUND, never creates an employee', async () => {
+    const { sql, calls } = makeFakeSql(adminOnly());
+    const { results, summary } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'x@example.com', role: 'EMPLOYEE', externalEmployeeId: 'GHOST' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'EMPLOYEE_NOT_FOUND' });
+    expect(summary.failed).toBe(1);
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO employees'))).toBe(false);
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO users'))).toBe(false);
+  });
+
+  it('case E: employee already linked to another user -> row fails EMPLOYEE_ALREADY_LINKED', async () => {
+    const { sql } = makeFakeSql({
+      ...adminOnly(),
+      employees: [employeeRow(EMP_A1, ORG_A, { external_employee_id: 'X1', user_id: 'user-old' })],
+    });
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'x@example.com', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'EMPLOYEE_ALREADY_LINKED' });
+  });
+
+  it('case F: user already linked to a different employee -> row fails USER_ALREADY_LINKED', async () => {
+    const { sql } = makeFakeSql({
+      memberships: [
+        { user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' },
+        { user_id: USER_EMP, organization_id: ORG_A, role: 'EMPLOYEE' },
+      ],
+      users: [
+        { id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' },
+        { id: USER_EMP, email: 'emp@example.com', display_name: 'Emp' },
+      ],
+      employees: [
+        employeeRow(EMP_A1, ORG_A, { external_employee_id: 'X1' }),
+        employeeRow(EMP_A2, ORG_A, { external_employee_id: 'X2', user_id: USER_EMP }),
+      ],
+    });
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'emp@example.com', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'USER_ALREADY_LINKED' });
+  });
+
+  it('case G: invalid role -> row fails INVALID_ROLE', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'x@example.com', role: 'SUPERADMIN' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'INVALID_ROLE' });
+  });
+
+  it('case H: invalid email -> row fails INVALID_EMAIL', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'not-an-email', role: 'EMPLOYEE' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'INVALID_EMAIL' });
+  });
+
+  it('case I: duplicate email within the same file -> second row fails DUPLICATE_IN_FILE, first still processed', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    const { results, summary } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'dup@example.com', role: 'EMPLOYEE' },
+      { key: '2', email: 'dup@example.com', role: 'EMPLOYEE' },
+    ], fakeHash);
+    expect(results[0].status).toBe('created');
+    expect(results[1]).toMatchObject({ status: 'error', code: 'DUPLICATE_IN_FILE' });
+    expect(summary).toEqual({ created: 1, linked: 0, existing: 0, failed: 1 });
+  });
+
+  it('one bad row never aborts the rest (partial success)', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'bad-email', role: 'EMPLOYEE' },
+      { key: '2', email: 'good@example.com', role: 'EMPLOYEE' },
+    ], fakeHash);
+    expect(results[0].status).toBe('error');
+    expect(results[1].status).toBe('created');
+  });
+
+  it('rerun of the same row is idempotent: reuses user/membership/link, never duplicates', async () => {
+    const base = {
+      memberships: [
+        { user_id: USER_ADMIN, organization_id: ORG_A, role: 'ADMIN' },
+        { user_id: USER_EMP, organization_id: ORG_A, role: 'EMPLOYEE' },
+      ],
+      users: [
+        { id: USER_ADMIN, email: 'admin@example.com', display_name: 'Admin' },
+        { id: USER_EMP, email: 'emp@example.com', display_name: 'Emp' },
+      ],
+      employees: [employeeRow(EMP_A1, ORG_A, { external_employee_id: 'X1', user_id: USER_EMP })],
+    };
+    const { sql, calls } = makeFakeSql(base);
+    const { results, summary } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'emp@example.com', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'already_linked', userId: USER_EMP, employeeId: EMP_A1 });
+    expect(summary).toEqual({ created: 0, linked: 0, existing: 1, failed: 0 });
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO users'))).toBe(false);
+    expect(calls.some((c) => c.text.startsWith('INSERT INTO memberships'))).toBe(false);
+    expect(calls.some((c) => c.text.startsWith('UPDATE employees'))).toBe(false);
+  });
+
+  it('free/personal plans cannot bulk-provision (Team-only, same gate as addMember)', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    await expect(bulkAddMembers(sql, { ...adminCtx, plan: 'free' }, [
+      { key: '1', email: 'x@example.com', role: 'EMPLOYEE' },
+    ], fakeHash)).rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
+  });
+
+  it('non-ADMIN cannot bulk-provision', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    await expect(bulkAddMembers(sql, employeeCtx, [
+      { key: '1', email: 'x@example.com', role: 'EMPLOYEE' },
+    ], fakeHash)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('tenant isolation: an external id belonging to another organization is never resolved', async () => {
+    const { sql } = makeFakeSql({
+      ...adminOnly(),
+      employees: [employeeRow('emp-b1', ORG_B, { external_employee_id: 'X1' })],
+    });
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'x@example.com', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'EMPLOYEE_NOT_FOUND' });
   });
 });
 

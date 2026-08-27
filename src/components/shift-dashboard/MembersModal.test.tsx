@@ -12,6 +12,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     ...actual,
     listRemoteMembers: vi.fn(),
     addRemoteMember: vi.fn(),
+    bulkAddRemoteMembers: vi.fn(),
     updateRemoteMemberRole: vi.fn(),
     removeRemoteMember: vi.fn(),
     createRemoteEmployee: vi.fn(),
@@ -27,6 +28,7 @@ beforeEach(() => {
 
 const mockedListRemoteMembers = vi.mocked(remote.listRemoteMembers);
 const mockedAddRemoteMember = vi.mocked(remote.addRemoteMember);
+const mockedBulkAddRemoteMembers = vi.mocked(remote.bulkAddRemoteMembers);
 const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
 const mockedUpdateRemoteEmployee = vi.mocked(remote.updateRemoteEmployee);
 const mockedDeleteRemoteEmployee = vi.mocked(remote.deleteRemoteEmployee);
@@ -217,14 +219,14 @@ describe('MembersModal — bulk employees CSV import', () => {
   });
 });
 
-describe('MembersModal — bulk users CSV import', () => {
+describe('MembersModal — bulk users CSV import + automatic linking', () => {
   const usersCsv = () => new File(
-    ['email,name,role,external_employee_id\npersona1@example.com,Adriana Molina,EMPLOYEE,\nadmin@example.com,Laura Riera,ADMIN,'],
+    ['email,name,role,external_employee_id\npersona1@example.com,Adriana Molina,EMPLOYEE,SI1\nadmin@example.com,Laura Riera,ADMIN,'],
     'usuarios.csv',
     { type: 'text/csv' },
   );
 
-  it('preview shows row errors for bad rows without silently dropping them', async () => {
+  it('preview classifies bad rows without silently dropping them', async () => {
     mockedListRemoteMembers.mockResolvedValue([]);
     renderMembersModal();
 
@@ -234,37 +236,44 @@ describe('MembersModal — bulk users CSV import', () => {
     fireEvent.change(input, { target: { files: [badCsv] } });
 
     await waitFor(() => expect(screen.getByText('2 filas · 0 ya son miembros · 0 nuevas · 2 errores')).toBeTruthy());
-    expect(screen.getByText('Falta el email')).toBeTruthy();
-    expect(screen.getByText('Rol no válido (usa ADMIN o EMPLOYEE)')).toBeTruthy();
+    expect(screen.getByText('Email inválido')).toBeTruthy();
+    expect(screen.getByText('Rol inválido')).toBeTruthy();
   });
 
-  it('confirm creates new users and shows their one-time temporary passwords', async () => {
+  it('preview marks an unresolved external_employee_id as "Empleado no encontrado", never creating one', async () => {
     mockedListRemoteMembers.mockResolvedValue([]);
-    mockedAddRemoteMember.mockImplementation(async ({ email, role }) => ({
-      userId: `user-${email}`,
-      email,
-      role,
-      temporaryPassword: `temp-${email}`,
-    }));
-    renderMembersModal();
+    renderMembersModal([]); // no employees in the org
 
     fireEvent.click(screen.getByText('Importar CSV'));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [usersCsv()] } });
 
-    await waitFor(() => expect(screen.getByText('2 filas · 0 ya son miembros · 2 nuevas · 0 errores')).toBeTruthy());
-    fireEvent.click(screen.getByText('Confirmar importación'));
-
-    await waitFor(() => expect(screen.getByText('Importación de usuarios completada')).toBeTruthy());
-    expect(mockedAddRemoteMember).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/temp-persona1@example.com/)).toBeTruthy();
-    expect(screen.getByText(/temp-admin@example.com/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText('Empleado no encontrado')).toBeTruthy());
+    expect(screen.queryByText('Usuario nuevo + vincular')).toBeNull();
   });
 
-  it('never sends a password field from the CSV path — server always generates it', async () => {
+  it('preview shows "Usuario nuevo + vincular" when the external id resolves to a free employee', async () => {
     mockedListRemoteMembers.mockResolvedValue([]);
-    mockedAddRemoteMember.mockResolvedValue({ userId: 'u1', email: 'persona1@example.com', role: 'EMPLOYEE', temporaryPassword: 'x' });
-    renderMembersModal();
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Adriana Molina', externalEmployeeId: 'SI1' })]);
+
+    fireEvent.click(screen.getByText('Importar CSV'));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [usersCsv()] } });
+
+    await waitFor(() => expect(screen.getByText('Usuario nuevo + vincular')).toBeTruthy());
+    expect(screen.getByText('Usuario sin empleado')).toBeTruthy(); // the admin row has no external id
+  });
+
+  it('confirm sends one bulk request and shows one-time temporary passwords + linked count', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    mockedBulkAddRemoteMembers.mockResolvedValue({
+      results: [
+        { row: 1, key: '0', email: 'persona1@example.com', status: 'created_and_linked', userId: 'u1', employeeId: 'e1', temporaryPassword: 'temp-1' },
+        { row: 2, key: '1', email: 'admin@example.com', status: 'created', userId: 'u2', employeeId: null, temporaryPassword: 'temp-2' },
+      ],
+      summary: { created: 2, linked: 1, existing: 0, failed: 0 },
+    });
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Adriana Molina', externalEmployeeId: 'SI1' })]);
 
     fireEvent.click(screen.getByText('Importar CSV'));
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -273,10 +282,31 @@ describe('MembersModal — bulk users CSV import', () => {
     await waitFor(() => expect(screen.getByText('Confirmar importación')).toBeTruthy());
     fireEvent.click(screen.getByText('Confirmar importación'));
 
-    await waitFor(() => expect(mockedAddRemoteMember).toHaveBeenCalled());
-    for (const call of mockedAddRemoteMember.mock.calls) {
-      expect(call[0]).not.toHaveProperty('password');
-    }
+    await waitFor(() => expect(screen.getByText('Importación de usuarios completada')).toBeTruthy());
+    expect(mockedBulkAddRemoteMembers).toHaveBeenCalledTimes(1);
+    expect(mockedBulkAddRemoteMembers).toHaveBeenCalledWith([
+      { key: '0', email: 'persona1@example.com', name: 'Adriana Molina', role: 'EMPLOYEE', externalEmployeeId: 'SI1' },
+      { key: '1', email: 'admin@example.com', name: 'Laura Riera', role: 'ADMIN', externalEmployeeId: '' },
+    ]);
+    expect(screen.getByText(/Empleados vinculados.*1/)).toBeTruthy();
+    expect(screen.getByText(/temp-1/)).toBeTruthy();
+    expect(screen.getByText(/temp-2/)).toBeTruthy();
+  });
+
+  it('a plan-limit rejection from the bulk endpoint shows the Team upgrade prompt', async () => {
+    const { ApiError } = await import('../../lib/session');
+    mockedListRemoteMembers.mockResolvedValue([]);
+    mockedBulkAddRemoteMembers.mockRejectedValue(new ApiError(403, 'Team plan required', 'PLAN_LIMIT'));
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Adriana Molina', externalEmployeeId: 'SI1' })]);
+
+    fireEvent.click(screen.getByText('Importar CSV'));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [usersCsv()] } });
+
+    await waitFor(() => expect(screen.getByText('Confirmar importación')).toBeTruthy());
+    fireEvent.click(screen.getByText('Confirmar importación'));
+
+    await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
   });
 });
 

@@ -2,6 +2,8 @@ import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import {
   addRemoteMember,
+  bulkAddRemoteMembers,
+  BulkMemberResult,
   createRemoteEmployee,
   deleteRemoteEmployee,
   linkEmployeeUser,
@@ -51,9 +53,96 @@ interface EmployeePreviewRow {
   errorMessage?: string;
 }
 
+type UserPreviewStatus =
+  | 'new_and_link' | 'existing_and_link' | 'no_employee' | 'already_linked'
+  | 'employee_not_found' | 'employee_already_linked' | 'user_already_linked'
+  | 'invalid_role' | 'invalid_email' | 'duplicate_in_file';
+
 interface UserPreviewRow {
   row: UserCsvRow;
-  status: 'existing' | 'new' | 'error';
+  status: UserPreviewStatus;
+  /** Locally-resolved target employee (by external_employee_id), when any. */
+  employee?: RemoteEmployee;
+}
+
+const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const userPreviewStatusKey: Record<UserPreviewStatus, string> = {
+  new_and_link: 'members.previewStatusNewAndLink',
+  existing_and_link: 'members.previewStatusExistingAndLink',
+  no_employee: 'members.previewStatusNoEmployee',
+  already_linked: 'members.previewStatusAlreadyLinked',
+  employee_not_found: 'members.previewStatusEmployeeNotFound',
+  employee_already_linked: 'members.previewStatusEmployeeAlreadyLinked',
+  user_already_linked: 'members.previewStatusUserAlreadyLinked',
+  invalid_role: 'members.previewStatusInvalidRole',
+  invalid_email: 'members.previewStatusInvalidEmail',
+  duplicate_in_file: 'members.previewStatusDuplicateInFile',
+};
+
+const bulkResultCodeKey: Record<string, string> = {
+  INVALID_EMAIL: 'members.resultCodeInvalidEmail',
+  INVALID_ROLE: 'members.resultCodeInvalidRole',
+  DUPLICATE_IN_FILE: 'members.resultCodeDuplicateInFile',
+  EMPLOYEE_NOT_FOUND: 'members.resultCodeEmployeeNotFound',
+  EMPLOYEE_ALREADY_LINKED: 'members.resultCodeEmployeeAlreadyLinked',
+  USER_ALREADY_LINKED: 'members.resultCodeUserAlreadyLinked',
+};
+
+/**
+ * Preview-only classification (Fase 4): informational, mirrors the backend's
+ * own validation/guards (bulkAddMembers in api/_lib/data.js) so the ADMIN
+ * sees an accurate picture before confirming — the server independently
+ * re-validates every row, this is never trusted as authorization.
+ */
+function classifyUserRow(
+  row: UserCsvRow,
+  seenEmails: Set<string>,
+  members: RemoteMember[],
+  employees: RemoteEmployee[],
+): UserPreviewRow {
+  if (row.rowError === 'missingEmail' || !row.email || !EMAIL_FORMAT_RE.test(row.email)) {
+    return { row, status: 'invalid_email' };
+  }
+  if (row.rowError === 'invalidRole' || !row.role) {
+    return { row, status: 'invalid_role' };
+  }
+  if (seenEmails.has(row.email)) {
+    return { row, status: 'duplicate_in_file' };
+  }
+  seenEmails.add(row.email);
+
+  let employee: RemoteEmployee | undefined;
+  if (row.externalEmployeeId) {
+    employee = employees.find((candidate) => candidate.externalEmployeeId === row.externalEmployeeId);
+    if (!employee) {
+      return { row, status: 'employee_not_found' };
+    }
+  }
+
+  const existingMember = members.find((member) => member.email.toLowerCase() === row.email);
+  const linkedEmployee = existingMember
+    ? employees.find((candidate) => candidate.userId === existingMember.userId)
+    : undefined;
+
+  if (employee?.userId && employee.userId !== existingMember?.userId) {
+    return { row, status: 'employee_already_linked', employee };
+  }
+  if (employee && linkedEmployee && linkedEmployee.id !== employee.id) {
+    return { row, status: 'user_already_linked', employee };
+  }
+
+  if (existingMember) {
+    if (employee && linkedEmployee?.id === employee.id) {
+      return { row, status: 'already_linked', employee };
+    }
+    if (employee) {
+      return { row, status: 'existing_and_link', employee };
+    }
+    return { row, status: linkedEmployee ? 'already_linked' : 'no_employee', employee: linkedEmployee };
+  }
+
+  return employee ? { row, status: 'new_and_link', employee } : { row, status: 'no_employee' };
 }
 
 /**
@@ -104,7 +193,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const usersFileRef = useRef<HTMLInputElement>(null);
   const [usersPreview, setUsersPreview] = useState<UserPreviewRow[] | null>(null);
   const [usersImporting, setUsersImporting] = useState(false);
-  const [usersResult, setUsersResult] = useState<{ created: { email: string; password: string }[]; failed: number } | null>(null);
+  const [usersResult, setUsersResult] = useState<{
+    created: { email: string; password: string }[];
+    linked: number;
+    failed: number;
+    rows: BulkMemberResult[];
+  } | null>(null);
   const [usersCsvError, setUsersCsvError] = useState('');
 
   // Bulk Employees CSV.
@@ -426,61 +520,43 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setUsersCsvError(t('members.csvParseError'));
       return;
     }
-    const existingEmails = new Set(members.map((member) => member.email.toLowerCase()));
-    setUsersPreview(rows.map((row) => {
-      if (row.rowError) {
-        return { row, status: 'error' };
-      }
-      return { row, status: existingEmails.has(row.email) ? 'existing' : 'new' };
-    }));
+    const seenEmails = new Set<string>();
+    setUsersPreview(rows.map((row) => classifyUserRow(row, seenEmails, members, employees)));
   };
 
+  /** Sends every parsed row in one bulk call — the backend is the single
+   * source of truth for creation/linking; the local preview above is purely
+   * informational. Never creates an Employee; row-level errors never abort
+   * the rest of the file (see bulkAddMembers in api/_lib/data.js). */
   const handleUsersConfirm = async () => {
     if (!usersPreview) {
       return;
     }
     setUsersImporting(true);
-    const created: { email: string; password: string }[] = [];
-    let failed = 0;
-    let hitPlanLimit = false;
-
-    for (const entry of usersPreview) {
-      if (entry.status !== 'new') {
-        if (entry.status === 'error') {
-          failed += 1;
-        }
-        continue;
+    try {
+      const items = usersPreview.map((entry, index) => ({
+        key: String(index),
+        email: entry.row.email,
+        name: entry.row.name,
+        role: (entry.row.role || 'EMPLOYEE') as RemoteMember['role'],
+        externalEmployeeId: entry.row.externalEmployeeId,
+      }));
+      const { results, summary } = await bulkAddRemoteMembers(items);
+      const created = results
+        .filter((r) => r.temporaryPassword)
+        .map((r) => ({ email: r.email ?? '', password: r.temporaryPassword ?? '' }));
+      setUsersResult({ created, linked: summary.linked, failed: summary.failed, rows: results });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'PLAN_LIMIT') {
+        setShowUpgrade(true);
+      } else {
+        setUsersCsvError(err instanceof Error ? err.message : t('members.actionFailed'));
       }
-      if (hitPlanLimit) {
-        failed += 1;
-        continue;
-      }
-      try {
-        const linkedEmployee = entry.row.externalEmployeeId
-          ? employees.find((employee) => employee.externalEmployeeId === entry.row.externalEmployeeId)
-          : undefined;
-        const result = await addRemoteMember({
-          email: entry.row.email,
-          role: entry.row.role as RemoteMember['role'],
-          displayName: entry.row.name || undefined,
-          employeeId: linkedEmployee?.id,
-        });
-        created.push({ email: result.email, password: result.temporaryPassword ?? '' });
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'PLAN_LIMIT') {
-          hitPlanLimit = true;
-        }
-        failed += 1;
-      }
+    } finally {
+      setUsersImporting(false);
+      onChanged();
+      void reload();
     }
-
-    setUsersResult({ created, failed });
-    setUsersImporting(false);
-    if (hitPlanLimit) {
-      setShowUpgrade(true);
-    }
-    onChanged();
-    void reload();
   };
 
   const statusLabelKey: Record<'existing' | 'new' | 'error', string> = {
@@ -640,6 +716,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
           {!usersPreview && !usersResult && (
             <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '10px' }}>
               <p style={{ margin: '0 0 6px', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>{t('members.csvUploadHint')}</p>
+              <p style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('members.csvUsersLinkHint')}</p>
               <input
                 ref={usersFileRef}
                 type="file"
@@ -665,20 +742,28 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
               <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700 }}>
                 {t('members.usersPreviewSummary', {
                   total: usersPreview.length,
-                  existing: usersPreview.filter((entry) => entry.status === 'existing').length,
-                  new: usersPreview.filter((entry) => entry.status === 'new').length,
-                  errors: usersPreview.filter((entry) => entry.status === 'error').length,
+                  existing: usersPreview.filter((entry) => entry.status === 'existing_and_link' || entry.status === 'already_linked' || entry.status === 'no_employee').length,
+                  new: usersPreview.filter((entry) => entry.status === 'new_and_link').length,
+                  errors: usersPreview.filter((entry) => !['new_and_link', 'existing_and_link', 'already_linked', 'no_employee'].includes(entry.status)).length,
                 })}
               </p>
-              <div style={{ maxHeight: '220px', overflowY: 'auto', display: 'grid', gap: '4px' }}>
+              <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'grid', gap: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.7fr 1.2fr 0.9fr 1.6fr', gap: '8px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-subtle)', padding: '2px 0' }}>
+                  <span>{t('members.previewColumnEmail')}</span>
+                  <span>{t('members.previewColumnName')}</span>
+                  <span>{t('members.previewColumnRole')}</span>
+                  <span>{t('members.previewColumnEmployee')}</span>
+                  <span>{t('members.previewColumnArea')}</span>
+                  <span>{t('members.previewColumnStatus')}</span>
+                </div>
                 {usersPreview.map((entry, index) => (
-                  <div key={`${entry.row.email}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.8rem', padding: '4px 0' }}>
-                    <span>{entry.row.email || '—'}{entry.row.role ? ` · ${entry.row.role}` : ''}</span>
-                    <span>
-                      {entry.status === 'error'
-                        ? t(entry.row.rowError === 'missingEmail' ? 'members.rowErrorMissingEmail' : 'members.rowErrorInvalidRole')
-                        : t(statusLabelKey[entry.status])}
-                    </span>
+                  <div key={`${entry.row.email}-${index}`} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 0.7fr 1.2fr 0.9fr 1.6fr', gap: '8px', fontSize: '0.8rem', padding: '4px 0', borderTop: '1px solid var(--glass-border)' }}>
+                    <span>{entry.row.email || '—'}</span>
+                    <span>{entry.row.name || '—'}</span>
+                    <span>{entry.row.role || '—'}</span>
+                    <span>{entry.employee?.name ?? '—'}</span>
+                    <span>{areaLabel(entry.employee?.areaId)}</span>
+                    <span>{t(userPreviewStatusKey[entry.status])}</span>
                   </div>
                 ))}
               </div>
@@ -697,8 +782,18 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
             <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '14px', display: 'grid', gap: '10px' }}>
               <strong style={{ fontSize: '0.9rem' }}>{t('members.usersResultTitle')}</strong>
               <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                {t('members.usersResultCreated')}: {usersResult.created.length} · {t('members.usersResultFailed')}: {usersResult.failed}
+                {t('members.usersResultCreated')}: {usersResult.created.length} · {t('members.usersResultLinked')}: {usersResult.linked} · {t('members.usersResultFailed')}: {usersResult.failed}
               </p>
+              {usersResult.failed > 0 && (
+                <div style={{ display: 'grid', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                  {usersResult.rows.filter((r) => r.status === 'error').map((r) => (
+                    <div key={r.row} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '0.78rem', color: 'var(--danger)' }}>
+                      <span>{r.email ?? `#${r.row}`}</span>
+                      <span>{r.code ? t(bulkResultCodeKey[r.code] ?? 'members.actionFailed') : r.error}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {usersResult.created.length > 0 && (
                 <div style={{ display: 'grid', gap: '6px' }}>
                   <span style={{ fontSize: '0.8rem', color: 'var(--color-gold)' }}>{t('members.temporaryPasswordNote')}</span>

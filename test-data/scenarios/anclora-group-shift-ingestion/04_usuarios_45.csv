@@ -1,0 +1,19 @@
+email,name,role,external_employee_id
+adrian.lopez@ancloragroup.test,Adrián López,EMPLOYEE,LOG-001
+aina.ferrer@ancloragroup.test,Aina Ferrer,EMPLOYEE,LOG-002
+alejandro.ruiz@ancloragroup.test,Alejandro Ruiz,EMPLOYEE,LOG-003
+alba.martin@ancloragroup.test,Alba Martín,EMPLOYEE,LOG-004
+alex.navarro@ancloragroup.test,Álex Navarro,EMPLOYEE,LOG-005
+andrea.torres@ancloragroup.test,Andrea Torres,EMPLOYEE,LOG-006
+antonia.sanchez@ancloragroup.test,Antonia Sánchez,EMPLOYEE,LOG-007
+bruno.garcia@ancloragroup.test,Bruno García,EMPLOYEE,LOG-008
+anabelen.garcia@ancloragroup.test,Ana Belén García,EMPLOYEE,OPE-001
+biel.barcelo@ancloragroup.test,Biel Barceló,EMPLOYEE,OPE-002
+carmen.munoz@ancloragroup.test,Carmen Muñoz,EMPLOYEE,OPE-003
+cristina.nadal@ancloragroup.test,Cristina Nadal,ADMIN,OPE-004
+sin.empleado@ancloragroup.test,Usuario Sin Empleado,EMPLOYEE,
+otro.intento@ancloragroup.test,Otro Intento Mismo Empleado,EMPLOYEE,LOG-002
+fantasma@ancloragroup.test,Empleado Fantasma,EMPLOYEE,LOG-999
+rol.invalido@ancloragroup.test,Rol Invalido,MANAGER,LOG-009
+email-invalido-sin-arroba,Email Invalido,EMPLOYEE,LOG-010
+aina.ferrer@ancloragroup.test,Aina Ferrer Duplicada,EMPLOYEE,LOG-002
