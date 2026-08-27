@@ -24,13 +24,23 @@ import {
   RosterTable,
 } from '../../ingestion/tabular-assistant';
 import { getDaysInMonth } from '../../lib/week';
-import { saveFormatProfile, UserFormatProfile } from '../../lib/format-profiles';
+import { UserFormatProfile } from '../../lib/format-profiles';
+import {
+  candidateInputFromLocalProfile,
+  FormatProfileStore,
+  LocalFormatProfileStore,
+} from '../../lib/format-profile-store';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { ImportResult } from '../../lib/import-quality';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { getShiftTypes } from '../../lib/shift-types';
 import { useI18n } from '../../lib/use-i18n';
 import { SearchableSelect } from '../ui/SearchableSelect';
+
+/** Default store when no session-derived store is provided (guest mode /
+ * standalone usage, e.g. existing tests) — identical behavior to before
+ * Format Memory v1. */
+const DEFAULT_LOCAL_STORE = new LocalFormatProfileStore();
 
 export interface AssistantCompletion {
   shifts: ParsedCalendarShift[];
@@ -51,6 +61,9 @@ interface ProfileAssistantPanelProps {
   selector: EmployeeSelector;
   onComplete: (result: AssistantCompletion) => void;
   onCancel: () => void;
+  /** Session-appropriate persistence (local for guests, organization-scoped
+   * for authenticated sessions). Defaults to a local store when omitted. */
+  store?: FormatProfileStore;
 }
 
 type TokenMeaning = AssistantAnswers['tokenMeanings'][string];
@@ -72,6 +85,7 @@ export const ProfileAssistantPanel = ({
   selector,
   onComplete,
   onCancel,
+  store = DEFAULT_LOCAL_STORE,
 }: ProfileAssistantPanelProps) => {
   const { locale, t } = useI18n();
   const [selectedRow, setSelectedRow] = useState<EmployeeRowCandidate | null>(null);
@@ -133,7 +147,7 @@ export const ProfileAssistantPanel = ({
       const tableAnalysis = analyzeRosterTable(table, selector);
       const profile = buildTabularProfileFromAnswers(table, tableAnalysis, answers);
       if (saveProfile) {
-        saveFormatProfile(profile);
+        void store.saveCandidate(candidateInputFromLocalProfile(profile)).catch(() => {});
         applyTokenAliasesToShiftTypes(profile);
       }
       const { shifts, quality } = buildTabularImportResult(table, answers, context);
@@ -217,7 +231,7 @@ export const ProfileAssistantPanel = ({
     // persist a profile still missing the just-learned codes (and duplicate
     // it on the next apply).
     if (saveProfile) {
-      saveFormatProfile(profile);
+      void store.saveCandidate(candidateInputFromLocalProfile(profile)).catch(() => {});
       applyTokenAliasesToShiftTypes(profile);
     }
     onComplete({

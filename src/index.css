@@ -1635,7 +1635,10 @@ button:hover {
   gap: 14px;
 }
 .auth-card:hover {
-  transform: scale(1.018);
+  /* No transform here: scaling the card shifts every descendant's screen
+     position, including the password visibility button — the geometry-shift
+     contract (index.css .password-toggle) requires that button to never
+     move, so the hover flourish is box-shadow only. */
   box-shadow: 0 48px 100px -35px rgba(106, 173, 73, 0.6);
 }
 .auth-close { position: absolute; top: 14px; right: 14px; }
@@ -1649,19 +1652,48 @@ button:hover {
 .auth-form { display: grid; gap: 12px; width: 100%; }
 .auth-field { display: grid; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .auth-field .modal-input { height: 40px; box-sizing: border-box; }
-.auth-password-wrap { position: relative; display: block; }
-.auth-password-wrap .modal-input { padding-right: 42px; }
-.auth-password-toggle {
+/*
+ * Shared password-visibility control (Login + Add User initial password).
+ * Centering uses full-height flex, never translateY: the global
+ * `button:hover { transform: scale(1.02) }` rule (index.css ~L258) replaces
+ * the whole `transform` value on hover, so a translateY(-50%)-based center
+ * would jump to the top edge the instant the pointer entered the button —
+ * the login eye-icon jitter bug. Flex centering has no transform dependency,
+ * and the scale is explicitly neutralized below so the hit area never moves
+ * or resizes in any state.
+ */
+.password-field { position: relative; display: block; }
+.password-field-input { padding-right: 42px; height: 40px; box-sizing: border-box; }
+.password-toggle {
   position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 38px;
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
   display: flex;
-  padding: 4px;
+  align-items: center;
+  justify-content: center;
+}
+.password-toggle:hover,
+.password-toggle:focus-visible,
+.password-toggle:active {
+  transform: none !important;
+  color: var(--text-primary);
+}
+.password-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--color-accent) 78%, white 22%);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+@media (max-width: 520px) {
+  .members-add-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 .auth-submit {
   height: 40px;

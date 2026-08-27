@@ -163,13 +163,13 @@ function ProfileSection({
   );
 
   const importPrefsBlock = (
-    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-lg)' }}>
-      <h3 style={{ margin: '0 0 var(--space-md)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.importPrefsTitle')}</h3>
-      <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+    <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+      <h3 style={{ margin: '0 0 var(--space-xs)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.importPrefsTitle')}</h3>
+      <p style={{ margin: '0 0 var(--space-sm)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
         {t('settings.importPrefsDesc')}
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-sm)' }}>
         <div>
           <label style={labelStyle}>{t('settings.identifiers')}</label>
           <input
@@ -219,7 +219,7 @@ function ProfileSection({
   // data only — nothing employee-related is rendered in this case.
   if (session && !hasEmployee) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
         <div style={{
           padding: 'var(--space-md)',
           borderRadius: 'var(--radius-lg)',
@@ -266,7 +266,7 @@ function ProfileSection({
   // employee identity. The account displayName stays internal-only here.
   if (session && hasEmployee) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
           <div>
             <label style={labelStyle}>{t('settings.employeeName')}</label>
@@ -308,7 +308,7 @@ function ProfileSection({
 
   // Guest (local-first, no session): import preferences only.
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
       {importPrefsBlock}
       {restartOnboardingBlock}
     </div>
