@@ -492,7 +492,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   return (
     <>
     <ModalShell isOpen={isOpen} onClose={onClose} title={t('members.title')} maxWidth="620px">
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', borderBottom: '1px solid var(--glass-border)' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', borderBottom: '1px solid var(--glass-border)' }}>
         {(['users', 'employees'] as Tab[]).map((option) => (
           <button
             key={option}
@@ -516,7 +516,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
       {tab === 'users' && (
         <>
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '18px' }}>
+          <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
             {members.map((member) => (
               <div
                 key={member.userId}
@@ -576,12 +576,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
             </div>
           )}
 
-          <form onSubmit={handleAdd} style={{ display: 'grid', gap: '10px', borderTop: '1px solid var(--glass-border)', paddingTop: '14px', marginBottom: '18px' }}>
+          <form onSubmit={handleAdd} style={{ display: 'grid', gap: '8px', borderTop: '1px solid var(--glass-border)', paddingTop: '10px', marginBottom: '12px' }}>
             <strong style={{ fontSize: '0.9rem' }}>{t('members.addTitle')}</strong>
             {/* Every cell is its own label+control block (same shape as SearchableSelect's
                 internal label+trigger) so CSS Grid's default row stretch never inflates
                 the plain inputs to match the taller role/password neighbors. */}
-            <div className="members-add-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'start' }}>
+            <div className="members-add-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', alignItems: 'start' }}>
               <label style={fieldLabelStyle}>
                 <span>{t('members.emailPlaceholder')}</span>
                 <input className="modal-input" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t('members.emailPlaceholder')} aria-label={t('auth.emailLabel')} />
@@ -638,8 +638,8 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
           </form>
 
           {!usersPreview && !usersResult && (
-            <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '14px' }}>
-              <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>{t('members.csvUploadHint')}</p>
+            <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '10px' }}>
+              <p style={{ margin: '0 0 6px', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>{t('members.csvUploadHint')}</p>
               <input
                 ref={usersFileRef}
                 type="file"
@@ -722,7 +722,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
       {tab === 'employees' && (
         <>
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '18px' }}>
+          <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
             {employees.map((employee) => (
               <div
                 key={employee.id}
