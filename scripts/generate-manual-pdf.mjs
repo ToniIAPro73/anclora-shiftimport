@@ -435,7 +435,8 @@ a { color: inherit; text-decoration: none; }
   font-size: 42pt;
   line-height: 1.0;
   font-weight: 600;
-  text-shadow: 0 3mm 10mm rgba(0, 0, 0, 0.4);
+  color: #f8f6ee;
+  text-shadow: none;
 }
 .cover-subtitle {
   margin: 7mm auto 0;
@@ -444,13 +445,15 @@ a { color: inherit; text-decoration: none; }
   font-size: 14.5pt;
   line-height: 1.32;
 }
-.cover-meta { display: flex; justify-content: center; gap: 7mm; margin-top: 13mm; color: #0f1a2e; font-size: 9.5pt; font-weight: 700; }
+.cover-meta { display: flex; justify-content: center; gap: 7mm; margin-top: 13mm; color: #0f1a2e; font-size: 9.5pt; font-weight: 700; background: transparent; }
 .cover-meta div {
   min-width: 40mm;
   padding: 3mm 6mm;
-  background: linear-gradient(135deg, #e0c472, #c7a451);
+  background: #e0c472;
   border-radius: 999px;
-  box-shadow: 0 2mm 8mm rgba(0, 0, 0, 0.3);
+  box-shadow: none;
+  filter: none;
+  opacity: 1;
   letter-spacing: 0.03em;
 }
 .cover-disclaimer {
