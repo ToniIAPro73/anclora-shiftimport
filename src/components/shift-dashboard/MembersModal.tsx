@@ -20,6 +20,9 @@ import { UpgradePrompt } from './UpgradePrompt';
 import { ApiError } from '../../lib/session';
 import type { PlanId } from '../../lib/plans';
 import { SearchableSelect } from '../ui/SearchableSelect';
+import { PasswordInput } from '../ui/PasswordInput';
+
+const fieldLabelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: 0 };
 
 interface MembersModalProps {
   isOpen: boolean;
@@ -575,9 +578,18 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
           <form onSubmit={handleAdd} style={{ display: 'grid', gap: '10px', borderTop: '1px solid var(--glass-border)', paddingTop: '14px', marginBottom: '18px' }}>
             <strong style={{ fontSize: '0.9rem' }}>{t('members.addTitle')}</strong>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <input className="modal-input" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t('members.emailPlaceholder')} aria-label={t('auth.emailLabel')} style={{ padding: '10px 12px' }} />
-              <input className="modal-input" type="text" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t('members.namePlaceholder')} aria-label={t('auth.nameLabel')} style={{ padding: '10px 12px' }} />
+            {/* Every cell is its own label+control block (same shape as SearchableSelect's
+                internal label+trigger) so CSS Grid's default row stretch never inflates
+                the plain inputs to match the taller role/password neighbors. */}
+            <div className="members-add-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'start' }}>
+              <label style={fieldLabelStyle}>
+                <span>{t('members.emailPlaceholder')}</span>
+                <input className="modal-input" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t('members.emailPlaceholder')} aria-label={t('auth.emailLabel')} />
+              </label>
+              <label style={fieldLabelStyle}>
+                <span>{t('members.namePlaceholder')}</span>
+                <input className="modal-input" type="text" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t('members.namePlaceholder')} aria-label={t('auth.nameLabel')} />
+              </label>
               <SearchableSelect
                 label={t('members.roleLabel')}
                 value={role}
@@ -586,9 +598,19 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                 emptyMessage={t('members.noRoles')}
                 ariaLabel={t('members.roleLabel')}
                 options={ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
-                style={{ padding: '10px 12px' }}
               />
-              <input className="modal-input" type="password" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('members.passwordPlaceholder')} aria-label={t('auth.passwordLabel')} style={{ padding: '10px 12px' }} />
+              <label style={fieldLabelStyle}>
+                <span>{t('members.passwordShortLabel')}</span>
+                <PasswordInput
+                  minLength={8}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder={t('members.passwordPlaceholder')}
+                  aria-label={t('auth.passwordLabel')}
+                  showLabel={t('auth.showPassword')}
+                  hideLabel={t('auth.hidePassword')}
+                />
+              </label>
             </div>
             <SearchableSelect
               label={t('members.linkEmployeeLabel')}
@@ -605,9 +627,8 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   searchText: employee.name.toLowerCase(),
                 })),
               ]}
-              style={{ padding: '10px 12px' }}
             />
-            <p style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.78rem', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.75rem', lineHeight: 1.4 }}>
               {t('members.passwordHint')}
             </p>
             {error && <p role="alert" style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}

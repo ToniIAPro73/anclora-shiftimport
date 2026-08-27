@@ -111,6 +111,47 @@ describe('MembersModal — single add-user temporary password', () => {
   });
 });
 
+describe('MembersModal — add-user initial password visibility toggle', () => {
+  it('the initial password field is hidden by default, toggles to text and back, and has an accessible label', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    renderMembersModal();
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    const passwordInput = screen.getByPlaceholderText('Contraseña inicial (opcional — se genera una si la dejas en blanco)') as HTMLInputElement;
+    expect(passwordInput.type).toBe('password');
+
+    const toggle = screen.getByRole('button', { name: 'Mostrar contraseña' });
+    fireEvent.click(toggle);
+    expect(passwordInput.type).toBe('text');
+    expect(screen.getByRole('button', { name: 'Ocultar contraseña' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar contraseña' }));
+    expect(passwordInput.type).toBe('password');
+  });
+
+  it('typed password value and add-user flow are unaffected by toggling visibility', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    mockedAddRemoteMember.mockResolvedValue({ userId: 'u1', email: 'nuevo@example.com', role: 'EMPLOYEE' });
+    renderMembersModal();
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.change(screen.getByPlaceholderText('Email del usuario'), { target: { value: 'nuevo@example.com' } });
+    const passwordInput = screen.getByPlaceholderText('Contraseña inicial (opcional — se genera una si la dejas en blanco)') as HTMLInputElement;
+    fireEvent.change(passwordInput, { target: { value: 'sup3rSecret!' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar contraseña' }));
+    expect(passwordInput.value).toBe('sup3rSecret!');
+
+    fireEvent.click(screen.getByText('Añadir'));
+    await waitFor(() => expect(mockedAddRemoteMember).toHaveBeenCalledWith({
+      email: 'nuevo@example.com',
+      role: 'EMPLOYEE',
+      displayName: undefined,
+      password: 'sup3rSecret!',
+      employeeId: undefined,
+    }));
+  });
+});
+
 describe('MembersModal — bulk employees CSV import', () => {
   const employeesCsv = () => new File(
     ['external_employee_id,name\nSI1,Ana Nueva\nSI2,Bea Existente'],

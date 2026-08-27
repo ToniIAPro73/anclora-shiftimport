@@ -1,8 +1,9 @@
 import { FormEvent, useState } from 'react';
-import { Eye, EyeOff, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { login, register, SessionInfo } from '../lib/session';
 import { useI18n } from '../lib/use-i18n';
 import { navigate } from '../lib/route';
+import { PasswordInput } from './ui/PasswordInput';
 
 interface AuthScreenProps {
   onAuthenticated: (session: SessionInfo) => void;
@@ -27,7 +28,6 @@ export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initia
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -104,27 +104,17 @@ export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initia
 
           <label className="auth-field" htmlFor="auth-password">
             <span>{t('auth.password')}</span>
-            <span className="auth-password-wrap">
-              <input
-                id="auth-password"
-                className="modal-input"
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={8}
-                aria-required="true"
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <button
-                type="button"
-                className="auth-password-toggle"
-                onClick={() => setShowPassword((current) => !current)}
-                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
-              >
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </span>
+            <PasswordInput
+              id="auth-password"
+              required
+              minLength={8}
+              aria-required="true"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              showLabel={t('auth.showPassword')}
+              hideLabel={t('auth.hidePassword')}
+            />
           </label>
 
           {mode === 'register' && (
