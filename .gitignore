@@ -59,4 +59,10 @@ qa/1.2b-visual/
 
 # Agent task docs (temporary working docs)
 .agent-tasks/
+
+# Manual screenshots (regenerable via scripts/capture-*.mjs; PDF embeds them as base64)
+docs/manual/screenshots/
+
+# Manual build scratch (seed fixture, intermediate pass PDF)
+tmp/
 node_modules

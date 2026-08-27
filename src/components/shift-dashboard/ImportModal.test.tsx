@@ -26,6 +26,12 @@ vi.mock('../../ingestion/team-roster', async (importOriginal) => {
   return { ...actual, detectTeamRoster: vi.fn() };
 });
 
+const apiFetchMock = vi.fn();
+vi.mock('../../lib/session', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/session')>();
+  return { ...actual, apiFetch: (...args: unknown[]) => apiFetchMock(...args) };
+});
+
 setupLocalStorageMock();
 afterEach(cleanup);
 
@@ -113,6 +119,7 @@ function renderImportModal(
     initialFile?: File | null;
     employeePreset?: { name: string; externalId: string } | null;
     identityLocked?: boolean;
+    organizationId?: string | null;
   } = {},
 ) {
   if (locale === 'en') {
@@ -128,6 +135,7 @@ function renderImportModal(
         initialFile={options.initialFile ?? null}
         employeePreset={options.employeePreset ?? null}
         identityLocked={options.identityLocked ?? false}
+        organizationId={options.organizationId ?? null}
       />
     </I18nProvider>,
   );
@@ -195,6 +203,68 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(loadFormatProfiles()[0].useCount).toBe(1);
+  });
+
+  it('organization session, drifted match: confirming creates a new candidate (supersedesLogicalProfileId) instead of touching the old profile', async () => {
+    apiFetchMock.mockReset();
+    const oldRemoteProfile = {
+      id: 'remote-old-1',
+      organizationId: 'org-drift-1',
+      logicalProfileId: 'lp-drift-1',
+      version: 1,
+      status: 'validated',
+      signature: { documentType: 'TYPE_A' as const, structureHash: 'olddeadbeef', dayHeaderCount: 31, columnCount: 31, hasLegend: false },
+      sourceType: 'pdf',
+      displayName: 'Cuadrante mensual',
+      parserConfig: { clusterTolerance: 8, columnMatchMaxDistance: 12 },
+      tokenAliases: { DL: 'libre' },
+      codeTimes: {},
+      offTokens: ['DL'],
+      employeeRowStrategy: 'name',
+      employeeRowIndex: null,
+      dayColumnMap: null,
+      tabularMemory: null,
+      useCount: 3,
+      successfulUseCount: 3,
+      lastUsedAt: '2026-03-01T00:00:00.000Z',
+      createdByUserId: 'user-1',
+      supersedesProfileId: null,
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z',
+    };
+    apiFetchMock.mockResolvedValueOnce({ profiles: [oldRemoteProfile] }); // GET during analysis (profilesHint)
+
+    const driftedSignature = { ...oldRemoteProfile.signature, structureHash: 'newdeadbeef', columnCount: 40 };
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      quality: { shifts: makeResult().shifts, confidence: 1, warnings: [], state: 'CORRECT', profileId: oldRemoteProfile.id },
+      structure: {
+        documentType: 'TYPE_A',
+        signature: driftedSignature,
+        dayHeaderCount: 31,
+        matchedProfile: { profile: { ...makeProfile(), id: oldRemoteProfile.id, signature: oldRemoteProfile.signature }, score: 0.6 },
+        drift: { drifted: true, changedFields: ['structureHash', 'columnCount'] },
+        periodDetected: true,
+      },
+    }));
+    const onConfirmImport = vi.fn(async () => true);
+
+    renderImportModal('es', () => {}, { onConfirmImport, initialFile: csvFile(), organizationId: 'org-drift-1' });
+
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Listo'));
+
+    apiFetchMock.mockResolvedValueOnce({ profile: { ...oldRemoteProfile, id: 'remote-new-1', version: 2, status: 'candidate', supersedesProfileId: 'remote-old-1' } }); // POST create-candidate
+
+    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+    await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(2));
+    const [, options] = apiFetchMock.mock.calls[1] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.supersedesLogicalProfileId).toBe('lp-drift-1');
+    expect(body.tokenAliases).toEqual({ DL: 'libre' });
+    expect(body.signature.structureHash).toBe('newdeadbeef');
+    // No PATCH "use" call against the old (drifted) profile.
+    expect(apiFetchMock.mock.calls.some(([, opts]) => opts?.method === 'PATCH')).toBe(false);
   });
 
   it('unknown format with unmatchable employee: no fabricated shifts, assistant renders, confirm disabled', async () => {

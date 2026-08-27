@@ -329,3 +329,358 @@ export const touchFormatProfile = (id: string): UserFormatProfile | null => {
   persistProfiles(profiles);
   return updated;
 };
+
+// ---------------------------------------------------------------------------
+// Server-canonical model (Format Memory v1, organization-scoped persistence).
+// Additive to the client-only UserFormatProfile above; see
+// sdd/features/format-memory-v1/01_TECHNICAL_DESIGN.md.
+// ---------------------------------------------------------------------------
+
+export type FormatProfileStatus = 'candidate' | 'validated' | 'verified' | 'legacy' | 'deprecated';
+
+export type FormatProfileSourceType = 'pdf' | 'tabular';
+
+export type UseOutcome = 'success' | 'failure';
+
+/** Server-persisted, organization-scoped format profile (one version). */
+export interface FormatProfile {
+  id: string;
+  organizationId: string;
+  logicalProfileId: string;
+  version: number;
+  status: FormatProfileStatus;
+  signature: LayoutSignature;
+  sourceType: FormatProfileSourceType;
+  displayName: string;
+  parserConfig: { clusterTolerance: number; columnMatchMaxDistance: number };
+  tokenAliases: Record<string, string>;
+  codeTimes: Record<string, { startTime: string; endTime: string }>;
+  offTokens: string[];
+  employeeRowStrategy: 'identifier' | 'name' | 'manual-row';
+  employeeRowIndex: number | null;
+  dayColumnMap: Record<number, number> | null;
+  tabularMemory: UserFormatProfile['tabular'] | null;
+  useCount: number;
+  successfulUseCount: number;
+  lastUsedAt: string | null;
+  createdByUserId: string | null;
+  supersedesProfileId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Input accepted from a client wanting to persist a new candidate version. */
+export interface CandidateProfileInput {
+  displayName: string;
+  sourceType: FormatProfileSourceType;
+  signature: LayoutSignature;
+  tokenAliases: Record<string, string>;
+  codeTimes: Record<string, { startTime: string; endTime: string }>;
+  offTokens: string[];
+  employeeRowStrategy: 'identifier' | 'name' | 'manual-row';
+  employeeRowIndex: number | null;
+  dayColumnMap: Record<number, number> | null;
+  tabularMemory: UserFormatProfile['tabular'] | null;
+  parserConfig: { clusterTolerance: number; columnMatchMaxDistance: number };
+  /** Set when this candidate is a drift re-teach of an existing logical family. */
+  supersedesLogicalProfileId?: string;
+}
+
+export interface ProfileMatch {
+  profile: FormatProfile;
+  score: number;
+}
+
+const MAX_DISPLAY_NAME = 80;
+const MAX_ALIAS_ENTRIES = 60;
+const MAX_ALIAS_LEN = 40;
+const MAX_OFF_TOKENS = 60;
+const MAX_OFF_TOKEN_LEN = 20;
+const MAX_DAY_COLUMN_ENTRIES = 31;
+const MAX_EMPLOYEE_ROW_INDEX = 9999;
+
+const EMAIL_PATTERN = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+/** Long digit runs read as payroll/external ids, never a legitimate alias/label. */
+const LONG_DIGIT_RUN = /\d{5,}/;
+/** "Firstname Lastname"-shaped text: two+ capitalized words, no digits/symbols. */
+const NAME_SHAPED = /^([A-ZÁÉÍÓÚÑ][a-záéíóúñ'-]+)(\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ'-]+)+$/;
+
+export interface SanitizationRejection {
+  field: string;
+  reason: string;
+}
+
+export interface SanitizationResult {
+  ok: boolean;
+  value?: CandidateProfileInput;
+  rejections: SanitizationRejection[];
+}
+
+const looksLikePii = (text: string): string | null => {
+  if (EMAIL_PATTERN.test(text)) return 'looks like an email address';
+  if (LONG_DIGIT_RUN.test(text)) return 'looks like an external/payroll id';
+  if (NAME_SHAPED.test(text.trim())) return 'looks like a person name';
+  return null;
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Central, authoritative re-validation of any payload that wants to become a
+ * persisted FormatProfile. Called both by the API (authoritative) and,
+ * optionally, by the client for early UX feedback — the API must NEVER trust
+ * a client-side pass of this function and must always re-run it itself.
+ *
+ * Allowlist-only: any key outside the known shape causes the whole payload to
+ * be rejected (fail closed), never silently dropped-and-accepted.
+ */
+export const sanitizeFormatProfileForPersistence = (
+  input: unknown,
+): SanitizationResult => {
+  const rejections: SanitizationRejection[] = [];
+  const reject = (field: string, reason: string) => rejections.push({ field, reason });
+
+  if (!isPlainObject(input)) {
+    return { ok: false, rejections: [{ field: '$', reason: 'payload must be an object' }] };
+  }
+
+  const allowedKeys = new Set([
+    'displayName', 'sourceType', 'signature', 'tokenAliases', 'codeTimes',
+    'offTokens', 'employeeRowStrategy', 'employeeRowIndex', 'dayColumnMap',
+    'tabularMemory', 'parserConfig', 'supersedesLogicalProfileId',
+  ]);
+  for (const key of Object.keys(input)) {
+    if (!allowedKeys.has(key)) {
+      reject(key, 'unknown field not on the allowlist');
+    }
+  }
+
+  const displayName = typeof input.displayName === 'string' ? input.displayName.trim() : '';
+  if (!displayName) {
+    reject('displayName', 'required');
+  } else if (displayName.length > MAX_DISPLAY_NAME) {
+    reject('displayName', `exceeds ${MAX_DISPLAY_NAME} characters`);
+  } else {
+    const piiReason = looksLikePii(displayName);
+    if (piiReason) reject('displayName', piiReason);
+  }
+
+  const sourceType = input.sourceType === 'pdf' || input.sourceType === 'tabular' ? input.sourceType : null;
+  if (!sourceType) reject('sourceType', 'must be "pdf" or "tabular"');
+
+  const signature = isPlainObject(input.signature) ? normalizeSignature(input.signature as Partial<LayoutSignature>) : null;
+  if (!signature || !signature.structureHash) {
+    reject('signature', 'missing or invalid structural signature');
+  } else if (signature.structureHash.length > 64) {
+    reject('signature.structureHash', 'exceeds 64 characters');
+  }
+
+  let tokenAliases: Record<string, string> = {};
+  if (input.tokenAliases !== undefined) {
+    if (!isPlainObject(input.tokenAliases)) {
+      reject('tokenAliases', 'must be an object');
+    } else {
+      const entries = Object.entries(input.tokenAliases);
+      if (entries.length > MAX_ALIAS_ENTRIES) {
+        reject('tokenAliases', `exceeds ${MAX_ALIAS_ENTRIES} entries`);
+      }
+      for (const [token, typeId] of entries) {
+        if (token.length > MAX_ALIAS_LEN || String(typeId).length > MAX_ALIAS_LEN) {
+          reject('tokenAliases', `entry "${token}" exceeds ${MAX_ALIAS_LEN} characters`);
+          continue;
+        }
+        if (typeof typeId !== 'string') {
+          reject('tokenAliases', `entry "${token}" value must be a string`);
+          continue;
+        }
+        const piiReason = looksLikePii(token) || looksLikePii(typeId);
+        if (piiReason) {
+          reject('tokenAliases', `entry "${token}" ${piiReason}`);
+          continue;
+        }
+        tokenAliases[token] = typeId;
+      }
+    }
+  }
+
+  let codeTimes: Record<string, { startTime: string; endTime: string }> = {};
+  if (input.codeTimes !== undefined) {
+    if (!isPlainObject(input.codeTimes)) {
+      reject('codeTimes', 'must be an object');
+    } else {
+      const entries = Object.entries(input.codeTimes);
+      if (entries.length > MAX_ALIAS_ENTRIES) {
+        reject('codeTimes', `exceeds ${MAX_ALIAS_ENTRIES} entries`);
+      }
+      for (const [token, value] of entries) {
+        const times = value as Partial<{ startTime: unknown; endTime: unknown }> | null;
+        const startTime = typeof times?.startTime === 'string' ? times.startTime : '';
+        const endTime = typeof times?.endTime === 'string' ? times.endTime : '';
+        if (!TIME_PATTERN.test(startTime) || !TIME_PATTERN.test(endTime)) {
+          reject('codeTimes', `entry "${token}" has an invalid time`);
+          continue;
+        }
+        const piiReason = looksLikePii(token);
+        if (piiReason) {
+          reject('codeTimes', `entry "${token}" ${piiReason}`);
+          continue;
+        }
+        codeTimes[token] = { startTime, endTime };
+      }
+    }
+  }
+
+  let offTokens: string[] = [];
+  if (input.offTokens !== undefined) {
+    if (!Array.isArray(input.offTokens)) {
+      reject('offTokens', 'must be an array');
+    } else {
+      if (input.offTokens.length > MAX_OFF_TOKENS) {
+        reject('offTokens', `exceeds ${MAX_OFF_TOKENS} entries`);
+      }
+      for (const raw of input.offTokens) {
+        const token = String(raw).trim();
+        if (token.length > MAX_OFF_TOKEN_LEN) {
+          reject('offTokens', `entry "${token}" exceeds ${MAX_OFF_TOKEN_LEN} characters`);
+          continue;
+        }
+        const piiReason = looksLikePii(token);
+        if (piiReason) {
+          reject('offTokens', `entry "${token}" ${piiReason}`);
+          continue;
+        }
+        offTokens.push(token);
+      }
+    }
+  }
+
+  const employeeRowStrategy = input.employeeRowStrategy === 'identifier'
+    || input.employeeRowStrategy === 'name'
+    || input.employeeRowStrategy === 'manual-row'
+    ? input.employeeRowStrategy
+    : null;
+  if (!employeeRowStrategy) reject('employeeRowStrategy', 'must be "identifier", "name" or "manual-row"');
+
+  let employeeRowIndex: number | null = null;
+  if (input.employeeRowIndex !== undefined && input.employeeRowIndex !== null) {
+    if (typeof input.employeeRowIndex !== 'number' || !Number.isInteger(input.employeeRowIndex)
+      || input.employeeRowIndex < 0 || input.employeeRowIndex > MAX_EMPLOYEE_ROW_INDEX) {
+      reject('employeeRowIndex', `must be an integer 0-${MAX_EMPLOYEE_ROW_INDEX}`);
+    } else {
+      employeeRowIndex = input.employeeRowIndex;
+    }
+  }
+
+  let dayColumnMap: Record<number, number> | null = null;
+  if (input.dayColumnMap !== undefined && input.dayColumnMap !== null) {
+    if (!isPlainObject(input.dayColumnMap)) {
+      reject('dayColumnMap', 'must be an object');
+    } else {
+      const entries = Object.entries(input.dayColumnMap);
+      if (entries.length > MAX_DAY_COLUMN_ENTRIES) {
+        reject('dayColumnMap', `exceeds ${MAX_DAY_COLUMN_ENTRIES} entries`);
+      }
+      const normalized = normalizeDayColumnMap(input.dayColumnMap);
+      dayColumnMap = normalized ?? null;
+    }
+  }
+
+  let tabularMemory: UserFormatProfile['tabular'] | null = null;
+  if (input.tabularMemory !== undefined && input.tabularMemory !== null) {
+    if (!isPlainObject(input.tabularMemory)) {
+      reject('tabularMemory', 'must be an object');
+    } else {
+      tabularMemory = normalizeTabularMemory(input.tabularMemory) ?? null;
+    }
+  }
+
+  let parserConfig = { clusterTolerance: 0, columnMatchMaxDistance: 0 };
+  if (input.parserConfig !== undefined) {
+    if (!isPlainObject(input.parserConfig)
+      || typeof input.parserConfig.clusterTolerance !== 'number'
+      || typeof input.parserConfig.columnMatchMaxDistance !== 'number') {
+      reject('parserConfig', 'must be { clusterTolerance: number, columnMatchMaxDistance: number }');
+    } else {
+      parserConfig = {
+        clusterTolerance: input.parserConfig.clusterTolerance,
+        columnMatchMaxDistance: input.parserConfig.columnMatchMaxDistance,
+      };
+    }
+  }
+
+  let supersedesLogicalProfileId: string | undefined;
+  if (input.supersedesLogicalProfileId !== undefined) {
+    if (typeof input.supersedesLogicalProfileId !== 'string' || !UUID_PATTERN.test(input.supersedesLogicalProfileId)) {
+      reject('supersedesLogicalProfileId', 'must be a UUID');
+    } else {
+      supersedesLogicalProfileId = input.supersedesLogicalProfileId;
+    }
+  }
+
+  if (rejections.length > 0) {
+    return { ok: false, rejections };
+  }
+
+  return {
+    ok: true,
+    rejections: [],
+    value: {
+      displayName,
+      sourceType: sourceType as FormatProfileSourceType,
+      signature: signature as LayoutSignature,
+      tokenAliases,
+      codeTimes,
+      offTokens,
+      employeeRowStrategy: employeeRowStrategy as CandidateProfileInput['employeeRowStrategy'],
+      employeeRowIndex,
+      dayColumnMap,
+      tabularMemory,
+      parserConfig,
+      ...(supersedesLogicalProfileId ? { supersedesLogicalProfileId } : {}),
+    },
+  };
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Two-tier scoring shared by the local and remote match paths: exact
+ * structural hash scores 1.0; same document type + day-header count scores
+ * 0.6 (drift-candidate territory); anything else does not match. Mirrors
+ * matchFormatProfile above but operates over server FormatProfile rows.
+ */
+export const matchFormatProfileList = (
+  profiles: FormatProfile[],
+  signature: LayoutSignature,
+): ProfileMatch | null => {
+  let best: ProfileMatch | null = null;
+  for (const profile of profiles) {
+    if (profile.status === 'deprecated') continue;
+    let score: number | null = null;
+    if (profile.signature.structureHash === signature.structureHash) {
+      score = 1;
+    } else if (
+      profile.signature.documentType === signature.documentType
+      && profile.signature.dayHeaderCount === signature.dayHeaderCount
+    ) {
+      score = 0.6;
+    }
+    if (score !== null && (best === null || score > best.score)) {
+      best = { profile, score };
+    }
+  }
+  return best;
+};
+
+/** Compares a stored server profile's signature against a freshly observed layout. */
+export const detectServerProfileDrift = (
+  profile: FormatProfile,
+  observed: LayoutSignature,
+): ProfileDriftReport => {
+  const fields: Array<keyof LayoutSignature> = [
+    'documentType', 'structureHash', 'dayHeaderCount', 'columnCount', 'hasLegend',
+  ];
+  const changedFields = fields.filter((field) => profile.signature[field] !== observed[field]);
+  return { drifted: changedFields.length > 0, changedFields };
+};

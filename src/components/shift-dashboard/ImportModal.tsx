@@ -19,7 +19,7 @@ import { detectTeamRoster } from '../../ingestion/team-roster';
 import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { loadUserProfile, saveUserProfile } from '../../lib/profile';
-import { touchFormatProfile } from '../../lib/format-profiles';
+import { createDriftCandidate, getFormatProfileStore, toProfileHintList } from '../../lib/format-profile-store';
 import { ImportResult, ImportWarningCode } from '../../lib/import-quality';
 import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
@@ -54,6 +54,9 @@ interface ImportModalProps {
   identityLocked?: boolean;
   /** Current authenticated user ID for user-scoped profile loading. */
   userId?: string | null;
+  /** Active organization (null = guest): selects local vs organization-scoped
+   * format-profile persistence. See src/lib/format-profile-store.ts. */
+  organizationId?: string | null;
   /** Active areas of the org (empty for guests / area-less orgs → no area UI). */
   areas?: RemoteArea[];
   /** Area context inherited from the dashboard (null = whole company). */
@@ -243,8 +246,9 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, areas = [], currentAreaId = null, allowAreaChoice = false }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false }: ImportModalProps) => {
   const { t, tl } = useI18n();
+  const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
   const now = new Date();
   const [file, setFile] = useState<File | null>(null);
@@ -436,7 +440,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     const startedAt = Date.now();
     try {
-      const result = await analyzeDocumentFile(target, buildSelector(), undefined, effectiveContext);
+      // Organization-scoped reuse: the hint list comes from the session
+      // store (remote for authenticated sessions, local for guests) instead
+      // of analysis.ts reading localStorage itself — a remote-fetch failure
+      // degrades to "no hint" (still analyzes, just without silent reuse for
+      // this one attempt) rather than blocking the import.
+      const profilesHint = toProfileHintList(await formatProfileStore.list().catch(() => []));
+      const result = await analyzeDocumentFile(target, buildSelector(), profilesHint, effectiveContext);
       setAnalysis(result);
       setDetectedFormat(getImportFormatLabel(result.kind));
       setParsedShifts(result.shifts);
@@ -449,7 +459,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     } finally {
       setLoading(false);
     }
-  }, [buildSelector, selectedMonth, selectedYear, identityLocked, employeePreset]);
+  }, [buildSelector, selectedMonth, selectedYear, identityLocked, employeePreset, formatProfileStore]);
 
   // Onboarding handoff: a pre-selected file auto-starts the pipeline once.
   useEffect(() => {
@@ -629,9 +639,21 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     }
 
     // A successful import through a recognized format counts as a profile use.
+    // successful_use_count only increments here — on confirmed import, never
+    // on preview/match — matching the pre-existing touchFormatProfile timing.
     const matchedProfileId = quality?.profileId ?? analysis?.structure?.matchedProfile?.profile.id;
     if (matchedProfileId) {
-      touchFormatProfile(matchedProfileId);
+      // Drift-safe versioning (organization sessions only — the local/guest
+      // store has no version lifecycle, see LocalFormatProfileStore): the
+      // template changed but the old aliases still parsed this import, so a
+      // new candidate version is created instead of silently reusing/
+      // overwriting the stable profile. Idempotent per FM-03: repeat drifted
+      // imports of the same changed template resolve to the same candidate.
+      if (organizationId && analysis?.structure?.drift?.drifted) {
+        void createDriftCandidate(formatProfileStore, matchedProfileId, analysis.structure.signature).catch(() => {});
+      } else {
+        void formatProfileStore.recordUse(matchedProfileId, 'success').catch(() => {});
+      }
     }
 
     const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
@@ -1009,6 +1031,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   selector={buildSelector()}
                   onComplete={handleAssistantComplete}
                   onCancel={() => setAssistantDismissed(true)}
+                  store={formatProfileStore}
                 />
               </div>
             )}
