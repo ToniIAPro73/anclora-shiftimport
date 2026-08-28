@@ -877,7 +877,7 @@ function App() {
   if (route === '/') {
     return (
       <>
-        <LandingPage isAuthenticated={Boolean(session)} />
+        <LandingPage isAuthenticated={authResolved ? Boolean(session) : null} />
         <CookieConsent />
       </>
     );
@@ -886,7 +886,7 @@ function App() {
   if (route === '/pricing') {
     return (
       <>
-        <PricingPage isAuthenticated={Boolean(session)} />
+        <PricingPage isAuthenticated={authResolved ? Boolean(session) : null} />
         <CookieConsent />
       </>
     );

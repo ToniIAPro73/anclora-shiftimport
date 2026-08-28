@@ -5,7 +5,8 @@ import { PublicHeader } from '../components/PublicHeader';
 import { LegalFooter } from '../components/LegalFooter';
 
 interface LandingPageProps {
-  isAuthenticated: boolean;
+  /** null = session resolution still in flight (unknown); never conflate with guest. */
+  isAuthenticated: boolean | null;
 }
 
 const scrollToId = (id: string) => {
@@ -89,7 +90,7 @@ export const LandingPage = ({ isAuthenticated }: LandingPageProps) => {
                 style={{ padding: '12px 22px', fontWeight: 800 }}
                 onClick={() => navigate(isAuthenticated ? '/app' : '/signup')}
               >
-                {isAuthenticated ? t('landing.goToApp') : t('landing.hero.ctaPrimary')}
+                {t('landing.hero.ctaPrimary')}
               </button>
               <button
                 type="button"
@@ -300,7 +301,7 @@ export const LandingPage = ({ isAuthenticated }: LandingPageProps) => {
           style={{ padding: '14px 26px', fontWeight: 800 }}
           onClick={() => navigate(isAuthenticated ? '/app' : '/signup')}
         >
-          {isAuthenticated ? t('landing.goToApp') : t('landing.finalCta.cta')}
+          {t('landing.finalCta.cta')}
         </button>
       </section>
 

@@ -1828,6 +1828,29 @@ button:hover {
   font-weight: 800;
 }
 
+/* Auth-dependent secondary action: the slot is always rendered and the
+   hidden sizer stacks both candidate labels in one grid-area, reserving the
+   max width so the nav never reflows when the session resolves. */
+.public-header-secondary-slot {
+  display: inline-grid;
+  align-items: center;
+}
+
+.public-header-secondary-sizer,
+.public-header-secondary-action {
+  grid-area: 1 / 1;
+}
+
+.public-header-secondary-sizer {
+  visibility: hidden;
+  display: inline-grid;
+  pointer-events: none;
+}
+
+.public-header-secondary-sizer-item {
+  grid-area: 1 / 1;
+}
+
 .public-nav-link {
   background: none;
   border: none;

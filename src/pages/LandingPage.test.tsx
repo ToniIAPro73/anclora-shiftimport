@@ -14,9 +14,10 @@ beforeEach(() => {
     addEventListener: () => {},
     removeEventListener: () => {},
   }));
+  window.history.pushState({}, '', '/');
 });
 
-function renderLanding(isAuthenticated: boolean) {
+function renderLanding(isAuthenticated: boolean | null) {
   return render(
     <ThemeProvider>
       <I18nProvider>
@@ -34,11 +35,28 @@ describe('LandingPage CTA (Fase 1.2A.3 + 1.2B)', () => {
     expect(screen.queryByRole('button', { name: 'Ir a ShiftImport' })).toBeNull();
   });
 
-  it('replaces every CTA with "Ir a ShiftImport" for a signed-in visitor, no Empezar gratis / Iniciar sesión left', () => {
+  it('keeps the public CTA copy for a signed-in visitor and exposes "Ir a ShiftImport" as the secondary action', () => {
     renderLanding(true);
-    expect(screen.getAllByRole('button', { name: 'Ir a ShiftImport' }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('button', { name: 'Empezar gratis' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Empezar gratis' }).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Importar mi primer cuadrante' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ir a ShiftImport' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Iniciar sesión' })).toBeNull();
+  });
+
+  it('hero CTA keeps the public text with isAuthenticated=true and navigates to /app', () => {
+    const { container } = renderLanding(true);
+    const heroCta = container.querySelector('.landing-hero .btn-gold');
+    expect(heroCta?.textContent).toBe('Empezar gratis');
+    fireEvent.click(heroCta as HTMLButtonElement);
+    expect(window.location.pathname).toBe('/app');
+  });
+
+  it('hero CTA navigates to /signup while auth is unknown (null)', () => {
+    const { container } = renderLanding(null);
+    const heroCta = container.querySelector('.landing-hero .btn-gold');
+    expect(heroCta?.textContent).toBe('Empezar gratis');
+    fireEvent.click(heroCta as HTMLButtonElement);
+    expect(window.location.pathname).toBe('/signup');
   });
 
   it('always offers Precios regardless of auth state', () => {
