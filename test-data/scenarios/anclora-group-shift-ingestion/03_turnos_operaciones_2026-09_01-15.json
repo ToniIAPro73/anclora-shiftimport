@@ -1,0 +1,2274 @@
+{
+  "schemaVersion": "1.0",
+  "organization": "Anclora Group",
+  "areaName": "Operaciones",
+  "period": {
+    "from": "2026-09-01",
+    "to": "2026-09-15"
+  },
+  "shifts": [
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-001",
+      "employeeName": "Ana Belén García",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-002",
+      "employeeName": "Biel Barceló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-003",
+      "employeeName": "Carmen Muñoz",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00",
+      "notes": "INCIDENCIA_INTENCIONADA_1: existe un segundo turno conflictivo para la misma fecha"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-005",
+      "employeeName": "Diego Alonso",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-006",
+      "employeeName": "Eva Cerdà",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-007",
+      "employeeName": "Ferran Caldentey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-008",
+      "employeeName": "Isabel Prieto",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-009",
+      "employeeName": "Jordi Aguiló",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-010",
+      "employeeName": "Lucía Mateu",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "",
+      "notes": "INCIDENCIA_INTENCIONADA_2: falta hora de fin"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-011",
+      "employeeName": "Marc Salas",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-012",
+      "employeeName": "Mónica Marín",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-013",
+      "employeeName": "Óscar Ferrer",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-014",
+      "employeeName": "Patricia Rey",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-01",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-02",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-03",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-04",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-05",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-07",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-08",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-09",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-10",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-11",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-12",
+      "shiftType": "T",
+      "startTime": "14:00",
+      "endTime": "22:00"
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-13",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-14",
+      "shiftType": "LIBRE",
+      "startTime": "",
+      "endTime": ""
+    },
+    {
+      "employeeId": "OPE-015",
+      "employeeName": "Raúl Sastre",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-15",
+      "shiftType": "M",
+      "startTime": "06:00",
+      "endTime": "14:00"
+    },
+    {
+      "employeeId": "OPE-004",
+      "employeeName": "Cristina Nadal",
+      "areaName": "Operaciones",
+      "areaCode": "OPE",
+      "date": "2026-09-06",
+      "shiftType": "T",
+      "startTime": "16:00",
+      "endTime": "00:00",
+      "notes": "INCIDENCIA_INTENCIONADA_1: duplicado conflictivo deliberado"
+    }
+  ]
+}

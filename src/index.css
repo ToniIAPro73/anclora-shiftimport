@@ -1828,6 +1828,29 @@ button:hover {
   font-weight: 800;
 }
 
+/* Auth-dependent secondary action: the slot is always rendered and the
+   hidden sizer stacks both candidate labels in one grid-area, reserving the
+   max width so the nav never reflows when the session resolves. */
+.public-header-secondary-slot {
+  display: inline-grid;
+  align-items: center;
+}
+
+.public-header-secondary-sizer,
+.public-header-secondary-action {
+  grid-area: 1 / 1;
+}
+
+.public-header-secondary-sizer {
+  visibility: hidden;
+  display: inline-grid;
+  pointer-events: none;
+}
+
+.public-header-secondary-sizer-item {
+  grid-area: 1 / 1;
+}
+
 .public-nav-link {
   background: none;
   border: none;
@@ -2735,4 +2758,390 @@ button:hover {
 
 .employee-menu-item--danger {
   color: var(--danger);
+}
+
+/* ---------------------------------------------------------------------------
+ * MembersModal workspace (B2B admin surface). The ModalShell `workspace`
+ * variant gives a fixed-height, non-scrolling card; this layout keeps header,
+ * tabs, toolbars and footers fixed and confines scrolling to the single
+ * region that needs it (list / table / preview). No outer+inner double scroll.
+ * ------------------------------------------------------------------------- */
+
+.members-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.members-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.members-tab {
+  padding: 8px 4px;
+  margin-bottom: -1px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-subtle);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.members-tab--active {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* --- Usuarios: lista (izquierda) + panel de alta (derecha) ---------------- */
+
+.members-users-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.members-users-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+/* The scrollable region. `overflow-y: auto` stays inline in the component
+ * (the scroll-preservation tests locate it by that exact inline style). */
+.members-list-scroll {
+  flex: 1;
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
+.members-users-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--panel-muted-bg);
+  scrollbar-gutter: stable;
+}
+
+.members-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.members-member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 8px 4px;
+  font-size: 0.85rem;
+}
+
+.members-member-row:last-child {
+  border-bottom: none;
+}
+
+/* --- Empleados: toolbar fija + listado administrativo compacto ------------ */
+
+.members-employees {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.members-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--panel-muted-bg);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.members-toolbar__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.members-toolbar__divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--glass-border);
+}
+
+.members-add-employee {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: var(--panel-muted-bg);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+/* Table-like compact rows: checkbox | empleado | ID externo | área | acceso | acciones */
+.members-emp-row {
+  display: grid;
+  grid-template-columns: 26px minmax(170px, 1.6fr) minmax(80px, 0.7fr) minmax(100px, 0.8fr) minmax(120px, 0.9fr) 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 0.85rem;
+}
+
+.members-emp-row--selected {
+  background: var(--glass-bg);
+}
+
+.members-emp-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-elevated);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-subtle);
+  padding-top: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.members-emp-name {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.members-emp-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-subtle);
+  font-size: 0.78rem;
+}
+
+.members-emp-cell--status {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+@media (max-width: 900px) {
+  /* El badge de estado nunca se trunca con ellipsis: peor ilegible que alto. */
+  .members-emp-cell--status .status-badge {
+    white-space: normal;
+  }
+}
+
+/* Inline edit / link forms span the whole row width. */
+.members-emp-row__full {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* --- Submodo bulk: sustituye visualmente la lista sin desmontarla --------- */
+
+.members-bulk-submode {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.members-bulk-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.members-bulk-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+  flex-shrink: 0;
+}
+
+/* Bulk table: empleado | ID | área | email | rol | estado | quitar */
+.members-bulk-cols {
+  display: grid;
+  grid-template-columns: 1.3fr 0.8fr 0.8fr 1.3fr 0.8fr 1.2fr 0.5fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.members-bulk-cols--head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-elevated);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* --- Submodo CSV (preview/resultado) a ancho completo --------------------- */
+
+.members-submode {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+}
+
+.members-submode-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.members-submode-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+  flex-shrink: 0;
+}
+
+/* Users CSV preview grid (6 columnas) */
+.members-preview-cols {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 0.7fr 1.2fr 0.9fr 1.6fr;
+  gap: 8px;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-soft);
+  min-width: 620px;
+}
+
+.members-preview-cols--head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-elevated);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-subtle);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* --- Responsive ------------------------------------------------------------ */
+
+/* Tablet landscape y estrechos: el panel de alta pasa debajo de la lista. */
+@media (max-width: 900px) {
+  .members-users-grid {
+    display: block;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .members-users-list {
+    margin-bottom: 12px;
+  }
+
+  .members-users-list .members-list-scroll {
+    flex: none;
+    max-height: none;
+    /* Single scroll region on stacked layouts: the grid container scrolls,
+       the list grows naturally (avoids nested double scroll on mobile). */
+    overflow-y: visible !important;
+  }
+
+  .members-users-panel {
+    overflow-y: visible;
+  }
+}
+
+/* Móvil: filas de empleados dejan la rejilla-tabla y se apilan compactas. */
+@media (max-width: 760px) {
+  .members-emp-row {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .members-emp-row--head {
+    display: none;
+  }
+
+  .members-emp-name {
+    flex: 1;
+    min-width: 140px;
+    white-space: normal;
+  }
+
+  .members-bulk-cols {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 6px;
+  }
+
+  .members-bulk-cols--head {
+    display: none;
+  }
+
+  .members-bulk-cols > .members-bulk-name {
+    grid-column: 1 / -1;
+    font-weight: 700;
+  }
+}
+
+@media (max-width: 520px) {
+  .members-toolbar__divider {
+    display: none;
+  }
 }

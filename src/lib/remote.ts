@@ -305,6 +305,40 @@ export async function addRemoteMember(input: {
   return payload.member;
 }
 
+export type BulkMemberStatus =
+  | 'created_and_linked' | 'created' | 'linked' | 'existing' | 'already_linked' | 'error';
+export type BulkMemberErrorCode =
+  | 'INVALID_EMAIL' | 'INVALID_ROLE' | 'DUPLICATE_IN_FILE' | 'EMPLOYEE_NOT_FOUND'
+  | 'EMPLOYEE_ALREADY_LINKED' | 'USER_ALREADY_LINKED';
+
+export interface BulkMemberResult {
+  row: number;
+  key: string;
+  email: string | null;
+  status: BulkMemberStatus;
+  userId?: string;
+  employeeId?: string | null;
+  code?: BulkMemberErrorCode;
+  error?: string;
+  temporaryPassword?: string;
+}
+
+/** Bulk user provisioning + automatic User<->Employee linking (Usuarios CSV
+ * import). `key` is a caller-supplied correlation id echoed back per result.
+ * Never creates an Employee — `externalEmployeeId` only resolves one. */
+export async function bulkAddRemoteMembers(items: {
+  key: string;
+  email: string;
+  name?: string;
+  role: RemoteMember['role'];
+  externalEmployeeId?: string;
+}[]): Promise<{ results: BulkMemberResult[]; summary: { created: number; linked: number; existing: number; failed: number } }> {
+  return apiFetch('/api/memberships/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ members: items }),
+  });
+}
+
 export async function updateRemoteMemberRole(userId: string, role: RemoteMember['role']): Promise<void> {
   await apiFetch('/api/memberships', {
     method: 'PATCH',

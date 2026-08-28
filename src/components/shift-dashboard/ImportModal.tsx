@@ -271,6 +271,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [qualityOverride, setQualityOverride] = useState<ImportResult | null>(null);
   const [assistantSession, setAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
   const [assistantDismissed, setAssistantDismissed] = useState(false);
+  // Server-side VLM fallback stage: 'analyzing' while the document is being
+  // re-analyzed visually; the abort controller cancels the fetch on
+  // reset/close (see resetImportState and the unmount effect).
+  const [vlmStage, setVlmStage] = useState<'analyzing' | null>(null);
+  const vlmAbortRef = useRef<AbortController | null>(null);
   // identityLocked (EMPLOYEE) + a multi-person roster: true when the roster
   // was successfully detected but no row matched the account's own employee.
   const [selfNotFound, setSelfNotFound] = useState(false);
@@ -335,6 +340,19 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   ) ?? null;
 
   useEscapeClose(isOpen, onClose);
+
+  // Abort any in-flight VLM analysis when the modal closes or unmounts (the
+  // component stays mounted with isOpen=false, so close ≠ unmount here).
+  useEffect(() => {
+    if (!isOpen) {
+      vlmAbortRef.current?.abort();
+      vlmAbortRef.current = null;
+    }
+    return () => {
+      vlmAbortRef.current?.abort();
+      vlmAbortRef.current = null;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -439,6 +457,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     };
 
     const startedAt = Date.now();
+    vlmAbortRef.current?.abort();
+    const vlmAbort = new AbortController();
+    vlmAbortRef.current = vlmAbort;
+    setVlmStage(null);
     try {
       // Organization-scoped reuse: the hint list comes from the session
       // store (remote for authenticated sessions, local for guests) instead
@@ -446,18 +468,28 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       // degrades to "no hint" (still analyzes, just without silent reuse for
       // this one attempt) rather than blocking the import.
       const profilesHint = toProfileHintList(await formatProfileStore.list().catch(() => []));
-      const result = await analyzeDocumentFile(target, buildSelector(), profilesHint, effectiveContext);
+      const result = await analyzeDocumentFile(target, buildSelector(), profilesHint, effectiveContext, {
+        onStage: () => setVlmStage('analyzing'),
+        signal: vlmAbort.signal,
+      });
+      if (vlmAbort.signal.aborted) {
+        return; // reset/closed while analyzing: leave the cleared state alone
+      }
       setAnalysis(result);
       setDetectedFormat(getImportFormatLabel(result.kind));
       setParsedShifts(result.shifts);
       setScanTime(((Date.now() - startedAt) / 1000).toFixed(1));
     } catch (importError: unknown) {
+      if (vlmAbort.signal.aborted) {
+        return;
+      }
       console.error('[ImportModal] Error:', importError);
       // Structured diagnosis instead of a raw exception — no parser names,
       // no stack traces (XLSX crash, OCR failure, unsupported format, ...).
       setErrorDiagnosis(diagnosisFromError(importError));
     } finally {
       setLoading(false);
+      setVlmStage(null);
     }
   }, [buildSelector, selectedMonth, selectedYear, identityLocked, employeePreset, formatProfileStore]);
 
@@ -517,6 +549,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   }, [parsedShifts.length]);
 
   const resetImportState = () => {
+    vlmAbortRef.current?.abort();
+    vlmAbortRef.current = null;
+    setVlmStage(null);
     setFile(null);
     setParsedShifts([]);
     setErrorDiagnosis(null);
@@ -886,9 +921,15 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 }}
               >
                 {loading ? (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                    <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                    {detectedFormat ? t('importModal.processingFormat', { format: detectedFormat }) : t('importModal.processing')}
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 }}>
+                    <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                    {/* The VLM-analyzing label is a full sentence: it must
+                        wrap and grow the button, never clip mid-word. */}
+                    <span style={{ whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.3, minWidth: 0 }}>
+                      {vlmStage === 'analyzing'
+                        ? t('importModal.vlmAnalyzing')
+                        : detectedFormat ? t('importModal.processingFormat', { format: detectedFormat }) : t('importModal.processing')}
+                    </span>
                   </span>
                 ) : t('importModal.process')}
               </button>
@@ -917,6 +958,22 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 >
                   {t(STATE_I18N_KEYS[diagnosis.state])}
                 </span>
+                {parsedShifts.some((shift) => shift.sourceFormat?.endsWith('+vlm')) && (
+                  <span
+                    data-testid="import-visual-analysis-badge"
+                    style={{
+                      background: 'var(--info-bg)',
+                      border: '1px solid var(--info-border)',
+                      color: 'var(--text-muted)',
+                      borderRadius: '999px',
+                      padding: '4px 12px',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {t('importModal.visualAnalysisBadge')}
+                  </span>
+                )}
                 {analysis?.structure?.matchedProfile && (
                   <span
                     style={{

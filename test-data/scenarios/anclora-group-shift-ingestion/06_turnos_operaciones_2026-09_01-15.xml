@@ -1,0 +1,718 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schedule>
+  <organization>Anclora Group</organization>
+  <areaName>Operaciones</areaName>
+  <period>
+    <from>2026-09-01</from>
+    <to>2026-09-15</to>
+  </period>
+  <shifts>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-01</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-02</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-03</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-04</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-05</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-06</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-07</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-08</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-09</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-10</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-11</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-12</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-13</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-14</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belén García</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-15</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-01</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-02</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-03</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-04</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-05</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-06</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-07</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-08</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-09</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-10</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-11</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-12</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-13</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-14</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-002</employeeId>
+      <employeeName>Biel Barceló</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-15</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-01</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-02</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-03</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-04</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-05</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-06</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-07</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-08</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-09</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-10</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-11</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-12</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-13</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-14</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-003</employeeId>
+      <employeeName>Carmen Muñoz</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-15</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-01</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-02</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-03</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-04</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-05</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-06</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+      <notes>INCIDENCIA_INTENCIONADA_1: existe un segundo turno conflictivo para la misma fecha</notes>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-07</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-08</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-09</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-10</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-11</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-12</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-13</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-14</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-15</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-01</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-02</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-03</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-04</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-05</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-06</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-07</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-08</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-09</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-10</date>
+      <shiftType>LIBRE</shiftType>
+      <startTime></startTime>
+      <endTime></endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-11</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime></endTime>
+      <notes>INCIDENCIA_INTENCIONADA_2: falta hora de fin</notes>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-12</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-13</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-14</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-011</employeeId>
+      <employeeName>Marc Salas</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-15</date>
+      <shiftType>T</shiftType>
+      <startTime>14:00</startTime>
+      <endTime>22:00</endTime>
+    </shift>
+    <shift>
+      <employeeId>OPE-004</employeeId>
+      <employeeName>Cristina Nadal</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-06</date>
+      <shiftType>T</shiftType>
+      <startTime>16:00</startTime>
+      <endTime>00:00</endTime>
+      <notes>INCIDENCIA_INTENCIONADA_1: duplicado conflictivo deliberado</notes>
+    </shift>
+    <shift>
+      <employeeId>OPE-999</employeeId>
+      <employeeName>Registro Invalido</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>fecha-invalida</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+      <notes>INCIDENCIA_INTENCIONADA_XML: fecha no parseable, debe generar diagnostico INVALID_DATE</notes>
+    </shift>
+    <shift>
+      <employeeId>OPE-001</employeeId>
+      <employeeName>Ana Belen Garcia</employeeName>
+      <areaCode>OPE</areaCode>
+      <date>2026-09-16</date>
+      <shiftType>M</shiftType>
+      <startTime>06:00</startTime>
+      <endTime>14:00</endTime>
+      <notes>CONTROL_VALIDO: registro adicional de control fuera del periodo base (16-09), debe importarse sin incidencias</notes>
+    </shift>
+  </shifts>
+</schedule>

@@ -43,11 +43,23 @@ describe('detectTeamRoster', () => {
     expect(work).toMatchObject({ shiftType: 'Regular', startTime: '05:00', endTime: '13:00' });
   });
 
-  it('skips rows with no employee name or an unparseable date', () => {
+  it('skips rows with no employee identity at all or an unparseable date', () => {
+    // A blank name with a valid external id is still a usable row (id-only
+    // employee matching is a first-class case, matching the multi-format
+    // ingestion contract's "externalEmployeeId first" priority) — only a
+    // row with neither name nor id, or an unparseable date, is dropped.
     const result = detectTeamRoster(
-      'external_employee_id,employee_name,date,start_time,end_time\nSI001,,2026-09-01,08:00,16:00\nSI002,Name,not-a-date,08:00,16:00',
+      'external_employee_id,employee_name,date,start_time,end_time\n,,2026-09-01,08:00,16:00\nSI002,Name,not-a-date,08:00,16:00',
     );
     expect(result).toBeNull();
+  });
+
+  it('accepts a row with a blank name but a valid external id', () => {
+    const result = detectTeamRoster(
+      'external_employee_id,employee_name,date,start_time,end_time\nSI001,,2026-09-01,08:00,16:00',
+    );
+    expect(result?.employees).toHaveLength(1);
+    expect(result?.employees[0]).toMatchObject({ externalEmployeeId: 'SI001', name: 'SI001' });
   });
 
   it('parses the real reference dataset (40 pre-existing + 2 new employees)', () => {
