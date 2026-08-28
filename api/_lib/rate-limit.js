@@ -60,6 +60,34 @@ export async function clearLoginAttempts(sql, key) {
   await sql`DELETE FROM login_attempts WHERE id_key = ${key}`;
 }
 
+/**
+ * Generic fixed-window limiter over the same table (id_key is free-form,
+ * e.g. `vlm:org:<id>`). Unlike the login limiter — which only counts FAILED
+ * attempts — these helpers count every attempt; the caller decides when to
+ * record. Options take minutes at the call site and reuse the same pure
+ * functions as the login limiter.
+ */
+export async function isKeyBlocked(sql, key, { windowMinutes, maxAttempts }) {
+  const rows = await sql`SELECT window_start, attempt_count FROM login_attempts WHERE id_key = ${key}`;
+  return isCurrentlyBlocked(rows[0], { windowMs: windowMinutes * 60 * 1000, maxAttempts });
+}
+
+/** Records one attempt; returns false (and writes nothing) when the key is
+ * already at the limit, true otherwise. */
+export async function recordKeyAttempt(sql, key, { windowMinutes, maxAttempts }) {
+  const rows = await sql`SELECT window_start, attempt_count FROM login_attempts WHERE id_key = ${key}`;
+  const next = evaluateFailedAttempt(rows[0], { windowMs: windowMinutes * 60 * 1000, maxAttempts });
+  if (next.limited) {
+    return false;
+  }
+  await sql`
+    INSERT INTO login_attempts (id_key, window_start, attempt_count)
+    VALUES (${key}, ${next.windowStart}, ${next.attemptCount})
+    ON CONFLICT (id_key) DO UPDATE SET window_start = EXCLUDED.window_start, attempt_count = EXCLUDED.attempt_count
+  `;
+  return true;
+}
+
 /** First hop in x-forwarded-for is the original client (Vercel sets this
  * at the edge); falls back to the raw socket address, then 'unknown'. */
 export function getClientIp(req) {

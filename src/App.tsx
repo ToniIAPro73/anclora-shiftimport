@@ -32,6 +32,7 @@ import {
 } from './lib/remote';
 import { findAreaMismatch } from './lib/areas';
 import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
+import { setVlmFallbackSessionActive } from './ingestion/vlm-client';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
@@ -109,6 +110,12 @@ function App() {
   const sessionRef = useRef<SessionInfo | null>(null);
   useEffect(() => {
     sessionRef.current = session;
+  }, [session]);
+  // VLM fallback availability follows the session: the endpoint is org-scoped,
+  // so it is only offered with an active organization context (never guests,
+  // never the pending org-choice state).
+  useEffect(() => {
+    setVlmFallbackSessionActive(Boolean(session?.organizationId));
   }, [session]);
   const [employees, setEmployees] = useState<RemoteEmployee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -870,7 +877,7 @@ function App() {
   if (route === '/') {
     return (
       <>
-        <LandingPage isAuthenticated={Boolean(session)} />
+        <LandingPage isAuthenticated={authResolved ? Boolean(session) : null} />
         <CookieConsent />
       </>
     );
@@ -879,7 +886,7 @@ function App() {
   if (route === '/pricing') {
     return (
       <>
-        <PricingPage isAuthenticated={Boolean(session)} />
+        <PricingPage isAuthenticated={authResolved ? Boolean(session) : null} />
         <CookieConsent />
       </>
     );

@@ -5,7 +5,8 @@ import { ThemeToggle } from './ui/ThemeToggle';
 import { LanguageToggle } from './ui/LanguageToggle';
 
 interface PublicHeaderProps {
-  isAuthenticated: boolean;
+  /** null = session resolution still in flight (unknown); never conflate with guest. */
+  isAuthenticated: boolean | null;
 }
 
 const scrollToId = (id: string) => {
@@ -49,17 +50,34 @@ export const PublicHeader = ({ isAuthenticated }: PublicHeaderProps) => {
           <ThemeToggle />
           <LanguageToggle />
         </div>
-        {!isAuthenticated && (
-          <button type="button" className="public-nav-link" onClick={() => navigate('/login')}>
-            {t('landing.nav.login')}
-          </button>
-        )}
+        {/*
+          Secondary action in a fixed-geometry slot: while auth is unknown
+          nothing is shown, but the sizer reserves the max width of either
+          label (login / goToApp) so the nav never shifts on resolution. The
+          primary CTA is always the public one (/signup redirects signed-in
+          users to /app in App), keeping text and width stable.
+        */}
+        <span className="public-header-secondary-slot">
+          <span className="public-header-secondary-sizer" aria-hidden="true">
+            <span className="public-nav-link public-header-secondary-sizer-item">{t('landing.nav.login')}</span>
+            <span className="public-nav-link public-header-secondary-sizer-item">{t('landing.goToApp')}</span>
+          </span>
+          {isAuthenticated !== null && (
+            <button
+              type="button"
+              className="public-nav-link public-header-secondary-action"
+              onClick={() => navigate(isAuthenticated ? '/app' : '/login')}
+            >
+              {isAuthenticated ? t('landing.goToApp') : t('landing.nav.login')}
+            </button>
+          )}
+        </span>
         <button
           type="button"
           className="btn-gold public-header-cta"
-          onClick={() => navigate(isAuthenticated ? '/app' : '/signup')}
+          onClick={() => navigate('/signup')}
         >
-          {isAuthenticated ? t('landing.goToApp') : t('landing.nav.ctaPrimary')}
+          {t('landing.nav.ctaPrimary')}
         </button>
       </nav>
     </header>

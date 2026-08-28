@@ -14,12 +14,14 @@
  * PDF implementation. Capability metadata lives in ../formats.ts.
  */
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
-import { IngestionError } from '../../lib/ingestion-errors';
+import { IngestionError, VlmErrorCode } from '../../lib/ingestion-errors';
 import { computeImportResult, ImportResult, QualitySignals } from '../../lib/import-quality';
 import { UserFormatProfile } from '../../lib/format-profiles';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
 import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
+import { analyzeWithVlmFallback, isVlmFallbackAvailable, VlmRecords } from '../vlm-client';
+import { classifyVlmTrigger } from '../vlm-trigger';
 import {
   analyzeRosterTable,
   detectCsvDelimiter,
@@ -544,6 +546,172 @@ export interface DocumentAnalysisResult {
    * positional pipeline could not fully handle on its own.
    */
   table?: RosterTable;
+  /**
+   * VLM fallback failure marker: the document qualified for the server-side
+   * visual analysis but it failed. The deterministic result is preserved
+   * untouched; the diagnosis layer appends a non-blocking VLM_* diagnostic
+   * (retry via the existing Process action).
+   */
+  vlmError?: { code: VlmErrorCode };
+}
+
+/** Hooks the UI passes to observe/control the VLM fallback stage. */
+export interface VlmFallbackHooks {
+  onStage?: (stage: 'analyzing') => void;
+  signal?: AbortSignal;
+}
+
+const VLM_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const VLM_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** VLM output is model output, not parsed text: fixed, mid-range confidence. */
+const VLM_SHIFT_CONFIDENCE = 0.6;
+
+/**
+ * Maps the VLM extraction payload to parsed shifts. Undated rows and rows
+ * with no content at all are dropped (they cannot be placed on a calendar);
+ * malformed times are blanked and counted so the quality signals reflect
+ * them. Unknown shift codes are kept as-is (resolvable via the registry when
+ * known) so the preview shows exactly what the model read.
+ */
+function mapVlmRecordsToShifts(records: VlmRecords, sourceFormat: string): { shifts: ParsedCalendarShift[]; invalidTimes: number } {
+  const shifts: ParsedCalendarShift[] = [];
+  let invalidTimes = 0;
+  for (const entry of records.entries) {
+    if (!VLM_DATE_RE.test(entry.date ?? '')) {
+      continue;
+    }
+    const rawStart = entry.startTime?.trim() ?? '';
+    const rawEnd = entry.endTime?.trim() ?? '';
+    if ((rawStart && !VLM_TIME_RE.test(rawStart)) || (rawEnd && !VLM_TIME_RE.test(rawEnd))) {
+      invalidTimes += 1;
+    }
+    const startTime = VLM_TIME_RE.test(rawStart) ? rawStart : '';
+    const endTime = VLM_TIME_RE.test(rawEnd) ? rawEnd : '';
+    const rawType = entry.shiftType?.trim() ?? '';
+    const shiftType = rawType ? (resolveShiftTypeId(rawType) ?? rawType) : null;
+    const notes = entry.notes?.trim() || null;
+    if (!shiftType && !startTime && !endTime && !notes) {
+      continue;
+    }
+    // Complete = typed absence row (no times) or fully timed work row.
+    const isValid = Boolean(shiftType && !startTime && !endTime) || Boolean(startTime && endTime);
+    const label = [rawType || null, startTime && endTime ? `${startTime}-${endTime}` : null].filter(Boolean).join(' ');
+    shifts.push({
+      date: entry.date,
+      startTime,
+      endTime,
+      origin: 'IMP',
+      sourceFormat,
+      isValid,
+      confidence: VLM_SHIFT_CONFIDENCE,
+      rawText: label ? `VLM: ${label}` : `VLM: ${entry.date}`,
+      shiftType,
+      notes,
+      color: null,
+    });
+  }
+  return { shifts, invalidTimes };
+}
+
+/**
+ * Builds a DocumentAnalysisResult from VLM records. There is no positioned
+ * layout to fingerprint (structure: null, documented on the interface) and
+ * no assistant questions. employeeMatch stays 'none' when the model could
+ * not name the employee — the ambiguity is preserved for the diagnosis
+ * layer, never resolved by guessing. The quality state is capped at REVIEW:
+ * model output always requires human review, however clean it looks.
+ */
+function buildVlmAnalysisResult(
+  records: VlmRecords,
+  base: { kind: DocumentKind; context: CalendarImportContext },
+): DocumentAnalysisResult {
+  const sourceFormat = `${base.kind}+vlm`;
+  const { shifts, invalidTimes } = mapVlmRecordsToShifts(records, sourceFormat);
+
+  const dated = shifts.filter((shift) => shift.date);
+  const mappedDays = new Set(dated.map((shift) => shift.date)).size;
+  const signals: QualitySignals = {
+    knownProfileMatched: false,
+    profileDrift: false,
+    // The caller always passes the (user-authoritative) month/year as context
+    // to the endpoint, so the dates come back aligned to a known period.
+    periodDetected: true,
+    employeeMatch: records.employeeName?.trim() ? 'strong' : 'none',
+    expectedDays: mappedDays,
+    mappedDays,
+    totalTokens: records.entries.length,
+    recognizedTokens: shifts.length,
+    unknownTokens: [],
+    invalidTimes,
+    incompleteAssignments: shifts.filter((shift) => !shift.isValid).length,
+  };
+
+  let quality = computeImportResult(shifts, signals);
+  if (quality.state === 'CORRECT') {
+    // VLM output is never CORRECT: it always requires human review.
+    quality = { ...quality, state: 'REVIEW' };
+  }
+
+  const firstDate = dated[0]?.date;
+  const detectedContext: CalendarImportContext = firstDate
+    ? { month: Number(firstDate.slice(5, 7)) - 1, year: Number(firstDate.slice(0, 4)) }
+    : base.context;
+
+  return {
+    kind: base.kind,
+    context: base.context,
+    shifts,
+    quality,
+    structure: null,
+    questions: [],
+    detectedContext,
+  };
+}
+
+/**
+ * Server-side VLM fallback, attempted after the deterministic pipeline when
+ * the trigger classifier marks the document eligible. Success replaces the
+ * result with the mapped records (capped at REVIEW); failure preserves the
+ * deterministic result and marks it with vlmError for the diagnosis layer.
+ * An aborted analysis silently returns the deterministic result — the caller
+ * (modal reset/close) is already tearing the state down.
+ */
+async function applyVlmFallback(
+  file: File,
+  kind: DocumentKind,
+  itemCount: number,
+  deterministic: DocumentAnalysisResult,
+  hooks?: VlmFallbackHooks,
+): Promise<DocumentAnalysisResult> {
+  const decision = classifyVlmTrigger({
+    kind,
+    itemCount,
+    quality: deterministic.quality,
+    authenticated: isVlmFallbackAvailable(),
+  });
+  if (decision.kind !== 'VLM_ELIGIBLE') {
+    return deterministic;
+  }
+
+  hooks?.onStage?.('analyzing');
+  let outcome;
+  try {
+    outcome = await analyzeWithVlmFallback(file, {
+      month: deterministic.context.month + 1,
+      year: deterministic.context.year,
+      signal: hooks?.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return deterministic;
+    }
+    throw error;
+  }
+
+  if (!outcome.ok) {
+    return { ...deterministic, vlmError: { code: outcome.code } };
+  }
+  return buildVlmAnalysisResult(outcome.records, { kind, context: deterministic.context });
 }
 
 /**
@@ -696,12 +864,19 @@ function analyzeRosterDocument(
  * savedProfilesHint is an optional performance hint: when provided, profile
  * matching runs against that list instead of reading storage again (same
  * scoring as matchFormatProfile).
+ *
+ * vlm (optional) hooks the server-side visual fallback: when the
+ * deterministic result is unusable (no items / UNRECOGNIZED with zero
+ * shifts) and a session is active, the document is rasterized and sent to
+ * /api/ingestion/vlm. The outcome either replaces the result (state capped
+ * at REVIEW) or marks it with vlmError — it never throws.
  */
 export async function analyzeDocumentFile(
   file: File,
   selector: EmployeeSelector,
   savedProfilesHint?: UserFormatProfile[],
   contextOverride?: CalendarImportContext,
+  vlm?: VlmFallbackHooks,
 ): Promise<DocumentAnalysisResult> {
   const kind = classifyDocument(file);
   if (kind === 'unknown' || kind === 'text') {
@@ -764,7 +939,7 @@ export async function analyzeDocumentFile(
     ? detectSections(items).map((section) => ({ month: section.month, year: section.year }))
     : undefined;
 
-  return {
+  const deterministic: DocumentAnalysisResult = {
     kind,
     context,
     shifts,
@@ -774,4 +949,9 @@ export async function analyzeDocumentFile(
     detectedContext,
     ...(coveredPeriods && coveredPeriods.length > 0 ? { coveredPeriods } : {}),
   };
+
+  // Server-side VLM fallback (pdf/image only, authenticated sessions only):
+  // attempted when the deterministic pipeline could not read the document —
+  // never replaces a usable result. See applyVlmFallback.
+  return applyVlmFallback(file, kind, items.length, deterministic, vlm);
 }

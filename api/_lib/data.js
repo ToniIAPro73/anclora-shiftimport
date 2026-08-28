@@ -733,6 +733,195 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
   return temporaryPassword ? { userId, email, role, temporaryPassword } : { userId, email, role };
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * ADMIN only: bulk user provisioning + automatic User<->Employee linking
+ * (multi-row CSV import, "Usuarios" tab). Each row is independent —
+ * one bad row never aborts the rest (same partial-success shape as
+ * bulkCreateEmployees). Never creates an Employee: `externalEmployeeId`
+ * only RESOLVES an existing one; an unknown id fails only that row
+ * (code EMPLOYEE_NOT_FOUND). Never overwrites an existing 1:1 link in
+ * either direction (guards mirror addMember's). Idempotent: rerunning the
+ * exact same CSV reuses the existing user/membership/link and reports
+ * 'existing' instead of erroring or duplicating anything.
+ */
+export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
+  requireRole(ctx, 'ADMIN');
+  requireFeature(ctx.plan, 'teamManagement', 'Inviting team members requires the Team plan.');
+
+  const rows = Array.isArray(items) ? items : [];
+
+  const employeeRows = await sql`
+    SELECT * FROM employees WHERE organization_id = ${ctx.organizationId}
+  `;
+  const employeesByExternalId = new Map();
+  for (const row of employeeRows) {
+    if (row.external_employee_id) {
+      employeesByExternalId.set(row.external_employee_id, mapEmployeeRow(row));
+    }
+  }
+
+  const memberRows = await sql`
+    SELECT m.user_id, m.role, u.email
+    FROM memberships m
+    JOIN users u ON u.id = m.user_id
+    WHERE m.organization_id = ${ctx.organizationId}
+  `;
+  const membershipByUserId = new Map(memberRows.map((row) => [row.user_id, row]));
+  const userIdByEmail = new Map(memberRows.map((row) => [row.email.toLowerCase(), row.user_id]));
+
+  // Employees already linked in the org, keyed by user_id — used to detect
+  // USER_ALREADY_LINKED without a per-row query.
+  const employeeByUserId = new Map();
+  for (const row of employeeRows) {
+    if (row.user_id) {
+      employeeByUserId.set(row.user_id, mapEmployeeRow(row));
+    }
+  }
+
+  const seenEmails = new Set();
+  const results = [];
+  const summary = { created: 0, linked: 0, existing: 0, failed: 0 };
+
+  const fail = (row, code, message) => {
+    results.push({ row: row.rowNumber, key: row.key, email: row.email || null, status: 'error', code, error: message });
+    summary.failed += 1;
+  };
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const raw = rows[i] ?? {};
+    const row = {
+      rowNumber: i + 1,
+      key: String(raw.key ?? ''),
+      email: String(raw.email ?? '').trim().toLowerCase(),
+      name: String(raw.name ?? '').trim(),
+      role: String(raw.role ?? '').trim().toUpperCase(),
+      externalEmployeeId: String(raw.externalEmployeeId ?? '').trim(),
+    };
+
+    if (!row.email || !EMAIL_RE.test(row.email)) {
+      fail(row, 'INVALID_EMAIL', 'A valid email is required');
+      continue;
+    }
+    if (!VALID_ROLES.includes(row.role)) {
+      fail(row, 'INVALID_ROLE', 'A valid role is required');
+      continue;
+    }
+    if (seenEmails.has(row.email)) {
+      fail(row, 'DUPLICATE_IN_FILE', 'Duplicate email within this file');
+      continue;
+    }
+    seenEmails.add(row.email);
+
+    // Resolve the target employee (never created here). Unknown id -> row
+    // fails; empty id -> user provisioned with no link (rule B).
+    let employee = null;
+    if (row.externalEmployeeId) {
+      employee = employeesByExternalId.get(row.externalEmployeeId) ?? null;
+      if (!employee) {
+        fail(row, 'EMPLOYEE_NOT_FOUND', `No employee with external id "${row.externalEmployeeId}"`);
+        continue;
+      }
+      if (employee.userId && employee.userId !== userIdByEmail.get(row.email)) {
+        fail(row, 'EMPLOYEE_ALREADY_LINKED', 'Employee is already linked to another user');
+        continue;
+      }
+    }
+
+    // Resolve or create the user.
+    let userId = userIdByEmail.get(row.email);
+    let created = false;
+    let temporaryPassword;
+    if (!userId) {
+      const existingUser = await sql`SELECT id FROM users WHERE lower(email) = ${row.email}`;
+      if (existingUser.length > 0) {
+        userId = existingUser[0].id;
+      } else {
+        const password = randomBytes(12).toString('base64url');
+        temporaryPassword = password;
+        const inserted = await sql`
+          INSERT INTO users (email, password_hash, display_name)
+          VALUES (${row.email}, ${hashPasswordFn(password)}, ${row.name})
+          RETURNING id
+        `;
+        userId = inserted[0].id;
+        created = true;
+      }
+    }
+
+    // User already linked to a DIFFERENT employee -> row fails (guard F),
+    // unless it's the very employee this row targets (idempotent no-op).
+    const linkedEmployee = employeeByUserId.get(userId);
+    if (employee && linkedEmployee && linkedEmployee.id !== employee.id) {
+      fail(row, 'USER_ALREADY_LINKED', 'User is already linked to another employee');
+      continue;
+    }
+    if (!employee && linkedEmployee) {
+      // Row didn't ask for a link, but the user already has one — never
+      // touched, never reported as an error.
+      employee = linkedEmployee;
+    }
+
+    // Membership: reuse if it already exists (idempotent rerun), else create.
+    const existingMembership = membershipByUserId.get(userId);
+    if (!existingMembership) {
+      await sql`
+        INSERT INTO memberships (user_id, organization_id, role)
+        VALUES (${userId}, ${ctx.organizationId}, ${row.role})
+      `;
+      membershipByUserId.set(userId, { user_id: userId, role: row.role, email: row.email });
+      userIdByEmail.set(row.email, userId);
+    }
+
+    // Link (only when the row named an employee, the employee is free or
+    // already this same user's, and nothing else claims it).
+    const wasAlreadyLinked = Boolean(employee && employee.userId === userId);
+    let justLinked = false;
+    if (employee && employee.userId !== userId) {
+      await sql`
+        UPDATE employees SET user_id = ${userId}, updated_at = NOW()
+        WHERE id = ${employee.id} AND organization_id = ${ctx.organizationId}
+      `;
+      employee = { ...employee, userId };
+      employeeByUserId.set(userId, employee);
+      if (row.externalEmployeeId) {
+        employeesByExternalId.set(row.externalEmployeeId, employee);
+      }
+      justLinked = true;
+    }
+
+    const status = created
+      ? (justLinked ? 'created_and_linked' : 'created')
+      : wasAlreadyLinked
+        ? 'already_linked'
+        : justLinked
+          ? 'linked'
+          : 'existing';
+
+    if (created) {
+      summary.created += 1;
+    } else {
+      summary.existing += 1;
+    }
+    if (justLinked) {
+      summary.linked += 1;
+    }
+
+    results.push({
+      row: row.rowNumber,
+      key: row.key,
+      email: row.email,
+      status,
+      userId,
+      employeeId: employee ? employee.id : null,
+      ...(temporaryPassword ? { temporaryPassword } : {}),
+    });
+  }
+
+  return { results, summary };
+}
+
 /** ADMIN only: change a member's role. The last ADMIN cannot be demoted. */
 export async function updateMemberRole(sql, ctx, input) {
   requireRole(ctx, 'ADMIN');

@@ -17,7 +17,8 @@
  * (test-data/fixtures/parser-regression/04_turnos_septiembre_2026.csv).
  */
 import { ParsedCalendarShift } from '../lib/import-types';
-import { findHeaderColumnIndex, parseRosterTable, parseTableDate } from './tabular-assistant';
+import { findHeaderColumnIndex, parseRosterTable, RosterTable } from './tabular-assistant';
+import { normalizeStructuredRows, RowDiagnostic, StructuredShiftRow } from './adapters/structured-rows';
 
 export interface DetectedTeamEmployee {
   /** Stable grouping key: external id when present, else a normalized-name key. */
@@ -25,18 +26,30 @@ export interface DetectedTeamEmployee {
   externalEmployeeId: string;
   name: string;
   shifts: ParsedCalendarShift[];
+  /** Area carried by the source file (area/areaCode column), when present.
+   * A hint only — resolution against the org's real areas happens server
+   * side; an unknown area never creates one implicitly. */
+  areaName?: string;
+  areaCode?: string;
 }
 
 export interface TeamRosterDetection {
   employees: DetectedTeamEmployee[];
+  /** Row-level issues (invalid date, incomplete shift, duplicate, unknown
+   * code) collected while normalizing — additive, existing callers that
+   * ignore it are unaffected. */
+  diagnostics?: RowDiagnostic[];
 }
 
-export function detectTeamRoster(text: string): TeamRosterDetection | null {
-  const table = parseRosterTable(text);
-  if (!table) {
-    return null;
-  }
-
+/**
+ * Converts an already-parsed RosterTable into structured rows and feeds
+ * them through the shared normalizer (adapters/structured-rows.ts) — the
+ * single convergence point every format (CSV, XLSX per-sheet, JSON, XML)
+ * shares. Returns null when the table doesn't even have the minimum
+ * employee+date columns (not tabular-roster-shaped at all); this null
+ * short-circuit stays a per-format decision, not the normalizer's job.
+ */
+export function buildTeamRosterFromTable(table: RosterTable): TeamRosterDetection | null {
   const nameCol = findHeaderColumnIndex(table.headers, 'employee');
   const dateCol = findHeaderColumnIndex(table.headers, 'date');
   if (nameCol === null || dateCol === null) {
@@ -45,46 +58,32 @@ export function detectTeamRoster(text: string): TeamRosterDetection | null {
   const idCol = findHeaderColumnIndex(table.headers, 'employeeId');
   const startCol = findHeaderColumnIndex(table.headers, 'start');
   const endCol = findHeaderColumnIndex(table.headers, 'end');
+  const typeCol = findHeaderColumnIndex(table.headers, 'type');
+  const areaCol = findHeaderColumnIndex(table.headers, 'area');
+  const areaCodeCol = findHeaderColumnIndex(table.headers, 'areaCode');
+  const notesCol = findHeaderColumnIndex(table.headers, 'notes');
 
-  const byKey = new Map<string, DetectedTeamEmployee>();
+  const rows: StructuredShiftRow[] = table.rows.map((row, index) => ({
+    employeeName: row[nameCol] ?? '',
+    externalEmployeeId: idCol !== null ? (row[idCol] ?? '') : '',
+    date: row[dateCol] ?? '',
+    startTime: startCol !== null ? (row[startCol] ?? '') : '',
+    endTime: endCol !== null ? (row[endCol] ?? '') : '',
+    shiftType: typeCol !== null ? (row[typeCol] ?? '') : '',
+    areaName: areaCol !== null ? (row[areaCol] ?? '') : undefined,
+    areaCode: areaCodeCol !== null ? (row[areaCodeCol] ?? '') : undefined,
+    notes: notesCol !== null ? (row[notesCol] ?? '') : undefined,
+    sourceRef: `row ${index + 2}`,
+  }));
 
-  for (const row of table.rows) {
-    const name = (row[nameCol] ?? '').trim();
-    if (!name) {
-      continue;
-    }
-    const date = parseTableDate(row[dateCol] ?? '');
-    if (!date) {
-      continue;
-    }
+  const result = normalizeStructuredRows(rows);
+  return result.employees.length > 0 ? result : null;
+}
 
-    const externalEmployeeId = idCol !== null ? (row[idCol] ?? '').trim() : '';
-    const key = externalEmployeeId || `name:${name.toLowerCase()}`;
-
-    let employee = byKey.get(key);
-    if (!employee) {
-      employee = { key, externalEmployeeId, name, shifts: [] };
-      byKey.set(key, employee);
-    }
-
-    const startTime = startCol !== null ? (row[startCol] ?? '').trim() : '';
-    const endTime = endCol !== null ? (row[endCol] ?? '').trim() : '';
-    const isWork = Boolean(startTime && endTime);
-
-    employee.shifts.push({
-      date,
-      startTime: isWork ? startTime : '',
-      endTime: isWork ? endTime : '',
-      origin: 'IMP',
-      isValid: true,
-      confidence: 0.9,
-      rawText: row.join(' '),
-      shiftType: isWork ? 'Regular' : 'Libre',
-      notes: null,
-      color: null,
-    });
+export function detectTeamRoster(text: string): TeamRosterDetection | null {
+  const table = parseRosterTable(text);
+  if (!table) {
+    return null;
   }
-
-  const employees = [...byKey.values()];
-  return employees.length > 0 ? { employees } : null;
+  return buildTeamRosterFromTable(table);
 }

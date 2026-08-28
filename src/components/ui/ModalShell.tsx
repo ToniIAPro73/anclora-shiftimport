@@ -20,6 +20,15 @@ interface ModalShellProps {
   /** Blocking dialogs (e.g. mandatory organization choice): hides the X and
    * disables ESC/click-outside. Only use when closing makes no sense. */
   blocking?: boolean;
+  /** A secondary panel/section owns ESC right now (e.g. a bulk-action
+   * drawer) — this modal must not close until that panel handles it and
+   * clears the flag. Unlike `blocking`, the X and click-outside still work. */
+  suppressEscape?: boolean;
+  /** Wide admin-workspace layout (MembersModal): fixed-height shell sized from
+   * the viewport, no outer scroll — the header/footer stay fixed and only the
+   * inner regions the caller marks scrollable actually scroll. This kills the
+   * intermittent outer scrollbar that appeared/disappeared with async loads. */
+  workspace?: boolean;
 }
 
 export const ModalShell = ({
@@ -31,6 +40,8 @@ export const ModalShell = ({
   maxWidth = '480px',
   closeAriaLabel = 'Close',
   blocking = false,
+  suppressEscape = false,
+  workspace = false,
 }: ModalShellProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -54,7 +65,7 @@ export const ModalShell = ({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (blocking) {
+        if (blocking || suppressEscape) {
           return;
         }
         event.stopPropagation();
@@ -84,7 +95,7 @@ export const ModalShell = ({
       document.removeEventListener('keydown', handleKeyDown, true);
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, onClose, blocking]);
+  }, [isOpen, onClose, blocking, suppressEscape]);
 
   if (!isOpen) {
     return null;
@@ -101,14 +112,18 @@ export const ModalShell = ({
     >
       <div
         ref={contentRef}
-        className="modal-content"
+        className={workspace ? 'modal-content modal-content--workspace' : 'modal-content'}
         role="dialog"
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        style={{ maxWidth, maxHeight: '90vh', overflowY: 'auto' }}
+        style={workspace
+          // Fixed-height shell: the card itself never scrolls, so open/load/
+          // reopen all produce the same geometry regardless of async content.
+          ? { maxWidth, height: 'min(86vh, 920px)', maxHeight: 'calc(100dvh - 24px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+          : { maxWidth, maxHeight: '90vh', overflowY: 'auto' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexShrink: 0 }}>
           <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{title}</h3>
           {!blocking && (
             <button type="button" className="theme-toggle" onClick={onClose} aria-label={closeAriaLabel}>
@@ -116,9 +131,9 @@ export const ModalShell = ({
             </button>
           )}
         </div>
-        <div>{children}</div>
+        <div style={workspace ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined}>{children}</div>
         {footer && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap', marginTop: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap', marginTop: '16px', flexShrink: 0 }}>
             {footer}
           </div>
         )}

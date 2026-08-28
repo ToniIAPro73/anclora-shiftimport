@@ -5,7 +5,8 @@ import { PublicHeader } from '../components/PublicHeader';
 import { LegalFooter } from '../components/LegalFooter';
 
 interface PricingPageProps {
-  isAuthenticated: boolean;
+  /** null = session resolution still in flight (unknown); never conflate with guest. */
+  isAuthenticated: boolean | null;
 }
 
 /**
@@ -53,7 +54,7 @@ export const PricingPage = ({ isAuthenticated }: PricingPageProps) => {
                 style={{ padding: '12px 20px', fontWeight: 800, width: '100%' }}
                 onClick={() => handleCta(planId)}
               >
-                {isAuthenticated ? t('landing.goToApp') : t(`pricing.plans.${planId}.cta`)}
+                {t(`pricing.plans.${planId}.cta`)}
               </button>
             </article>
           );
