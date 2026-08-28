@@ -3,6 +3,11 @@ import { useI18n } from '../../lib/use-i18n';
 import type { PlanId } from '../../lib/plans';
 import { detectTeamRoster, DetectedTeamEmployee } from '../../ingestion/team-roster';
 import { detectPdfTeamRoster } from '../../ingestion/pdf-team-import';
+import { parseXlsxTeamWorkbook, SheetSummary } from '../../ingestion/adapters/xlsx-workbook';
+import { parseJsonTeamRoster } from '../../ingestion/adapters/json-adapter';
+import { parseXmlTeamRoster } from '../../ingestion/adapters/xml-adapter';
+import { RowDiagnostic } from '../../ingestion/adapters/structured-rows';
+import { IngestionError } from '../../lib/ingestion-errors';
 import {
   RemoteEmployee,
   RemoteArea,
@@ -71,7 +76,7 @@ interface ImportOutcome {
 
 type Step = 'upload' | 'select' | 'preview' | 'result';
 
-function toDomainShift(shift: DetectedTeamEmployee['shifts'][number]): Shift {
+function toDomainShift(shift: DetectedTeamEmployee['shifts'][number], sourceFormat: string): Shift {
   const type = normalizeShiftTypeLabel(shift.shiftType ?? '') || 'Regular';
   return {
     id: crypto.randomUUID(),
@@ -80,7 +85,7 @@ function toDomainShift(shift: DetectedTeamEmployee['shifts'][number]): Shift {
     endTime: shift.endTime,
     location: type,
     origin: 'IMP',
-    sourceFormat: 'csv',
+    sourceFormat,
   };
 }
 
@@ -142,7 +147,12 @@ export const TeamImportModal = ({
   // Fase 1.2F-PDF §12: PDF batches share ONE Import record across every
   // employee (one document, one source event); CSV keeps its existing
   // per-employee Import (unchanged, regression-safe).
-  const [sourceFormat, setSourceFormat] = useState<'csv' | 'pdf'>('csv');
+  const [sourceFormat, setSourceFormat] = useState<'csv' | 'pdf' | 'xlsx' | 'json' | 'xml'>('csv');
+  // XLSX multi-sheet summary + row-level diagnostics (invalid date,
+  // incomplete shift, duplicate, unknown sheet) — additive, never blocks a
+  // format that has none (CSV/PDF leave both empty).
+  const [sheetSummaries, setSheetSummaries] = useState<SheetSummary[]>([]);
+  const [rowDiagnostics, setRowDiagnostics] = useState<RowDiagnostic[]>([]);
   const [importAreaId, setImportAreaId] = useState<string | null>(defaultImportAreaId);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
@@ -178,6 +188,8 @@ export const TeamImportModal = ({
     setOutcomes([]);
     setImporting(false);
     setSourceFormat('csv');
+    setSheetSummaries([]);
+    setRowDiagnostics([]);
     setImportAreaId(defaultImportAreaId);
     setBulkConfirmOpen(false);
     setBulkBusy(false);
@@ -192,16 +204,73 @@ export const TeamImportModal = ({
   const handleFile = async (file: File) => {
     setError('');
     setLoading(true);
+    setSheetSummaries([]);
+    setRowDiagnostics([]);
     try {
-      const isPdf = file.name.toLowerCase().endsWith('.pdf') || file.type.toLowerCase().includes('pdf');
-      const detection = isPdf
-        ? await detectPdfTeamRoster(file)
-        : detectTeamRoster(await file.text());
-      if (!detection) {
+      const name = file.name.toLowerCase();
+      const mime = file.type.toLowerCase();
+      const isPdf = name.endsWith('.pdf') || mime.includes('pdf');
+      const isXlsx = name.endsWith('.xlsx') || name.endsWith('.xls') || mime.includes('spreadsheet') || mime.includes('excel');
+      const isJson = name.endsWith('.json') || mime.includes('json');
+      const isXml = name.endsWith('.xml') || mime.includes('xml');
+
+      let detection: { employees: DetectedTeamEmployee[]; diagnostics?: RowDiagnostic[] } | null;
+      let format: typeof sourceFormat;
+
+      if (isPdf) {
+        format = 'pdf';
+        detection = await detectPdfTeamRoster(file);
+      } else if (isXlsx) {
+        format = 'xlsx';
+        try {
+          const workbook = await parseXlsxTeamWorkbook(file);
+          detection = workbook;
+          setSheetSummaries(workbook.sheets);
+        } catch (err) {
+          setError(err instanceof IngestionError
+            ? t('teamImport.uploadErrorInvalidXlsx', { detail: err.message })
+            : t('teamImport.uploadError'));
+          return;
+        }
+      } else if (isJson) {
+        format = 'json';
+        try {
+          detection = parseJsonTeamRoster(await file.text());
+        } catch (err) {
+          if (err instanceof IngestionError && err.code === 'INVALID_JSON') {
+            setError(t('teamImport.uploadErrorInvalidJson', { detail: err.message }));
+          } else if (err instanceof IngestionError && err.code === 'UNKNOWN_STRUCTURED_SCHEMA') {
+            setError(t('teamImport.uploadErrorUnknownSchema'));
+          } else {
+            setError(t('teamImport.uploadError'));
+          }
+          return;
+        }
+      } else if (isXml) {
+        format = 'xml';
+        try {
+          detection = parseXmlTeamRoster(await file.text());
+        } catch (err) {
+          if (err instanceof IngestionError && err.code === 'INVALID_XML') {
+            setError(t('teamImport.uploadErrorInvalidXml', { detail: err.message }));
+          } else if (err instanceof IngestionError && err.code === 'UNKNOWN_STRUCTURED_SCHEMA') {
+            setError(t('teamImport.uploadErrorUnknownSchema'));
+          } else {
+            setError(t('teamImport.uploadError'));
+          }
+          return;
+        }
+      } else {
+        format = 'csv';
+        detection = detectTeamRoster(await file.text());
+      }
+
+      if (!detection || detection.employees.length === 0) {
         setError(t('teamImport.uploadError'));
         return;
       }
-      setSourceFormat(isPdf ? 'pdf' : 'csv');
+      setSourceFormat(format);
+      setRowDiagnostics(detection.diagnostics ?? []);
 
       const matched = await Promise.all(detection.employees.map(async (employee): Promise<TeamRow> => {
         const match = await matchRemoteEmployee({ name: employee.name, externalId: employee.externalEmployeeId });
@@ -400,7 +469,7 @@ export const TeamImportModal = ({
     try {
       const entries = await Promise.all(selectedRows.map(async (row): Promise<PreviewEntry> => {
         const existing = await loadRemoteShifts(row.resolvedEmployeeId as string);
-        const incoming = row.detected.shifts.map(toDomainShift);
+        const incoming = row.detected.shifts.map((shift) => toDomainShift(shift, sourceFormat));
         const report = classifyImportChanges(existing, incoming);
         return {
           row,
@@ -530,7 +599,7 @@ export const TeamImportModal = ({
               {loading ? t('teamImport.matching') : t('teamImport.chooseFile')}
               <input
                 type="file"
-                accept=".csv,text/csv,.pdf,application/pdf"
+                accept=".csv,text/csv,.pdf,application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.json,application/json,.xml,application/xml,text/xml"
                 style={{ display: 'none' }}
                 disabled={loading}
                 onChange={(event) => {
@@ -554,6 +623,20 @@ export const TeamImportModal = ({
             <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
               {t('teamImport.rosterSummary', rosterCounts)}
             </p>
+            {sheetSummaries.length > 0 && (
+              <p data-testid="team-import-workbook-summary" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+                {t('teamImport.workbookSummary', {
+                  sheetCount: sheetSummaries.length,
+                  processed: sheetSummaries.filter((s) => s.status === 'processed').length,
+                  ignored: sheetSummaries.filter((s) => s.status !== 'processed').length,
+                })}
+              </p>
+            )}
+            {rowDiagnostics.length > 0 && (
+              <p data-testid="team-import-row-diagnostics" role="status" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-gold)' }}>
+                {t('teamImport.rowDiagnosticsSummary', { count: rowDiagnostics.length })}
+              </p>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>
                 {t('teamImport.selectedCount', { selected: selectedRows.length, total: rosterCounts.total })}

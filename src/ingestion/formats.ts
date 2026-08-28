@@ -53,11 +53,21 @@ export const SUPPORTED_IMPORT_FORMATS: ImportFormatCapability[] = [
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'application/vnd.ms-excel',
     ],
-    parser: 'ExcelJS → cuadrícula tabular',
+    parser: 'ExcelJS → cuadrícula tabular (single-employee ImportModal, primera hoja) o multi-hoja team roster (TeamImportModal, adapters/xlsx-workbook.ts)',
     capability: 'PARTIAL',
-    notes: 'Primera hoja, celdas tratadas como cuadrícula tabular.',
+    notes: 'ImportModal (single-employee) sigue usando solo la primera hoja. TeamImportModal procesa todas las hojas: cada una se clasifica (procesada/ignorada/vacía) de forma independiente y converge al mismo pipeline que CSV.',
   },
 ];
+
+/**
+ * JSON and XML are first-class formats ONLY for the multi-employee team
+ * import (TeamImportModal → src/ingestion/adapters/{json,xml}-adapter.ts).
+ * They are deliberately NOT added to SUPPORTED_IMPORT_FORMATS above: that
+ * registry drives the single-employee ImportModal's accept/label/display
+ * line (classifyDocument has no JSON/XML branch), and advertising them
+ * there would offer a file picker option that throws UNSUPPORTED_FORMAT.
+ * TeamImportModal builds its own accept attribute and copy instead.
+ */
 
 export const NOT_SUPPORTED_FORMATS: ImportFormatCapability[] = [];
 

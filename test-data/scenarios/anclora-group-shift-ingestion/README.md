@@ -36,3 +36,35 @@ Segunda ejecución (idempotencia, misma CSV sin cambios):
 - Fila 13 -> existing (usuario ya es miembro).
 - Esta segunda pasada es también el caso de aceptación "email existente dentro de la
   organización + employee libre" para cualquier fila que aún no tuviera vínculo.
+
+---
+
+SHIFTIMPORT_MULTIFORMAT_INGESTION_XLSX_JSON_XML — fixtures añadidas
+
+03_turnos_operaciones_2026-09_01-15.json
+- Equivalente JSON exacto de 03_turnos_operaciones_2026-09_01-15.csv (mismos 226
+  registros, mismas dos incidencias deliberadas: OPE-004/2026-09-06 duplicado
+  conflictivo y OPE-011/2026-09-11 turno incompleto sin endTime).
+- Forma J3 (schemaVersion + organization + areaName + period + shifts[]).
+
+05_turnos_multi_area_2026-09_01-15.xlsx
+- 4 hojas: "Logística" (contenido íntegro de 02_turnos_logistica…csv, incluye las 2
+  incidencias deliberadas de ese fichero: LOG-007 código X1 y LOG-018 nombre no
+  coincidente), "Operaciones" (contenido íntegro de 03_…csv, con sus 2 incidencias),
+  "Instrucciones" (una hoja de texto libre sin cabecera de roster — debe ignorarse) y
+  "Notas" (hoja totalmente vacía — debe clasificarse como vacía, no como error).
+- Resultado esperado: 45 empleados distintos (30 Logística + 15 Operaciones), 2 hojas
+  procesadas, 1 ignorada, 1 vacía; ninguna fila se pierde entre hojas ni se duplica.
+
+06_turnos_operaciones_2026-09_01-15.xml
+- Subconjunto bien definido y semánticamente equivalente al JSON: empleados
+  OPE-001..003 (control, periodo completo) + OPE-004 y OPE-011 (con sus incidencias
+  deliberadas) + un registro adicional inválido (OPE-999, fecha no parseable — debe
+  producir un diagnóstico INVALID_DATE) + un registro adicional de control válido
+  (OPE-001 / 2026-09-16, fuera del periodo base, debe importarse sin incidencias).
+- Forma X3 (schedule > organization/areaName/period + shifts > shift).
+
+Todas estas incidencias se validan en:
+- src/ingestion/adapters/json-adapter.test.ts
+- src/ingestion/adapters/xml-adapter.test.ts
+- src/ingestion/adapters/xlsx-workbook.test.ts

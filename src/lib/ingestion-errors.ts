@@ -19,7 +19,22 @@ export type IngestionErrorCode =
   | 'PARTIAL_EXTRACTION'
   | 'INCOMPLETE_TIMES'
   | 'INSUFFICIENT_DATA'
-  | 'PARSER_FAILURE';
+  | 'PARSER_FAILURE'
+  // Multi-format structured ingestion (XLSX multi-sheet / JSON / XML team
+  // import — src/ingestion/adapters/). Row-level diagnostics returned
+  // alongside a detection result, not necessarily thrown.
+  | 'INVALID_JSON'
+  | 'INVALID_XML'
+  | 'INVALID_XLSX'
+  | 'UNKNOWN_STRUCTURED_SCHEMA'
+  | 'SHEET_EMPTY'
+  | 'SHEET_IGNORED'
+  | 'SHEET_SCHEMA_UNKNOWN'
+  | 'AREA_NOT_FOUND'
+  | 'INVALID_DATE'
+  | 'INVALID_TIME'
+  | 'DUPLICATE_RECORD'
+  | 'INCOMPLETE_SHIFT';
 
 export class IngestionError extends Error {
   readonly code: IngestionErrorCode;
