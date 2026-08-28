@@ -83,7 +83,12 @@ export function parseXmlTeamRoster(text: string): XmlTeamRosterResult {
   const doc = parser.parseFromString(text, 'application/xml');
   const parserError = doc.getElementsByTagName('parsererror')[0];
   if (parserError) {
-    throw new IngestionError('INVALID_XML', `XML mal formado: ${parserError.textContent?.trim() ?? 'error de sintaxis'}`);
+    // Both browsers and jsdom prepend a human summary line before a
+    // "rendering of the page" dump of the offending markup — keep only
+    // that summary, the rest is internal parser noise the user can't act on.
+    const raw = (parserError.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const summary = raw.split(/Below is a rendering/i)[0].trim() || 'error de sintaxis';
+    throw new IngestionError('INVALID_XML', `XML mal formado: ${summary}`);
   }
 
   const { elements, areaName: documentAreaName } = findShiftElements(doc);

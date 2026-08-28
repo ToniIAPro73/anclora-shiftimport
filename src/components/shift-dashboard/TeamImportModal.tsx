@@ -615,11 +615,18 @@ export const TeamImportModal = ({
         )}
 
         {step === 'select' && (
-          // No `overflow: hidden` here (UI_MOTION_CONTRACT): the row list
-          // below already scrolls on its own (overflowY: auto), so a clip
-          // boundary here only cut off the hover-elevated buttons on their
-          // right edge — never actually needed for layout.
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          // `flex: 1, minHeight: 0` on this wrapper AND on the row list
+          // below (not just `overflowY: auto` on the list) — a nested flex
+          // column only lets an `overflow: auto` child actually shrink and
+          // scroll when every ancestor between it and the height-capped
+          // `.modal-content` also has `minHeight: 0`; without it the whole
+          // `.modal-content` grows to the list's full content height and
+          // its OWN scrollbar takes over, hiding the header and the
+          // "Continuar" button on a large roster (45+ employees) until the
+          // user scrolls the entire panel. No `overflow: hidden` needed
+          // here beyond that — a clip boundary would only cut off the
+          // hover-elevated buttons on their right edge.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, minHeight: 0 }}>
             <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
               {t('teamImport.rosterSummary', rosterCounts)}
             </p>
@@ -705,7 +712,7 @@ export const TeamImportModal = ({
                 </div>
               </div>
             )}
-            <div style={{ overflowY: 'auto', display: 'grid', gap: '8px', paddingRight: '4px' }}>
+            <div style={{ overflowY: 'auto', display: 'grid', gap: '8px', paddingRight: '4px', flex: 1, minHeight: 0 }}>
               {rows.map((row) => (
                 <div
                   key={row.key}
@@ -817,10 +824,12 @@ export const TeamImportModal = ({
         )}
 
         {step === 'preview' && (
-          // Same clipping fix as the select step — the entries list already
-          // scrolls on its own; this outer `hidden` only clipped hover
-          // elevation on the flush-right "Importar" button.
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          // Same `flex: 1, minHeight: 0` fix as the select step (see its
+          // comment) — otherwise a large batch (45+ employees) grows this
+          // wrapper to full content height and `.modal-content`'s own
+          // scrollbar takes over, hiding the stat cards and the "Importar"
+          // button until the whole panel is scrolled.
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1, minHeight: 0 }}>
             <h4 style={{ margin: 0 }}>{t('teamImport.previewTitle')}</h4>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
               <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
@@ -836,7 +845,7 @@ export const TeamImportModal = ({
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewConflicts')}</div>
               </div>
             </div>
-            <div style={{ overflowY: 'auto', display: 'grid', gap: '6px', paddingRight: '4px' }}>
+            <div style={{ overflowY: 'auto', display: 'grid', gap: '6px', paddingRight: '4px', flex: 1, minHeight: 0 }}>
               {preview.map((entry) => (
                 <div
                   key={entry.row.key}
