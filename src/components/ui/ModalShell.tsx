@@ -20,6 +20,10 @@ interface ModalShellProps {
   /** Blocking dialogs (e.g. mandatory organization choice): hides the X and
    * disables ESC/click-outside. Only use when closing makes no sense. */
   blocking?: boolean;
+  /** A secondary panel/section owns ESC right now (e.g. a bulk-action
+   * drawer) — this modal must not close until that panel handles it and
+   * clears the flag. Unlike `blocking`, the X and click-outside still work. */
+  suppressEscape?: boolean;
 }
 
 export const ModalShell = ({
@@ -31,6 +35,7 @@ export const ModalShell = ({
   maxWidth = '480px',
   closeAriaLabel = 'Close',
   blocking = false,
+  suppressEscape = false,
 }: ModalShellProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -54,7 +59,7 @@ export const ModalShell = ({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (blocking) {
+        if (blocking || suppressEscape) {
           return;
         }
         event.stopPropagation();
@@ -84,7 +89,7 @@ export const ModalShell = ({
       document.removeEventListener('keydown', handleKeyDown, true);
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, onClose, blocking]);
+  }, [isOpen, onClose, blocking, suppressEscape]);
 
   if (!isOpen) {
     return null;

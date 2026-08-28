@@ -317,14 +317,16 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
     await waitFor(() => expect(screen.getByText('Añadir empleado')).toBeTruthy());
   };
 
-  it('renders a text badge Activo/Inactivo per row', async () => {
+  it('renders a text badge per row: Activo only once linked to a User', async () => {
     renderMembersModal([
-      remoteEmployee({ id: 'e1', name: 'Ana Activa', status: 'active' }),
-      remoteEmployee({ id: 'e2', name: 'Bea Inactiva', status: 'inactive' }),
+      remoteEmployee({ id: 'e1', name: 'Ana Activa', status: 'active', userId: 'u1' }),
+      remoteEmployee({ id: 'e2', name: 'Bea Sin Acceso', status: 'active' }),
+      remoteEmployee({ id: 'e3', name: 'Cris Inactiva', status: 'inactive' }),
     ]);
     await openEmployeesTab();
 
     expect(screen.getByText('Activo')).toBeTruthy();
+    expect(screen.getByText('Sin acceso a la app')).toBeTruthy();
     expect(screen.getByText('Inactivo')).toBeTruthy();
   });
 
@@ -477,5 +479,197 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
       areaId: 'area-s',
       status: 'active',
     }));
+  });
+});
+
+describe('MembersModal — bulk access management (Fase 3/4/6/7/8)', () => {
+  const openEmployeesTab = async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    fireEvent.click(screen.getByText('Empleados'));
+    await waitFor(() => expect(screen.getByText('Añadir empleado')).toBeTruthy());
+  };
+
+  const noAccessEmployees = () => [
+    remoteEmployee({ id: 'e1', name: 'Emp Uno', externalEmployeeId: 'X1' }),
+    remoteEmployee({ id: 'e2', name: 'Emp Dos', externalEmployeeId: 'X2' }),
+    remoteEmployee({ id: 'e3', name: 'Emp Tres', externalEmployeeId: 'X3', userId: 'u-linked' }),
+    remoteEmployee({ id: 'e4', name: 'Emp Cuatro', externalEmployeeId: 'X4', status: 'inactive' }),
+  ];
+
+  it('an already-linked or inactive employee has no enabled selection checkbox', async () => {
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    expect((screen.getByLabelText('Seleccionar a Emp Uno para conceder acceso') as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Seleccionar a Emp Tres para conceder acceso') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText('Seleccionar a Emp Cuatro para conceder acceso') as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('individual checkbox selection updates the counter and enables "Conceder acceso"', async () => {
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    const grantButton = screen.getByRole('button', { name: 'Conceder acceso' });
+    expect(grantButton.hasAttribute('disabled')).toBe(true);
+
+    fireEvent.click(screen.getByLabelText('Seleccionar a Emp Uno para conceder acceso'));
+    expect(screen.getByText('1 seleccionados')).toBeTruthy();
+    expect(grantButton.hasAttribute('disabled')).toBe(false);
+
+    fireEvent.click(screen.getByLabelText('Seleccionar a Emp Uno para conceder acceso'));
+    expect(screen.getByText('0 seleccionados')).toBeTruthy();
+    expect(grantButton.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('"Seleccionar todos sin acceso" selects only eligible employees, never linked or inactive ones', async () => {
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seleccionar todos sin acceso' }));
+    expect(screen.getByText('2 seleccionados')).toBeTruthy();
+    expect((screen.getByLabelText('Seleccionar a Emp Uno para conceder acceso') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Seleccionar a Emp Dos para conceder acceso') as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deseleccionar todos' }));
+    expect(screen.getByText('0 seleccionados')).toBeTruthy();
+  });
+
+  it('grant-access panel submits the existing bulk endpoint with the selected rows and their edited emails', async () => {
+    mockedBulkAddRemoteMembers.mockResolvedValue({
+      results: [
+        { row: 1, key: 'e1', email: 'uno@example.com', status: 'created_and_linked', userId: 'u1', employeeId: 'e1', temporaryPassword: 'temp-1' },
+        { row: 2, key: 'e2', email: 'dos@example.com', status: 'linked', userId: 'u2', employeeId: 'e2' },
+      ],
+      summary: { created: 1, linked: 2, existing: 0, failed: 0 },
+    });
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seleccionar todos sin acceso' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Conceder acceso' }));
+
+    await waitFor(() => expect(screen.getByText('Conceder acceso en bloque')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Email de Emp Uno'), { target: { value: 'uno@example.com' } });
+    fireEvent.change(screen.getByLabelText('Email de Emp Dos'), { target: { value: 'dos@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y conceder acceso' }));
+
+    await waitFor(() => expect(mockedBulkAddRemoteMembers).toHaveBeenCalledWith([
+      { key: 'e1', email: 'uno@example.com', name: 'Emp Uno', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+      { key: 'e2', email: 'dos@example.com', name: 'Emp Dos', role: 'EMPLOYEE', externalEmployeeId: 'X2' },
+    ]));
+    // Both rows succeeded — the panel empties out, no rows left to correct.
+    await waitFor(() => expect(screen.getByText('Todos los empleados seleccionados ya tienen acceso.')).toBeTruthy());
+  });
+
+  it('partial success keeps only the failed row in the panel and never auto-closes it', async () => {
+    mockedBulkAddRemoteMembers.mockResolvedValue({
+      results: [
+        { row: 1, key: 'e1', email: 'uno@example.com', status: 'created_and_linked', userId: 'u1', employeeId: 'e1' },
+        { row: 2, key: 'e2', email: 'no-un-email', status: 'error', code: 'INVALID_EMAIL', error: 'Invalid email' },
+      ],
+      summary: { created: 1, linked: 1, existing: 0, failed: 1 },
+    });
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seleccionar todos sin acceso' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Conceder acceso' }));
+    await waitFor(() => expect(screen.getByText('Conceder acceso en bloque')).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText('Email de Emp Uno'), { target: { value: 'uno@example.com' } });
+    fireEvent.change(screen.getByLabelText('Email de Emp Dos'), { target: { value: 'no-un-email' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y conceder acceso' }));
+
+    await waitFor(() => expect(screen.getByText('Email inválido')).toBeTruthy());
+    // The successful row is gone from the panel; the panel itself is still open.
+    expect(screen.queryByLabelText('Email de Emp Uno')).toBeNull();
+    expect(screen.getByLabelText('Email de Emp Dos')).toBeTruthy();
+    expect(screen.getByText('Conceder acceso en bloque')).toBeTruthy();
+  });
+
+  it('a row can be removed from the panel before confirming, without submitting it', async () => {
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seleccionar todos sin acceso' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Conceder acceso' }));
+    await waitFor(() => expect(screen.getByText('Conceder acceso en bloque')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Quitar a Emp Dos de la selección'));
+    expect(screen.queryByLabelText('Email de Emp Dos')).toBeNull();
+    expect(screen.getByLabelText('Email de Emp Uno')).toBeTruthy();
+  });
+
+  it('ESC closes the bulk-grant panel without closing the whole modal', async () => {
+    const onClose = vi.fn();
+    mockedListRemoteMembers.mockResolvedValue([]);
+    render(
+      <I18nProvider>
+        <MembersModal isOpen onClose={onClose} employees={noAccessEmployees()} currentUserId="user-admin" onChanged={() => {}} />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByText('Empleados'));
+    await waitFor(() => expect(screen.getByText('Añadir empleado')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Seleccionar a Emp Uno para conceder acceso'));
+    fireEvent.click(screen.getByRole('button', { name: 'Conceder acceso' }));
+    await waitFor(() => expect(screen.getByText('Conceder acceso en bloque')).toBeTruthy());
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByText('Conceder acceso en bloque')).toBeNull());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('an individual action (deactivate) does not reset the employees list scroll position', async () => {
+    mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e1', status: 'inactive' }));
+    const employees = Array.from({ length: 30 }, (_, i) => remoteEmployee({ id: `e${i}`, name: `Persona ${i}`, externalEmployeeId: `X${i}` }));
+    const { container } = renderMembersModal(employees);
+    await openEmployeesTab();
+
+    const scrollContainer = screen.getByLabelText('Seleccionar a Persona 0 para conceder acceso').closest('[style*="overflow-y: auto"]') as HTMLDivElement;
+    expect(scrollContainer).toBeTruthy();
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 420, writable: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Acciones de Persona 5' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+
+    await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalled());
+    expect(scrollContainer.scrollTop).toBe(420);
+    void container;
+  });
+
+  it('a bulk grant does not reset the employees list scroll position', async () => {
+    mockedBulkAddRemoteMembers.mockResolvedValue({
+      results: [{ row: 1, key: 'e0', email: 'p0@example.com', status: 'linked', userId: 'u0', employeeId: 'e0' }],
+      summary: { created: 0, linked: 1, existing: 0, failed: 0 },
+    });
+    const employees = Array.from({ length: 30 }, (_, i) => remoteEmployee({ id: `e${i}`, name: `Persona ${i}`, externalEmployeeId: `X${i}` }));
+    renderMembersModal(employees);
+    await openEmployeesTab();
+
+    const scrollContainer = screen.getByLabelText('Seleccionar a Persona 0 para conceder acceso').closest('[style*="overflow-y: auto"]') as HTMLDivElement;
+    Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
+
+    fireEvent.click(screen.getByLabelText('Seleccionar a Persona 0 para conceder acceso'));
+    fireEvent.click(screen.getByRole('button', { name: 'Conceder acceso' }));
+    await waitFor(() => expect(screen.getByText('Conceder acceso en bloque')).toBeTruthy());
+    fireEvent.change(screen.getByLabelText('Email de Persona 0'), { target: { value: 'p0@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y conceder acceso' }));
+
+    await waitFor(() => expect(mockedBulkAddRemoteMembers).toHaveBeenCalled());
+    expect(scrollContainer.scrollTop).toBe(300);
+  });
+
+  it('the filter narrows the visible list while keeping selection state coherent', async () => {
+    renderMembersModal(noAccessEmployees());
+    await openEmployeesTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seleccionar todos sin acceso' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Con acceso' }));
+
+    expect(screen.getByText('Emp Tres')).toBeTruthy();
+    expect(screen.queryByText('Emp Uno')).toBeNull();
+    // Selection made while filtered to "sin acceso" survives switching filters.
+    expect(screen.getByText('2 seleccionados')).toBeTruthy();
   });
 });

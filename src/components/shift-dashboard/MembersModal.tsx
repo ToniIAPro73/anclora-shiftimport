@@ -1,9 +1,10 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import {
   addRemoteMember,
   bulkAddRemoteMembers,
   BulkMemberResult,
+  BulkMemberStatus,
   createRemoteEmployee,
   deleteRemoteEmployee,
   linkEmployeeUser,
@@ -66,6 +67,22 @@ interface UserPreviewRow {
 }
 
 const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** One row of the bulk "Conceder acceso" panel (Fase 4) — always keyed by
+ * employeeId, never by row index, since rows can be removed independently. */
+interface BulkGrantRow {
+  employeeId: string;
+  email: string;
+  role: RemoteMember['role'];
+}
+
+const bulkStatusLabelKey: Record<Exclude<BulkMemberStatus, 'error'>, string> = {
+  created_and_linked: 'members.bulkStatusCreatedLinked',
+  created: 'members.bulkStatusCreated',
+  linked: 'members.bulkStatusLinked',
+  existing: 'members.bulkStatusExisting',
+  already_linked: 'members.bulkStatusAlreadyLinked',
+};
 
 const userPreviewStatusKey: Record<UserPreviewStatus, string> = {
   new_and_link: 'members.previewStatusNewAndLink',
@@ -208,6 +225,38 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const [employeesResult, setEmployeesResult] = useState<{ created: number; updated: number; failed: number } | null>(null);
   const [employeesCsvError, setEmployeesCsvError] = useState('');
 
+  // Employees-tab filter + multi-select "grant access in bulk" (Fase 3/4).
+  const [employeeFilter, setEmployeeFilter] = useState<'all' | 'with' | 'without'>('all');
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<Set<string>>(new Set());
+  const [bulkGrantOpen, setBulkGrantOpen] = useState(false);
+  const [bulkGrantRows, setBulkGrantRows] = useState<BulkGrantRow[]>([]);
+  const [bulkGrantSubmitting, setBulkGrantSubmitting] = useState(false);
+  const [bulkGrantResults, setBulkGrantResults] = useState<Record<string, BulkMemberResult> | null>(null);
+  const bulkGrantPanelRef = useRef<HTMLDivElement>(null);
+
+  // Scroll preservation (Fase 7/8): the employees/users lists are their own
+  // scroll containers (not the whole modal). Any action re-fetches members
+  // and/or employees, which re-renders these lists in place (same DOM nodes,
+  // keyed by id — never remounted) but a fresh array reference still nudges
+  // layout enough to lose scrollTop, so we snapshot it right before the
+  // action and restore it synchronously (useLayoutEffect, before paint) once
+  // the resulting re-render commits. No setTimeout, no scrollIntoView guess.
+  const pendingScrollRestoreRef = useRef<{ el: HTMLDivElement; top: number } | null>(null);
+  const captureScroll = (el: HTMLDivElement | null) => {
+    if (el) {
+      pendingScrollRestoreRef.current = { el, top: el.scrollTop };
+    }
+  };
+  useLayoutEffect(() => {
+    const pending = pendingScrollRestoreRef.current;
+    if (pending) {
+      pending.el.scrollTop = pending.top;
+      pendingScrollRestoreRef.current = null;
+    }
+  });
+  const employeesListRef = useRef<HTMLDivElement>(null);
+  const membersListRef = useRef<HTMLDivElement>(null);
+
   const reload = useCallback(async () => {
     try {
       setMembers(await listRemoteMembers());
@@ -231,6 +280,10 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setOpenMenuId(null);
       setEditingEmployeeId(null);
       setLinkingEmployeeId(null);
+      setSelectedEmployeeIds(new Set());
+      setBulkGrantOpen(false);
+      setBulkGrantRows([]);
+      setBulkGrantResults(null);
     }
   }, [isOpen, reload]);
 
@@ -257,7 +310,8 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
     };
   }, [openMenuId]);
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (action: () => Promise<unknown>, scrollEl: HTMLDivElement | null = null) => {
+    captureScroll(scrollEl);
     setBusy(true);
     setError('');
     try {
@@ -334,7 +388,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
         status: employee.status,
       });
       setEditingEmployeeId(null);
-    });
+    }, employeesListRef.current);
   };
 
   const handleDeactivateEmployee = (employee: RemoteEmployee) => {
@@ -344,12 +398,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
     }
     // On 400 LAST_ADMIN (and any other rejection) run() surfaces the server
     // message in the modal's error area.
-    void run(() => updateRemoteEmployee({ id: employee.id, status: 'inactive' }));
+    void run(() => updateRemoteEmployee({ id: employee.id, status: 'inactive' }), employeesListRef.current);
   };
 
   const handleReactivateEmployee = (employee: RemoteEmployee) => {
     setOpenMenuId(null);
-    void run(() => updateRemoteEmployee({ id: employee.id, status: 'active' }));
+    void run(() => updateRemoteEmployee({ id: employee.id, status: 'active' }), employeesListRef.current);
   };
 
   const startLinkEmployee = (employee: RemoteEmployee) => {
@@ -367,7 +421,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
     void run(async () => {
       await linkEmployeeUser(employee.id, linkingUserId);
       setLinkingEmployeeId(null);
-    });
+    }, employeesListRef.current);
   };
 
   const handleDeleteEmployee = async (employee: RemoteEmployee) => {
@@ -375,6 +429,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
     if (!window.confirm(t('members.deleteConfirm', { name: employee.name }))) {
       return;
     }
+    captureScroll(employeesListRef.current);
     setBusy(true);
     setError('');
     try {
@@ -387,6 +442,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
         setError(err.message);
         if (window.confirm(t('members.hasHistoryDeactivateOffer'))) {
           try {
+            captureScroll(employeesListRef.current);
             await updateRemoteEmployee({ id: employee.id, status: 'inactive' });
             setError('');
             await reload();
@@ -417,6 +473,185 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const unlinkedEmployees = employees.filter(
     (employee) => (employee.status === 'active' || employee.status === 'pending_access') && !employee.userId,
   );
+
+  // Every non-inactive employee with no linked User — eligible for the
+  // "grant access" bulk flow (Fase 3). Already-linked and inactive employees
+  // are never selectable for it.
+  const isGrantEligible = (employee: RemoteEmployee) => unlinkedEmployees.some((candidate) => candidate.id === employee.id);
+
+  const visibleEmployees = employees.filter((employee) => {
+    if (employeeFilter === 'with') {
+      return !!employee.userId;
+    }
+    if (employeeFilter === 'without') {
+      return isGrantEligible(employee);
+    }
+    return true;
+  });
+
+  // Selection never outlives its own eligibility (Fase 3): an employee that
+  // gets linked or deactivated out from under a pending selection drops out
+  // automatically instead of silently staying selected.
+  useEffect(() => {
+    setSelectedEmployeeIds((current) => {
+      if (current.size === 0) {
+        return current;
+      }
+      const next = new Set<string>();
+      let changed = false;
+      current.forEach((id) => {
+        const employee = employees.find((candidate) => candidate.id === id);
+        if (employee && isGrantEligible(employee)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+    // isGrantEligible is derived fresh from `employees` every render — depending on it
+    // directly would just re-describe the same `employees` dependency already listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees]);
+
+  const toggleEmployeeSelected = (employeeId: string) => {
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      if (next.has(employeeId)) {
+        next.delete(employeeId);
+      } else {
+        next.add(employeeId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllWithoutAccess = () => {
+    setSelectedEmployeeIds(new Set(visibleEmployees.filter(isGrantEligible).map((employee) => employee.id)));
+  };
+
+  const clearEmployeeSelection = () => setSelectedEmployeeIds(new Set());
+
+  const openBulkGrant = () => {
+    const rows: BulkGrantRow[] = employees
+      .filter((employee) => selectedEmployeeIds.has(employee.id))
+      .map((employee) => ({ employeeId: employee.id, email: '', role: 'EMPLOYEE' as RemoteMember['role'] }));
+    setBulkGrantRows(rows);
+    setBulkGrantResults(null);
+    setBulkGrantOpen(true);
+  };
+
+  const closeBulkGrant = () => {
+    setBulkGrantOpen(false);
+    setBulkGrantRows([]);
+    setBulkGrantResults(null);
+  };
+
+  const updateBulkGrantRow = (employeeId: string, patch: Partial<BulkGrantRow>) => {
+    setBulkGrantRows((current) => current.map((row) => (row.employeeId === employeeId ? { ...row, ...patch } : row)));
+  };
+
+  const removeBulkGrantRow = (employeeId: string) => {
+    setBulkGrantRows((current) => current.filter((row) => row.employeeId !== employeeId));
+    setSelectedEmployeeIds((current) => {
+      const next = new Set(current);
+      next.delete(employeeId);
+      return next;
+    });
+  };
+
+  // ESC inside the bulk panel closes only the panel (ModalShell's own ESC is
+  // suppressed via `suppressEscape` while this is open — see MembersModal's
+  // ModalShell usage below).
+  useEffect(() => {
+    if (!bulkGrantOpen) {
+      return;
+    }
+    const firstInput = bulkGrantPanelRef.current?.querySelector<HTMLElement>('input, select, button');
+    firstInput?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeBulkGrant();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [bulkGrantOpen]);
+
+  const bulkGrantEmailSeen = (() => {
+    const counts = new Map<string, number>();
+    bulkGrantRows.forEach((row) => {
+      const key = row.email.trim().toLowerCase();
+      if (key) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    });
+    return counts;
+  })();
+
+  const bulkGrantRowIssue = (row: BulkGrantRow): string | null => {
+    const email = row.email.trim();
+    if (!email) {
+      return t('members.bulkGrantEmptyEmail');
+    }
+    if (!EMAIL_FORMAT_RE.test(email)) {
+      return t('members.bulkGrantInvalidEmail');
+    }
+    if ((bulkGrantEmailSeen.get(email.toLowerCase()) ?? 0) > 1) {
+      return t('members.bulkGrantDuplicateEmail');
+    }
+    return null;
+  };
+
+  /** Confirms the bulk grant panel by reusing the existing bulk provisioning
+   * backend (POST /api/memberships/bulk via bulkAddRemoteMembers) — same
+   * contract as the Users CSV import, no parallel endpoint. The server stays
+   * the authority on every row; rows that fail stay in the panel (never
+   * auto-closed) so the ADMIN can fix and resubmit just those. */
+  const handleBulkGrantConfirm = async () => {
+    if (bulkGrantRows.length === 0) {
+      return;
+    }
+    captureScroll(employeesListRef.current);
+    setBulkGrantSubmitting(true);
+    try {
+      const items = bulkGrantRows.map((row) => {
+        const employee = employees.find((candidate) => candidate.id === row.employeeId);
+        return {
+          key: row.employeeId,
+          email: row.email.trim(),
+          name: employee?.name,
+          role: row.role,
+          externalEmployeeId: employee?.externalEmployeeId ?? undefined,
+        };
+      });
+      const { results } = await bulkAddRemoteMembers(items);
+      const resultsByEmployeeId: Record<string, BulkMemberResult> = {};
+      results.forEach((result) => {
+        resultsByEmployeeId[result.key] = result;
+      });
+      setBulkGrantResults((current) => ({ ...current, ...resultsByEmployeeId }));
+
+      const succeededIds = new Set(results.filter((result) => result.status !== 'error').map((result) => result.key));
+      setBulkGrantRows((current) => current.filter((row) => !succeededIds.has(row.employeeId)));
+      setSelectedEmployeeIds((current) => {
+        const next = new Set(current);
+        succeededIds.forEach((id) => next.delete(id));
+        return next;
+      });
+
+      await reload();
+      onChanged();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'PLAN_LIMIT') {
+        setShowUpgrade(true);
+      } else {
+        setError(err instanceof Error ? err.message : t('members.actionFailed'));
+      }
+    } finally {
+      setBulkGrantSubmitting(false);
+    }
+  };
 
   // Members eligible for linking: not linked to any active employee (the
   // server's USER_ALREADY_LINKED guard stays authoritative either way).
@@ -567,7 +802,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
   return (
     <>
-    <ModalShell isOpen={isOpen} onClose={onClose} title={t('members.title')} maxWidth="620px">
+    <ModalShell isOpen={isOpen} onClose={onClose} title={t('members.title')} maxWidth="620px" suppressEscape={bulkGrantOpen}>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', borderBottom: '1px solid var(--glass-border)' }}>
         {(['users', 'employees'] as Tab[]).map((option) => (
           <button
@@ -592,7 +827,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
       {tab === 'users' && (
         <>
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
+          <div ref={membersListRef} style={{ display: 'grid', gap: '8px', marginBottom: '12px', maxHeight: '360px', overflowY: 'auto' }}>
             {members.map((member) => (
               <div
                 key={member.userId}
@@ -609,7 +844,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                 <SearchableSelect
                   label=""
                   value={member.role}
-                  onChange={(role) => void run(() => updateRemoteMemberRole(member.userId, role as RemoteMember['role']))}
+                  onChange={(role) => void run(() => updateRemoteMemberRole(member.userId, role as RemoteMember['role']), membersListRef.current)}
                   searchPlaceholder={t('members.searchPlaceholder')}
                   emptyMessage={t('members.noRoles')}
                   ariaLabel={t('members.roleLabel')}
@@ -622,7 +857,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                     type="button"
                     className="btn-outline"
                     disabled={busy}
-                    onClick={() => void run(() => removeRemoteMember(member.userId))}
+                    onClick={() => void run(() => removeRemoteMember(member.userId), membersListRef.current)}
                     style={{ padding: '6px 10px', fontWeight: 700, borderColor: 'var(--danger)', color: 'var(--danger)' }}
                   >
                     {t('members.remove')}
@@ -817,8 +1052,52 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
       {tab === 'employees' && (
         <>
-          <div style={{ display: 'grid', gap: '8px', marginBottom: '12px' }}>
-            {employees.map((employee) => (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+            {(['all', 'without', 'with'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={employeeFilter === option ? 'btn-gold' : 'btn-outline'}
+                onClick={() => setEmployeeFilter(option)}
+                style={{ padding: '6px 10px', fontSize: '0.78rem', fontWeight: 700 }}
+                aria-pressed={employeeFilter === option}
+              >
+                {t(option === 'all' ? 'members.filterAll' : option === 'without' ? 'members.filterWithoutAccess' : 'members.filterWithAccess')}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '10px', padding: '8px 10px', borderRadius: '10px', background: 'var(--panel-muted-bg)' }}>
+            <button
+              type="button"
+              className="btn-outline"
+              disabled={visibleEmployees.filter(isGrantEligible).length === 0}
+              onClick={selectAllWithoutAccess}
+              style={{ padding: '6px 10px', fontSize: '0.78rem', fontWeight: 700 }}
+            >
+              {t('members.selectAllWithoutAccess')}
+            </button>
+            {selectedEmployeeIds.size > 0 && (
+              <button type="button" className="btn-outline" onClick={clearEmployeeSelection} style={{ padding: '6px 10px', fontSize: '0.78rem', fontWeight: 700 }}>
+                {t('members.clearSelection')}
+              </button>
+            )}
+            <span role="status" style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-subtle)' }}>
+              {t('members.selectedCount', { count: selectedEmployeeIds.size })}
+            </span>
+            <button
+              type="button"
+              className="btn-gold"
+              disabled={selectedEmployeeIds.size === 0 || busy}
+              onClick={openBulkGrant}
+              style={{ padding: '8px 14px', fontWeight: 800, marginLeft: 'auto' }}
+            >
+              {t('members.grantAccessAction')}
+            </button>
+          </div>
+
+          <div ref={employeesListRef} style={{ display: 'grid', gap: '8px', marginBottom: '12px', maxHeight: '360px', overflowY: 'auto' }}>
+            {visibleEmployees.map((employee) => (
               <div
                 key={employee.id}
                 style={{
@@ -827,6 +1106,14 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   padding: '10px 12px', background: 'var(--panel-muted-bg)', fontSize: '0.85rem',
                 }}
               >
+                <input
+                  type="checkbox"
+                  checked={selectedEmployeeIds.has(employee.id)}
+                  disabled={!isGrantEligible(employee)}
+                  onChange={() => toggleEmployeeSelected(employee.id)}
+                  aria-label={t('members.selectEmployeeAria', { name: employee.name })}
+                  style={{ width: '16px', height: '16px', flexShrink: 0 }}
+                />
                 {linkingEmployeeId === employee.id ? (
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', flex: 1 }}>
                     <SearchableSelect
@@ -913,11 +1200,15 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                         {areaLabel(employee.areaId)}
                       </span>
                     )}
-                    <span className={`status-badge ${employee.status === 'active' ? 'status-badge--active' : employee.status === 'pending_access' ? 'status-badge--pending' : 'status-badge--inactive'}`}>
-                      {t(employee.status === 'active' ? 'members.statusActive' : employee.status === 'pending_access' ? 'members.statusPendingAccess' : 'members.statusInactive')}
+                    {/* Three states only (Fase 10): Activo con acceso / Sin acceso a la app / Inactivo.
+                        "Sin acceso" never implies the Employee itself is missing anything — the
+                        title makes explicit that the record exists, only the User link doesn't. */}
+                    <span
+                      className={`status-badge ${employee.status === 'inactive' ? 'status-badge--inactive' : employee.userId ? 'status-badge--active' : 'status-badge--pending'}`}
+                      title={employee.status !== 'inactive' && !employee.userId ? t('members.pendingAccess') : undefined}
+                    >
+                      {t(employee.status === 'inactive' ? 'members.statusInactive' : employee.userId ? 'members.statusActive' : 'members.statusPendingAccess')}
                     </span>
-                    {!employee.userId && employee.status === 'pending_access' && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.pendingAccess')}</span>}
-                    {!employee.userId && employee.status === 'active' && <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>{t('members.noLink')}</span>}
                     {employee.userId && members.some((member) => member.userId === employee.userId) && (
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
                         {members.find((member) => member.userId === employee.userId)?.email}
@@ -965,6 +1256,94 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
               </div>
             ))}
           </div>
+
+          {bulkGrantOpen && (
+            <div
+              ref={bulkGrantPanelRef}
+              role="region"
+              aria-label={t('members.bulkGrantPanelAria')}
+              style={{
+                display: 'grid', gap: '10px', marginBottom: '16px', padding: '12px',
+                borderRadius: '12px', border: '1px solid var(--color-accent)', background: 'var(--panel-muted-bg)',
+              }}
+            >
+              <strong style={{ fontSize: '0.9rem' }}>{t('members.bulkGrantTitle')}</strong>
+              <div style={{ maxHeight: '280px', overflowY: 'auto', display: 'grid', gap: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr 0.9fr 1.4fr 0.9fr 1.3fr 0.5fr', gap: '8px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-subtle)', padding: '2px 0' }}>
+                  <span>{t('members.previewColumnEmployee')}</span>
+                  <span>{t('members.bulkGrantColumnExternalId')}</span>
+                  <span>{t('members.previewColumnArea')}</span>
+                  <span>{t('members.previewColumnEmail')}</span>
+                  <span>{t('members.previewColumnRole')}</span>
+                  <span>{t('members.previewColumnStatus')}</span>
+                  <span />
+                </div>
+                {bulkGrantRows.map((row) => {
+                  const employee = employees.find((candidate) => candidate.id === row.employeeId);
+                  const result = bulkGrantResults?.[row.employeeId];
+                  const issue = bulkGrantRowIssue(row);
+                  return (
+                    <div key={row.employeeId} style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr 0.9fr 1.4fr 0.9fr 1.3fr 0.5fr', gap: '8px', alignItems: 'center', fontSize: '0.8rem', padding: '4px 0', borderTop: '1px solid var(--glass-border)' }}>
+                      <span>{employee?.name ?? '—'}</span>
+                      <span style={{ color: 'var(--text-subtle)' }}>{employee?.externalEmployeeId ?? '—'}</span>
+                      <span style={{ color: 'var(--text-subtle)' }}>{areaLabel(employee?.areaId)}</span>
+                      <input
+                        className="modal-input"
+                        type="email"
+                        value={row.email}
+                        onChange={(event) => updateBulkGrantRow(row.employeeId, { email: event.target.value })}
+                        placeholder={t('members.emailPlaceholder')}
+                        aria-label={t('members.bulkGrantEmailAria', { name: employee?.name ?? '' })}
+                        style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                      />
+                      <select
+                        className="modal-input"
+                        value={row.role}
+                        onChange={(event) => updateBulkGrantRow(row.employeeId, { role: event.target.value as RemoteMember['role'] })}
+                        aria-label={t('members.bulkGrantRoleAria', { name: employee?.name ?? '' })}
+                        style={{ padding: '6px 8px', fontSize: '0.8rem' }}
+                      >
+                        {ROLES.map((roleOption) => (
+                          <option key={roleOption} value={roleOption}>{t(`role.${roleOption.toLowerCase()}`)}</option>
+                        ))}
+                      </select>
+                      <span style={{ color: result ? (result.status === 'error' ? 'var(--danger)' : 'var(--color-gold)') : issue ? 'var(--danger)' : 'var(--text-subtle)' }}>
+                        {result
+                          ? (result.status === 'error' ? t(bulkResultCodeKey[result.code ?? ''] ?? 'members.actionFailed') : t(bulkStatusLabelKey[result.status]))
+                          : (issue ?? '—')}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        onClick={() => removeBulkGrantRow(row.employeeId)}
+                        aria-label={t('members.bulkGrantRemoveRowAria', { name: employee?.name ?? '' })}
+                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      >
+                        {t('members.remove')}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {bulkGrantRows.length === 0 && (
+                <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-subtle)' }}>{t('members.bulkGrantAllDone')}</p>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" className="btn-outline" disabled={bulkGrantSubmitting} onClick={closeBulkGrant} style={{ padding: '8px 14px', fontWeight: 700 }}>
+                  {t('members.csvClose')}
+                </button>
+                <button
+                  type="button"
+                  className="btn-gold"
+                  disabled={bulkGrantSubmitting || bulkGrantRows.length === 0}
+                  onClick={() => void handleBulkGrantConfirm()}
+                  style={{ padding: '8px 14px', fontWeight: 800 }}
+                >
+                  {bulkGrantSubmitting ? t('members.bulkGrantSubmitting') : t('members.bulkGrantConfirmAction')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {error && <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
 
