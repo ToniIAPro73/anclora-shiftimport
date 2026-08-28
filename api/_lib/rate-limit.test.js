@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateFailedAttempt, isCurrentlyBlocked, getClientIp } from './rate-limit.js';
+import {
+  evaluateFailedAttempt, isCurrentlyBlocked, getClientIp, isKeyBlocked, recordKeyAttempt,
+} from './rate-limit.js';
 
 const CONFIG = { windowMs: 5 * 60 * 1000, maxAttempts: 3 };
 const T0 = Date.parse('2026-01-01T00:00:00Z');
@@ -67,5 +69,51 @@ describe('getClientIp', () => {
   it('falls back to the socket address, then unknown', () => {
     expect(getClientIp({ headers: {}, socket: { remoteAddress: '198.51.100.4' } })).toBe('198.51.100.4');
     expect(getClientIp({ headers: {} })).toBe('unknown');
+  });
+});
+
+describe('generic key limiter (isKeyBlocked / recordKeyAttempt)', () => {
+  const LIMIT = { windowMinutes: 60, maxAttempts: 3 };
+
+  function makeFakeSql() {
+    const rows = new Map();
+    const sql = (strings, ...values) => {
+      const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
+      if (text.includes('FROM login_attempts')) {
+        const row = rows.get(values[0]);
+        return Promise.resolve(row ? [row] : []);
+      }
+      if (text.startsWith('INSERT INTO login_attempts')) {
+        rows.set(values[0], { window_start: values[1], attempt_count: values[2] });
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    };
+    return { sql, rows };
+  }
+
+  it('is not blocked for an unknown key', async () => {
+    const { sql } = makeFakeSql();
+    expect(await isKeyBlocked(sql, 'vlm:org:a', LIMIT)).toBe(false);
+  });
+
+  it('counts attempts and blocks at the threshold', async () => {
+    const { sql } = makeFakeSql();
+    expect(await recordKeyAttempt(sql, 'vlm:org:a', LIMIT)).toBe(true);
+    expect(await recordKeyAttempt(sql, 'vlm:org:a', LIMIT)).toBe(true);
+    expect(await isKeyBlocked(sql, 'vlm:org:a', LIMIT)).toBe(false);
+    expect(await recordKeyAttempt(sql, 'vlm:org:a', LIMIT)).toBe(true);
+    expect(await isKeyBlocked(sql, 'vlm:org:a', LIMIT)).toBe(true);
+    // already-limited keys are not written again (no unbounded growth)
+    expect(await recordKeyAttempt(sql, 'vlm:org:a', LIMIT)).toBe(false);
+  });
+
+  it('keeps independent keys isolated', async () => {
+    const { sql } = makeFakeSql();
+    for (let i = 0; i < 3; i += 1) {
+      await recordKeyAttempt(sql, 'vlm:org:a', LIMIT);
+    }
+    expect(await isKeyBlocked(sql, 'vlm:org:a', LIMIT)).toBe(true);
+    expect(await isKeyBlocked(sql, 'vlm:org:b', LIMIT)).toBe(false);
   });
 });
