@@ -445,6 +445,8 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
     renderMembersModal([], () => {}, [remoteArea(), remoteArea({ id: 'area-s', name: 'Sur', code: null })]);
     await openEmployeesTab();
 
+    // The add-employee form lives behind the toolbar toggle in the workspace layout.
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir empleado' }));
     fireEvent.change(screen.getByPlaceholderText('Nombre del empleado'), { target: { value: 'Ana Nueva' } });
     fireEvent.click(screen.getAllByRole('button', { name: 'Área' })[0]);
     fireEvent.click(screen.getByRole('option', { name: 'Sur' }));
