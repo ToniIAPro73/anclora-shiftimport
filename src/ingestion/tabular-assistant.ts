@@ -146,12 +146,15 @@ export function normalizeTableHeader(value: string): string {
  */
 export const ROSTER_HEADER_ALIASES: Record<string, string[]> = {
   date: ['fecha', 'dia', 'fecha turno', 'fecha del turno', 'fecha de trabajo', 'date', 'day'],
-  start: ['inicio', 'hora inicio', 'entrada', 'desde', 'start', 'start time', 'hora_inicio'],
-  end: ['fin', 'hora fin', 'salida', 'hasta', 'end', 'end time', 'hora_fin'],
-  type: ['tipo', 'turno', 'tipo turno', 'tipo de turno', 'shift type', 'type'],
-  employee: ['empleado', 'nombre', 'nombre empleado', 'trabajador', 'employee', 'employee name'],
-  employeeId: ['id', 'legajo', 'identificador', 'employee id', 'worker id', 'member id', 'external employee id', 'external id'],
+  start: ['inicio', 'hora inicio', 'entrada', 'desde', 'start', 'start time', 'starttime', 'hora_inicio'],
+  end: ['fin', 'hora fin', 'salida', 'hasta', 'end', 'end time', 'endtime', 'hora_fin'],
+  type: ['tipo', 'turno', 'tipo turno', 'tipo de turno', 'shift type', 'shifttype', 'type'],
+  employee: ['empleado', 'nombre', 'nombre empleado', 'trabajador', 'employee', 'employee name', 'employeename'],
+  employeeId: ['id', 'legajo', 'identificador', 'employee id', 'employeeid', 'worker id', 'member id', 'external employee id', 'externalemployeeid', 'external id'],
   value: ['value', 'registro', 'detalle', 'turnos', 'slots', 'allotment'],
+  area: ['area', 'área', 'departamento', 'department', 'sección', 'seccion', 'areaname'],
+  areaCode: ['area code', 'areacode', 'codigo area', 'código área'],
+  notes: ['notes', 'notas', 'observaciones', 'comentarios', 'comment', 'comments'],
 };
 
 export type RosterHeaderField = keyof typeof ROSTER_HEADER_ALIASES;
