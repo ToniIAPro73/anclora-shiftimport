@@ -42,6 +42,9 @@ const T_KEYS = [
   'diagnosis.employee.unknownMessage', 'diagnosis.employee.ambiguousMessage',
   'diagnosis.unsupportedLayout.message', 'diagnosis.confirmBlocked', 'diagnosis.nothingImported',
   'diagnosis.error.PARSER_FAILURE', 'diagnosis.error.MALFORMED_INPUT', 'diagnosis.error.EMPTY_DOCUMENT',
+  'diagnosis.vlm.VLM_UNAVAILABLE', 'diagnosis.vlm.VLM_TIMEOUT', 'diagnosis.vlm.VLM_RATE_LIMITED',
+  'diagnosis.vlm.VLM_INVALID_RESPONSE', 'diagnosis.vlm.VLM_PROVIDER_ERROR', 'diagnosis.vlm.VLM_FILE_TOO_LARGE',
+  'importModal.vlmAnalyzing', 'importModal.visualAnalysisBadge',
   'assistant.vacationOption', 'assistant.otherOption', 'assistant.otherTypeLabel', 'assistant.timesRequired',
 ];
 

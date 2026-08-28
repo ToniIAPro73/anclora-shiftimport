@@ -34,7 +34,38 @@ export type IngestionErrorCode =
   | 'INVALID_DATE'
   | 'INVALID_TIME'
   | 'DUPLICATE_RECORD'
-  | 'INCOMPLETE_SHIFT';
+  | 'INCOMPLETE_SHIFT'
+  // Server-side VLM fallback (POST /api/ingestion/vlm). Emitted as
+  // non-blocking diagnostics on top of the deterministic result — never
+  // thrown as IngestionError.
+  | 'VLM_UNAVAILABLE'
+  | 'VLM_TIMEOUT'
+  | 'VLM_RATE_LIMITED'
+  | 'VLM_INVALID_RESPONSE'
+  | 'VLM_PROVIDER_ERROR'
+  | 'VLM_FILE_TOO_LARGE';
+
+/** Codes the VLM fallback can surface (client-side pre-validation included). */
+export type VlmErrorCode =
+  | 'VLM_UNAVAILABLE'
+  | 'VLM_TIMEOUT'
+  | 'VLM_RATE_LIMITED'
+  | 'VLM_INVALID_RESPONSE'
+  | 'VLM_PROVIDER_ERROR'
+  | 'VLM_FILE_TOO_LARGE';
+
+export const VLM_ERROR_CODES: readonly VlmErrorCode[] = [
+  'VLM_UNAVAILABLE',
+  'VLM_TIMEOUT',
+  'VLM_RATE_LIMITED',
+  'VLM_INVALID_RESPONSE',
+  'VLM_PROVIDER_ERROR',
+  'VLM_FILE_TOO_LARGE',
+];
+
+export function isVlmErrorCode(value: unknown): value is VlmErrorCode {
+  return typeof value === 'string' && (VLM_ERROR_CODES as readonly string[]).includes(value);
+}
 
 export class IngestionError extends Error {
   readonly code: IngestionErrorCode;

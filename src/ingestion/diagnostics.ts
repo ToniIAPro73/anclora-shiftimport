@@ -212,6 +212,23 @@ export function buildImportDiagnosis(
   const expectedDays = partial?.expected ?? itemAnalysis?.structure.dayHeaderCount ?? 0;
   const mappedDays = partial?.mapped ?? new Set(shifts.map((shift) => shift.date)).size;
 
+  // VLM fallback failure: non-blocking, informational. The deterministic
+  // diagnostics below are preserved — this only explains that the extra
+  // visual analysis was attempted and failed (retry = Process again).
+  // Pushed first so it survives every early return below.
+  if (result.vlmError) {
+    diagnostics.push({
+      code: result.vlmError.code,
+      severity: 'warning',
+      blocking: false,
+      recoverable: true,
+      messageKey: `diagnosis.vlm.${result.vlmError.code}`,
+      recovery: 'none',
+      safeToImportPartial: true,
+      stage: 'analysis',
+    });
+  }
+
   // Day numbers the layout promised but no column aligned to, plus the days
   // whose cells hold unknown codes (both are "understood structure, unresolved
   // content" and must be named, not just counted).

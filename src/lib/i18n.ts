@@ -507,6 +507,8 @@ const translations: Record<Locale, TranslationTree> = {
       selfNotFoundHint: 'Comprueba que has seleccionado el cuadrante correcto.',
       unknownError: 'Error desconocido',
       errorPrefix: 'Error: {{message}}',
+      vlmAnalyzing: 'Estamos realizando un análisis visual adicional porque el documento no pudo interpretarse con suficiente fiabilidad.',
+      visualAnalysisBadge: 'Análisis visual',
     },
     settings: {
       title: 'Ajustes',
@@ -877,6 +879,14 @@ const translations: Record<Locale, TranslationTree> = {
       },
       confirmBlocked: 'La importación está desactivada hasta resolver lo anterior.',
       nothingImported: 'No se importará nada hasta que lo resuelvas.',
+      vlm: {
+        VLM_UNAVAILABLE: 'El análisis visual adicional no está disponible ahora mismo. Puedes reintentarlo con "Procesar archivo".',
+        VLM_TIMEOUT: 'El análisis visual adicional tardó demasiado. Puedes reintentarlo.',
+        VLM_RATE_LIMITED: 'Se alcanzó el límite de análisis visuales. Espera unos minutos antes de reintentar.',
+        VLM_INVALID_RESPONSE: 'El análisis visual adicional devolvió una respuesta no válida. Puedes reintentarlo.',
+        VLM_PROVIDER_ERROR: 'El análisis visual adicional falló. Puedes reintentarlo con "Procesar archivo".',
+        VLM_FILE_TOO_LARGE: 'El documento es demasiado grande para el análisis visual adicional. Prueba con un archivo más ligero.',
+      },
       error: {
         UNSUPPORTED_FORMAT: 'Formato de archivo no soportado. Formatos admitidos: PDF, PNG/JPG/WebP, CSV y XLSX.',
         UNSUPPORTED_LAYOUT: 'No se ha podido reconocer la estructura de este documento.',
@@ -1357,6 +1367,8 @@ const translations: Record<Locale, TranslationTree> = {
       selfNotFoundHint: 'Check that you uploaded the correct schedule.',
       unknownError: 'Unknown error',
       errorPrefix: 'Error: {{message}}',
+      vlmAnalyzing: 'We are running an additional visual analysis because the document could not be interpreted reliably enough.',
+      visualAnalysisBadge: 'Visual analysis',
     },
     settings: {
       title: 'Settings',
@@ -1727,6 +1739,14 @@ const translations: Record<Locale, TranslationTree> = {
       },
       confirmBlocked: 'Import is disabled until the above is resolved.',
       nothingImported: 'Nothing will be imported until you resolve it.',
+      vlm: {
+        VLM_UNAVAILABLE: 'The additional visual analysis is not available right now. You can retry with "Process file".',
+        VLM_TIMEOUT: 'The additional visual analysis took too long. You can retry it.',
+        VLM_RATE_LIMITED: 'The visual analysis limit was reached. Wait a few minutes before retrying.',
+        VLM_INVALID_RESPONSE: 'The additional visual analysis returned an invalid response. You can retry it.',
+        VLM_PROVIDER_ERROR: 'The additional visual analysis failed. You can retry with "Process file".',
+        VLM_FILE_TOO_LARGE: 'The document is too large for the additional visual analysis. Try a lighter file.',
+      },
       error: {
         UNSUPPORTED_FORMAT: 'Unsupported file format. Supported formats: PDF, PNG/JPG/WebP, CSV and XLSX.',
         UNSUPPORTED_LAYOUT: 'The structure of this document could not be recognized.',
