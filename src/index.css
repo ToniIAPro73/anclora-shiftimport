@@ -997,6 +997,11 @@ button:hover {
   font-weight: 600;
 }
 
+button[aria-busy='true'] {
+  cursor: wait !important;
+  pointer-events: none;
+}
+
 .modal-reset-button {
   background: var(--panel-muted-bg);
   border-color: color-mix(in srgb, var(--color-accent) 72%, transparent);

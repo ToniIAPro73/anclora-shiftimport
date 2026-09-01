@@ -881,7 +881,7 @@ export const TeamImportModal = ({
               <button type="button" className="btn-outline" disabled={importing} onClick={() => setStep('select')} style={{ padding: '10px 18px', fontWeight: 700 }}>
                 {t('teamImport.back')}
               </button>
-              <button type="button" className="btn-gold" disabled={importing} onClick={() => void handleConfirmImport()} style={{ padding: '10px 18px', fontWeight: 800 }}>
+              <button type="button" className="btn-gold" disabled={importing} aria-busy={importing} onClick={() => void handleConfirmImport()} style={{ padding: '10px 18px', fontWeight: 800, cursor: importing ? 'wait' : undefined }}>
                 {importing ? t('teamImport.importing') : t('teamImport.confirmImport')}
               </button>
             </div>

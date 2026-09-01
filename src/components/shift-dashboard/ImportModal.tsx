@@ -292,6 +292,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const now = new Date();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [errorDiagnosis, setErrorDiagnosis] = useState<ImportDiagnosis | null>(null);
   const [periodConflictResolved, setPeriodConflictResolved] = useState(false);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
@@ -345,6 +346,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     const readyForDiff = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
     return classifyImportChanges(existingShifts, readyForDiff);
   }, [parsedShifts, existingShifts]);
+  const importAlreadyExists = importDiff.unchanged.length > 0
+    && importDiff.new.length === 0
+    && importDiff.changed.length === 0;
 
   const selectedContext = useMemo<CalendarImportContext | undefined>(
     () => selectedPeriod === 'multi' ? undefined : {
@@ -718,6 +722,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   const handleConfirm = async () => {
+    if (confirming) {
+      return;
+    }
+    setConfirming(true);
+    try {
     const periods = analysis?.coveredPeriods ?? [...new Map(
       parsedShifts.filter((shift) => shift.date).map((shift) => [shift.date.slice(0, 7), {
         month: Number(shift.date.slice(5, 7)) - 1,
@@ -765,9 +774,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
       : { name: employeeName.trim(), externalId: employeeId.trim() };
 
-    const persisted = await onConfirmImport(finalShifts, importPeriod, selector, importAreaId);
-    if (persisted) {
-      onClose();
+      const persisted = await onConfirmImport(finalShifts, importPeriod, selector, importAreaId);
+      if (persisted) {
+        onClose();
+      }
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -997,6 +1009,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               <button
                 className="btn-gold import-process-button"
                 disabled={!file || loading}
+                aria-busy={loading}
                 onClick={handleStartImport}
                 style={{
                   padding: '14px 16px',
@@ -1277,14 +1290,21 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </div>
             )}
 
+            {importAlreadyExists && (
+              <p role="alert" style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                {t('importModal.alreadyImported', { count: importDiff.unchanged.length })}
+              </p>
+            )}
+
             <div style={{ marginTop: '16px' }}>
               <button
                 className="btn-gold import-process-button"
-                style={{ width: '100%', height: '48px', fontSize: '1rem' }}
-                disabled={readyShifts.length === 0 || loading || diagnosisBlocking}
-                onClick={handleConfirm}
+                disabled={readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists}
+                aria-busy={confirming}
+                onClick={() => void handleConfirm()}
+                style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}
               >
-                {t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
+                {confirming ? t('importModal.importing') : t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
               </button>
               {diagnosisBlocking && (
                 <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--danger)', textAlign: 'center' }}>
