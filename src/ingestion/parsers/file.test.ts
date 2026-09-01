@@ -212,6 +212,8 @@ describe('analyzeDocumentFile — positional XLSX regression', () => {
     expect(result.kind).toBe('excel');
     expect(result.shifts).toHaveLength(246);
     expect(result.coveredPeriods).toHaveLength(9);
+    expect(result.coveredPeriods?.[0]).toEqual({ month: 0, year: 2026 });
+    expect(result.coveredPeriods?.[8]).toEqual({ month: 8, year: 2026 });
     expect(result.quality.warnings).toEqual([]);
     expect(result.shifts.find((shift) => shift.date === '2026-06-16')).toMatchObject({ startTime: '17:00', endTime: '01:00' });
   });
