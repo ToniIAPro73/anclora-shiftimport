@@ -727,18 +727,6 @@ function App() {
 
       targetEmployeeId = targetEmployee.id;
 
-      try {
-        const created = await createRemoteImport({
-          fileName: '',
-          sourceFormat: newShifts[0]?.sourceFormat ?? '',
-          periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
-          periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
-          areaId: areaId ?? null,
-        });
-        importId = created.id;
-      } catch (error) {
-        console.error('Failed to register import', error);
-      }
     }
 
     const snapshot = targetEmployeeId === selectedEmployeeId
@@ -749,6 +737,7 @@ function App() {
     const pendingImportedByDate = new Map<string, Shift[]>();
     const upserts: Shift[] = [];
     const deleteIds: string[] = [];
+    let identicalCount = 0;
 
     for (const shift of normalizedIncoming) {
       const existingImportedShifts = pendingImportedByDate.get(shift.date)
@@ -759,6 +748,7 @@ function App() {
       if (existingImportedShifts.length === 0) {
         working.push(shift);
         upserts.push(shift);
+        pendingImportedByDate.set(shift.date, [...existingImportedShifts, shift]);
         continue;
       }
 
@@ -770,6 +760,7 @@ function App() {
         (existing) => fingerprintShift(existing).full === fingerprintShift(shift).full,
       );
       if (identicalExisting) {
+        identicalCount += 1;
         continue;
       }
       const existingShift = matchingExisting ?? existingImportedShifts[0];
@@ -789,8 +780,34 @@ function App() {
       deleteIds.push(existingShift.id);
       pendingImportedByDate.set(
         shift.date,
-        existingImportedShifts.filter((existing) => existing.id !== existingShift.id),
+        [...existingImportedShifts.filter((existing) => existing.id !== existingShift.id), shift],
       );
+    }
+
+    // A repeated document with no changes is a no-op. Tell the user clearly
+    // and do not create another Import record or send an empty write request.
+    // This also protects the flow when a second import is started after the
+    // first one has already finished.
+    if (upserts.length === 0 && identicalCount > 0) {
+      window.alert(t('importModal.alreadyImported', { count: identicalCount }));
+      return false;
+    }
+
+    // The import record represents a write, so register it only after the
+    // duplicate/conflict reconciliation has produced actual upserts.
+    if (session && upserts.length > 0 && !importId) {
+      try {
+        const created = await createRemoteImport({
+          fileName: '',
+          sourceFormat: newShifts[0]?.sourceFormat ?? '',
+          periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
+          periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
+          areaId: areaId ?? null,
+        });
+        importId = created.id;
+      } catch (error) {
+        console.error('Failed to register import', error);
+      }
     }
 
     // Shared "the import actually landed" tail — must run whenever a
