@@ -27,6 +27,7 @@ import { Shift } from '../../lib/types';
 import { ApiError, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
 import { SearchableSelect } from '../ui/SearchableSelect';
+import { detectImportFlow } from '../../ingestion/import-dispatcher';
 
 interface TeamImportModalProps {
   isOpen: boolean;
@@ -46,6 +47,8 @@ interface TeamImportModalProps {
   currentAreaId?: string | null;
   /** ADMIN with 2+ areas may choose import target. */
   allowAreaChoice?: boolean;
+  /** Automatic dispatcher handoff for a workbook containing one employee. */
+  onSingleEmployeeDetected?: (file: File, employee: DetectedTeamEmployee) => void;
 }
 
 interface TeamRow {
@@ -122,6 +125,7 @@ export const TeamImportModal = ({
   areas = [],
   currentAreaId = null,
   allowAreaChoice = false,
+  onSingleEmployeeDetected,
 }: TeamImportModalProps) => {
   const { t } = useI18n();
   const defaultImportAreaId = currentAreaId ?? (areas.length === 1 ? areas[0].id : null);
@@ -265,12 +269,17 @@ export const TeamImportModal = ({
         detection = detectTeamRoster(await file.text());
       }
 
-      if (!detection || detection.employees.length === 0) {
+      if (!detection || detectImportFlow(detection.employees) === 'blocked') {
         setError(t('teamImport.uploadError'));
         return;
       }
       setSourceFormat(format);
       setRowDiagnostics(detection.diagnostics ?? []);
+
+      if (detectImportFlow(detection.employees) === 'individual' && onSingleEmployeeDetected) {
+        onSingleEmployeeDetected(file, detection.employees[0]);
+        return;
+      }
 
       const matched = await Promise.all(detection.employees.map(async (employee): Promise<TeamRow> => {
         const match = await matchRemoteEmployee({ name: employee.name, externalId: employee.externalEmployeeId });
@@ -563,7 +572,10 @@ export const TeamImportModal = ({
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '760px', width: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{t('teamImport.title')}</h3>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{t('teamImport.title')}</h3>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('teamImport.teamFlow')}</span>
+          </div>
           <button type="button" className="theme-toggle" onClick={handleClose} aria-label={t('common.close')}>×</button>
         </div>
 
