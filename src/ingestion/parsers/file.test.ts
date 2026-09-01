@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { mergeShiftTypeOverrides, SHIFT_TYPE_PRESET_EXAMPLE } from '../../lib/shift-types';
 import { ParsedCalendarShift } from '../../lib/import-types';
 import {
   cellPositionToItem,
+  analyzeDocumentFile,
   classifyDocument,
   detectCalendarContext,
   extractExcelItems,
@@ -198,6 +201,19 @@ describe('parseEmployeeShiftsFromFile — canonical roster CSV', () => {
     const shifts = await parseEmployeeShiftsFromFile(file, context, ANA_SELECTOR);
     expect(shifts).toHaveLength(1);
     expect(shifts[0]).toMatchObject({ date: '2026-08-01', startTime: '08:00', endTime: '14:00', shiftType: 'Libre' });
+  });
+});
+
+describe('analyzeDocumentFile — positional XLSX regression', () => {
+  it('returns the individual calendar without using the legend sheet', async () => {
+    const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza.xlsx'));
+    const file = makeFile('Turnos_Sebastian_Pozo_Mendoza.xlsx', [buffer], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const result = await analyzeDocumentFile(file, { employeeName: 'Sebastian Pozo Mendoza', employeeIdentifiers: [] }, undefined, { month: 8, year: 2026 });
+    expect(result.kind).toBe('excel');
+    expect(result.shifts).toHaveLength(246);
+    expect(result.coveredPeriods).toHaveLength(9);
+    expect(result.quality.warnings).toEqual([]);
+    expect(result.shifts.find((shift) => shift.date === '2026-06-16')).toMatchObject({ startTime: '17:00', endTime: '01:00' });
   });
 });
 
