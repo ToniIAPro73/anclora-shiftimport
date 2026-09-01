@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
-import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
+import { CalendarImportContext, ImportPeriod, ParsedCalendarShift } from '../../lib/import-types';
 import { analyzeDocumentFile, classifyDocument, DocumentAnalysisResult, extractDocumentItems, filterShiftsToContext } from '../../ingestion/parsers/file';
 import {
   getImportFormatLabel,
@@ -36,7 +36,7 @@ interface ImportModalProps {
   onClose: () => void;
   onConfirmImport: (
     shifts: Shift[],
-    targetPeriod: CalendarImportContext,
+    targetPeriod: ImportPeriod,
     selector?: { name: string; externalId: string },
     /** Area the import belongs to (null = org-scoped). Guests never send one. */
     areaId?: string | null,
@@ -300,6 +300,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [employeeId, setEmployeeId] = useState(() => userId ? loadUserProfile(userId).employeeIdentifiers[0] ?? '' : '');
   const [selectedMonth, setSelectedMonth] = useState(String(initialContext.month));
   const [selectedYear, setSelectedYear] = useState(String(initialContext.year));
+  const [selectedPeriod, setSelectedPeriod] = useState(String(initialContext.month));
   // Area the import will be registered under: inherited from the dashboard
   // context, re-targetable only when allowAreaChoice (ADMIN, 2+ areas).
   const [importAreaId, setImportAreaId] = useState<string | null>(currentAreaId);
@@ -345,6 +346,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     return classifyImportChanges(existingShifts, readyForDiff);
   }, [parsedShifts, existingShifts]);
 
+  const selectedContext = useMemo<CalendarImportContext | undefined>(
+    () => selectedPeriod === 'multi' ? undefined : {
+      month: Number.parseInt(selectedPeriod, 10),
+      year: Number.parseInt(selectedYear, 10),
+    },
+    [selectedPeriod, selectedYear],
+  );
+
   // Canonical import diagnosis: the single source of truth for the state
   // chip, the explanatory messages and whether confirm stays disabled.
   const diagnosis = useMemo<ImportDiagnosis | null>(() => {
@@ -364,14 +373,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     };
     return buildImportDiagnosis(effective, {
       itemAnalysis: assistantSession?.itemAnalysis ?? null,
-      selectedContext: {
-        month: Number.parseInt(selectedMonth, 10),
-        year: Number.parseInt(selectedYear, 10),
-      },
+      selectedContext,
       periodConflictResolved,
       recoveryDismissed: assistantDismissed,
     });
-  }, [errorDiagnosis, analysis, parsedShifts, qualityOverride, assistantDismissed, assistantSession, selectedMonth, selectedYear, periodConflictResolved]);
+  }, [errorDiagnosis, analysis, parsedShifts, qualityOverride, assistantDismissed, assistantSession, periodConflictResolved, selectedContext]);
 
   const diagnosisBlocking = diagnosis?.diagnostics.some((diagnostic) => diagnostic.blocking) ?? false;
   const monthMismatch = diagnosis?.diagnostics.find(
@@ -409,6 +415,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     }
     setSelectedMonth(String(initialContext.month));
     setSelectedYear(String(initialContext.year));
+    setSelectedPeriod(String(initialContext.month));
   }, [initialContext.month, initialContext.year, isOpen]);
 
   // The import area follows the dashboard context on open / area switch.
@@ -491,7 +498,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     // the diagnosis layer raises MONTH_MISMATCH instead of silently
     // re-dating — the user decides explicitly.
     const effectiveContext = contextOverride ?? {
-      month: Number.parseInt(selectedMonth, 10),
+      month: Number.parseInt(selectedPeriod === 'multi' ? String(initialContext.month) : selectedPeriod, 10),
       year: Number.parseInt(selectedYear, 10),
     };
 
@@ -517,6 +524,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       setAnalysis(result);
       setDetectedFormat(getImportFormatLabel(result.kind));
       setParsedShifts(result.shifts);
+      const periods = result.coveredPeriods ?? [...new Map(
+        result.shifts.filter((shift) => shift.date).map((shift) => [shift.date.slice(0, 7), {
+          month: Number(shift.date.slice(5, 7)) - 1,
+          year: Number(shift.date.slice(0, 4)),
+        }]),
+      ).values()];
+      if (periods.length > 1) {
+        setSelectedPeriod('multi');
+        setSelectedYear(String(periods[0]?.year ?? selectedYear));
+      } else if (periods[0]) {
+        setSelectedPeriod(String(periods[0].month));
+        setSelectedMonth(String(periods[0].month));
+        setSelectedYear(String(periods[0].year));
+      }
       setScanTime(((Date.now() - startedAt) / 1000).toFixed(1));
     } catch (importError: unknown) {
       if (vlmAbort.signal.aborted) {
@@ -530,7 +551,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       setLoading(false);
       setVlmStage(null);
     }
-  }, [buildSelector, selectedMonth, selectedYear, identityLocked, employeePreset, formatProfileStore]);
+  }, [buildSelector, selectedPeriod, selectedYear, initialContext.month, identityLocked, employeePreset, formatProfileStore]);
 
   // Onboarding handoff: a pre-selected file auto-starts the pipeline once.
   useEffect(() => {
@@ -640,7 +661,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     // for multi-month documents (TYPE_MULTI) where the same file legitimately
     // covers several months and auto-detect can only ever resolve to one.
     await runAnalysis(file, {
-      month: Number.parseInt(selectedMonth, 10),
+      month: Number.parseInt(selectedPeriod === 'multi' ? String(initialContext.month) : selectedPeriod, 10),
       year: Number.parseInt(selectedYear, 10),
     });
   };
@@ -669,6 +690,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       return;
     }
     setSelectedMonth(String(detected.month));
+    setSelectedPeriod(String(detected.month));
     setSelectedYear(String(detected.year));
     await runAnalysis(file, detected);
   };
@@ -680,7 +702,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       return;
     }
     const selected = {
-      month: Number.parseInt(selectedMonth, 10),
+      month: Number.parseInt(selectedPeriod, 10),
       year: Number.parseInt(selectedYear, 10),
     };
     const filtered = filterShiftsToContext(analysis.shifts, selected);
@@ -696,10 +718,15 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   const handleConfirm = async () => {
-    const importContext: CalendarImportContext = {
-      month: Number.parseInt(selectedMonth, 10),
-      year: Number.parseInt(selectedYear, 10),
-    };
+    const periods = analysis?.coveredPeriods ?? [...new Map(
+      parsedShifts.filter((shift) => shift.date).map((shift) => [shift.date.slice(0, 7), {
+        month: Number(shift.date.slice(5, 7)) - 1,
+        year: Number(shift.date.slice(0, 4)),
+      }]),
+    ).values()];
+    const importPeriod: ImportPeriod = selectedPeriod === 'multi'
+      ? { kind: 'multi', periods }
+      : { kind: 'single', month: Number.parseInt(selectedPeriod, 10), year: Number.parseInt(selectedYear, 10) };
 
     // identityLocked: identity is the account's, never local guest profile
     // text — don't let a locked/read-only field write into the local profile.
@@ -738,8 +765,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
       : { name: employeeName.trim(), externalId: employeeId.trim() };
 
-    onConfirmImport(finalShifts, importContext, selector, importAreaId);
-    onClose();
+    const persisted = await onConfirmImport(finalShifts, importPeriod, selector, importAreaId);
+    if (persisted) {
+      onClose();
+    }
   };
 
   if (!isOpen) {
@@ -784,6 +813,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
   const periodLabel = (period: CalendarImportContext): string =>
     `${monthOptions[period.month] ?? String(period.month + 1)} ${period.year}`;
+  const detectedPeriodLabel = selectedPeriod === 'multi' && analysis?.coveredPeriods?.length
+    ? `${t('importModal.multiPeriod')} · ${monthOptions[analysis.coveredPeriods[0].month]}–${monthOptions[analysis.coveredPeriods[analysis.coveredPeriods.length - 1].month]} ${analysis.coveredPeriods[0].year}`
+    : selectedContext ? periodLabel(selectedContext) : null;
 
   const diagnosticVars = (diagnostic: ImportDiagnosis['diagnostics'][number]): Record<string, string | number> => {
     if (diagnostic.code === 'MONTH_MISMATCH' && diagnosis && analysis?.detectedContext) {
@@ -847,9 +879,23 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 </label>
               )}
 
-              <ModalSelect label={t('importModal.monthLabel')} value={selectedMonth} options={monthSelectOptions} onChange={setSelectedMonth} />
+              <ModalSelect
+                label={t('importModal.monthLabel')}
+                value={selectedPeriod}
+                options={[...monthSelectOptions, { value: 'multi', label: t('importModal.multiPeriod') }]}
+                onChange={(value) => {
+                  setSelectedPeriod(value);
+                  if (value !== 'multi') setSelectedMonth(value);
+                }}
+              />
 
               <ModalSelect label={t('importModal.yearLabel')} value={selectedYear} options={yearSelectOptions} onChange={setSelectedYear} />
+
+              {detectedPeriodLabel && (
+                <span data-testid="import-detected-period" style={{ gridColumn: '1 / -1', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                  {detectedPeriodLabel}
+                </span>
+              )}
 
               {/* Area context: 1 area → fixed read-only context; 2+ → ADMIN
                   chooses, other roles see their own area as read-only text.
@@ -1252,9 +1298,3 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     </div>
   );
 };
-
-
-
-
-
-

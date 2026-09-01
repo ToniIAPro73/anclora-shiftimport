@@ -204,8 +204,8 @@ export async function bulkCreateRemoteEmployees(items: {
 export async function createRemoteImport(input: {
   fileName: string;
   sourceFormat: string;
-  periodYear: number;
-  periodMonth: number;
+  periodYear: number | null;
+  periodMonth: number | null;
   areaId?: string | null;
 }): Promise<RemoteImport> {
   const payload = await apiFetch<{ import: RemoteImport }>('/api/imports', {
