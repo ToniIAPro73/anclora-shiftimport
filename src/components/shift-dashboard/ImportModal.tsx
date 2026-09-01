@@ -807,7 +807,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px', paddingRight: '36px' }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>{t('importModal.title')}</h2>
+          <div>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>{t('importModal.title')}</h2>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('importModal.individualFlow')}</span>
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <button
               className="btn-outline modal-reset-button"
@@ -1249,7 +1252,6 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     </div>
   );
 };
-
 
 
 

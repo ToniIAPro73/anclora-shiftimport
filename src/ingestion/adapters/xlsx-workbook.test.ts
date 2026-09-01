@@ -145,4 +145,25 @@ describe('parseXlsxTeamWorkbook', () => {
     expect(result.diagnostics.some((d) => d.code === 'DUPLICATE_RECORD')).toBe(true);
     expect(result.diagnostics.some((d) => d.code === 'INCOMPLETE_SHIFT')).toBe(true);
   });
+
+  it('regression: positional individual calendar processes Jan-Sep and ignores the legend sheet', async () => {
+    const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza.xlsx'));
+    const file = new File([buffer], 'Turnos_Sebastian_Pozo_Mendoza.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const result = await parseXlsxTeamWorkbook(file);
+    expect(result.layout).toBe('individual-calendar');
+    expect(result.employees).toHaveLength(1);
+    expect(result.employees[0].name).toBe('Sebastian Pozo Mendoza');
+    expect(result.employees[0].shifts).toHaveLength(246);
+    expect(result.employees[0].shifts.find((shift) => shift.date === '2026-01-04')).toMatchObject({ startTime: '21:00', endTime: '05:00' });
+    expect(result.employees[0].shifts.find((shift) => shift.date === '2026-07-02')).toMatchObject({ startTime: '21:00', endTime: '05:00' });
+    expect(result.employees[0].shifts.some((shift) => shift.rawText.includes('!'))).toBe(false);
+    expect(result.employees[0].shifts.every((shift) => shift.date < '2026-10-01')).toBe(true);
+    expect(result.employees[0].shifts.filter((shift) => shift.shiftType === 'Libre')).toHaveLength(93);
+    expect(result.sheets).toEqual([
+      { sheetName: 'Calendario empleado', status: 'processed', rowCount: 246 },
+      { sheetName: 'Leyenda', status: 'ignored', rowCount: 6 },
+    ]);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.sourceRef === 'Leyenda')).toBe(true);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === 'UNKNOWN_SHIFT_CODES')).toBe(false);
+  });
 });

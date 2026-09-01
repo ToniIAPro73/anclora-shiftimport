@@ -18,9 +18,12 @@
  * column — it never creates an area and never overrides an explicit one.
  */
 import { IngestionError } from '../../lib/ingestion-errors';
+import { ParsedCalendarShift } from '../../lib/import-types';
 import { findHeaderColumnIndex, RosterTable } from '../tabular-assistant';
 import { normalizeStructuredRows, RowDiagnostic, StructuredShiftRow } from './structured-rows';
-import { TeamRosterDetection } from '../team-roster';
+import { DetectedTeamEmployee, TeamRosterDetection } from '../team-roster';
+import { normalizeTimeToken } from '../core/normalize';
+import { resolveShiftTypeId } from '../../lib/shift-types';
 
 export type SheetStatus = 'processed' | 'empty' | 'ignored';
 
@@ -33,6 +36,8 @@ export interface SheetSummary {
 export interface WorkbookTeamRosterResult extends TeamRosterDetection {
   diagnostics: RowDiagnostic[];
   sheets: SheetSummary[];
+  /** Positional employee calendars are eligible for automatic dispatch. */
+  layout: 'tabular' | 'individual-calendar' | 'unknown';
 }
 
 interface Worksheet {
@@ -98,6 +103,73 @@ function sheetToRosterTable(sheet: Worksheet): SheetGridResult {
   return { kind: 'table', table: { headers: headerRow, rows: dataRows } };
 }
 
+const MONTHS: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+};
+
+function cleanCell(value: string): string {
+  return value.replace(/!/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function positionalCalendarFromSheet(sheet: Worksheet): { employee: DetectedTeamEmployee; rowCount: number } | null {
+  const grid: string[][] = [];
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    const cells: string[] = [];
+    row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+      cells[columnNumber - 1] = cellToText(cell.value);
+    });
+    grid[rowNumber - 1] = cells.map((cell) => cell ?? '');
+  });
+
+  const title = grid.flat().find((value) => /calendario\s+\d{4}/i.test(value)) ?? '';
+  const yearMatch = title.match(/calendario\s+(\d{4})/i);
+  const year = yearMatch ? Number(yearMatch[1]) : null;
+  const employeeName = title
+    .replace(/\s+calendario\s+\d{4}.*/i, '')
+    .trim();
+  if (!year || !employeeName) {
+    return null;
+  }
+
+  const shifts: ParsedCalendarShift[] = [];
+  let populatedMonths = 0;
+  for (const row of grid) {
+    const month = MONTHS[cleanCell(row?.[0] ?? '').toLowerCase()];
+    if (!month) continue;
+    const dayHeader = grid.find((candidate) => candidate?.slice(1).some((value) => /^\d{1,2}$/.test(value.trim())));
+    if (!dayHeader) continue;
+    let monthHasData = false;
+    for (let column = 1; column < row.length; column += 1) {
+      const day = Number(dayHeader[column]);
+      if (!day || day > 31) continue;
+      const raw = cleanCell(row[column] ?? '');
+      if (!raw) continue;
+      const times = raw.match(/\b\d{1,2}:\d{2}\b/g) ?? [];
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (times.length >= 2) {
+        shifts.push({ date, startTime: normalizeTimeToken(times[0] ?? ''), endTime: normalizeTimeToken(times[1] ?? ''), origin: 'IMP', isValid: true, confidence: 0.95, rawText: raw, shiftType: 'Regular', notes: null, color: null });
+        monthHasData = true;
+      } else {
+        // These document codes are known rest markers in this calendar
+        // family. Keep the product registry authoritative, with the
+        // documented DL/AJ compatibility fallback when no user alias exists.
+        const type = resolveShiftTypeId(raw) ?? (/^(DL|AJ)$/i.test(raw) ? 'Libre' : null);
+        if (type) {
+          shifts.push({ date, startTime: '', endTime: '', origin: 'IMP', isValid: true, confidence: 0.95, rawText: raw, shiftType: type, notes: null, color: null });
+          monthHasData = true;
+        }
+      }
+    }
+    if (monthHasData) populatedMonths += 1;
+  }
+  return populatedMonths > 0 ? {
+    employee: { key: `name:${employeeName.toLowerCase()}`, externalEmployeeId: '', name: employeeName, shifts },
+    rowCount: shifts.length,
+  } : null;
+}
+
 /**
  * Reads every worksheet of the given file, classifies each, and merges the
  * processed ones into one TeamRosterDetection. Throws
@@ -119,9 +191,17 @@ export async function parseXlsxTeamWorkbook(file: File): Promise<WorkbookTeamRos
   const sheets: SheetSummary[] = [];
   const allRows: StructuredShiftRow[] = [];
   const allDiagnostics: RowDiagnostic[] = [];
+  let positionalEmployee: DetectedTeamEmployee | null = null;
+  let sawTabularSheet = false;
 
   for (const sheet of workbook.worksheets as unknown as Worksheet[]) {
     const gridResult = sheetToRosterTable(sheet);
+    const positional = positionalCalendarFromSheet(sheet);
+    if (positional) {
+      positionalEmployee = positional.employee;
+      sheets.push({ sheetName: sheet.name, status: 'processed', rowCount: positional.rowCount });
+      continue;
+    }
     if (gridResult.kind !== 'table') {
       sheets.push({ sheetName: sheet.name, status: gridResult.kind, rowCount: 0 });
       allDiagnostics.push({
@@ -146,6 +226,7 @@ export async function parseXlsxTeamWorkbook(file: File): Promise<WorkbookTeamRos
       });
       continue;
     }
+    sawTabularSheet = true;
 
     const idCol = findHeaderColumnIndex(table.headers, 'employeeId');
     const startCol = findHeaderColumnIndex(table.headers, 'start');
@@ -177,5 +258,8 @@ export async function parseXlsxTeamWorkbook(file: File): Promise<WorkbookTeamRos
   }
 
   const { employees, diagnostics } = normalizeStructuredRows(allRows);
-  return { employees, diagnostics: [...allDiagnostics, ...diagnostics], sheets };
+  if (positionalEmployee) {
+    return { employees: [positionalEmployee], diagnostics: allDiagnostics, sheets, layout: 'individual-calendar' };
+  }
+  return { employees, diagnostics: [...allDiagnostics, ...diagnostics], sheets, layout: sawTabularSheet ? 'tabular' : 'unknown' };
 }

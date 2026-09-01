@@ -41,6 +41,7 @@ import { extractPdfTextItems } from './pdf';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
 import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
+import { parseXlsxTeamWorkbook } from '../adapters/xlsx-workbook';
 
 // The canonical alias table lives in ../tabular-assistant (shared with the
 // tabular assistant fallback); re-exported here for API compatibility.
@@ -920,6 +921,46 @@ export async function analyzeDocumentFile(
     }
 
     return { kind, context, shifts, quality, structure: parsed.analysis.structure, questions, detectedContext };
+  }
+
+  if (kind === 'excel') {
+    const workbook = await parseXlsxTeamWorkbook(file);
+    if (workbook.employees.length === 0) {
+      throw new IngestionError('NO_SHIFTS_FOUND', 'No se detectaron turnos importables en el libro XLSX.');
+    }
+    const shifts = workbook.employees.flatMap((employee) => employee.shifts)
+      .map((shift) => ({ ...shift, sourceFormat: kind }));
+    const periods = [...new Map(
+      shifts.filter((shift) => shift.date).map((shift) => [shift.date.slice(0, 7), {
+        month: Number(shift.date.slice(5, 7)) - 1,
+        year: Number(shift.date.slice(0, 4)),
+      }]),
+    ).values()];
+    const detectedContext = periods[0] ?? contextOverride ?? { month: 0, year: new Date().getFullYear() };
+    const context = contextOverride ?? detectedContext;
+    const quality = computeImportResult(shifts, {
+      knownProfileMatched: false,
+      profileDrift: false,
+      periodDetected: true,
+      employeeMatch: 'strong',
+      expectedDays: shifts.length,
+      mappedDays: shifts.length,
+      totalTokens: shifts.length,
+      recognizedTokens: shifts.length,
+      unknownTokens: [],
+      invalidTimes: 0,
+      incompleteAssignments: 0,
+    });
+    return {
+      kind,
+      context,
+      shifts,
+      quality: { ...quality, shifts },
+      structure: null,
+      questions: [],
+      detectedContext,
+      ...(periods.length > 1 ? { coveredPeriods: periods } : {}),
+    };
   }
 
   const items = await extractDocumentItems(file);

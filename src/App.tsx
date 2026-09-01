@@ -61,6 +61,7 @@ import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { SearchableSelect } from './components/ui/SearchableSelect';
 import { CalendarImportContext } from './lib/import-types';
+import type { DetectedTeamEmployee } from './ingestion/team-roster';
 import { loadFormatProfiles } from './lib/format-profiles';
 import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
@@ -149,6 +150,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingFile, setOnboardingFile] = useState<File | null>(null);
+  const [adminIndividualImport, setAdminIndividualImport] = useState<{ file: File; employee: DetectedTeamEmployee } | null>(null);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
@@ -665,13 +667,20 @@ function App() {
     if (!name) {
       return null;
     }
+    // A single-person auto-dispatch may only target an existing org employee.
+    // Do not turn an uncertain identity into a new employee from this path;
+    // the user must resolve it explicitly before any write can happen.
+    if (adminIndividualImport) {
+      window.alert(t('team.resolveEmployeeFailed'));
+      return null;
+    }
     if (!window.confirm(t('team.createEmployeeConfirm', { employee: label }))) {
       return null;
     }
     const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined, areaId: areaId ?? undefined });
     setEmployees((current) => [...current, created]);
     return created;
-  }, [session, employees, selectedEmployeeId, t]);
+  }, [session, employees, selectedEmployeeId, adminIndividualImport, t]);
 
   const handleConfirmImport = async (
     newShifts: Shift[],
@@ -1263,18 +1272,25 @@ function App() {
         userId={session?.user.id ?? null}
       />
 
-      {(!session || session.role === 'EMPLOYEE') && (
+      {(!session || session.role === 'EMPLOYEE' || Boolean(adminIndividualImport)) && (
         <ImportModal
           isOpen={isImportOpen}
           onClose={() => {
             setIsImportOpen(false);
             setOnboardingFile(null);
+            setAdminIndividualImport(null);
           }}
           onConfirmImport={handleConfirmImport}
           initialContext={{ month: currentMonth, year: currentYear }}
           existingShifts={shifts}
-          initialFile={onboardingFile}
+          initialFile={adminIndividualImport?.file ?? onboardingFile}
           employeePreset={(() => {
+            if (adminIndividualImport) {
+              return {
+                name: adminIndividualImport.employee.name,
+                externalId: adminIndividualImport.employee.externalEmployeeId,
+              };
+            }
             // EMPLOYEE identity is never the team-bar selector (admin-only
             // concept) — always the user's own linked employee record.
             if (!session) {
@@ -1292,7 +1308,7 @@ function App() {
         />
       )}
 
-      {session && session.role === 'ADMIN' && (
+      {session && session.role === 'ADMIN' && !adminIndividualImport && (
         <TeamImportModal
           isOpen={isImportOpen}
           onClose={() => setIsImportOpen(false)}
@@ -1304,6 +1320,9 @@ function App() {
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
           allowAreaChoice={session.role === 'ADMIN'}
+          onSingleEmployeeDetected={(file, employee) => {
+            setAdminIndividualImport({ file, employee });
+          }}
         />
       )}
 
@@ -1442,6 +1461,4 @@ function App() {
 }
 
 export default App;
-
-
 

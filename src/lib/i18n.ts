@@ -416,6 +416,7 @@ const translations: Record<Locale, TranslationTree> = {
     },
     teamImport: {
       title: 'Importar cuadrante',
+      teamFlow: 'Cuadrante de equipo',
       uploadTitle: 'Sube el CSV de turnos del equipo',
       uploadHint: 'Admite CSV, XLSX (con varias hojas), JSON, XML (identificador/nombre de empleado, fecha, hora de inicio y fin) o PDF de cuadrante con varios empleados.',
       chooseFile: 'Elegir archivo',
@@ -474,6 +475,7 @@ const translations: Record<Locale, TranslationTree> = {
     },
     importModal: {
       title: 'Importar cuadrante',
+      individualFlow: 'Cuadrante individual',
       newImport: 'Nueva Importación',
       closeAria: 'Cerrar importación',
       nameLabel: 'Nombre',
@@ -1276,6 +1278,7 @@ const translations: Record<Locale, TranslationTree> = {
     },
     teamImport: {
       title: 'Import schedule',
+      teamFlow: 'Team schedule',
       uploadTitle: 'Upload the team shifts CSV',
       uploadHint: 'Accepts CSV, XLSX (multi-sheet), JSON, XML (employee id/name, date, start and end time) or a multi-employee PDF roster.',
       chooseFile: 'Choose file',
@@ -1334,6 +1337,7 @@ const translations: Record<Locale, TranslationTree> = {
     },
     importModal: {
       title: 'Import schedule',
+      individualFlow: 'Individual schedule',
       newImport: 'New Import',
       closeAria: 'Close import',
       nameLabel: 'Name',
