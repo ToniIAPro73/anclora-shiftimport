@@ -162,8 +162,8 @@ function ModalSelect({
 
   // The menu renders in a body portal anchored to the trigger: the modal's
   // own clipping chain (`.import-modal-grid`/`.import-modal-left` use
-  // overflow:hidden on desktop, `.modal-content` scrolls on mobile) would
-  // otherwise cut the dropdown or grow a scroll region. Anchored to the
+  // overflow:hidden) would otherwise cut the dropdown or grow a scroll region.
+  // Anchored to the
   // trigger rect, capped at 240px or the viewport space actually available —
   // short lists show fully, long lists scroll inside the menu. Flips upward
   // when there is no usable room below.
@@ -860,7 +860,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           <X size={24} />
         </button>
 
-        <fieldset disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <fieldset className="import-modal__form" disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div className="import-modal__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px', paddingRight: '36px' }}>
           <div>
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>{t('importModal.title')}</h2>

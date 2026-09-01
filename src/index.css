@@ -937,6 +937,12 @@ select:disabled {
   flex: 0 0 auto;
 }
 
+.import-modal__form {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .import-modal__content {
   flex: 1 1 auto;
   min-height: 0;
@@ -1614,11 +1620,11 @@ button[aria-busy='true'] {
   }
 }
 
-/* The 360px preview floor can exceed the whole viewport on short screens;
-   the modal overlay already scrolls, so a smaller floor keeps it reachable. */
+/* Keep the preview panel shrinkable on short screens so the footer remains in
+   the fixed shell; the shifts list owns the only vertical scroll region. */
 @media (max-width: 760px) and (max-height: 700px) {
   .import-modal-right {
-    min-height: 220px;
+    min-height: 0;
   }
 }
 

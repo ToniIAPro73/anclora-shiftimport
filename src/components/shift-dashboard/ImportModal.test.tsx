@@ -168,6 +168,7 @@ describe('ImportModal', () => {
     expect(dialog.classList.contains('modal-content')).toBe(true);
     expect(dialog.style.overflowY).toBe('');
     expect(dialog.querySelector('.import-modal__header')).toBeTruthy();
+    expect(dialog.querySelector('.import-modal__form')).toBeTruthy();
     expect(dialog.querySelector('.import-modal__content')).toBeTruthy();
     expect((dialog.querySelector('.import-modal__shifts-list') as HTMLElement).classList.contains('import-modal__shifts-list')).toBe(true);
     expect(dialog.querySelector('.import-modal__footer')).toBeTruthy();
