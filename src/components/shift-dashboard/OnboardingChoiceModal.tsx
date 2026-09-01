@@ -84,7 +84,7 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
           >
             {t('auth.logoutAction')}
           </button>
-          <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '10px 16px', fontWeight: 800 }}>
+          <button type="submit" className="btn-gold" disabled={busy} aria-busy={busy} style={{ padding: '10px 16px', fontWeight: 800 }}>
             {t('onboardingChoice.confirm')}
           </button>
         </div>

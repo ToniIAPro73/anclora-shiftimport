@@ -144,7 +144,7 @@ export const FormatProfilesModal = ({ isOpen, onClose, store, canManage }: Forma
             aria-label={t('formatProfiles.renameLabel')}
             style={{ padding: '6px 10px', flex: 1, minWidth: '140px' }}
           />
-          <button type="submit" className="btn-gold" disabled={busyId === profile.id} style={{ padding: '6px 10px', fontWeight: 800 }}>
+          <button type="submit" className="btn-gold" disabled={busyId === profile.id} aria-busy={busyId === profile.id} style={{ padding: '6px 10px', fontWeight: 800 }}>
             {t('common.save')}
           </button>
           <button type="button" className="btn-outline" disabled={busyId === profile.id} onClick={() => setRenamingId(null)} style={{ padding: '6px 10px', fontWeight: 700 }}>
@@ -182,6 +182,7 @@ export const FormatProfilesModal = ({ isOpen, onClose, store, canManage }: Forma
                 type="button"
                 className="btn-outline"
                 disabled={busyId === profile.id}
+                aria-busy={busyId === profile.id}
                 onClick={() => startRename(profile)}
                 style={{ padding: '6px 10px', fontWeight: 700 }}
               >
@@ -192,6 +193,7 @@ export const FormatProfilesModal = ({ isOpen, onClose, store, canManage }: Forma
                   type="button"
                   className="btn-outline"
                   disabled={busyId === profile.id}
+                  aria-busy={busyId === profile.id}
                   onClick={() => void run(profile.id, () => store.confirm(profile.id))}
                   style={{ padding: '6px 10px', fontWeight: 700 }}
                 >
@@ -203,6 +205,7 @@ export const FormatProfilesModal = ({ isOpen, onClose, store, canManage }: Forma
                   type="button"
                   className="btn-outline"
                   disabled={busyId === profile.id}
+                  aria-busy={busyId === profile.id}
                   onClick={() => void run(profile.id, () => store.reactivate(profile.id))}
                   style={{ padding: '6px 10px', fontWeight: 700 }}
                 >
@@ -214,6 +217,7 @@ export const FormatProfilesModal = ({ isOpen, onClose, store, canManage }: Forma
                   type="button"
                   className="btn-outline"
                   disabled={busyId === profile.id}
+                  aria-busy={busyId === profile.id}
                   onClick={() => void run(profile.id, () => store.deprecate(profile.id))}
                   style={{ padding: '6px 10px', fontWeight: 700, borderColor: 'var(--danger)', color: 'var(--danger)' }}
                 >

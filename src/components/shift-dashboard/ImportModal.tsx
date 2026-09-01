@@ -1008,12 +1008,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             <div style={{ minWidth: 0, width: '100%', flexShrink: 0 }}>
               <button
                 className="btn-gold import-process-button"
-                disabled={!file || loading}
+                disabled={!file || loading || diagnosisBlocking}
                 aria-busy={loading}
                 onClick={handleStartImport}
                 style={{
                   padding: '14px 16px',
-                  opacity: !file || loading ? 0.5 : 1,
+                  opacity: !file || loading || diagnosisBlocking ? 0.5 : 1,
                   width: '100%',
                   minHeight: '52px',
                   fontSize: '0.98rem',

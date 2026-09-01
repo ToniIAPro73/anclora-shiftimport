@@ -259,6 +259,33 @@ button:hover {
   transform: scale(1.02);
 }
 
+/* Native disabled controls are intentionally handled here, below the base
+   interaction rule: every visual button family keeps its own colors, while
+   disabled controls lose action affordances consistently. */
+button:disabled,
+button[aria-disabled='true'] {
+  cursor: not-allowed !important;
+  filter: saturate(0.55);
+  opacity: 0.56;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+button:disabled:hover,
+button:disabled:active,
+button[aria-disabled='true']:hover,
+button[aria-disabled='true']:active {
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+input:disabled,
+select:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.7;
+}
+
 .import-upload-zone,
 .import-upload-zone:hover,
 .import-upload-zone:focus,
