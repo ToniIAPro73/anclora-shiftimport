@@ -160,6 +160,20 @@ describe('ImportModal', () => {
     expect(screen.getByText('Process file')).toBeTruthy();
   });
 
+  it('keeps the import shell fixed and assigns scrolling only to the shifts list', () => {
+    renderImportModal('es', () => {});
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.classList.contains('import-modal')).toBe(true);
+    expect(dialog.classList.contains('modal-content')).toBe(true);
+    expect(dialog.style.overflowY).toBe('');
+    expect(dialog.querySelector('.import-modal__header')).toBeTruthy();
+    expect(dialog.querySelector('.import-modal__content')).toBeTruthy();
+    expect((dialog.querySelector('.import-modal__shifts-list') as HTMLElement).classList.contains('import-modal__shifts-list')).toBe(true);
+    expect(dialog.querySelector('.import-modal__footer')).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: /Confirmar Importación/ })).toBeTruthy();
+  });
+
   it('closes via the external close button (positioned outside the header row, absolute in the card)', () => {
     const onClose = vi.fn();
     renderImportModal('es', onClose);

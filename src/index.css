@@ -865,6 +865,15 @@ select:disabled {
   cursor: wait;
 }
 
+/* A global operation owns the pointer state of the whole application. This
+ * deliberately wins over inline button cursors and over the functional
+ * disabled cursor: `not-allowed` is for unavailable actions, `wait` is for a
+ * running application-wide operation. */
+.app--busy,
+.app--busy * {
+  cursor: wait !important;
+}
+
 .app-operation-lock__status {
   position: fixed;
   top: 16px;
@@ -906,6 +915,55 @@ select:disabled {
   max-height: calc(100vh - var(--space-md) * 2);
   max-height: calc(100dvh - var(--space-md) * 2);
   overflow-y: auto;
+}
+
+/* Import preview: the shell is a viewport-bounded flex column. Only the
+ * detected-shifts list may scroll; the header and confirmation footer remain
+ * in the shell's layout and never move below the fold. */
+.import-modal-overlay {
+  overflow: hidden;
+  padding: var(--space-md);
+}
+
+.import-modal {
+  height: min(88vh, calc(100vh - var(--space-md) * 2));
+  height: min(88dvh, calc(100dvh - var(--space-md) * 2));
+  max-height: calc(100vh - var(--space-md) * 2);
+  max-height: calc(100dvh - var(--space-md) * 2);
+  overflow: hidden;
+}
+
+.import-modal__header {
+  flex: 0 0 auto;
+}
+
+.import-modal__content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.import-modal__left,
+.import-modal__shifts-panel {
+  min-height: 0;
+}
+
+.import-modal__shifts-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.import-modal__shifts-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.import-modal__footer {
+  flex: 0 0 auto;
+  padding-top: 12px;
 }
 
 .modal-input {
@@ -1403,32 +1461,34 @@ button[aria-busy='true'] {
 
 @media (max-width: 760px) {
   .import-modal-overlay {
-    align-items: flex-start;
-    justify-content: stretch;
+    align-items: center;
+    justify-content: center;
     padding: 10px;
-    overflow-y: auto;
+    overflow: hidden;
   }
 
-  .import-modal-content {
+  .import-modal {
     width: 100% !important;
     max-width: none !important;
-    height: auto !important;
-    max-height: none !important;
+    height: calc(100dvh - 20px) !important;
+    height: calc(100vh - 20px) !important;
+    max-height: calc(100dvh - 20px) !important;
+    max-height: calc(100vh - 20px) !important;
     padding: 16px;
   }
 
   .import-modal-grid {
     grid-template-columns: 1fr !important;
-    overflow: visible !important;
+    grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+    overflow: hidden !important;
   }
 
-  .import-modal-left,
-  .import-modal-right {
-    overflow: visible !important;
+  .import-modal-left {
+    overflow: hidden !important;
   }
 
   .import-modal-right {
-    min-height: 360px;
+    min-height: 0;
   }
 
   .jt-counter-modal-content {

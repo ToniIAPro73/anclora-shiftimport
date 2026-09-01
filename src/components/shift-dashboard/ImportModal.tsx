@@ -849,8 +849,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   return (
-    <div className="modal-overlay" data-import-modal>
-      <div className="modal-content" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('importModal.title')} style={{ maxWidth: '1380px', width: '96vw', height: '88vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="modal-overlay import-modal-overlay" data-import-modal>
+      <div className="modal-content import-modal" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('importModal.title')} style={{ maxWidth: '1380px', width: '96vw', display: 'flex', flexDirection: 'column' }}>
         <button
           disabled={interactionLocked}
           onClick={() => { if (!interactionLocked) onClose(); }}
@@ -861,7 +861,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         </button>
 
         <fieldset disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px', paddingRight: '36px' }}>
+        <div className="import-modal__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px', paddingRight: '36px' }}>
           <div>
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>{t('importModal.title')}</h2>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('importModal.individualFlow')}</span>
@@ -878,8 +878,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           </div>
         </div>
 
-        <div className="import-modal-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(0, 1.1fr)', gap: '18px', flex: 1, overflow: 'hidden' }}>
-          <div className="import-modal-left" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
+        <div className="import-modal__content import-modal-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(0, 1.1fr)', gap: '18px', flex: 1, overflow: 'hidden' }}>
+          <div className="import-modal__left import-modal-left" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 <span>{t('importModal.nameLabel')}</span>
@@ -1054,7 +1054,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             </div>
           </div>
 
-          <div className="import-modal-right" style={{ display: 'flex', flexDirection: 'column', background: 'var(--panel-muted-bg)', borderRadius: '16px', padding: '16px', overflow: 'hidden', minWidth: 0 }}>
+          <div className="import-modal__shifts-panel import-modal-right" style={{ display: 'flex', flexDirection: 'column', background: 'var(--panel-muted-bg)', borderRadius: '16px', padding: '16px', overflow: 'hidden', minWidth: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--color-accent)' }}>{t('importModal.detected')}</h3>
               <span style={{ fontSize: '0.75rem', opacity: 0.6 }}>
@@ -1211,7 +1211,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '12px', minHeight: 0 }}>
+            <div className="import-modal__shifts-list" style={{ border: '1px solid var(--glass-border)', borderRadius: '12px' }}>
               {parsedShifts.length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--table-head-bg)', zIndex: 10 }}>
@@ -1313,27 +1313,27 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </p>
             )}
 
-            <div style={{ marginTop: '16px' }}>
-              <button
-                className="btn-gold import-process-button"
-                disabled={readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
-                aria-busy={interactionLocked}
-                onClick={() => void handleConfirm()}
-                style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}
-              >
-                <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
-                  {interactionLocked ? t('importModal.importing') : t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
-                </span>
-              </button>
-              {diagnosisBlocking && (
-                <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--danger)', textAlign: 'center' }}>
-                  {t('diagnosis.confirmBlocked')}
-                </p>
-              )}
-            </div>
           </div>
         </div>
         </fieldset>
+        <div className="import-modal__footer">
+          <button
+            className="btn-gold import-process-button"
+            disabled={readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
+            aria-busy={interactionLocked}
+            onClick={() => void handleConfirm()}
+            style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}
+          >
+            <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
+              {interactionLocked ? t('importModal.importing') : t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
+            </span>
+          </button>
+          {diagnosisBlocking && (
+            <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--danger)', textAlign: 'center' }}>
+              {t('diagnosis.confirmBlocked')}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

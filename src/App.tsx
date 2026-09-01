@@ -1046,7 +1046,7 @@ function App() {
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
 
   return (
-    <div className="container" aria-busy={isImporting}>
+    <div className={`container${isImporting ? ' app--busy' : ''}`} aria-busy={isImporting}>
       <MonthHeader
         year={currentYear}
         month={currentMonth}
@@ -1289,7 +1289,7 @@ function App() {
       </div>
 
       {isImporting && (
-        <div className="app-operation-lock" role="presentation">
+        <div className="app-operation-lock" role="presentation" aria-busy="true">
           <div className="app-operation-lock__status" role="status" aria-live="polite" tabIndex={-1} data-import-progress>
             <span className="app-operation-lock__spinner" aria-hidden="true" />
             {t('importModal.importing')}
