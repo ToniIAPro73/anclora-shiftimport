@@ -75,7 +75,7 @@ export const FormatProfileMigrationModal = ({
               <button type="button" className="btn-outline" onClick={onCancel} style={{ padding: '10px 14px', fontWeight: 700 }}>
                 {t('formatMigration.close')}
               </button>
-              <button type="button" className="btn-gold" onClick={() => void runMigration()} disabled={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
+              <button type="button" className="btn-gold" onClick={() => void runMigration()} disabled={busy} aria-busy={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
                 {busy ? t('formatMigration.migrating') : t('formatMigration.retryAction')}
               </button>
             </>
@@ -92,7 +92,7 @@ export const FormatProfileMigrationModal = ({
             <button type="button" className="btn-outline" onClick={onKeepLocal} style={{ padding: '10px 14px', fontWeight: 700 }}>
               {t('formatMigration.keepLocal')}
             </button>
-            <button type="button" className="btn-gold" onClick={() => void runMigration()} disabled={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
+            <button type="button" className="btn-gold" onClick={() => void runMigration()} disabled={busy} aria-busy={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
               {busy ? t('formatMigration.migrating') : t('formatMigration.importAction')}
             </button>
           </>

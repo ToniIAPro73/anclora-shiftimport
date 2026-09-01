@@ -294,6 +294,7 @@ function ProfileSection({
               style={{ width: 'fit-content' }}
               onClick={handleSaveName}
               disabled={saving || !name.trim() || name === employee?.name}
+              aria-busy={saving}
             >
               {saving ? t('auth.working') : saved ? t('settings.saved') : t('settings.saveName')}
             </button>

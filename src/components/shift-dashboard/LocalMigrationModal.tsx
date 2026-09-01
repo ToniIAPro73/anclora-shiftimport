@@ -63,7 +63,7 @@ export const LocalMigrationModal = ({
           <button type="button" className="btn-outline" onClick={onKeepLocal} style={{ padding: '10px 14px', fontWeight: 700 }}>
             {t('migration.keepLocal')}
           </button>
-          <button type="button" className="btn-gold" onClick={() => void handleImport()} disabled={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
+          <button type="button" className="btn-gold" onClick={() => void handleImport()} disabled={busy} aria-busy={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
             {busy ? t('auth.working') : t('migration.importAction')}
           </button>
         </>

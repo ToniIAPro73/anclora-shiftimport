@@ -484,6 +484,11 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   // "grant access" bulk flow (Fase 3). Already-linked and inactive employees
   // are never selectable for it.
   const isGrantEligible = (employee: RemoteEmployee) => unlinkedEmployees.some((candidate) => candidate.id === employee.id);
+  const selectedEmployeesAreEligible = selectedEmployeeIds.size > 0
+    && [...selectedEmployeeIds].every((id) => {
+      const employee = employees.find((candidate) => candidate.id === id);
+      return employee ? isGrantEligible(employee) : false;
+    });
 
   const visibleEmployees = employees.filter((employee) => {
     if (employeeFilter === 'with') {
@@ -530,6 +535,10 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   }, [employees]);
 
   const toggleEmployeeSelected = (employeeId: string) => {
+    const employee = employees.find((candidate) => candidate.id === employeeId);
+    if (!employee || !isGrantEligible(employee)) {
+      return;
+    }
     setSelectedEmployeeIds((current) => {
       const next = new Set(current);
       if (next.has(employeeId)) {
@@ -542,12 +551,19 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   };
 
   const selectAllWithoutAccess = () => {
-    setSelectedEmployeeIds(new Set(visibleEmployees.filter(isGrantEligible).map((employee) => employee.id)));
+    const eligibleIds = visibleEmployees.filter(isGrantEligible).map((employee) => employee.id);
+    if (eligibleIds.length === 0) {
+      return;
+    }
+    setSelectedEmployeeIds(new Set(eligibleIds));
   };
 
   const clearEmployeeSelection = () => setSelectedEmployeeIds(new Set());
 
   const openBulkGrant = () => {
+    if (!selectedEmployeesAreEligible) {
+      return;
+    }
     const rows: BulkGrantRow[] = employees
       .filter((employee) => selectedEmployeeIds.has(employee.id))
       .map((employee) => ({ employeeId: employee.id, email: '', role: 'EMPLOYEE' as RemoteMember['role'] }));
@@ -1064,7 +1080,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   {t('members.passwordHint')}
                 </p>
                 {error && <p role="alert" style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
-                <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '10px 14px', fontWeight: 800, justifySelf: 'end' }}>
+                  <button type="submit" className="btn-gold" disabled={busy} aria-busy={busy} style={{ padding: '10px 14px', fontWeight: 800, justifySelf: 'end' }}>
                   {busy ? t('auth.working') : t('members.addAction')}
                 </button>
               </form>
@@ -1170,16 +1186,20 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   <button type="button" className="btn-outline" style={{ padding: '5px 9px', fontSize: '0.77rem', fontWeight: 700 }} title={`${t('members.csvUploadHint')} ${t('members.csvEmployeesNoAccessHint')}`} onClick={() => employeesFileRef.current?.click()}>
                     {t('members.importEmployeesCsv')}
                   </button>
-                  <button
-                    type="button"
-                    className="btn-gold"
-                    disabled={selectedEmployeeIds.size === 0 || busy}
-                    onClick={openBulkGrant}
-                    style={{ padding: '8px 14px', fontWeight: 800 }}
-                  >
-                    {t('members.grantAccessAction')}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="btn-gold"
+                  disabled={!selectedEmployeesAreEligible || busy}
+                  onClick={openBulkGrant}
+                  aria-describedby="members-grant-access-help"
+                  style={{ padding: '8px 14px', fontWeight: 800 }}
+                >
+                  {t('members.grantAccessAction')}
+                </button>
+              </div>
+              <p id="members-grant-access-help" style={{ margin: '0 0 8px', fontSize: '0.75rem', color: 'var(--text-subtle)' }}>
+                {unlinkedEmployees.length > 0 ? t('members.grantAccessHint') : t('members.noEligibleEmployees')}
+              </p>
               </div>
               <input
                 ref={employeesFileRef}
@@ -1215,7 +1235,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                       style={{ minWidth: '180px' }}
                     />
                   )}
-                  <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
+                  <button type="submit" className="btn-gold" disabled={busy} aria-busy={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
                     {busy ? t('auth.working') : t('members.addEmployeeAction')}
                   </button>
                 </form>
@@ -1315,7 +1335,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                             style={{ width: '180px' }}
                           />
                         )}
-                        <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '6px 10px', fontWeight: 800 }}>
+                        <button type="submit" className="btn-gold" disabled={busy} aria-busy={busy} style={{ padding: '6px 10px', fontWeight: 800 }}>
                           {t('common.save')}
                         </button>
                         <button type="button" className="btn-outline" disabled={busy} onClick={() => setEditingEmployeeId(null)} style={{ padding: '6px 10px', fontWeight: 700 }}>
