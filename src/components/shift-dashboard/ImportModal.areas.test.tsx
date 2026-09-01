@@ -108,6 +108,17 @@ describe('ImportModal — area context', () => {
     expect(options).toContain('Sur');
   });
 
+  it('the open menu renders in a body portal, outside the modal clipping containers', () => {
+    renderImportModal({ areas: AREAS, allowAreaChoice: true });
+
+    fireEvent.click(screen.getByText('Toda la empresa'));
+    const menu = screen.getByRole('listbox');
+
+    expect(menu.parentElement).toBe(document.body);
+    expect(menu.closest('.import-modal-left')).toBeNull();
+    expect(menu.closest('.modal-content')).toBeNull();
+  });
+
   it('2+ areas without choice (EMPLOYEE): own area shown as read-only context, no selector', () => {
     renderImportModal({ areas: AREAS, currentAreaId: 'area-n' });
     const context = screen.getByTestId('import-area-context');

@@ -92,4 +92,12 @@ describe('SearchableSelect', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('the open menu renders in a body portal, outside any clipping ancestor', () => {
+    renderSelect();
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+    const menu = screen.getByRole('listbox').closest('.modal-select-menu');
+    expect(menu).not.toBeNull();
+    expect(menu!.parentElement).toBe(document.body);
+  });
 });
