@@ -132,7 +132,7 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
                   aria-label={t('areas.codePlaceholder')}
                   style={{ padding: '6px 10px', width: '130px' }}
                 />
-                <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '6px 10px', fontWeight: 800 }}>
+                <button type="submit" className="btn-gold" disabled={busy} aria-busy={busy} style={{ padding: '6px 10px', fontWeight: 800 }}>
                   {t('common.save')}
                 </button>
                 <button type="button" className="btn-outline" disabled={busy} onClick={() => setEditingAreaId(null)} style={{ padding: '6px 10px', fontWeight: 700 }}>
@@ -198,7 +198,7 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
           aria-label={t('areas.codePlaceholder')}
           style={{ padding: '10px 12px', width: '150px' }}
         />
-        <button type="submit" className="btn-gold" disabled={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
+        <button type="submit" className="btn-gold" disabled={busy} aria-busy={busy} style={{ padding: '10px 14px', fontWeight: 800 }}>
           {busy ? t('auth.working') : t('common.add')}
         </button>
       </form>
