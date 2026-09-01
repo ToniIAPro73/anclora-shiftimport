@@ -6,6 +6,7 @@ import { I18nProvider } from '../../lib/i18n-react';
 import { loadFormatProfiles, saveFormatProfile, UserFormatProfile } from '../../lib/format-profiles';
 import { getTtfvEvents } from '../../lib/ttfv';
 import { ParsedCalendarShift } from '../../lib/import-types';
+import { Shift } from '../../lib/types';
 import { analyzeDocumentFile, DocumentAnalysisResult } from '../../ingestion/parsers/file';
 import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
 import { detectTeamRoster } from '../../ingestion/team-roster';
@@ -120,6 +121,7 @@ function renderImportModal(
     employeePreset?: { name: string; externalId: string } | null;
     identityLocked?: boolean;
     organizationId?: string | null;
+    existingShifts?: Shift[];
   } = {},
 ) {
   if (locale === 'en') {
@@ -136,6 +138,7 @@ function renderImportModal(
         employeePreset={options.employeePreset ?? null}
         identityLocked={options.identityLocked ?? false}
         organizationId={options.organizationId ?? null}
+        existingShifts={options.existingShifts}
       />
     </I18nProvider>,
   );
@@ -203,6 +206,55 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(loadFormatProfiles()[0].useCount).toBe(1);
+  });
+
+  it('locks confirmation with a busy cursor and stays open when persistence returns false', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    let resolveConfirmation!: (value: boolean) => void;
+    const confirmation = new Promise<boolean>((resolve) => { resolveConfirmation = resolve; });
+    const onConfirmImport = vi.fn(() => confirmation);
+    const onClose = vi.fn();
+
+    renderImportModal('es', onClose, { onConfirmImport, initialFile: csvFile() });
+    const confirmButton = await screen.findByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+    fireEvent.click(confirmButton);
+    await waitFor(() => expect(confirmButton.getAttribute('aria-busy')).toBe('true'));
+    expect(confirmButton.disabled).toBe(true);
+    expect(confirmButton.style.cursor).toBe('wait');
+    fireEvent.click(confirmButton);
+    expect(onConfirmImport).toHaveBeenCalledTimes(1);
+
+    resolveConfirmation(false);
+    await waitFor(() => expect(confirmButton.getAttribute('aria-busy')).toBe('false'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('closes only after persistence returns true', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    let resolveConfirmation!: (value: boolean) => void;
+    const confirmation = new Promise<boolean>((resolve) => { resolveConfirmation = resolve; });
+    const onClose = vi.fn();
+    renderImportModal('es', onClose, { onConfirmImport: vi.fn(() => confirmation), initialFile: csvFile() });
+    fireEvent.click(await screen.findByRole('button', { name: /Confirmar Importación/ }));
+    expect(onClose).not.toHaveBeenCalled();
+    resolveConfirmation(true);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('disables confirmation when every detected shift is already identical', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    const onConfirmImport = vi.fn(async () => true);
+    const existingShifts: Shift[] = [
+      { id: 'existing-1', date: '2026-03-04', startTime: '08:00', endTime: '16:00', location: 'Regular', origin: 'IMP' },
+      { id: 'existing-2', date: '2026-03-05', startTime: '08:00', endTime: '16:00', location: 'Regular', origin: 'IMP' },
+    ];
+
+    renderImportModal('es', () => {}, { onConfirmImport, existingShifts, initialFile: csvFile() });
+    const confirmButton = await screen.findByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+
+    expect(confirmButton.disabled).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain('ya están en el sistema');
+    expect(onConfirmImport).not.toHaveBeenCalled();
   });
 
   it('organization session, drifted match: confirming creates a new candidate (supersedesLogicalProfileId) instead of touching the old profile', async () => {
