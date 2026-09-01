@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, FileText, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
 import { analyzeDocumentFile, classifyDocument, DocumentAnalysisResult, extractDocumentItems, filterShiftsToContext } from '../../ingestion/parsers/file';
@@ -151,17 +152,56 @@ function ModalSelect({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<React.CSSProperties>({});
+
+  // The menu renders in a body portal anchored to the trigger: the modal's
+  // own clipping chain (`.import-modal-grid`/`.import-modal-left` use
+  // overflow:hidden on desktop, `.modal-content` scrolls on mobile) would
+  // otherwise cut the dropdown or grow a scroll region. Anchored to the
+  // trigger rect, capped at 240px or the viewport space actually available —
+  // short lists show fully, long lists scroll inside the menu. Flips upward
+  // when there is no usable room below.
+  const MENU_MAX_HEIGHT = 240;
+  const VIEWPORT_GAP = 12;
+  const MIN_USEFUL_SPACE = 140;
+
+  const updateMenuPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_GAP;
+    const spaceAbove = rect.top - VIEWPORT_GAP;
+    const openUp = spaceBelow < MIN_USEFUL_SPACE && spaceAbove > spaceBelow;
+    const available = Math.max(96, Math.min(MENU_MAX_HEIGHT, openUp ? spaceAbove : spaceBelow));
+    setMenuPosition(openUp
+      ? { position: 'fixed', left: rect.left, width: rect.width, bottom: window.innerHeight - rect.top + 6, maxHeight: available }
+      : { position: 'fixed', left: rect.left, width: rect.width, top: rect.bottom + 6, maxHeight: available });
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    updateMenuPosition();
     const handlePointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
       }
     };
     window.addEventListener('mousedown', handlePointerDown);
-    return () => window.removeEventListener('mousedown', handlePointerDown);
-  }, [open]);
+    // Capture scroll from any ancestor (the modal card itself scrolls on
+    // small viewports) so the anchored menu never detaches from its trigger.
+    window.addEventListener('scroll', updateMenuPosition, true);
+    window.addEventListener('resize', updateMenuPosition);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('scroll', updateMenuPosition, true);
+      window.removeEventListener('resize', updateMenuPosition);
+    };
+  }, [open, updateMenuPosition]);
 
   const selectedOption = options.find((option) => option.value === value);
 
@@ -169,6 +209,7 @@ function ModalSelect({
     <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)', position: 'relative', minWidth: 0 }}>
       <span>{label}</span>
       <button
+        ref={triggerRef}
         type="button"
         className="modal-select-trigger"
         onClick={() => setOpen((current) => !current)}
@@ -192,17 +233,14 @@ function ModalSelect({
         <span>{selectedOption?.label ?? ''}</span>
         <ChevronDown size={16} />
       </button>
-      {open && (
+      {open && createPortal(
         <div
+          ref={menuRef}
           className="modal-select-menu"
           role="listbox"
           style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            right: 0,
-            zIndex: 30,
-            maxHeight: '240px',
+            ...menuPosition,
+            zIndex: 1100,
             overflowY: 'auto',
             padding: '6px',
             border: '1px solid var(--glass-border)',
@@ -240,7 +278,8 @@ function ModalSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

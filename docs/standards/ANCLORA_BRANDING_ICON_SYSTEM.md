@@ -80,7 +80,7 @@ Ondas = mismo color que el borde. Esquema monocromático.
 | Premium | `anclora-talent` *(pausado)* | Cobre | `#4A9FD8` azul cielo | `#141E28` navy azul | 205° |
 | Premium | `anclora-synergi` | Cobre | `#8C5AB4` púrpura | `#1C162A` navy púrpura | 280° |
 | Premium | `anclora-command-center` | Azul/violeta | `#6C63FF` violeta premium + `#5FA8FF` azul luminoso | `#1E1A2E` navy púrpura | 245° |
-| Premium | `anclora-syncxml` *(añadido 2026-08)* | Cobre | `#BFA46A` dorado apagado | `#070A12` navy profundo *(inferido del fondo real del producto)* | 41° |
+| Premium | `anclora-guesthub` *(añadido 2026-08)* *(renombrado a GuestHub 2026-08)* | Cobre | `#BFA46A` dorado apagado | `#070A12` navy profundo *(inferido del fondo real del producto)* | 41° |
 | Premium | `anclora-groundsync` *(añadido 2026-08-03, reasignado)* | Cobre | `#6AAD49` verde musgo *(reasignado para resolver colisión con Talent; icono regenerado y verificado, CSS de la app aún en `#afd2fa` azul, pendiente de sincronizar)* | `#0f1739` navy azulado *(verificado, `--color-bg-base` dark)* | 100° |
 | Ultra | `anclora-private-estates` | Oro | `#D4AF37` oro | `#1A3035` teal oscuro | 45° |
 | Ultra | `anclora-private-estates-landing` *(añadido 2026-08)* | Oro | `#D4AF37` oro *(comparte icono con `anclora-private-estates`, mismo lockup confirmado)* | `#1A3035` teal oscuro | 45° |
@@ -116,7 +116,7 @@ Ondas = mismo color que el borde. Esquema monocromático.
 | Púrpura (280°) ↔ Rojo (355°) | 75° | ✓ |
 | Rojo (355°) ↔ Naranja (25°) | 30° | ✓ interiores distintos |
 | Verde musgo GroundSync (100°) ↔ Naranja Impulso (25°) | 75° | ✓ *(reasignado 2026-08-03, ver `ANCLORA_BRANDING_MASTER_CONTRACT.md`)* |
-| Verde musgo GroundSync (100°) ↔ Dorado apagado SyncXML (41°) | 59° | ✓ |
+| Verde musgo GroundSync (100°) ↔ Dorado apagado GuestHub (41°) | 59° | ✓ |
 | Verde musgo GroundSync (100°) ↔ Esmeralda Data Lab/EnergyScan (155°) | 55° | ✓ |
 | Verde musgo GroundSync (100°) ↔ Azul cielo Talent (205°) | 105° | ✓ |
 
@@ -238,7 +238,7 @@ navy (#0F1520) with subtle leather grain texture, waves brushed indigo blue
 metal (#5C70D8) with soft highlights, black background, 3D render, no text
 ```
 
-### SyncXML *(añadido 2026-08)*
+### GuestHub *(añadido 2026-08)*
 ```
 Circular emblem, three horizontal smooth wave lines, outer ring polished 
 brushed rose copper metallic (#C07860) with beveled edges, inner background 
