@@ -49,6 +49,8 @@ interface TeamImportModalProps {
   allowAreaChoice?: boolean;
   /** Automatic dispatcher handoff for a workbook containing one employee. */
   onSingleEmployeeDetected?: (file: File, employee: DetectedTeamEmployee) => void;
+  isImporting?: boolean;
+  onImportStateChange?: (importing: boolean) => void;
 }
 
 interface TeamRow {
@@ -126,6 +128,8 @@ export const TeamImportModal = ({
   currentAreaId = null,
   allowAreaChoice = false,
   onSingleEmployeeDetected,
+  isImporting = false,
+  onImportStateChange,
 }: TeamImportModalProps) => {
   const { t } = useI18n();
   const defaultImportAreaId = currentAreaId ?? (areas.length === 1 ? areas[0].id : null);
@@ -162,6 +166,7 @@ export const TeamImportModal = ({
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ created: number; existing: number; failed: number } | null>(null);
+  const interactionLocked = importing || isImporting;
 
   useEffect(() => {
     if (isOpen) {
@@ -201,6 +206,9 @@ export const TeamImportModal = ({
   };
 
   const handleClose = () => {
+    if (importing || isImporting) {
+      return;
+    }
     reset();
     onClose();
   };
@@ -499,8 +507,13 @@ export const TeamImportModal = ({
   };
 
   const handleConfirmImport = async () => {
+    if (importing || isImporting) {
+      return;
+    }
+    onImportStateChange?.(true);
     setImporting(true);
     const results: ImportOutcome[] = [];
+    try {
 
     // PDF batches share ONE Import record for the whole document (§12):
     // created once, up front, best-effort — if this fails, each employee
@@ -554,10 +567,13 @@ export const TeamImportModal = ({
         results.push({ row: entry.row, ok: false, created: 0 });
       }
     }
-    setOutcomes(results);
-    setImporting(false);
-    setStep('result');
-    onImported();
+      setOutcomes(results);
+      setStep('result');
+      onImported();
+    } finally {
+      setImporting(false);
+      onImportStateChange?.(false);
+    }
   };
 
   const totals = {
@@ -569,15 +585,19 @@ export const TeamImportModal = ({
 
   return (
     <>
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '760px', width: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="modal-overlay" data-import-modal>
+      <div className="modal-content" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('teamImport.title')} style={{ maxWidth: '760px', width: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{t('teamImport.title')}</h3>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('teamImport.teamFlow')}</span>
           </div>
-          <button type="button" className="theme-toggle" onClick={handleClose} aria-label={t('common.close')}>×</button>
+          <button type="button" className="theme-toggle" disabled={interactionLocked} onClick={handleClose} aria-label={t('common.close')}>×</button>
         </div>
+
+        {interactionLocked && <p role="status" aria-live="polite" data-import-progress tabIndex={-1} style={{ margin: '0 0 12px', color: 'var(--color-gold)', fontWeight: 700 }}>{t('importModal.importing')}</p>}
+
+        <fieldset disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
 
         {error && (
           <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
@@ -607,7 +627,7 @@ export const TeamImportModal = ({
               </p>
             )}
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.88rem' }}>{t('teamImport.uploadHint')}</p>
-            <label className="btn-gold" aria-disabled={loading} style={{ padding: '12px 18px', fontWeight: 800, textAlign: 'center', cursor: loading ? 'not-allowed' : 'pointer' }}>
+            <label className="btn-gold" aria-disabled={interactionLocked || loading} style={{ padding: '12px 18px', fontWeight: 800, textAlign: 'center', cursor: interactionLocked || loading ? 'not-allowed' : 'pointer' }}>
               {loading ? t('teamImport.matching') : t('teamImport.chooseFile')}
               <input
                 type="file"
@@ -879,11 +899,11 @@ export const TeamImportModal = ({
               ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', paddingTop: '6px' }}>
-              <button type="button" className="btn-outline" disabled={importing} onClick={() => setStep('select')} style={{ padding: '10px 18px', fontWeight: 700 }}>
+              <button type="button" className="btn-outline" disabled={interactionLocked} onClick={() => setStep('select')} style={{ padding: '10px 18px', fontWeight: 700 }}>
                 {t('teamImport.back')}
               </button>
-              <button type="button" className="btn-gold" disabled={importing} aria-busy={importing} onClick={() => void handleConfirmImport()} style={{ padding: '10px 18px', fontWeight: 800, cursor: importing ? 'wait' : undefined }}>
-                {importing ? t('teamImport.importing') : t('teamImport.confirmImport')}
+              <button type="button" className="btn-gold" disabled={interactionLocked} aria-busy={interactionLocked} onClick={() => void handleConfirmImport()} style={{ padding: '10px 18px', fontWeight: 800, cursor: interactionLocked ? 'wait' : undefined }}>
+                {interactionLocked ? t('importModal.importing') : t('teamImport.confirmImport')}
               </button>
             </div>
           </div>
@@ -924,6 +944,7 @@ export const TeamImportModal = ({
             </div>
           </div>
         )}
+        </fieldset>
       </div>
     </div>
     <UpgradePrompt

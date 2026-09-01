@@ -122,11 +122,10 @@ function renderImportModal(
     identityLocked?: boolean;
     organizationId?: string | null;
     existingShifts?: Shift[];
+    isImporting?: boolean;
   } = {},
 ) {
-  if (locale === 'en') {
-    localStorage.setItem('anclora_shiftimport_locale_v1', 'en');
-  }
+  localStorage.setItem('anclora_shiftimport_locale_v1', locale);
   return render(
     <I18nProvider>
       <ImportModal
@@ -139,6 +138,7 @@ function renderImportModal(
         identityLocked={options.identityLocked ?? false}
         organizationId={options.organizationId ?? null}
         existingShifts={options.existingShifts}
+        isImporting={options.isImporting}
       />
     </I18nProvider>,
   );
@@ -255,6 +255,18 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(confirmButton.disabled).toBe(true);
     expect(screen.getByRole('alert').textContent).toContain('ya están en el sistema');
     expect(onConfirmImport).not.toHaveBeenCalled();
+  });
+
+  it('shows translated importing state and locks the modal controls', () => {
+    const onClose = vi.fn();
+    renderImportModal('es', onClose, { isImporting: true, initialFile: csvFile() });
+
+    expect(screen.getByText('Importando…').closest('button')).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Cerrar importación' })).toHaveProperty('disabled', true);
+    expect(screen.queryByText('importModal.importing')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Nueva Importación' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Eliminar archivo seleccionado' })).toHaveProperty('disabled', true);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('organization session, drifted match: confirming creates a new candidate (supersedesLogicalProfileId) instead of touching the old profile', async () => {

@@ -147,6 +147,7 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [appOperation, setAppOperation] = useState<'idle' | 'importing'>('idle');
   const [importResult, setImportResult] = useState<ReconciliationReport | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -155,6 +156,35 @@ function App() {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
+  const isImporting = appOperation === 'importing';
+  const hasImportConflict = importConflictState !== null;
+
+  useEffect(() => {
+    if (!isImporting) {
+      return;
+    }
+    const preventUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', preventUnload);
+    return () => window.removeEventListener('beforeunload', preventUnload);
+  }, [isImporting]);
+
+  useEffect(() => {
+    if (!isImporting) {
+      return;
+    }
+    const keepFocusInImport = (event: KeyboardEvent) => {
+      if (event.key === 'Tab' && !(event.target as HTMLElement).closest('[data-import-modal], [data-import-conflict]')) {
+        event.preventDefault();
+        document.querySelector<HTMLElement>('[data-import-conflict] button, [data-import-modal] [data-import-progress]')?.focus();
+      }
+    };
+    document.querySelector<HTMLElement>('[data-import-conflict] button, [data-import-modal] [data-import-progress]')?.focus();
+    document.addEventListener('keydown', keepFocusInImport, true);
+    return () => document.removeEventListener('keydown', keepFocusInImport, true);
+  }, [isImporting, hasImportConflict]);
 
   // Authenticated bootstrap: loads the org employees, picks the working
   // employee (self for EMPLOYEE role) and loads that employee's shifts.
@@ -380,6 +410,9 @@ function App() {
   }, []);
 
   const handleLogout = useCallback(async () => {
+    if (isImporting) {
+      return;
+    }
     try {
       await logout();
     } catch (error) {
@@ -390,7 +423,7 @@ function App() {
       console.error('Logout failed', error);
     }
     await resetToUnauthenticated();
-  }, [resetToUnauthenticated]);
+  }, [isImporting, resetToUnauthenticated]);
 
   // A 401 on any authenticated API call means the session died server-side
   // (expired, or invalidated from another tab/device): transition instead of
@@ -424,13 +457,16 @@ function App() {
   }, [resetToUnauthenticated]);
 
   const handleSelectEmployee = useCallback(async (employeeId: string) => {
+    if (isImporting) {
+      return;
+    }
     setSelectedEmployeeId(employeeId);
     try {
       setShifts(await loadRemoteShifts(employeeId));
     } catch (error) {
       console.error('Failed to load employee shifts', error);
     }
-  }, []);
+  }, [isImporting]);
 
   // ------------------------------------------------------- area context
   // 0 active areas → no area UI at all; 1 → implicit context (text only);
@@ -542,12 +578,18 @@ function App() {
   , [shifts, editingShiftId]);
 
   const handleNavigate = (delta: number) => {
+    if (isImporting) {
+      return;
+    }
     const d = new Date(currentYear, currentMonth + delta, 1);
     setCurrentYear(d.getFullYear());
     setCurrentMonth(d.getMonth());
   };
 
   const handleSaveShift = async (shift: Shift) => {
+    if (isImporting) {
+      return;
+    }
     const conflict = findShiftConflict(shifts, shift, locale);
     if (conflict) {
       window.alert(conflict);
@@ -569,6 +611,9 @@ function App() {
   };
 
   const handleDeleteShift = async (id: string) => {
+    if (isImporting) {
+      return;
+    }
     const nextShifts = shifts.filter(s => s.id !== id);
 
     try {
@@ -584,12 +629,18 @@ function App() {
   };
 
   const handleEditShift = (id: string) => {
+    if (isImporting) {
+      return;
+    }
     setDraftShiftDate(null);
     setEditingShiftId(id);
     setIsModalOpen(true);
   };
 
   const handleCreateShiftForDate = (date: string) => {
+    if (isImporting) {
+      return;
+    }
     setEditingShiftId(null);
     setDraftShiftDate(date);
     setIsModalOpen(true);
@@ -995,18 +1046,24 @@ function App() {
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
 
   return (
-    <div className="container">
+    <div className="container" aria-busy={isImporting}>
       <MonthHeader
         year={currentYear}
         month={currentMonth}
-        onNavigate={handleNavigate}
+        onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
         onAddShift={() => {
+          if (isImporting) {
+            return;
+          }
           setEditingShiftId(null);
           setDraftShiftDate(null);
           setIsModalOpen(true);
         }}
-        onImport={() => setIsImportOpen(true)}
+        onImport={() => { if (!isImporting) setIsImportOpen(true); }}
         onOpenSettings={(role) => {
+          if (isImporting) {
+            return;
+          }
           if (role === 'EMPLOYEE') {
             // EMPLOYEE role: only profile tab is accessible
             setIsSettingsOpen(true);
@@ -1025,7 +1082,7 @@ function App() {
             <button
               type="button"
               className="btn-outline"
-              onClick={() => setIsAuthOpen(true)}
+              onClick={() => { if (!isImporting) setIsAuthOpen(true); }}
               style={{ padding: '8px 14px', fontWeight: 700 }}
             >
               {t('auth.signIn')}
@@ -1052,7 +1109,7 @@ function App() {
             <button
               type="button"
               className="btn-outline"
-              onClick={() => void handleLogout()}
+              onClick={() => { if (!isImporting) void handleLogout(); }}
               style={{ padding: '8px 14px', fontWeight: 700 }}
             >
               {t('auth.logoutAction')}
@@ -1168,7 +1225,7 @@ function App() {
               <button
                 type="button"
                 className="btn-outline"
-                onClick={() => setIsMembersOpen(true)}
+                onClick={() => { if (!isImporting) setIsMembersOpen(true); }}
                 style={{ padding: '6px 12px', fontWeight: 700 }}
               >
                 {t('members.title')}
@@ -1178,7 +1235,7 @@ function App() {
               <button
                 type="button"
                 className="btn-outline"
-                onClick={() => setIsAreasOpen(true)}
+                onClick={() => { if (!isImporting) setIsAreasOpen(true); }}
                 style={{ padding: '6px 12px', fontWeight: 700 }}
               >
                 {t('areas.manage')}
@@ -1187,7 +1244,7 @@ function App() {
             <button
               type="button"
               className="btn-outline"
-              onClick={() => setIsFormatProfilesOpen(true)}
+              onClick={() => { if (!isImporting) setIsFormatProfilesOpen(true); }}
               style={{ padding: '6px 12px', fontWeight: 700 }}
             >
               {t('formatProfiles.manage')}
@@ -1195,7 +1252,7 @@ function App() {
             <button
               type="button"
               className="btn-outline"
-              onClick={() => void handleLogout()}
+              onClick={() => { if (!isImporting) void handleLogout(); }}
               style={{ padding: '6px 12px', fontWeight: 700, marginLeft: 'auto' }}
             >
               {t('auth.logoutAction')}
@@ -1231,11 +1288,23 @@ function App() {
         )}
       </div>
 
+      {isImporting && (
+        <div className="app-operation-lock" role="presentation">
+          <div className="app-operation-lock__status" role="status" aria-live="polite" tabIndex={-1} data-import-progress>
+            <span className="app-operation-lock__spinner" aria-hidden="true" />
+            {t('importModal.importing')}
+          </div>
+        </div>
+      )}
+
       <ShiftModal
-        isOpen={isModalOpen}
+        isOpen={isModalOpen && !isImporting}
         editingShift={editingShift}
         defaultDate={draftShiftDate}
         onClose={() => {
+          if (isImporting) {
+            return;
+          }
           setIsModalOpen(false);
           setDraftShiftDate(null);
         }}
@@ -1244,7 +1313,7 @@ function App() {
       />
 
       <SettingsModal
-        isOpen={isSettingsOpen}
+        isOpen={isSettingsOpen && !isImporting}
         onClose={() => setIsSettingsOpen(false)}
         onRestartOnboarding={() => {
           resetOnboarding();
@@ -1290,7 +1359,7 @@ function App() {
       />
 
       <OnboardingModal
-        isOpen={isOnboardingOpen}
+        isOpen={isOnboardingOpen && !isImporting}
         onClose={() => setIsOnboardingOpen(false)}
         onFileChosen={(chosen) => {
           setIsOnboardingOpen(false);
@@ -1304,11 +1373,16 @@ function App() {
         <ImportModal
           isOpen={isImportOpen}
           onClose={() => {
+            if (isImporting) {
+              return;
+            }
             setIsImportOpen(false);
             setOnboardingFile(null);
             setAdminIndividualImport(null);
           }}
           onConfirmImport={handleConfirmImport}
+          isImporting={isImporting}
+          onImportStateChange={(importing) => setAppOperation(importing ? 'importing' : 'idle')}
           initialContext={{ month: currentMonth, year: currentYear }}
           existingShifts={shifts}
           initialFile={adminIndividualImport?.file ?? onboardingFile}
@@ -1339,7 +1413,9 @@ function App() {
       {session && session.role === 'ADMIN' && !adminIndividualImport && (
         <TeamImportModal
           isOpen={isImportOpen}
-          onClose={() => setIsImportOpen(false)}
+          onClose={() => { if (!isImporting) setIsImportOpen(false); }}
+          isImporting={isImporting}
+          onImportStateChange={(importing) => setAppOperation(importing ? 'importing' : 'idle')}
           onImported={() => {
             void hydrateAuthenticated(session);
           }}
@@ -1422,7 +1498,7 @@ function App() {
       />
 
       <MembersModal
-        isOpen={isMembersOpen}
+        isOpen={isMembersOpen && !isImporting}
         onClose={() => setIsMembersOpen(false)}
         employees={employees}
         areas={activeAreas}
@@ -1436,21 +1512,21 @@ function App() {
       />
 
       <AreasModal
-        isOpen={isAreasOpen}
+        isOpen={isAreasOpen && !isImporting}
         onClose={() => setIsAreasOpen(false)}
         onChanged={() => void refreshAreas()}
       />
 
       <FormatProfilesModal
-        isOpen={isFormatProfilesOpen}
+        isOpen={isFormatProfilesOpen && !isImporting}
         onClose={() => setIsFormatProfilesOpen(false)}
         store={getFormatProfileStore(session?.organizationId ?? null)}
         canManage={session?.role === 'ADMIN'}
       />
 
       {importConflictState && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: '520px' }}>
+        <div className="modal-overlay" data-import-conflict>
+          <div className="modal-content" role="dialog" aria-modal="true" aria-label={t('importConflict.title')} style={{ maxWidth: '520px' }}>
             <h3 style={{ margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 800 }}>{t('importConflict.title')}</h3>
             <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
               {t('importConflict.description')}

@@ -65,6 +65,8 @@ interface ImportModalProps {
   /** ADMIN may re-target the import to another area before confirming;
    * EMPLOYEE/guest never get a selector (their context is read-only). */
   allowAreaChoice?: boolean;
+  isImporting?: boolean;
+  onImportStateChange?: (importing: boolean) => void;
 }
 
 /** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
@@ -144,11 +146,13 @@ function ModalSelect({
   value,
   options,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   options: ModalSelectOption[];
   onChange: (value: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -212,9 +216,11 @@ function ModalSelect({
         ref={triggerRef}
         type="button"
         className="modal-select-trigger"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => !disabled && setOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={disabled}
+        aria-disabled={disabled}
         style={{
           width: '100%',
           minHeight: '44px',
@@ -233,7 +239,7 @@ function ModalSelect({
         <span>{selectedOption?.label ?? ''}</span>
         <ChevronDown size={16} />
       </button>
-      {open && createPortal(
+      {open && !disabled && createPortal(
         <div
           ref={menuRef}
           className="modal-select-menu"
@@ -285,7 +291,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
@@ -293,6 +299,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const interactionLocked = confirming || isImporting;
   const [errorDiagnosis, setErrorDiagnosis] = useState<ImportDiagnosis | null>(null);
   const [periodConflictResolved, setPeriodConflictResolved] = useState(false);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
@@ -388,7 +395,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     (diagnostic) => diagnostic.code === 'MONTH_MISMATCH' && diagnostic.blocking,
   ) ?? null;
 
-  useEscapeClose(isOpen, onClose);
+  useEscapeClose(isOpen && !interactionLocked, onClose);
 
   // Abort any in-flight VLM analysis when the modal closes or unmounts (the
   // component stays mounted with isOpen=false, so close ≠ unmount here).
@@ -722,9 +729,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   const handleConfirm = async () => {
-    if (confirming) {
+    if (interactionLocked) {
       return;
     }
+    onImportStateChange?.(true);
     setConfirming(true);
     try {
     const periods = analysis?.coveredPeriods ?? [...new Map(
@@ -780,6 +788,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       }
     } finally {
       setConfirming(false);
+      onImportStateChange?.(false);
     }
   };
 
@@ -840,16 +849,18 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '1380px', width: '96vw', height: '88vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="modal-overlay" data-import-modal>
+      <div className="modal-content" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('importModal.title')} style={{ maxWidth: '1380px', width: '96vw', height: '88vh', display: 'flex', flexDirection: 'column' }}>
         <button
-          onClick={onClose}
+          disabled={interactionLocked}
+          onClick={() => { if (!interactionLocked) onClose(); }}
           aria-label={t('importModal.closeAria')}
           style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
         >
           <X size={24} />
         </button>
 
+        <fieldset disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginBottom: '12px', paddingRight: '36px' }}>
           <div>
             <h2 style={{ fontSize: '1.5rem', fontWeight: '800', margin: 0 }}>{t('importModal.title')}</h2>
@@ -859,7 +870,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             <button
               className="btn-outline modal-reset-button"
               onClick={resetImportState}
-              disabled={!canStartFreshImport}
+              disabled={!canStartFreshImport || interactionLocked}
               style={{ padding: '8px 12px', fontWeight: 700 }}
             >
               {t('importModal.newImport')}
@@ -895,13 +906,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 label={t('importModal.monthLabel')}
                 value={selectedPeriod}
                 options={[...monthSelectOptions, { value: 'multi', label: t('importModal.multiPeriod') }]}
+                disabled={interactionLocked}
                 onChange={(value) => {
                   setSelectedPeriod(value);
                   if (value !== 'multi') setSelectedMonth(value);
                 }}
               />
 
-              <ModalSelect label={t('importModal.yearLabel')} value={selectedYear} options={yearSelectOptions} onChange={setSelectedYear} />
+              <ModalSelect label={t('importModal.yearLabel')} value={selectedYear} options={yearSelectOptions} onChange={setSelectedYear} disabled={interactionLocked} />
 
               {detectedPeriodLabel && (
                 <span data-testid="import-detected-period" style={{ gridColumn: '1 / -1', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
@@ -924,6 +936,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   value={importAreaId ?? ''}
                   options={areaSelectOptions}
                   onChange={(value) => setImportAreaId(value || null)}
+                  disabled={interactionLocked}
                 />
               )}
               {areas.length >= 2 && !allowAreaChoice && currentAreaName && (
@@ -936,7 +949,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
             <button
               className="import-upload-zone"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => !interactionLocked && fileInputRef.current?.click()}
+              disabled={interactionLocked}
               style={{
                 border: '2px dashed var(--glass-border)',
                 borderRadius: '14px',
@@ -944,7 +958,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer',
+                cursor: interactionLocked ? 'not-allowed' : 'pointer',
                 gap: '8px',
                 padding: '14px 14px',
                 minHeight: '108px',
@@ -995,7 +1009,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   </div>
                 </div>
                 <button
+                  type="button"
+                  disabled={interactionLocked}
                   onClick={resetImportState}
+                  aria-label={t('importModal.removeFileAria')}
                   style={{ background: 'var(--danger-bg-strong)', border: 'none', padding: '6px', borderRadius: '8px', cursor: 'pointer', flexShrink: 0 }}
                 >
                   <Trash2 size={16} color="white" />
@@ -1008,7 +1025,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             <div style={{ minWidth: 0, width: '100%', flexShrink: 0 }}>
               <button
                 className="btn-gold import-process-button"
-                disabled={!file || loading || diagnosisBlocking}
+                disabled={!file || loading || diagnosisBlocking || interactionLocked}
                 aria-busy={loading}
                 onClick={handleStartImport}
                 style={{
@@ -1250,7 +1267,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                             />
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>
-                            <button onClick={() => handleRemoveShift(index)} style={{ color: 'var(--danger)', padding: '6px' }}>
+                            <button type="button" disabled={interactionLocked} onClick={() => handleRemoveShift(index)} style={{ color: 'var(--danger)', padding: '6px' }}>
                               <Trash2 size={16} />
                             </button>
                           </td>
@@ -1299,12 +1316,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             <div style={{ marginTop: '16px' }}>
               <button
                 className="btn-gold import-process-button"
-                disabled={readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists}
-                aria-busy={confirming}
+                disabled={readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
+                aria-busy={interactionLocked}
                 onClick={() => void handleConfirm()}
                 style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}
               >
-                {confirming ? t('importModal.importing') : t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
+                <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
+                  {interactionLocked ? t('importModal.importing') : t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
+                </span>
               </button>
               {diagnosisBlocking && (
                 <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--danger)', textAlign: 'center' }}>
@@ -1314,6 +1333,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             </div>
           </div>
         </div>
+        </fieldset>
       </div>
     </div>
   );

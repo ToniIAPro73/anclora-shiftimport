@@ -856,6 +856,42 @@ select:disabled {
   padding: var(--space-md);
 }
 
+.app-operation-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: color-mix(in srgb, var(--color-bg-overlay) 42%, transparent);
+  backdrop-filter: blur(2px);
+  cursor: wait;
+}
+
+.app-operation-lock__status {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 68%, var(--glass-border));
+  border-radius: 999px;
+  background: var(--panel-muted-bg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-soft);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.app-operation-lock__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--color-gold) 30%, transparent);
+  border-top-color: var(--color-gold);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 .modal-content {
   position: relative;
   background: var(--gradient-primary);
