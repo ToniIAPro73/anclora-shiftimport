@@ -607,7 +607,7 @@ export const TeamImportModal = ({
               </p>
             )}
             <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.88rem' }}>{t('teamImport.uploadHint')}</p>
-            <label className="btn-gold" style={{ padding: '12px 18px', fontWeight: 800, textAlign: 'center', cursor: 'pointer' }}>
+            <label className="btn-gold" aria-disabled={loading} style={{ padding: '12px 18px', fontWeight: 800, textAlign: 'center', cursor: loading ? 'not-allowed' : 'pointer' }}>
               {loading ? t('teamImport.matching') : t('teamImport.chooseFile')}
               <input
                 type="file"
@@ -826,6 +826,7 @@ export const TeamImportModal = ({
                 type="button"
                 className="btn-gold"
                 disabled={loading}
+                aria-busy={loading}
                 onClick={() => void handleContinueToPreview()}
                 style={{ padding: '10px 18px', fontWeight: 800 }}
               >
