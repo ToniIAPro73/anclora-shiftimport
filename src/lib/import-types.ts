@@ -3,6 +3,10 @@ export interface CalendarImportContext {
   year: number;
 }
 
+export type ImportPeriod =
+  | { kind: 'single'; month: number; year: number }
+  | { kind: 'multi'; periods: CalendarImportContext[] };
+
 export type PdfDocumentType = 'TYPE_A' | 'TYPE_B' | 'TYPE_TAB' | 'TYPE_LEGEND' | 'TYPE_MULTI' | 'UNKNOWN';
 
 export interface ParsedCalendarShift {

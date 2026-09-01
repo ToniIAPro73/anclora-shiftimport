@@ -60,8 +60,9 @@ import { PricingPage } from './pages/PricingPage';
 import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { SearchableSelect } from './components/ui/SearchableSelect';
-import { CalendarImportContext } from './lib/import-types';
+import { ImportPeriod } from './lib/import-types';
 import type { DetectedTeamEmployee } from './ingestion/team-roster';
+import { normalizeText } from './ingestion/core/normalize';
 import { loadFormatProfiles } from './lib/format-profiles';
 import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
@@ -150,7 +151,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingFile, setOnboardingFile] = useState<File | null>(null);
-  const [adminIndividualImport, setAdminIndividualImport] = useState<{ file: File; employee: DetectedTeamEmployee } | null>(null);
+  const [adminIndividualImport, setAdminIndividualImport] = useState<{ file: File; employee: DetectedTeamEmployee; employeeId: string | null } | null>(null);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
@@ -622,6 +623,13 @@ function App() {
     const name = (selector?.name ?? '').trim();
     const externalId = (selector?.externalId ?? '').trim();
 
+    // An ADMIN's individual dispatch is anchored to the employee selected in
+    // the organization context. The file name is evidence, never authority;
+    // this also prevents a payroll id from another sheet from retargeting it.
+    if (adminIndividualImport && selected) {
+      return selected;
+    }
+
     // Identity untouched relative to the selected employee: no resolution needed.
     if (selected
       && (!name || name.toLowerCase() === selected.name.trim().toLowerCase())
@@ -684,7 +692,7 @@ function App() {
 
   const handleConfirmImport = async (
     newShifts: Shift[],
-    targetPeriod: CalendarImportContext,
+    targetPeriod: ImportPeriod,
     selector?: { name: string; externalId: string },
     areaId?: string | null,
   ): Promise<boolean> => {
@@ -723,8 +731,8 @@ function App() {
         const created = await createRemoteImport({
           fileName: '',
           sourceFormat: newShifts[0]?.sourceFormat ?? '',
-          periodYear: targetPeriod.year,
-          periodMonth: targetPeriod.month,
+          periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
+          periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
           areaId: areaId ?? null,
         });
         importId = created.id;
@@ -791,8 +799,11 @@ function App() {
     // that rejected but still committed server-side.
     const applySuccessTail = () => {
       setShifts(working);
-      setCurrentYear(targetPeriod.year);
-      setCurrentMonth(targetPeriod.month);
+      const visiblePeriod = targetPeriod.kind === 'single'
+        ? targetPeriod
+        : targetPeriod.periods[0] ?? { month: currentMonth, year: currentYear };
+      setCurrentYear(visiblePeriod.year);
+      setCurrentMonth(visiblePeriod.month);
       setIsImportOpen(false);
       setOnboardingFile(null);
       // TTFV funnel endpoint + onboarding completion on the first real import.
@@ -1321,7 +1332,25 @@ function App() {
           currentAreaId={effectiveAreaId}
           allowAreaChoice={session.role === 'ADMIN'}
           onSingleEmployeeDetected={(file, employee) => {
-            setAdminIndividualImport({ file, employee });
+            const matching = employees.filter((candidate) => (
+              employee.externalEmployeeId
+                ? candidate.externalEmployeeId === employee.externalEmployeeId
+                : normalizeText(candidate.name) === normalizeText(employee.name)
+            ));
+            const resolved = matching.length === 1 ? matching[0] : null;
+            if (resolved) {
+              setSelectedEmployeeId(resolved.id);
+            }
+            setAdminIndividualImport({
+              file,
+              employee: {
+                ...employee,
+                // The application directory is authoritative. Never copy an
+                // identifier from an informational worksheet into this path.
+                externalEmployeeId: resolved?.externalEmployeeId ?? employee.externalEmployeeId,
+              },
+              employeeId: resolved?.id ?? null,
+            });
           }}
         />
       )}
@@ -1461,4 +1490,3 @@ function App() {
 }
 
 export default App;
-
