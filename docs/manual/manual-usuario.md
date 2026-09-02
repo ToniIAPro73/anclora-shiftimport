@@ -372,6 +372,51 @@ Dentro de Ajustes, en la sección **Zona de peligro**, un administrador puede **
 - **Conserva** la organización, tu cuenta de administrador, las áreas creadas y los formatos de cuadrante aprendidos — se consideran configuración de la organización, no datos operativos de un mes concreto.
 - Exige escribir la palabra **RESTABLECER** para confirmar, precisamente porque no se puede deshacer.
 
+### 9.5 Historial de importaciones
+
+Junto al botón **Importar**, un icono de reloj abre el **Historial de importaciones**: la lista de todas las importaciones confirmadas en la organización activa. Cualquier usuario con sesión iniciada puede consultarlo; **eliminar** una importación concreta está reservado a los administradores (un empleado ve la misma lista en modo solo lectura, sin el botón de eliminar).
+
+Cada fila del historial muestra:
+
+- **Fecha y hora** en que se confirmó la importación, y **quién** la ejecutó.
+- **Empleados**: cuántos empleados venían en el archivo importado (no el total de la organización).
+- **Turnos del archivo**: cuántos turnos contenía el documento en total.
+- **Turnos nuevos**: cuántos de esos turnos se crearon realmente (los que no existían todavía).
+- **Ya existentes**: cuántos turnos del archivo coincidían con turnos ya guardados y no se tocaron.
+- **Período**: el mes, o el rango de meses si fue una importación plurimensual.
+- **Tipo**: *Individual* (una persona) o *Equipo* (varios empleados en la misma operación, ver [sección 10](#10-importación-de-equipo-solo-administradores)).
+- **Formato** del documento original (PDF, CSV o XLSX).
+- **Ámbito**: *Global* si la importación no estaba limitada a un área, o *Área: nombre* si lo estaba. Ese nombre queda fijado en el momento de importar — si el área se renombra o se desactiva más adelante, el historial sigue mostrando el nombre que tenía entonces.
+- **Estado**: *Completada* o *Eliminada*.
+
+Puedes acotar la lista con filtros compactos de ámbito, tipo, formato y estado. El encabezado, los filtros y la paginación permanecen fijos; solo la lista de importaciones se desplaza internamente cuando hay más resultados de los que caben en pantalla.
+
+#### Eliminar una importación concreta
+
+Un administrador puede eliminar cualquier importación no eliminada todavía desde su propia fila. Al confirmar:
+
+- Se eliminan **únicamente los turnos creados por esa importación** — nunca por coincidencia de fecha, horario, empleado o área.
+- **Los turnos añadidos manualmente se conservan siempre**, aunque tengan la misma fecha y horario que un turno importado que se está eliminando. Un turno manual nunca pertenece a una importación.
+- Los turnos de **otras** importaciones no se ven afectados.
+- No se elimina ningún empleado, usuario ni área — solo los turnos de esa importación.
+- El cuadro de confirmación muestra la fecha, el usuario, el período, el ámbito y el número exacto de turnos que se van a eliminar, y avisa de que **la acción no puede deshacerse**.
+- La fila queda deshabilitada mientras se elimina («Eliminando…») para impedir una doble confirmación.
+
+La importación eliminada sigue apareciendo en el historial marcada como **Eliminada**, como registro de lo ocurrido — solo desaparecen sus turnos del calendario.
+
+#### Diferencia con «Restaurar la organización a su estado inicial»
+
+El historial de importaciones y **Restablecer la situación inicial** (sección 9.4) resuelven problemas distintos:
+
+| | Eliminar una importación | Restablecer la situación inicial |
+| --- | --- | --- |
+| Alcance | Una importación concreta | Toda la organización |
+| Qué borra | Solo los turnos creados por esa importación | Todos los empleados, turnos e importaciones |
+| Turnos manuales | Se conservan siempre | Se eliminan (junto con todo lo demás) |
+| Cuándo usarlo | Corregir un archivo importado por error, sin tocar el resto | Empezar de cero por completo |
+
+Si importaste un archivo equivocado, usa siempre **Eliminar esta importación** — «Restablecer la situación inicial» borra muchísimo más de lo necesario para corregir un solo error de importación.
+
 ---
 
 ## 10. Importación de equipo (solo administradores)
