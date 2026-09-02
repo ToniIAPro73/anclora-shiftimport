@@ -6,6 +6,7 @@ import {
   createEmployee,
   createImport,
   deleteEmployee,
+  deleteImport,
   deleteShiftsByIds,
   findEmployeeMatch,
   listImports,
@@ -61,6 +62,11 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
 
+    // createImport area_name_snapshot lookup (values: [areaId, organizationId])
+    if (text.startsWith('SELECT name FROM areas')) {
+      const found = areas.find((a) => a.id === values[0] && a.organization_id === values[1]);
+      return Promise.resolve(found ? [{ name: found.name }] : []);
+    }
     // Area lookups (assertAreaInOrg / resolveAreaIdByName / bulk roster index)
     if (text.startsWith('SELECT id, name, code FROM areas')) {
       return Promise.resolve(areas.filter((a) => a.organization_id === values[0] && a.active !== false));
@@ -207,22 +213,56 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve([row]);
     }
     if (text.startsWith('INSERT INTO imports')) {
-      // 'completed' is a SQL literal; area_id (when present) is values[6].
-      const hasArea = text.includes(', area_id');
+      // Every inserted column is a bound parameter (including the 'completed'
+      // status literal), so the parenthesized column list lines up 1:1 with
+      // `values` — no positional guessing needed even as columns/branches
+      // (area vs no-area) evolve.
+      const columns = text.match(/INSERT INTO imports \( ([^)]+) \)/)[1].split(',').map((c) => c.trim());
+      const record = {};
+      columns.forEach((col, index) => { record[col] = values[index]; });
       const row = {
         id: `import-${calls.length}`,
-        organization_id: values[0],
-        imported_by_user_id: values[1],
-        file_name: values[2],
-        source_format: values[3],
-        period_year: values[4],
-        period_month: values[5],
-        status: 'completed',
-        area_id: hasArea ? values[6] : null,
+        organization_id: record.organization_id,
+        imported_by_user_id: record.imported_by_user_id,
+        file_name: record.file_name,
+        source_format: record.source_format,
+        period_year: record.period_year,
+        period_month: record.period_month,
+        status: record.status ?? 'completed',
+        area_id: record.area_id ?? null,
+        import_mode: record.import_mode ?? 'individual',
+        period_kind: record.period_kind ?? 'single',
+        period_label: record.period_label ?? '',
+        scope_type: record.scope_type ?? 'global',
+        area_name_snapshot: record.area_name_snapshot ?? null,
+        employee_count: record.employee_count ?? 0,
+        shift_count: record.shift_count ?? 0,
+        created_shift_count: record.created_shift_count ?? 0,
+        existing_shift_count: record.existing_shift_count ?? 0,
+        deleted_at: null,
+        deleted_by_user_id: null,
         created_at: new Date(),
       };
       imports.push(row);
       return Promise.resolve([row]);
+    }
+    // deleteImport pre-check (values: [id, organizationId])
+    if (text.startsWith('SELECT id, organization_id, deleted_at FROM imports')) {
+      return Promise.resolve(
+        imports.filter((i) => i.id === values[0] && i.organization_id === values[1])
+          .map((i) => ({ id: i.id, organization_id: i.organization_id, deleted_at: i.deleted_at ?? null })),
+      );
+    }
+    // deleteImport soft-delete (values: [deletedByUserId, id, organizationId])
+    if (text.startsWith('UPDATE imports')) {
+      const [deletedByUserId, id, organizationId] = values;
+      const target = imports.find((i) => i.id === id && i.organization_id === organizationId && !i.deleted_at);
+      if (!target) {
+        return Promise.resolve([]);
+      }
+      target.deleted_at = new Date();
+      target.deleted_by_user_id = deletedByUserId;
+      return Promise.resolve([{ id: target.id }]);
     }
     // resetOrganization: org-scoped delete-all (values: [organizationId])
     if (text.startsWith('DELETE FROM imports')) {
@@ -231,6 +271,16 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         imports.splice(imports.indexOf(row), 1);
       }
       return Promise.resolve(removed.map((row) => ({ id: row.id })));
+    }
+    // listImports (values: [organizationId] or [organizationId, areaId]) —
+    // simulates the LEFT JOIN users for imported_by_user_name.
+    if (text.startsWith('SELECT i.*, u.display_name')) {
+      const orgRows = imports.filter((i) => i.organization_id === values[0]);
+      const scoped = text.includes('i.area_id') ? orgRows.filter((i) => i.area_id === values[1]) : orgRows;
+      return Promise.resolve(scoped.map((row) => ({
+        ...row,
+        imported_by_user_name: users.find((u) => u.id === row.imported_by_user_id)?.display_name ?? null,
+      })));
     }
     if (text.includes('FROM imports')) {
       return Promise.resolve(imports.filter((i) => i.organization_id === values[0]));
@@ -267,6 +317,15 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         return Promise.resolve([{ id: values[0] }]);
       }
       return Promise.resolve([]);
+    }
+    // deleteImport: exact import_id-scoped hard delete (values: [importId, organizationId])
+    if (text.startsWith('DELETE FROM shifts') && text.includes('WHERE import_id')) {
+      const [importId, organizationId] = values;
+      const removed = shifts.filter((s) => s.import_id === importId && s.organization_id === organizationId);
+      for (const row of removed) {
+        shifts.splice(shifts.indexOf(row), 1);
+      }
+      return Promise.resolve(removed.map((row) => ({ id: row.id })));
     }
     if (text.startsWith('DELETE FROM shifts')) {
       // resetOrganization: org-scoped delete-all (values: [organizationId])
@@ -763,7 +822,8 @@ describe('import persistence', () => {
     const first = await createImport(sql, adminCtx, { fileName: 'a.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8 });
     const second = await createImport(sql, adminCtx, { fileName: 'b.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 9 });
     expect(first.id).not.toBe(second.id);
-    const all = await listImports(sql, adminCtx);
+    const { imports: all, total } = await listImports(sql, adminCtx);
+    expect(total).toBe(2);
     expect(all).toHaveLength(2);
     expect(all.every((item) => item.organizationId === ORG_A)).toBe(true);
   });
@@ -771,7 +831,163 @@ describe('import persistence', () => {
   it('import listings never leak across organizations', async () => {
     const { sql } = makeFakeSql();
     await createImport(sql, adminCtx, { fileName: 'a.pdf' });
-    expect(await listImports(sql, orgBCtx)).toHaveLength(0);
+    const { imports: leaked, total } = await listImports(sql, orgBCtx);
+    expect(leaked).toHaveLength(0);
+    expect(total).toBe(0);
+  });
+
+  it('captures the full set of history fields (mode, period, scope, counts)', async () => {
+    const { sql } = makeFakeSql({ areas: [{ id: 'area-1', organization_id: ORG_A, name: 'Operations', active: true }] });
+    const created = await createImport(sql, adminCtx, {
+      fileName: 'roster.xlsx',
+      sourceFormat: 'xlsx',
+      periodYear: 2026,
+      periodMonth: 1,
+      importMode: 'team',
+      periodKind: 'multi',
+      periodLabel: 'Enero–Septiembre 2026',
+      areaId: 'area-1',
+      employeeCount: 12,
+      shiftCount: 246,
+      createdShiftCount: 200,
+      existingShiftCount: 46,
+    });
+    expect(created.importMode).toBe('team');
+    expect(created.periodKind).toBe('multi');
+    expect(created.periodLabel).toBe('Enero–Septiembre 2026');
+    expect(created.scopeType).toBe('area');
+    expect(created.areaId).toBe('area-1');
+    expect(created.areaNameSnapshot).toBe('Operations');
+    expect(created.employeeCount).toBe(12);
+    expect(created.shiftCount).toBe(246);
+    expect(created.createdShiftCount).toBe(200);
+    expect(created.existingShiftCount).toBe(46);
+    expect(created.status).toBe('completed');
+  });
+
+  it('defaults to individual/single/global when no area or mode is given', async () => {
+    const { sql } = makeFakeSql();
+    const created = await createImport(sql, adminCtx, { fileName: 'a.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8 });
+    expect(created.importMode).toBe('individual');
+    expect(created.periodKind).toBe('single');
+    expect(created.scopeType).toBe('global');
+    expect(created.areaId).toBeNull();
+    expect(created.areaNameSnapshot).toBeNull();
+  });
+
+  it('rejects an area from another organization for the snapshot', async () => {
+    const { sql } = makeFakeSql({ areas: [{ id: 'area-b', organization_id: ORG_B, name: 'Foreign', active: true }] });
+    await expect(createImport(sql, adminCtx, { fileName: 'x', areaId: 'area-b' }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('paginates and filters the history in-process after the tenant-scoped fetch', async () => {
+    const { sql } = makeFakeSql();
+    for (let i = 0; i < 7; i += 1) {
+      await createImport(sql, adminCtx, {
+        fileName: `f${i}.csv`,
+        sourceFormat: i % 2 === 0 ? 'csv' : 'xlsx',
+        importMode: i < 3 ? 'team' : 'individual',
+      });
+    }
+    const page1 = await listImports(sql, adminCtx, { page: 1, pageSize: 5 });
+    expect(page1.imports).toHaveLength(5);
+    expect(page1.total).toBe(7);
+    const page2 = await listImports(sql, adminCtx, { page: 2, pageSize: 5 });
+    expect(page2.imports).toHaveLength(2);
+
+    const teamOnly = await listImports(sql, adminCtx, { importMode: 'team' });
+    expect(teamOnly.total).toBe(3);
+    expect(teamOnly.imports.every((row) => row.importMode === 'team')).toBe(true);
+
+    const csvOnly = await listImports(sql, adminCtx, { sourceFormat: 'csv' });
+    expect(csvOnly.total).toBe(4);
+  });
+});
+
+describe('import deletion (exact, import_id-scoped)', () => {
+  const IMPORT_1 = '33333333-3333-4333-8333-333333333333';
+  const IMPORT_2 = '44444444-4444-4444-8444-444444444444';
+  const IMPORT_MISSING = '55555555-5555-4555-8555-555555555555';
+
+  it('deletes only the shifts created by the targeted import; manual and other-import shifts survive', async () => {
+    const { sql, calls } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
+      shifts: [
+        shiftRow({ id: 'shift-imported', import_id: IMPORT_1, origin: 'IMP' }),
+        shiftRow({ id: 'shift-other-import', import_id: IMPORT_2, origin: 'IMP' }),
+        shiftRow({ id: 'shift-manual', import_id: null, origin: 'MAN' }),
+        shiftRow({ id: 'shift-untraceable', import_id: null, origin: 'IMP' }),
+      ],
+    });
+    const result = await deleteImport(sql, adminCtx, IMPORT_1);
+    expect(result).toMatchObject({ deleted: true, deletedShiftCount: 1 });
+
+    const deleteCall = calls.find((c) => c.text.startsWith('DELETE FROM shifts') && c.text.includes('import_id'));
+    expect(deleteCall.values).toEqual([IMPORT_1, ORG_A]);
+  });
+
+  it('marks the import row as deleted (soft delete) rather than removing it', async () => {
+    const { sql } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
+      shifts: [shiftRow({ id: 's1', import_id: IMPORT_1 })],
+    });
+    await deleteImport(sql, adminCtx, IMPORT_1);
+    const { imports: after } = await listImports(sql, adminCtx);
+    const row = after.find((i) => i.id === IMPORT_1);
+    expect(row.status).toBe('deleted');
+    expect(row.deletedAt).not.toBeNull();
+  });
+
+  it('rejects deleting an import belonging to another organization (404, no leak)', async () => {
+    const { sql } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_B, deleted_at: null }],
+      shifts: [shiftRow({ id: 's1', import_id: IMPORT_1, organization_id: ORG_B })],
+    });
+    await expect(deleteImport(sql, adminCtx, IMPORT_1)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('rejects a non-ADMIN caller', async () => {
+    const { sql } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
+    });
+    await expect(deleteImport(sql, employeeCtx, IMPORT_1)).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('rejects a malformed import id', async () => {
+    const { sql } = makeFakeSql();
+    await expect(deleteImport(sql, adminCtx, 'not-a-uuid')).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('rejects a well-formed but unknown import id', async () => {
+    const { sql } = makeFakeSql();
+    await expect(deleteImport(sql, adminCtx, IMPORT_MISSING)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('rejects deleting an already-deleted import (no double delete)', async () => {
+    const { sql } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: new Date('2026-01-01') }],
+    });
+    await expect(deleteImport(sql, adminCtx, IMPORT_1)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('runs the deletion inside a transaction', async () => {
+    const { sql, state } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
+      shifts: [shiftRow({ id: 's1', import_id: IMPORT_1 })],
+    });
+    await deleteImport(sql, adminCtx, IMPORT_1);
+    expect(state.transactionUsed).toBe(true);
+  });
+
+  it('reports zero deleted shifts for an import that created none (still marks it deleted)', async () => {
+    const { sql } = makeFakeSql({
+      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
+      shifts: [],
+    });
+    const result = await deleteImport(sql, adminCtx, IMPORT_1);
+    expect(result.deletedShiftCount).toBe(0);
+    expect(result.deleted).toBe(true);
   });
 });
 

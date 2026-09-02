@@ -57,12 +57,23 @@ function mapImportRow(row) {
     id: row.id,
     organizationId: row.organization_id,
     importedByUserId: row.imported_by_user_id,
+    importedByUserName: row.imported_by_user_name ?? null,
     fileName: row.file_name,
     sourceFormat: row.source_format,
     periodYear: row.period_year,
     periodMonth: row.period_month,
-    status: row.status,
+    periodKind: row.period_kind ?? 'single',
+    periodLabel: row.period_label ?? '',
+    importMode: row.import_mode ?? 'individual',
+    scopeType: row.area_id ? 'area' : (row.scope_type ?? 'global'),
     areaId: row.area_id ?? null,
+    areaNameSnapshot: row.area_name_snapshot ?? null,
+    employeeCount: row.employee_count ?? 0,
+    shiftCount: row.shift_count ?? 0,
+    createdShiftCount: row.created_shift_count ?? 0,
+    existingShiftCount: row.existing_shift_count ?? 0,
+    status: row.deleted_at ? 'deleted' : row.status,
+    deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
   };
 }
@@ -1032,57 +1043,186 @@ export async function resetOrganization(sql, ctx) {
 
 // ------------------------------------------------------------------ imports
 
-export async function listImports(sql, ctx, { areaId = null } = {}) {
+/**
+ * Org-scoped import history, newest first. Pagination and the optional
+ * filters (userId/importMode/scopeType/sourceFormat/status) are applied
+ * in-process after the tenant-scoped fetch: the history is expected to stay
+ * in the hundreds-of-rows range per organization, and this keeps one simple,
+ * always-correct query shape instead of a hand-built dynamic WHERE — see the
+ * "Limitaciones pendientes" note in the feature report if this ever needs to
+ * move to SQL-level filtering/pagination for very large histories.
+ * Soft-deleted imports (deleted_at set) are NOT excluded — they must still
+ * show up, displayed as status 'deleted' (mapImportRow), so the history stays
+ * a complete audit trail.
+ */
+export async function listImports(sql, ctx, {
+  areaId = null,
+  page = 1,
+  pageSize = 5,
+  userId = null,
+  importMode = null,
+  scopeType = null,
+  sourceFormat = null,
+  status = null,
+} = {}) {
   const rows = areaId
     ? await sql`
-        SELECT * FROM imports
-        WHERE organization_id = ${ctx.organizationId}
-          AND area_id = ${areaId}
-        ORDER BY created_at DESC
+        SELECT i.*, u.display_name AS imported_by_user_name
+        FROM imports i
+        LEFT JOIN users u ON u.id = i.imported_by_user_id
+        WHERE i.organization_id = ${ctx.organizationId}
+          AND i.area_id = ${areaId}
+        ORDER BY i.created_at DESC
       `
     : await sql`
-        SELECT * FROM imports
-        WHERE organization_id = ${ctx.organizationId}
-        ORDER BY created_at DESC
+        SELECT i.*, u.display_name AS imported_by_user_name
+        FROM imports i
+        LEFT JOIN users u ON u.id = i.imported_by_user_id
+        WHERE i.organization_id = ${ctx.organizationId}
+        ORDER BY i.created_at DESC
       `;
-  return rows.map(mapImportRow);
+
+  const mapped = rows.map(mapImportRow);
+  const filtered = mapped.filter((row) => (
+    (!userId || row.importedByUserId === userId)
+    && (!importMode || row.importMode === importMode)
+    && (!scopeType || row.scopeType === scopeType)
+    && (!sourceFormat || row.sourceFormat === sourceFormat)
+    && (!status || row.status === status)
+  ));
+
+  const safePageSize = Math.min(Math.max(Number(pageSize) || 5, 1), 50);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const start = (safePage - 1) * safePageSize;
+
+  return {
+    imports: filtered.slice(start, start + safePageSize),
+    total: filtered.length,
+    page: safePage,
+    pageSize: safePageSize,
+  };
 }
 
 export async function createImport(sql, ctx, input) {
-  // areaId NULL = organization-scoped import; set = area-scoped import. The
-  // area must belong to the session org (403 otherwise, no existence leak).
+  // areaId NULL = organization-scoped (global) import; set = area-scoped
+  // import. The area must belong to the session org (403 otherwise, no
+  // existence leak) — same assertAreaInOrg convention used everywhere else.
+  // The area's CURRENT name is snapshotted at creation time so the history
+  // stays readable even if the area is later renamed or deactivated.
   const areaId = input?.areaId ? String(input.areaId).trim() || null : null;
+  let areaNameSnapshot = null;
   if (areaId) {
     await assertAreaInOrg(sql, ctx, areaId);
+    const nameRows = await sql`
+      SELECT name FROM areas WHERE id = ${areaId} AND organization_id = ${ctx.organizationId}
+    `;
+    areaNameSnapshot = nameRows[0]?.name ?? null;
   }
+
+  const status = 'completed';
+  const importMode = input?.importMode === 'team' ? 'team' : 'individual';
+  const periodKind = input?.periodKind === 'multi' ? 'multi' : 'single';
+  const periodLabel = String(input?.periodLabel ?? '').trim();
+  const scopeType = areaId ? 'area' : 'global';
+  const employeeCount = Math.max(0, Math.trunc(Number(input?.employeeCount) || 0));
+  const shiftCount = Math.max(0, Math.trunc(Number(input?.shiftCount) || 0));
+  const createdShiftCount = Math.max(0, Math.trunc(Number(input?.createdShiftCount) || 0));
+  const existingShiftCount = Math.max(0, Math.trunc(Number(input?.existingShiftCount) || 0));
+
   const rows = areaId
     ? await sql`
         INSERT INTO imports (
           organization_id, imported_by_user_id, file_name, source_format,
-          period_year, period_month, status, area_id
+          period_year, period_month, status, area_id,
+          import_mode, period_kind, period_label, scope_type, area_name_snapshot,
+          employee_count, shift_count, created_shift_count, existing_shift_count
         )
         VALUES (
           ${ctx.organizationId}, ${ctx.user.id},
           ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
           ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-          'completed', ${areaId}
+          ${status}, ${areaId},
+          ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType}, ${areaNameSnapshot},
+          ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount}
         )
         RETURNING *
       `
     : await sql`
         INSERT INTO imports (
           organization_id, imported_by_user_id, file_name, source_format,
-          period_year, period_month, status
+          period_year, period_month, status,
+          import_mode, period_kind, period_label, scope_type,
+          employee_count, shift_count, created_shift_count, existing_shift_count
         )
         VALUES (
           ${ctx.organizationId}, ${ctx.user.id},
           ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
           ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-          'completed'
+          ${status},
+          ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
+          ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount}
         )
         RETURNING *
       `;
   return mapImportRow(rows[0]);
+}
+
+/**
+ * Deletes exactly one import (ADMIN only): the shifts it created are HARD
+ * deleted, scoped strictly by `import_id` (never period/employee/area/origin
+ * — see the feature spec's "Turnos importados" rules), so a manual shift
+ * that happens to be identical in date/time/employee is never touched
+ * (manual shifts always have import_id IS NULL, never equal to any import's
+ * id). The import row itself is SOFT deleted (deleted_at/deleted_by_user_id)
+ * so it keeps showing in the history as 'deleted', per the project's
+ * soft-delete convention for historical/reference rows (see areas).
+ *
+ * Both writes run inside one transaction: either both land or neither does
+ * — no state where the import shows completed but its shifts are gone, or
+ * deleted but shifts remain. The real deleted-shift count comes back from
+ * RETURNING, never trusted from the client.
+ */
+export async function deleteImport(sql, ctx, rawImportId) {
+  requireRole(ctx, 'ADMIN');
+  const id = String(rawImportId ?? '').trim();
+  if (!UUID_RE.test(id)) {
+    throw new HttpError(400, 'Import id is required');
+  }
+
+  const existingRows = await sql`
+    SELECT id, organization_id, deleted_at FROM imports
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+  `;
+  const existing = existingRows[0];
+  if (!existing) {
+    throw new HttpError(404, 'Import not found');
+  }
+  if (existing.deleted_at) {
+    throw new HttpError(409, 'Import already deleted');
+  }
+
+  const [deletedShifts, updatedImport] = await sql.transaction((txn) => [
+    txn`
+      DELETE FROM shifts
+      WHERE import_id = ${id} AND organization_id = ${ctx.organizationId}
+      RETURNING id
+    `,
+    txn`
+      UPDATE imports
+      SET deleted_at = NOW(), deleted_by_user_id = ${ctx.user.id}, updated_at = NOW()
+      WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND deleted_at IS NULL
+      RETURNING id
+    `,
+  ]);
+
+  if (updatedImport.length === 0) {
+    // Raced with a concurrent delete of the same import between the check
+    // above and the transaction — surfaced as a conflict, never silently
+    // reported as success with a made-up count.
+    throw new HttpError(409, 'Import already deleted');
+  }
+
+  return { deleted: true, importId: id, deletedShiftCount: deletedShifts.length };
 }
 
 // ------------------------------------------------------------------- shifts

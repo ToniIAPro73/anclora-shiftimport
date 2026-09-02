@@ -131,7 +131,7 @@ export const TeamImportModal = ({
   isImporting = false,
   onImportStateChange,
 }: TeamImportModalProps) => {
-  const { t } = useI18n();
+  const { t, tl } = useI18n();
   const defaultImportAreaId = currentAreaId ?? (areas.length === 1 ? areas[0].id : null);
   const [step, setStep] = useState<Step>('upload');
   const [error, setError] = useState('');
@@ -515,6 +515,16 @@ export const TeamImportModal = ({
     const results: ImportOutcome[] = [];
     try {
 
+    // History fields (import_mode/employee/shift counts) are computed from
+    // `preview` up front — it already reflects every matched employee in the
+    // uploaded file, independent of which branch below ends up creating the
+    // Import row(s).
+    const monthNames = tl('calendar.months');
+    const batchEmployeeCount = preview.length;
+    const batchShiftCount = preview.reduce((sum, entry) => sum + entry.newCount + entry.conflictCount + entry.unchangedCount, 0);
+    const batchCreatedCount = preview.reduce((sum, entry) => sum + entry.newCount, 0);
+    const batchExistingCount = preview.reduce((sum, entry) => sum + entry.unchangedCount, 0);
+
     // PDF batches share ONE Import record for the whole document (§12):
     // created once, up front, best-effort — if this fails, each employee
     // falls back to its own Import below rather than blocking the batch.
@@ -530,6 +540,13 @@ export const TeamImportModal = ({
             periodYear: period.year,
             periodMonth: period.month,
             areaId: importAreaId ?? null,
+            importMode: 'team',
+            periodKind: 'single',
+            periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
+            employeeCount: batchEmployeeCount,
+            shiftCount: batchShiftCount,
+            createdShiftCount: batchCreatedCount,
+            existingShiftCount: batchExistingCount,
           });
           sharedImportId = created.id;
         } catch (err) {
@@ -553,6 +570,13 @@ export const TeamImportModal = ({
               periodYear: period.year,
               periodMonth: period.month,
               areaId: importAreaId ?? null,
+              importMode: 'team',
+              periodKind: 'single',
+              periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
+              employeeCount: 1,
+              shiftCount: entry.newCount + entry.conflictCount + entry.unchangedCount,
+              createdShiftCount: entry.newCount,
+              existingShiftCount: entry.unchangedCount,
             });
             importId = created.id;
           }

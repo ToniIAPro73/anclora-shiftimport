@@ -390,6 +390,13 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
       periodYear: 2026,
       periodMonth: 2,
       areaId: 'area-s',
+      importMode: 'team',
+      periodKind: 'single',
+      periodLabel: 'Marzo 2026',
+      employeeCount: 1,
+      shiftCount: 1,
+      createdShiftCount: 1,
+      existingShiftCount: 0,
     }));
   });
 });

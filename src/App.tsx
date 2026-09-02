@@ -46,6 +46,7 @@ import { LocalMigrationModal } from './components/shift-dashboard/LocalMigration
 import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { AreasModal } from './components/shift-dashboard/AreasModal';
+import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryModal';
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
@@ -77,6 +78,26 @@ const FORMAT_PROFILE_MIGRATION_DONE_KEY = 'anclora_shiftimport_format_profiles_m
 
 function insertShift(current: Shift[], incoming: Shift): Shift[] {
   return [...current.filter((shift) => shift.id !== incoming.id), normalizeShift(incoming)];
+}
+
+/** Human-readable snapshot of the imported period, rendered once at confirm
+ * time in the active locale (see imports.period_label — the history never
+ * retranslates it after the fact). */
+function formatImportPeriodLabel(period: ImportPeriod, monthNames: string[]): string {
+  if (period.kind === 'single') {
+    return `${monthNames[period.month] ?? period.month} ${period.year}`;
+  }
+  if (period.periods.length === 0) {
+    return '';
+  }
+  const sorted = [...period.periods].sort((a, b) => (a.year - b.year) || (a.month - b.month));
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const firstLabel = monthNames[first.month] ?? first.month;
+  const lastLabel = monthNames[last.month] ?? last.month;
+  return first.year === last.year
+    ? `${firstLabel}–${lastLabel} ${first.year}`
+    : `${firstLabel} ${first.year}–${lastLabel} ${last.year}`;
 }
 
 interface ImportConflictState {
@@ -141,6 +162,7 @@ function App() {
   const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isAreasOpen, setIsAreasOpen] = useState(false);
+  const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
@@ -854,6 +876,13 @@ function App() {
           periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
           periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
           areaId: areaId ?? null,
+          importMode: 'individual',
+          periodKind: targetPeriod.kind,
+          periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
+          employeeCount: 1,
+          shiftCount: normalizedIncoming.length,
+          createdShiftCount: upserts.length,
+          existingShiftCount: identicalCount,
         });
         importId = created.id;
       } catch (error) {
@@ -1060,6 +1089,7 @@ function App() {
           setIsModalOpen(true);
         }}
         onImport={() => { if (!isImporting) setIsImportOpen(true); }}
+        onOpenImportHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
         onOpenSettings={(role) => {
           if (isImporting) {
             return;
@@ -1515,6 +1545,24 @@ function App() {
         isOpen={isAreasOpen && !isImporting}
         onClose={() => setIsAreasOpen(false)}
         onChanged={() => void refreshAreas()}
+      />
+
+      <ImportHistoryModal
+        isOpen={isImportHistoryOpen && !isImporting}
+        onClose={() => setIsImportHistoryOpen(false)}
+        session={session}
+        onDeleted={() => {
+          // The client Shift model never carries import_id (it's a server-
+          // side/history concern, see lib/types.ts), and a deleted import
+          // may belong to an employee other than the one currently in view
+          // — so unlike the other mutations in this app (which compute the
+          // next array locally), the correct refresh here is to re-read the
+          // currently viewed employee's shifts from the server, the single
+          // source of truth for what the deletion actually removed.
+          if (session && selectedEmployeeId) {
+            void loadRemoteShifts(selectedEmployeeId).then(setShifts).catch(() => {});
+          }
+        }}
       />
 
       <FormatProfilesModal

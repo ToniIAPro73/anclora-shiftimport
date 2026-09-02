@@ -1,14 +1,23 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { createImport, listImports } from '../_lib/data.js';
+import { createImport, deleteImport, listImports } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * GET  /api/imports           — org-scoped import history.
- * GET  /api/imports?areaId=X  — history filtered by area (dashboard area
- *                               context; empty result for foreign area ids).
- * POST /api/imports           — register a completed import document; optional
- *                               areaId makes the import area-scoped (validated
- *                               against the session org).
+ * GET    /api/imports                — org-scoped import history (any role,
+ *                                       read-only for EMPLOYEE — same
+ *                                       broad-read/ADMIN-write convention as
+ *                                       /api/areas). Supports ?areaId=,
+ *                                       ?page=, ?pageSize=, ?userId=,
+ *                                       ?importMode=, ?scopeType=,
+ *                                       ?sourceFormat=, ?status=.
+ * POST   /api/imports                — register a completed import document;
+ *                                       optional areaId makes it area-scoped
+ *                                       (validated against the session org).
+ * DELETE /api/imports  { id }        — delete exactly one import (ADMIN):
+ *                                       hard-deletes only the shifts it
+ *                                       created (by import_id), soft-deletes
+ *                                       the import row. See deleteImport in
+ *                                       _lib/data.js for the full contract.
  */
 export default async function handler(req, res) {
   try {
@@ -16,10 +25,17 @@ export default async function handler(req, res) {
     const ctx = requireOrgContext(await resolveContext(req, sql));
 
     if (req.method === 'GET') {
-      const imports = await listImports(sql, ctx, {
+      const result = await listImports(sql, ctx, {
         areaId: String(req.query?.areaId ?? '').trim() || null,
+        page: Number(req.query?.page) || 1,
+        pageSize: Number(req.query?.pageSize) || 5,
+        userId: String(req.query?.userId ?? '').trim() || null,
+        importMode: String(req.query?.importMode ?? '').trim() || null,
+        scopeType: String(req.query?.scopeType ?? '').trim() || null,
+        sourceFormat: String(req.query?.sourceFormat ?? '').trim() || null,
+        status: String(req.query?.status ?? '').trim() || null,
       });
-      return sendJson(res, 200, { imports });
+      return sendJson(res, 200, result);
     }
 
     if (req.method === 'POST') {
@@ -27,7 +43,12 @@ export default async function handler(req, res) {
       return sendJson(res, 201, { import: created });
     }
 
-    res.setHeader('Allow', 'GET, POST');
+    if (req.method === 'DELETE') {
+      const result = await deleteImport(sql, ctx, req.body?.id);
+      return sendJson(res, 200, result);
+    }
+
+    res.setHeader('Allow', 'GET, POST, DELETE');
     return sendJson(res, 405, { error: 'Method not allowed' });
   } catch (error) {
     return handleError(res, error);

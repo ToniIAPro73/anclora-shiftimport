@@ -23,8 +23,39 @@ export interface RemoteImport {
   sourceFormat: string;
   periodYear: number | null;
   periodMonth: number | null;
+  periodKind?: 'single' | 'multi';
+  periodLabel?: string;
+  importMode?: 'individual' | 'team';
   status: string;
   areaId?: string | null;
+  areaNameSnapshot?: string | null;
+  scopeType?: 'global' | 'area';
+  importedByUserId?: string | null;
+  importedByUserName?: string | null;
+  employeeCount?: number;
+  shiftCount?: number;
+  createdShiftCount?: number;
+  existingShiftCount?: number;
+  createdAt?: string;
+  deletedAt?: string | null;
+}
+
+export interface ImportHistoryFilters {
+  page?: number;
+  pageSize?: number;
+  areaId?: string | null;
+  userId?: string | null;
+  importMode?: 'individual' | 'team' | null;
+  scopeType?: 'global' | 'area' | null;
+  sourceFormat?: string | null;
+  status?: string | null;
+}
+
+export interface ImportHistoryPage {
+  imports: RemoteImport[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 /** `recognized_inactive`: the single match exists but its status is
@@ -207,12 +238,46 @@ export async function createRemoteImport(input: {
   periodYear: number | null;
   periodMonth: number | null;
   areaId?: string | null;
+  importMode?: 'individual' | 'team';
+  periodKind?: 'single' | 'multi';
+  periodLabel?: string;
+  employeeCount?: number;
+  shiftCount?: number;
+  createdShiftCount?: number;
+  existingShiftCount?: number;
 }): Promise<RemoteImport> {
   const payload = await apiFetch<{ import: RemoteImport }>('/api/imports', {
     method: 'POST',
     body: JSON.stringify(input),
   });
   return payload.import;
+}
+
+/** Org-scoped import history, paginated. Read access follows the same
+ * broad-role convention as /api/areas — EMPLOYEE can view, deletion is
+ * ADMIN-only (the server rejects a non-ADMIN delete with 403). */
+export async function listRemoteImports(filters: ImportHistoryFilters = {}): Promise<ImportHistoryPage> {
+  const params = new URLSearchParams();
+  if (filters.page) params.set('page', String(filters.page));
+  if (filters.pageSize) params.set('pageSize', String(filters.pageSize));
+  if (filters.areaId) params.set('areaId', filters.areaId);
+  if (filters.userId) params.set('userId', filters.userId);
+  if (filters.importMode) params.set('importMode', filters.importMode);
+  if (filters.scopeType) params.set('scopeType', filters.scopeType);
+  if (filters.sourceFormat) params.set('sourceFormat', filters.sourceFormat);
+  if (filters.status) params.set('status', filters.status);
+  const query = params.toString();
+  return apiFetch<ImportHistoryPage>(`/api/imports${query ? `?${query}` : ''}`);
+}
+
+/** ADMIN only: deletes exactly this import's created shifts (by import_id)
+ * and soft-deletes the import row. Manual shifts and shifts from other
+ * imports are never touched — see deleteImport in api/_lib/data.js. */
+export async function deleteRemoteImport(id: string): Promise<{ deleted: boolean; importId: string; deletedShiftCount: number }> {
+  return apiFetch('/api/imports', {
+    method: 'DELETE',
+    body: JSON.stringify({ id }),
+  });
 }
 
 // ------------------------------------------------------------ areas

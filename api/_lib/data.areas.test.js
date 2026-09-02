@@ -53,7 +53,7 @@ const employeeRow = (id, org, over = {}) => ({
   ...over,
 });
 
-function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [] } = {}) {
+function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [], users = [] } = {}) {
   const calls = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
@@ -122,25 +122,46 @@ function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [] } =
       }
       return Promise.resolve([target ?? employeeRow(values[6], values[7])]);
     }
-    if (text.includes('FROM imports') && text.includes('area_id =') && text.startsWith('SELECT *')) {
-      return Promise.resolve(imports.filter((i) => i.organization_id === values[0] && i.area_id === values[1]));
+    // createImport area_name_snapshot lookup (values: [areaId, organizationId])
+    if (text.startsWith('SELECT name FROM areas')) {
+      const found = areas.find((a) => a.id === values[0] && a.organization_id === values[1]);
+      return Promise.resolve(found ? [{ name: found.name }] : []);
     }
-    if (text.startsWith('SELECT * FROM imports')) {
-      return Promise.resolve(imports.filter((i) => i.organization_id === values[0]));
+    if (text.startsWith('SELECT i.*, u.display_name')) {
+      const orgRows = imports.filter((i) => i.organization_id === values[0]);
+      const scoped = text.includes('i.area_id') ? orgRows.filter((i) => i.area_id === values[1]) : orgRows;
+      return Promise.resolve(scoped.map((row) => ({
+        ...row,
+        imported_by_user_name: users.find((u) => u.id === row.imported_by_user_id)?.display_name ?? null,
+      })));
     }
     if (text.startsWith('INSERT INTO imports')) {
-      // 'completed' is a SQL literal; area_id (when present) is values[6].
-      const hasArea = text.includes(', area_id');
+      // Every inserted column is a bound parameter, so the parenthesized
+      // column list lines up 1:1 with `values`.
+      const columns = text.match(/INSERT INTO imports \( ([^)]+) \)/)[1].split(',').map((c) => c.trim());
+      const record = {};
+      columns.forEach((col, index) => { record[col] = values[index]; });
       const row = {
         id: `import-${imports.length}`,
-        organization_id: values[0],
-        imported_by_user_id: values[1],
-        file_name: values[2],
-        source_format: values[3],
-        period_year: values[4],
-        period_month: values[5],
-        status: 'completed',
-        area_id: hasArea ? values[6] : null,
+        organization_id: record.organization_id,
+        imported_by_user_id: record.imported_by_user_id,
+        file_name: record.file_name,
+        source_format: record.source_format,
+        period_year: record.period_year,
+        period_month: record.period_month,
+        status: record.status ?? 'completed',
+        area_id: record.area_id ?? null,
+        import_mode: record.import_mode ?? 'individual',
+        period_kind: record.period_kind ?? 'single',
+        period_label: record.period_label ?? '',
+        scope_type: record.scope_type ?? 'global',
+        area_name_snapshot: record.area_name_snapshot ?? null,
+        employee_count: record.employee_count ?? 0,
+        shift_count: record.shift_count ?? 0,
+        created_shift_count: record.created_shift_count ?? 0,
+        existing_shift_count: record.existing_shift_count ?? 0,
+        deleted_at: null,
+        deleted_by_user_id: null,
         created_at: new Date(),
       };
       imports.push(row);
@@ -329,8 +350,8 @@ describe('areas: area-scoped imports + shift snapshot', () => {
     });
     const all = await listImports(sql, adminCtx);
     const scoped = await listImports(sql, adminCtx, { areaId: AREA_OPS });
-    expect(all).toHaveLength(2);
-    expect(scoped.map((i) => i.id)).toEqual(['imp-1']);
+    expect(all.imports).toHaveLength(2);
+    expect(scoped.imports.map((i) => i.id)).toEqual(['imp-1']);
   });
 
   it('shift inherits area from area-scoped import', async () => {

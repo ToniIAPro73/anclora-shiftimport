@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, PlusCircle, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, History, PlusCircle, Settings } from 'lucide-react';
 import { SessionInfo } from '../../lib/session';
 import { RemoteEmployee } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
@@ -12,6 +12,7 @@ interface MonthHeaderProps {
   onNavigate: (delta: number) => void;
   onAddShift: () => void;
   onImport: () => void;
+  onOpenImportHistory?: () => void;
   onOpenSettings: (role: SessionInfo['role']) => void;
   session: SessionInfo | null;
   employees: RemoteEmployee[];
@@ -53,6 +54,7 @@ export const MonthHeader = ({
   onNavigate,
   onAddShift,
   onImport,
+  onOpenImportHistory,
   onOpenSettings,
   session,
   employees,
@@ -106,6 +108,16 @@ export const MonthHeader = ({
         <button onClick={onImport} className="btn-outline dashboard-action-button">
                   {t('header.import')}
                 </button>
+                {onOpenImportHistory && (
+                  <button
+                    onClick={onOpenImportHistory}
+                    className="theme-toggle"
+                    title={t('header.importHistory')}
+                    aria-label={t('header.importHistory')}
+                  >
+                    <History size={18} />
+                  </button>
+                )}
                 <button className="btn-gold dashboard-action-button dashboard-add-button" onClick={onAddShift}>
           <PlusCircle size={18} /> <span>{t('header.add')}</span>
         </button>
