@@ -15,9 +15,13 @@ interface ShiftModalProps {
   onClose: () => void;
   onSave: (shift: Shift) => void;
   onDelete?: (id: string) => void;
+  /** A save is in flight: form inert, close blocked, confirm button shows the
+   * working state — mirrors the import-confirm contract (cursor wait,
+   * "Procesando…", no interaction until the operation settles). */
+  isSaving?: boolean;
 }
 
-export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, onSave, onDelete }: ShiftModalProps) => {
+export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, onSave, onDelete, isSaving = false }: ShiftModalProps) => {
   const { locale, t } = useI18n();
   const shiftTypeOptions = getShiftTypes().map((type) => ({ value: type.label, label: translateShiftTypeLabel(type.id, locale, type.label) }));
   const [formData, setFormData] = useState<Shift>({
@@ -29,7 +33,7 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
     origin: 'MAN',
   });
 
-  useEscapeClose(isOpen, onClose);
+  useEscapeClose(isOpen && !isSaving, onClose);
 
   useEffect(() => {
     if (editingShift) {
@@ -55,9 +59,10 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
     <div className="modal-overlay">
       <div className="modal-content">
         <button
-          onClick={onClose}
+          onClick={() => { if (!isSaving) onClose(); }}
+          disabled={isSaving}
           aria-label={t('common.close')}
-          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: isSaving ? 'wait' : 'pointer' }}
         >
           <X size={24} />
         </button>
@@ -69,6 +74,7 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
           </h2>
         </div>
 
+        <fieldset disabled={isSaving} style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
           <div>
             <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
@@ -139,8 +145,14 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
           </div>
 
           <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
-            <button className="btn-gold" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} onClick={() => onSave(formData)}>
-              <Save size={18} /> {t('shiftModal.confirm')}
+            <button
+              className="btn-gold"
+              disabled={isSaving}
+              aria-busy={isSaving}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: isSaving ? 'wait' : undefined }}
+              onClick={() => { if (!isSaving) onSave(formData); }}
+            >
+              <Save size={18} /> <span aria-live="polite">{isSaving ? t('shiftModal.working') : t('shiftModal.confirm')}</span>
             </button>
             {editingShift && onDelete && (
               <button
@@ -163,6 +175,7 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
             )}
           </div>
         </div>
+        </fieldset>
       </div>
     </div>
   );

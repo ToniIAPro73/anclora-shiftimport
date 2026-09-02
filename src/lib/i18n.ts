@@ -102,6 +102,8 @@ const translations: Record<Locale, TranslationTree> = {
       searchPlaceholder: 'Buscar tipo de turno...',
       noShiftTypes: 'No hay tipos de turno disponibles',
       confirm: 'Confirmar',
+      working: 'Procesando…',
+      saveSuccess: 'Turno guardado correctamente.',
     },
     importConflict: {
       title: 'Conflicto de importación',
@@ -1017,6 +1019,8 @@ const translations: Record<Locale, TranslationTree> = {
       searchPlaceholder: 'Search shift type...',
       noShiftTypes: 'No shift types available',
       confirm: 'Confirm',
+      working: 'Processing…',
+      saveSuccess: 'Shift saved successfully.',
     },
     importConflict: {
       title: 'Import conflict',

@@ -169,7 +169,7 @@ function App() {
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [appOperation, setAppOperation] = useState<'idle' | 'importing'>('idle');
+  const [appOperation, setAppOperation] = useState<'idle' | 'importing' | 'saving-shift'>('idle');
   const [importResult, setImportResult] = useState<ReconciliationReport | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -179,6 +179,7 @@ function App() {
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
   const isImporting = appOperation === 'importing';
+  const isSavingShift = appOperation === 'saving-shift';
   const hasImportConflict = importConflictState !== null;
 
   useEffect(() => {
@@ -609,7 +610,7 @@ function App() {
   };
 
   const handleSaveShift = async (shift: Shift) => {
-    if (isImporting) {
+    if (isImporting || isSavingShift) {
       return;
     }
     const conflict = findShiftConflict(shifts, shift, locale);
@@ -620,20 +621,24 @@ function App() {
 
     const nextShifts = insertShift(shifts, shift);
 
+    setAppOperation('saving-shift');
     try {
       await persistChanges(nextShifts, { upserts: [shift] });
       setShifts(nextShifts);
       setIsModalOpen(false);
       setEditingShiftId(null);
       setDraftShiftDate(null);
+      window.alert(t('shiftModal.saveSuccess'));
     } catch (error) {
       console.error('Failed to persist shift', error);
       window.alert(t('importConflict.saveShiftFailed'));
+    } finally {
+      setAppOperation('idle');
     }
   };
 
   const handleDeleteShift = async (id: string) => {
-    if (isImporting) {
+    if (isImporting || isSavingShift) {
       return;
     }
     const nextShifts = shifts.filter(s => s.id !== id);
@@ -1089,7 +1094,7 @@ function App() {
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
 
   return (
-    <div className={`container${isImporting ? ' app--busy' : ''}`} aria-busy={isImporting}>
+    <div className={`container${isImporting || isSavingShift ? ' app--busy' : ''}`} aria-busy={isImporting || isSavingShift}>
       <MonthHeader
         year={currentYear}
         month={currentMonth}
@@ -1332,11 +1337,11 @@ function App() {
         )}
       </div>
 
-      {isImporting && (
+      {(isImporting || isSavingShift) && (
         <div className="app-operation-lock" role="presentation" aria-busy="true">
           <div className="app-operation-lock__status" role="status" aria-live="polite" tabIndex={-1} data-import-progress>
             <span className="app-operation-lock__spinner" aria-hidden="true" />
-            {t('importModal.importing')}
+            {isImporting ? t('importModal.importing') : t('shiftModal.working')}
           </div>
         </div>
       )}
@@ -1345,8 +1350,9 @@ function App() {
         isOpen={isModalOpen && !isImporting}
         editingShift={editingShift}
         defaultDate={draftShiftDate}
+        isSaving={isSavingShift}
         onClose={() => {
-          if (isImporting) {
+          if (isImporting || isSavingShift) {
             return;
           }
           setIsModalOpen(false);

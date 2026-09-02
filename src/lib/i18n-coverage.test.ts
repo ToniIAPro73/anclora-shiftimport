@@ -14,7 +14,7 @@ const T_KEYS = [
   'stats.own', 'stats.company', 'stats.totalMonth', 'stats.totalYear', 'stats.month', 'stats.year',
   'calendar.addShiftTitle', 'calendar.addShiftBlockedTitle',
   'shiftModal.titleNew', 'shiftModal.titleEdit', 'shiftModal.dateLabel', 'shiftModal.startLabel',
-  'shiftModal.endLabel', 'shiftModal.typeLabel', 'shiftModal.confirm',
+  'shiftModal.endLabel', 'shiftModal.typeLabel', 'shiftModal.confirm', 'shiftModal.working', 'shiftModal.saveSuccess',
   'importConflict.title', 'importConflict.description', 'importConflict.existing', 'importConflict.incoming',
   'importConflict.skip', 'importConflict.abort', 'importConflict.replace',
   'importModal.title', 'importModal.newImport', 'importModal.nameLabel', 'importModal.idLabel',
