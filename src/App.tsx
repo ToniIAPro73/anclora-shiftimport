@@ -1010,6 +1010,20 @@ function App() {
   }
 
   if ((route === '/login' || route === '/signup') && !session) {
+    // Session restore is still in flight: `session === null` here does NOT
+    // mean "anonymous". Rendering AuthScreen now would flash the login form
+    // for already-authenticated users (landing CTA → /login → restore lands
+    // → redirect to /app). Show the same resolving surface as /app instead.
+    if (!authResolved) {
+      return (
+        <>
+          <div className="container" role="status" style={{ padding: '48px 16px', color: 'var(--text-muted)' }}>
+            {t('common.loading')}
+          </div>
+          <CookieConsent />
+        </>
+      );
+    }
     return (
       <>
         <AuthScreen
