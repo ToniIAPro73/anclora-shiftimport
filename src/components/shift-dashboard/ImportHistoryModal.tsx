@@ -17,19 +17,13 @@ interface ImportHistoryModalProps {
   onDeleted: (importId: string) => void;
 }
 
-/** Rows per page. Kept deliberately small so the modal never needs an
- * internal vertical scroll (see ADR note in the feature report): compact
- * cards + a filter bar + header/footer must comfortably fit under the shared
- * ModalShell's 90vh cap at any of the validated breakpoints.
- *
- * Desktop/tablet fit 5; narrow phones wrap each card onto more lines (the
- * filter bar itself wraps to two rows below ~480px), so 5 cards there
- * overflows the 90vh cap and forces the scroll this feature must not have —
- * confirmed by measuring a real 390×844 render (scrollHeight 1134 >
- * clientHeight 758, and even a trimmed 3-card layout still overflowed the
- * shorter 375×812 phone). 2 cards keeps every validated phone size scroll-free. */
-const DESKTOP_PAGE_SIZE = 5;
-const MOBILE_PAGE_SIZE = 2;
+/** Rows per page. The modal now uses the fixed-height `workspace` shell:
+ * header, filter bar and pagination stay pinned and only the list region
+ * scrolls, so the page size no longer has to guarantee a scroll-free fit —
+ * it only bounds fetch size and DOM nodes. 10/5 keeps pages snappy while
+ * making most histories fit on one page. */
+const DESKTOP_PAGE_SIZE = 10;
+const MOBILE_PAGE_SIZE = 5;
 const MOBILE_BREAKPOINT_QUERY = '(max-width: 480px)';
 
 function useResponsivePageSize(): number {
@@ -192,14 +186,14 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
   };
 
   return (
-    <ModalShell isOpen={isOpen} onClose={onClose} title={t('imports.historyTitle')} maxWidth="820px">
+    <ModalShell isOpen={isOpen} onClose={onClose} title={t('imports.historyTitle')} maxWidth="820px" workspace>
       {!canDelete && (
-        <p style={{ margin: '0 0 12px', color: 'var(--text-subtle)', fontSize: '0.8rem' }}>
+        <p style={{ margin: '0 0 12px', color: 'var(--text-subtle)', fontSize: '0.8rem', flexShrink: 0 }}>
           {t('imports.readOnlyNotice')}
         </p>
       )}
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px', flexShrink: 0 }}>
         <select
           className="modal-input"
           aria-label={t('imports.columnScope')}
@@ -247,22 +241,23 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
         </select>
       </div>
 
-      {loading && (
-        <p role="status" style={{ margin: '18px 0', color: 'var(--text-subtle)', fontSize: '0.85rem' }}>
-          {t('imports.loading')}
-        </p>
-      )}
+      <div className="import-history-scroll" style={{ overflowY: 'auto' }}>
+        {loading && (
+          <p role="status" style={{ margin: '18px 0', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.85rem' }}>
+            {t('imports.loading')}
+          </p>
+        )}
 
-      {!loading && rows.length === 0 && !error && (
-        <p style={{ margin: '18px 0', color: 'var(--text-subtle)', fontSize: '0.85rem' }}>
-          {t('imports.empty')}
-        </p>
-      )}
+        {!loading && rows.length === 0 && !error && (
+          <p style={{ margin: '18px 0', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '0.85rem' }}>
+            {t('imports.empty')}
+          </p>
+        )}
 
-      {error && <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
+        {error && <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>}
 
-      {!loading && rows.length > 0 && (
-        <div style={{ display: 'grid', gap: '6px', marginBottom: '8px' }}>
+        {!loading && rows.length > 0 && (
+          <div style={{ display: 'grid', gap: '6px', marginBottom: '8px', alignContent: 'start' }}>
           {rows.map((row) => {
             const isDeleting = deletingId === row.id;
             const isDeleted = row.status === 'deleted';
@@ -333,10 +328,11 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
               </div>
             );
           })}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexShrink: 0, paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
         <button
           type="button"
           className="month-nav-button"

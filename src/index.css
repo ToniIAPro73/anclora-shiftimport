@@ -2958,6 +2958,29 @@ button[aria-busy='true'] {
   scrollbar-gutter: stable;
 }
 
+/* Import history: same fixed-shell pattern — header, filters and pagination
+ * stay pinned; only this region scrolls (overflow-y inline in the component). */
+.import-history-scroll {
+  flex: 1;
+  min-height: 0;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--glass-border) transparent;
+}
+
+.import-history-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.import-history-scroll::-webkit-scrollbar-thumb {
+  background: var(--glass-border);
+  border-radius: 999px;
+}
+
+.import-history-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .members-users-panel {
   display: flex;
   flex-direction: column;

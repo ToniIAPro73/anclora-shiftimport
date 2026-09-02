@@ -17,6 +17,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
 });
 
 afterEach(cleanup);
+afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -78,7 +79,7 @@ function renderModal(session: SessionInfo | null = adminSession(), onDeleted: ()
 }
 
 describe('ImportHistoryModal', () => {
-  it('requests a smaller page size on narrow (mobile) viewports to avoid internal scroll', async () => {
+  it('requests a smaller page size on narrow (mobile) viewports', async () => {
     const matchMediaMock = vi.fn().mockImplementation((query: string) => ({
       matches: query === '(max-width: 480px)',
       media: query,
@@ -91,8 +92,7 @@ describe('ImportHistoryModal', () => {
     mockedListRemoteImports.mockResolvedValue(page([importRow()]));
     renderModal();
 
-    await waitFor(() => expect(mockedListRemoteImports).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 2 })));
-    vi.unstubAllGlobals();
+    await waitFor(() => expect(mockedListRemoteImports).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 5 })));
   });
 
 
@@ -191,7 +191,7 @@ describe('ImportHistoryModal', () => {
   });
 
   it('disables pagination controls appropriately and requests the next page', async () => {
-    mockedListRemoteImports.mockResolvedValue(page([importRow()], { total: 12, page: 1, pageSize: 5 }));
+    mockedListRemoteImports.mockResolvedValue(page([importRow()], { total: 25, page: 1, pageSize: 10 }));
     renderModal();
 
     await waitFor(() => expect(screen.getByLabelText('Página siguiente')).toBeTruthy());
@@ -199,7 +199,7 @@ describe('ImportHistoryModal', () => {
     expect(screen.getByLabelText('Página siguiente')).toHaveProperty('disabled', false);
     expect(screen.getByText('Página 1 de 3')).toBeTruthy();
 
-    mockedListRemoteImports.mockResolvedValueOnce(page([importRow({ id: 'import-2' })], { total: 12, page: 2, pageSize: 5 }));
+    mockedListRemoteImports.mockResolvedValueOnce(page([importRow({ id: 'import-2' })], { total: 25, page: 2, pageSize: 10 }));
     fireEvent.click(screen.getByLabelText('Página siguiente'));
     await waitFor(() => expect(mockedListRemoteImports).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })));
   });
