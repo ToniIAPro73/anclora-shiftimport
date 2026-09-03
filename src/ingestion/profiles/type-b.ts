@@ -52,6 +52,17 @@ export const TYPE_B_PROFILE: IngestionProfile = {
     // identity (locateRowOnPage strips any item matching the target
     // employee's own name tokens), not by widening this bound.
     dataMinX: 150,
+    // Separate from dataMinX on purpose: the name-detection zone (roster
+    // enumeration + dense-layout name anchoring) can safely go wider than
+    // the row-DATA cutoff above, since it only decides "is this a name
+    // candidate", never "is this a shift cell". The widened-export variant
+    // right-pads shorter names (name column isn't left-aligned to a fixed
+    // x — a short name like "Cerda Cerda, Joan" starts at x~184, wider
+    // than the x~162 of a long one like "Bosch Noguera, Roberto Jaime"),
+    // so this needs real headroom, not just past the longest observed
+    // name — still comfortably short of the first real shift-cell column
+    // in this variant (observed starting ~x230).
+    nameMaxX: 210,
     ceiling: { mode: 'offset', offset: 12, inclusive: true },
     floor: {
       mode: 'next-row-boundary',

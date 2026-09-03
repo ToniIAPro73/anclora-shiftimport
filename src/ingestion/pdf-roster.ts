@@ -43,7 +43,7 @@ export function detectPdfRoster(items: PdfTextItem[]): PdfRosterDetection | null
     return null;
   }
 
-  const { markerMaxX, dataMinX } = profile.rowWindow;
+  const { markerMaxX, dataMinX, nameMaxX = dataMinX } = profile.rowWindow;
   const idPattern = profile.rowWindow.floor.mode === 'next-row-boundary' && profile.rowWindow.floor.scan.idPattern
     ? profile.rowWindow.floor.scan.idPattern
     : FALLBACK_ID_PATTERN;
@@ -61,7 +61,7 @@ export function detectPdfRoster(items: PdfTextItem[]): PdfRosterDetection | null
     // a name a few points wide of the marker column is never silently
     // dropped from the candidate pool (which previously made its id fall
     // back to the nearest OTHER row's name instead).
-    const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page && item.x < dataMinX));
+    const pageItems = sortPdfItemsForReading(items.filter((item) => item.page === page && item.x < nameMaxX));
     const idItems = pageItems.filter((item) => item.x < markerMaxX && idPattern.test(normalizeEmployeeId(item.text)));
     const nameBands = findAllNameMarkerBands(pageItems, profile.rowWindow);
 

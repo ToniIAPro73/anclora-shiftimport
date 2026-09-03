@@ -151,3 +151,33 @@ describe('detectPdfRoster (structural-header misattribution regression)', () => 
     expect(names).not.toContain('Nomina Empleado');
   });
 });
+
+// Real production regression, second half: once markerMaxX/dataMinX widen
+// enough to stop misattributing the "Nomina" header (previous fixture),
+// the wide-export variant's names still don't sit at a uniform x — the
+// name column isn't left-aligned, so a SHORTER name (e.g. "Cerda Cerda,
+// Joan", x~184) can start further right than a LONGER one on an adjacent
+// row (e.g. "Bosch Noguera, Roberto Jaime", x~162). A too-narrow name zone
+// (nameMaxX) dropped the shorter names as candidates entirely, so the
+// nearest-band lookup fell back to the row above's name — every id got
+// their own id correctly, but some got a NEIGHBOUR's name.
+const TYPE_B_VARIABLE_NAME_WIDTH_FIXTURE: PdfTextItem[] = [
+  textItem('Nomina Empleado', 21.3, 700.0),
+  textItem('L5', 300.0, 600.0),
+  textItem('38248', 109.6, 423.9),
+  textItem('Bosch Noguera, Roberto Jaime', 162.1, 423.9),
+  // Shorter name, further right than the row above's longer name — the
+  // exact real-document pattern that broke with a 180-wide name zone.
+  textItem('85919', 109.6, 401.1),
+  textItem('Cerda Cerda, Joan', 183.9, 401.1),
+];
+
+describe('detectPdfRoster (variable name-column width regression)', () => {
+  it('never attaches a shorter name from a wider layout to the wrong id', () => {
+    const roster = detectPdfRoster(TYPE_B_VARIABLE_NAME_WIDTH_FIXTURE);
+    expect(roster).not.toBeNull();
+    const byId = new Map(roster!.employees.map((employee) => [employee.externalEmployeeId, employee.name]));
+    expect(byId.get('38248')).toBe('Bosch Noguera, Roberto Jaime');
+    expect(byId.get('85919')).toBe('Cerda Cerda, Joan');
+  });
+});

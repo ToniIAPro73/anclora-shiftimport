@@ -38,6 +38,16 @@ export interface RowWindowRules {
   nameMatching: boolean;
   /** Row data items sit at x > dataMinX. */
   dataMinX: number;
+  /**
+   * How far right a name label may extend to still anchor a row (dense-
+   * layout zone: markerMaxX..nameMaxX, sharing a line with an id marker).
+   * Defaults to dataMinX when omitted. Kept separate from dataMinX because
+   * a wider export variant can push the printed name (x~162) past a
+   * dataMinX that must stay tight for another real layout's legitimate
+   * first-day column (x~166) — the two bounds serve different purposes and
+   * a real document can need one widened without the other.
+   */
+  nameMaxX?: number;
   /** Upper bound of the row band. */
   ceiling:
     | { mode: 'previous-employee-label' }
@@ -85,7 +95,7 @@ function nameMarkerLabelItems(pageItems: PdfTextItem[], rules: RowWindowRules): 
     if (item.x < rules.markerMaxX) {
       return true;
     }
-    return item.x < rules.dataMinX && anchorYs.some((anchorY) => Math.abs(anchorY - item.y) <= 1);
+    return item.x < (rules.nameMaxX ?? rules.dataMinX) && anchorYs.some((anchorY) => Math.abs(anchorY - item.y) <= 1);
   });
 }
 
