@@ -59,12 +59,14 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
     <div className="modal-overlay">
       <div className="modal-content">
         <button
+          type="button"
+          className="theme-toggle"
           onClick={() => { if (!isSaving) onClose(); }}
           disabled={isSaving}
           aria-label={t('common.close')}
-          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: isSaving ? 'wait' : 'pointer' }}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', cursor: isSaving ? 'wait' : 'pointer' }}
         >
-          <X size={24} />
+          <X size={18} />
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-xl)' }}>

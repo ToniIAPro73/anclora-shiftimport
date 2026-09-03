@@ -66,11 +66,13 @@ export const OnboardingModal = ({ isOpen, onClose, onFileChosen, userId = null }
     <div className="modal-overlay">
       <div className="modal-content onboarding-modal-content" style={{ maxWidth: 520 }}>
         <button
+          type="button"
+          className="theme-toggle"
           onClick={onClose}
           aria-label={t('onboarding.closeAria')}
-          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)' }}
         >
-          <X size={24} />
+          <X size={18} />
         </button>
 
         <h2 style={{ fontSize: '1.35rem', fontWeight: 800, margin: '0 0 4px', paddingRight: '32px' }}>

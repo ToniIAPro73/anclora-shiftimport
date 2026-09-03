@@ -742,11 +742,13 @@ export const SettingsModal = ({
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: 640, maxHeight: '85vh', overflowY: 'auto', padding: 'var(--space-lg) var(--space-xl)' }}>
         <button
+          type="button"
+          className="theme-toggle"
           onClick={onClose}
-          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)' }}
           aria-label={t('settings.closeAria')}
         >
-          <X size={24} />
+          <X size={18} />
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)' }}>

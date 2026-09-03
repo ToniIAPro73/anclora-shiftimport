@@ -873,12 +873,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     <div className="modal-overlay import-modal-overlay" data-import-modal>
       <div className="modal-content import-modal" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('importModal.title')} style={{ maxWidth: '1380px', width: '96vw', display: 'flex', flexDirection: 'column' }}>
         <button
+          type="button"
+          className="theme-toggle"
           disabled={interactionLocked}
           onClick={() => { if (!interactionLocked) onClose(); }}
           aria-label={t('importModal.closeAria')}
-          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)' }}
         >
-          <X size={24} />
+          <X size={18} />
         </button>
 
         <fieldset className="import-modal__form" disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>

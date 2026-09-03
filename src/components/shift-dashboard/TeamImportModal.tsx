@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { useI18n } from '../../lib/use-i18n';
 import type { PlanId } from '../../lib/plans';
 import { detectTeamRoster, DetectedTeamEmployee } from '../../ingestion/team-roster';
@@ -585,7 +586,9 @@ export const TeamImportModal = ({
             <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{t('teamImport.title')}</h3>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('teamImport.teamFlow')}</span>
           </div>
-          <button type="button" className="theme-toggle" disabled={interactionLocked} onClick={handleClose} aria-label={t('common.close')}>×</button>
+          <button type="button" className="theme-toggle" disabled={interactionLocked} onClick={handleClose} aria-label={t('common.close')}>
+            <X size={18} />
+          </button>
         </div>
 
         {interactionLocked && <p role="status" aria-live="polite" data-import-progress tabIndex={-1} style={{ margin: '0 0 12px', color: 'var(--color-gold)', fontWeight: 700 }}>{t('importModal.importing')}</p>}
