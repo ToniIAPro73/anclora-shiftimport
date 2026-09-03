@@ -104,6 +104,7 @@ function periodOf(dateIso: string): { year: number; month: number } {
 const statusLabelKey: Record<EmployeeMatchKind, string> = {
   recognized: 'teamImport.statusRecognized',
   recognized_inactive: 'teamImport.statusRecognizedInactive',
+  recognized_pending: 'teamImport.statusRecognizedPending',
   new: 'teamImport.statusNew',
   ambiguous: 'teamImport.statusAmbiguous',
 };
@@ -148,6 +149,7 @@ export const TeamImportModal = ({
     total: rows.length,
     recognized: rows.filter((row) => row.status === 'recognized').length,
     recognizedInactive: rows.filter((row) => row.status === 'recognized_inactive').length,
+    recognizedPending: rows.filter((row) => row.status === 'recognized_pending').length,
     new: rows.filter((row) => row.status === 'new').length,
     ambiguous: rows.filter((row) => row.status === 'ambiguous').length,
   }), [rows]);
@@ -463,6 +465,14 @@ export const TeamImportModal = ({
         if (result.status === 'existing_inactive') {
           return { ...row, status: 'recognized_inactive', candidates: [result.employee], resolvedEmployeeId: null };
         }
+        // Only an ACTIVE employee is import-ready (backend enforces this
+        // too). A row that just got created, or that matched an existing
+        // but still pending_access employee, must show as such — never
+        // silently marked 'recognized'+selected, which would let the admin
+        // believe shifts are about to import when they will be rejected.
+        if (result.employee.status !== 'active') {
+          return { ...row, status: 'recognized_pending', candidates: [result.employee], resolvedEmployeeId: null, selected: false };
+        }
         return { ...row, status: 'recognized', resolvedEmployeeId: result.employee.id, selected: true };
       }));
       setBulkResult({ created, existing, failed });
@@ -697,6 +707,11 @@ export const TeamImportModal = ({
                 {t('teamImport.resolveBeforeSelect')}
               </p>
             )}
+            {rosterCounts.recognizedPending > 0 && (
+              <p role="status" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-gold)' }}>
+                {t('teamImport.pendingActivationHint', { count: rosterCounts.recognizedPending })}
+              </p>
+            )}
             {bulkResult && (
               <p role="status" style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-accent)' }}>
                 {t('teamImport.bulkCreateResult', bulkResult)}
@@ -775,8 +790,8 @@ export const TeamImportModal = ({
                       fontWeight: 700,
                       padding: '3px 8px',
                       borderRadius: '999px',
-                      background: row.status === 'recognized' ? 'var(--info-bg)' : row.status === 'new' ? 'var(--gold-tint-bg)' : 'var(--danger-bg)',
-                      color: row.status === 'recognized' ? 'var(--color-accent)' : row.status === 'new' ? 'var(--color-gold)' : 'var(--danger)',
+                      background: row.status === 'recognized' ? 'var(--info-bg)' : (row.status === 'new' || row.status === 'recognized_pending') ? 'var(--gold-tint-bg)' : 'var(--danger-bg)',
+                      color: row.status === 'recognized' ? 'var(--color-accent)' : (row.status === 'new' || row.status === 'recognized_pending') ? 'var(--color-gold)' : 'var(--danger)',
                     }}
                   >
                     {t(statusLabelKey[row.status])}
@@ -818,7 +833,7 @@ export const TeamImportModal = ({
                         ariaLabel={t('teamImport.chooseMatch')}
                         options={row.candidates.map((candidate) => ({
                           value: candidate.id,
-                          label: `${candidate.name}${candidate.externalEmployeeId ? ` (ID ${candidate.externalEmployeeId})` : ''}${candidate.status === 'inactive' ? ` (${t('teamImport.statusRecognizedInactive')})` : ''}`,
+                          label: `${candidate.name}${candidate.externalEmployeeId ? ` (ID ${candidate.externalEmployeeId})` : ''}${candidate.status === 'inactive' ? ` (${t('teamImport.statusRecognizedInactive')})` : ''}${candidate.status === 'pending_access' ? ` (${t('teamImport.statusRecognizedPending')})` : ''}`,
                           searchText: `${candidate.name} ${candidate.externalEmployeeId ?? ''}`.toLowerCase(),
                         }))}
                         style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}

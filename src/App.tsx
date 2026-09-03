@@ -693,17 +693,28 @@ function App() {
     const name = (selector?.name ?? '').trim();
     const externalId = (selector?.externalId ?? '').trim();
 
-    // An ADMIN's individual dispatch is anchored to the employee selected in
-    // the organization context. The file name is evidence, never authority;
-    // this also prevents a payroll id from another sheet from retargeting it.
-    if (adminIndividualImport && selected) {
-      return selected;
-    }
-
-    // Identity untouched relative to the selected employee: no resolution needed.
-    if (selected
+    // An ADMIN's individual dispatch is anchored to the identity resolved
+    // at detection time (adminIndividualImport.employeeId), never to
+    // whatever the toolbar's employee selector currently shows — that can
+    // be stale (e.g. still pointing at the previously viewed employee) when
+    // the uploaded file's identity didn't match anyone. Trusting `selected`
+    // here silently attributed shifts to the wrong employee (real
+    // incident: an unregistered "Sebastián Pozo Mendoza" import landed on
+    // whoever was selected in the toolbar). No match at detection time
+    // means no employee to return — fall through to the explicit
+    // resolution below, which for this path always ends in 'new' and is
+    // blocked/offered for inline registration there, never silently reused.
+    if (adminIndividualImport) {
+      if (adminIndividualImport.employeeId) {
+        const matched = employees.find((employee) => employee.id === adminIndividualImport.employeeId) ?? null;
+        if (matched) {
+          return matched;
+        }
+      }
+    } else if (selected
       && (!name || name.toLowerCase() === selected.name.trim().toLowerCase())
       && (!externalId || externalId === (selected.externalEmployeeId ?? ''))) {
+      // Identity untouched relative to the selected employee: no resolution needed.
       return selected;
     }
 
@@ -734,6 +745,16 @@ function App() {
       return resolution.employee;
     }
 
+    // pending_access: the employee exists (already or freshly registered)
+    // but never got a user linked to them. Unlike recognized_inactive there
+    // is no one-click reactivation — completing registration means adding
+    // real access details in "Usuarios de la organización" — so this always
+    // blocks the import rather than offering an inline resolution.
+    if (match.kind === 'recognized_pending') {
+      window.alert(t('team.pendingEmployeeBlocked', { name: match.employees[0]?.name ?? name }));
+      return null;
+    }
+
     if (match.kind === 'ambiguous') {
       window.alert(t('team.ambiguousEmployee', { name }));
       return null;
@@ -745,11 +766,25 @@ function App() {
     if (!name) {
       return null;
     }
-    // A single-person auto-dispatch may only target an existing org employee.
-    // Do not turn an uncertain identity into a new employee from this path;
-    // the user must resolve it explicitly before any write can happen.
+    // A single-person auto-dispatch never imports straight onto a brand-new
+    // identity — only ACTIVE employees may receive imported shifts (backend
+    // enforces this too, see EMPLOYEE_NOT_ACTIVE). Offer a partial alta
+    // (pending_access: name + external id only, no email) so the admin
+    // doesn't have to leave this flow to start registering them, but this
+    // import attempt still stops here — it resumes only after the admin
+    // completes the registration in "Usuarios de la organización" and
+    // re-runs the import.
     if (adminIndividualImport) {
-      window.alert(t('team.resolveEmployeeFailed'));
+      if (window.confirm(t('team.createEmployeePartialConfirm', { employee: label }))) {
+        try {
+          const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined, areaId: areaId ?? undefined });
+          setEmployees((current) => [...current, created]);
+          window.alert(t('team.employeeCreatedPendingActivation', { employee: label }));
+        } catch (error) {
+          console.error('Failed to create partial employee from single-import flow', error);
+          window.alert(t('team.resolveEmployeeFailed'));
+        }
+      }
       return null;
     }
     if (!window.confirm(t('team.createEmployeeConfirm', { employee: label }))) {

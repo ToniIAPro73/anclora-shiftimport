@@ -88,8 +88,12 @@ function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [], us
         count: String(employees.filter((e) => e.organization_id === values[0] && e.status === 'active').length),
       }]);
     }
-    if (text.startsWith('SELECT id FROM employees')) {
-      return Promise.resolve(employees.filter((e) => e.id === values[0] && e.organization_id === values[1]));
+    if (text.startsWith('SELECT id, status FROM employees')) {
+      return Promise.resolve(
+        employees
+          .filter((e) => e.id === values[0] && e.organization_id === values[1])
+          .map((e) => ({ id: e.id, status: e.status })),
+      );
     }
     if (text.startsWith('SELECT * FROM employees WHERE id =')) {
       return Promise.resolve(employees.filter((e) => e.id === values[0]));

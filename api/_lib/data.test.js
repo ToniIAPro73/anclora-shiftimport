@@ -119,8 +119,12 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       ));
     }
     // assertEmployeeInOrg (values: [id, organizationId])
-    if (text.startsWith('SELECT id FROM employees')) {
-      return Promise.resolve(employees.filter((e) => e.id === values[0] && e.organization_id === values[1]));
+    if (text.startsWith('SELECT id, status FROM employees')) {
+      return Promise.resolve(
+        employees
+          .filter((e) => e.id === values[0] && e.organization_id === values[1])
+          .map((e) => ({ id: e.id, status: e.status })),
+      );
     }
     // updateEmployee current-row lookup (values: [id]); deleteEmployee loads
     // org-scoped (values: [id, organizationId]).
@@ -380,6 +384,32 @@ describe('tenant isolation', () => {
     const deleteCall = calls.find((call) => call.text.startsWith('DELETE FROM shifts'));
     expect(deleteCall.text).toContain('organization_id');
     expect(deleteCall.values).toContain(ORG_A);
+  });
+});
+
+describe('active-employee gate on import', () => {
+  it('rejects an IMP shift for a pending_access employee', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'pending_access' })] });
+    await expect(upsertShifts(sql, adminCtx, [shiftInput({ origin: 'IMP' })]))
+      .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_NOT_ACTIVE' });
+  });
+
+  it('rejects an IMP shift for an inactive employee', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'inactive' })] });
+    await expect(upsertShifts(sql, adminCtx, [shiftInput({ origin: 'IMP' })]))
+      .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_NOT_ACTIVE' });
+  });
+
+  it('allows a MAN (manual) shift for a pending_access employee', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'pending_access' })] });
+    const saved = await upsertShifts(sql, adminCtx, [shiftInput({ origin: 'MAN' })]);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('allows an IMP shift for an active employee', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })] });
+    const saved = await upsertShifts(sql, adminCtx, [shiftInput({ origin: 'IMP' })]);
+    expect(saved).toHaveLength(1);
   });
 });
 

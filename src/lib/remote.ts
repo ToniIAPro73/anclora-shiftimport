@@ -60,8 +60,12 @@ export interface ImportHistoryPage {
 }
 
 /** `recognized_inactive`: the single match exists but its status is
- * 'inactive' — never silently reactivated nor duplicated by import flows. */
-export type EmployeeMatchKind = 'recognized' | 'recognized_inactive' | 'ambiguous' | 'new';
+ * 'inactive' — never silently reactivated nor duplicated by import flows.
+ * `recognized_pending`: the single match exists but is still
+ * 'pending_access' (detected/created but never linked to a user) — an
+ * import may not target it until an ADMIN completes its registration in
+ * "Usuarios de la organización" (backend also rejects it, EMPLOYEE_NOT_ACTIVE). */
+export type EmployeeMatchKind = 'recognized' | 'recognized_inactive' | 'recognized_pending' | 'ambiguous' | 'new';
 
 interface RemoteShiftRow {
   id: string;

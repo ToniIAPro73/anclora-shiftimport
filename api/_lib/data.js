@@ -116,12 +116,13 @@ function effectiveEmployeeId(ctx, requestedEmployeeId) {
 
 async function assertEmployeeInOrg(sql, ctx, employeeId) {
   const rows = await sql`
-    SELECT id FROM employees
+    SELECT id, status FROM employees
     WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
   `;
   if (rows.length === 0) {
     throw new HttpError(403, 'Employee does not belong to the organization');
   }
+  return rows[0];
 }
 
 /**
@@ -189,6 +190,20 @@ export async function listEmployees(sql, ctx, { areaId = null } = {}) {
   return rows.map(mapEmployeeRow);
 }
 
+/** A matched employee is only truly import-ready when ACTIVE. inactive and
+ * pending_access each get their own distinct kind so callers never treat
+ * either as "recognized" — an import must never silently land on an
+ * employee who isn't active yet (see EMPLOYEE_NOT_ACTIVE in upsertShifts). */
+function matchKindForStatus(status) {
+  if (status === 'inactive') {
+    return 'recognized_inactive';
+  }
+  if (status === 'pending_access') {
+    return 'recognized_pending';
+  }
+  return 'recognized';
+}
+
 /** Matching support for the importer: find by external id or normalized name.
  *
  * EMPLOYEE role: never search the org directory by client-sent text — that
@@ -223,10 +238,7 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
     `;
     if (rows.length > 0) {
       const employees = rows.map(mapEmployeeRow);
-      if (employees.length === 1 && employees[0].status === 'inactive') {
-        return { kind: 'recognized_inactive', employees };
-      }
-      return { kind: 'recognized', employees };
+      return { kind: employees.length === 1 ? matchKindForStatus(employees[0].status) : 'recognized', employees };
     }
   }
 
@@ -238,7 +250,7 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
     `;
     if (rows.length === 1) {
       const employees = rows.map(mapEmployeeRow);
-      return { kind: employees[0].status === 'inactive' ? 'recognized_inactive' : 'recognized', employees };
+      return { kind: matchKindForStatus(employees[0].status), employees };
     }
     if (rows.length > 1) {
       return { kind: 'ambiguous', employees: rows.map(mapEmployeeRow) };
@@ -1383,7 +1395,19 @@ export async function upsertShifts(sql, ctx, rawShifts) {
       throw new HttpError(400, 'Shift requires date and employeeId');
     }
     const employeeId = effectiveEmployeeId(ctx, shift.employeeId);
-    await assertEmployeeInOrg(sql, ctx, employeeId);
+    const employee = await assertEmployeeInOrg(sql, ctx, employeeId);
+
+    // Imported shifts (origin IMP) may only land on an ACTIVE employee — a
+    // pending_access row (detected in a file but not yet linked to a real
+    // user) or an inactive one is not a usable employee yet. Manual shifts
+    // (origin MAN) are untouched: an ADMIN adding one shift by hand for a
+    // pending_access employee is not the import-a-whole-file risk this
+    // guards against.
+    if (shift.origin === 'IMP' && employee.status !== 'active') {
+      const error = new HttpError(409, 'Cannot import shifts for an employee that is not active yet');
+      error.code = 'EMPLOYEE_NOT_ACTIVE';
+      throw error;
+    }
 
     // Area snapshot rule (single rule, tested): explicit shift.areaId (org-
     // validated) wins; else the import's area when the import is area-scoped;
