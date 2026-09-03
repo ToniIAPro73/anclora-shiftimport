@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ExcelJS from 'exceljs';
-import { IngestionError } from '../../lib/ingestion-errors';
+import JSZip from 'jszip';
 import { parseXlsxTeamWorkbook } from './xlsx-workbook';
 
 async function workbookFile(name: string, build: (wb: ExcelJS.Workbook) => void): Promise<File> {
@@ -12,6 +12,21 @@ async function workbookFile(name: string, build: (wb: ExcelJS.Workbook) => void)
   return new File([buffer as unknown as BlobPart], name, {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
+}
+
+async function prefixWorkbookElements(file: File): Promise<File> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const workbookXml = await zip.file('xl/workbook.xml')?.async('string');
+  if (!workbookXml) throw new Error('test workbook.xml missing');
+  zip.file('xl/workbook.xml', workbookXml
+    .replace('<workbook ', '<x:workbook ')
+    .replace('<sheets>', '<x:sheets>')
+    .replace('</sheets>', '</x:sheets>')
+    .replace('<sheet ', '<x:sheet ')
+    .replace(/<\/sheet>/g, '</x:sheet>')
+    .replace('</workbook>', '</x:workbook>'));
+  const buffer = await zip.generateAsync({ type: 'arraybuffer' });
+  return new File([buffer], file.name, { type: file.type });
 }
 
 const ROSTER_HEADER = ['employeeId', 'employeeName', 'date', 'shiftType', 'startTime', 'endTime'];
@@ -28,6 +43,16 @@ describe('parseXlsxTeamWorkbook', () => {
     expect(result.employees).toHaveLength(1);
   });
 
+  it('normalizes a namespaced workbook variant in memory before parsing', async () => {
+    const source = await workbookFile('namespaced.xlsx', (wb) => {
+      const sheet = wb.addWorksheet('Hoja con espacios');
+      sheet.addRow(ROSTER_HEADER);
+      sheet.addRow(['OPE-001', 'Ana García', '2026-09-01', 'M', '06:00', '14:00']);
+    });
+    const result = await parseXlsxTeamWorkbook(await prefixWorkbookElements(source));
+    expect(result.sheets).toEqual([{ sheetName: 'Hoja con espacios', status: 'processed', rowCount: 1 }]);
+  });
+
   it('A2/A4: multiple sheets with compatible layouts are both processed and merged without duplication', async () => {
     const file = await workbookFile('multi.xlsx', (wb) => {
       const logistica = wb.addWorksheet('Logística');
@@ -40,6 +65,18 @@ describe('parseXlsxTeamWorkbook', () => {
     const result = await parseXlsxTeamWorkbook(file);
     expect(result.sheets.map((s) => s.status)).toEqual(['processed', 'processed']);
     expect(result.employees).toHaveLength(2);
+  });
+
+  it('preserves sheet names containing spaces and accents', async () => {
+    const file = await workbookFile('named-sheets.xlsx', (wb) => {
+      for (const name of ['Turnos con espacios', 'Área Logística Áccentada']) {
+        const sheet = wb.addWorksheet(name);
+        sheet.addRow(ROSTER_HEADER);
+        sheet.addRow(['OPE-001', 'Ana García', '2026-09-01', 'M', '06:00', '14:00']);
+      }
+    });
+    const result = await parseXlsxTeamWorkbook(file);
+    expect(result.sheets.map((sheet) => sheet.sheetName)).toEqual(['Turnos con espacios', 'Área Logística Áccentada']);
   });
 
   it('A3: empty and instructions sheets are classified, not imported as data', async () => {
@@ -116,7 +153,28 @@ describe('parseXlsxTeamWorkbook', () => {
     const file = new File([new Uint8Array([1, 2, 3, 4])], 'broken.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     });
-    await expect(parseXlsxTeamWorkbook(file)).rejects.toBeInstanceOf(IngestionError);
+    await expect(parseXlsxTeamWorkbook(file)).rejects.toMatchObject({
+      code: 'INVALID_XLSX',
+      message: 'No se pudo leer el archivo XLSX. El libro no tiene una estructura de hojas reconocible o está dañado.',
+    });
+  });
+
+  it('returns a readable error for a workbook with no sheets', async () => {
+    const file = await workbookFile('no-sheets.xlsx', () => undefined);
+    await expect(parseXlsxTeamWorkbook(file)).rejects.toMatchObject({
+      code: 'INVALID_XLSX',
+      message: 'El libro XLSX no contiene ninguna hoja.',
+    });
+  });
+
+  it('reads a rich-text cell value without assuming a primitive cell type', async () => {
+    const file = await workbookFile('rich-text.xlsx', (wb) => {
+      const sheet = wb.addWorksheet('Hoja con acento');
+      sheet.addRow(ROSTER_HEADER);
+      sheet.addRow(['OPE-001', { richText: [{ text: 'Ana ' }, { text: 'García' }] }, '2026-09-01', 'M', '06:00', '14:00']);
+    });
+    const result = await parseXlsxTeamWorkbook(file);
+    expect(result.employees[0]?.name).toBe('Ana García');
   });
 
   it('processes the multi-area acceptance fixture: both rosters, ignored notes/instructions, deliberate incidents detected', async () => {
@@ -165,5 +223,22 @@ describe('parseXlsxTeamWorkbook', () => {
     ]);
     expect(result.diagnostics.some((diagnostic) => diagnostic.sourceRef === 'Leyenda')).toBe(true);
     expect(result.diagnostics.some((diagnostic) => diagnostic.code === 'UNKNOWN_SHIFT_CODES')).toBe(false);
+  });
+
+  it('regression: modified positional fixture retains both sheets and five changed values', async () => {
+    const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx'));
+    const file = new File([buffer], 'Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const result = await parseXlsxTeamWorkbook(file);
+    expect(result.sheets).toEqual([
+      { sheetName: 'Calendario empleado', status: 'processed', rowCount: 246 },
+      { sheetName: 'Leyenda', status: 'ignored', rowCount: 6 },
+    ]);
+    expect(result.employees[0]?.shifts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ date: '2026-01-04', startTime: '20:00', endTime: '04:00' }),
+      expect.objectContaining({ date: '2026-01-15', startTime: '06:00', endTime: '14:00' }),
+      expect.objectContaining({ date: '2026-02-13', startTime: '18:00', endTime: '02:00' }),
+      expect.objectContaining({ date: '2026-05-22', startTime: '16:00', endTime: '00:00' }),
+      expect.objectContaining({ date: '2026-09-11', startTime: '06:00', endTime: '14:00' }),
+    ]));
   });
 });

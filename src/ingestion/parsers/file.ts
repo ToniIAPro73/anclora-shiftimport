@@ -41,7 +41,7 @@ import { extractPdfTextItems } from './pdf';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
 import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
-import { parseXlsxTeamWorkbook } from '../adapters/xlsx-workbook';
+import { loadXlsxWorksheets, parseXlsxTeamWorkbook } from '../adapters/xlsx-workbook';
 
 // The canonical alias table lives in ../tabular-assistant (shared with the
 // tabular assistant fallback); re-exported here for API compatibility.
@@ -122,12 +122,9 @@ export function extractTabularItems(text: string, page = 1): PdfTextItem[] {
 
 /** Extracts positioned items from an Excel workbook (first sheet is enough). */
 export async function extractExcelItems(file: File): Promise<PdfTextItem[]> {
-  const ExcelJS = (await import('exceljs')).default;
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(await file.arrayBuffer());
-
   const items: PdfTextItem[] = [];
-  const sheet = workbook.worksheets[0];
+  const { worksheets } = await loadXlsxWorksheets(file);
+  const sheet = worksheets[0];
   if (!sheet) {
     return items;
   }

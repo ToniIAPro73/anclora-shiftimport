@@ -24,6 +24,7 @@ import { normalizeStructuredRows, RowDiagnostic, StructuredShiftRow } from './st
 import { DetectedTeamEmployee, TeamRosterDetection } from '../team-roster';
 import { normalizeTimeToken } from '../core/normalize';
 import { resolveShiftTypeId } from '../../lib/shift-types';
+import JSZip from 'jszip';
 
 export type SheetStatus = 'processed' | 'empty' | 'ignored';
 
@@ -40,7 +41,7 @@ export interface WorkbookTeamRosterResult extends TeamRosterDetection {
   layout: 'tabular' | 'individual-calendar' | 'unknown';
 }
 
-interface Worksheet {
+export interface XlsxWorksheet {
   name: string;
   eachRow: (options: { includeEmpty: boolean }, callback: (row: WorksheetRow, rowNumber: number) => void) => void;
 }
@@ -78,7 +79,7 @@ type SheetGridResult =
   | { kind: 'ignored' }
   | { kind: 'table'; table: RosterTable };
 
-function sheetToRosterTable(sheet: Worksheet): SheetGridResult {
+function sheetToRosterTable(sheet: XlsxWorksheet): SheetGridResult {
   const grid: string[][] = [];
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     const cells: string[] = [];
@@ -113,7 +114,7 @@ function cleanCell(value: string): string {
   return value.replace(/!/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function positionalCalendarFromSheet(sheet: Worksheet): { employee: DetectedTeamEmployee; rowCount: number } | null {
+function positionalCalendarFromSheet(sheet: XlsxWorksheet): { employee: DetectedTeamEmployee; rowCount: number } | null {
   const grid: string[][] = [];
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     const cells: string[] = [];
@@ -170,23 +171,105 @@ function positionalCalendarFromSheet(sheet: Worksheet): { employee: DetectedTeam
   } : null;
 }
 
+export interface LoadedXlsxWorkbook {
+  worksheets: XlsxWorksheet[];
+}
+
+const XLSX_ERROR_MESSAGE = 'No se pudo leer el archivo XLSX. El libro no tiene una estructura de hojas reconocible o está dañado.';
+const XLSX_EMPTY_MESSAGE = 'El libro XLSX no contiene ninguna hoja.';
+
+/**
+ * ExcelJS 4.x expects the main SpreadsheetML elements without a namespace
+ * prefix. Some otherwise valid workbooks emit those same elements as x:*
+ * and can make ExcelJS return an undefined workbook model. Normalize only
+ * that parser-compatibility detail in memory, preserving the uploaded file.
+ */
+async function normalizeXlsxForExcelJs(data: ArrayBuffer): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(data);
+  const names = Object.keys(zip.files);
+  if (!names.some((name) => name === 'xl/workbook.xml')) {
+    throw new Error('workbook.xml missing');
+  }
+
+  for (const name of names) {
+    const entry = zip.file(name);
+    if (!entry || (!name.endsWith('.xml') && !name.endsWith('.rels'))) {
+      continue;
+    }
+    let content = await entry.async('string');
+    if (name.endsWith('.xml')) {
+      content = content
+        .replace(/(<\/?)(x:)/g, '$1')
+        .replace(/\sxmlns:x="[^"]*"/g, '');
+    }
+    if (name === 'xl/worksheets/_rels/sheet1.xml.rels') {
+      content = content
+        .replace(/Target="\/xl\/comments1\.xml"/g, 'Target="../comments1.xml"')
+        .replace(/Target="\/xl\/drawings\/vmldrawing\.vml"/g, 'Target="../drawings/vmlDrawing1.vml"')
+        .replace(/Target="\/xl\/drawings\/drawing1\.xml"/g, 'Target="../drawings/drawing1.xml"');
+    }
+    zip.file(name, content);
+  }
+
+  // ExcelJS only recognizes the conventional VML filename pattern.
+  const vml = zip.file('xl/drawings/vmldrawing.vml');
+  if (vml) {
+    zip.file('xl/drawings/vmlDrawing1.vml', await vml.async('nodebuffer'));
+    zip.remove('xl/drawings/vmldrawing.vml');
+  }
+  return zip.generateAsync({ type: 'arraybuffer' });
+}
+
+async function loadWorkbook(data: ArrayBuffer): Promise<LoadedXlsxWorkbook> {
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  const loaded = await workbook.xlsx.load(data);
+  if (!loaded) {
+    throw new Error('parser returned no workbook');
+  }
+  const worksheets = (workbook as { worksheets?: unknown }).worksheets;
+  if (!Array.isArray(worksheets)) {
+    throw new Error('parser returned no worksheet collection');
+  }
+  if (worksheets.length === 0) {
+    throw new IngestionError('INVALID_XLSX', XLSX_EMPTY_MESSAGE);
+  }
+  if (worksheets.some((sheet) => !sheet || typeof (sheet as XlsxWorksheet).name !== 'string' || typeof (sheet as XlsxWorksheet).eachRow !== 'function')) {
+    throw new Error('parser returned an invalid worksheet');
+  }
+  return { worksheets: worksheets as XlsxWorksheet[] };
+}
+
+/**
+ * Loads an XLSX defensively. A second, in-memory compatibility pass handles
+ * namespace/relationship variants emitted by some spreadsheet editors.
+ * The original upload is never rewritten or persisted.
+ */
+export async function loadXlsxWorksheets(file: File): Promise<LoadedXlsxWorkbook> {
+  const data = await file.arrayBuffer();
+  try {
+    return await loadWorkbook(data);
+  } catch (firstError) {
+    try {
+      return await loadWorkbook(await normalizeXlsxForExcelJs(data));
+    } catch (secondError) {
+      if (secondError instanceof IngestionError && secondError.message === XLSX_EMPTY_MESSAGE) {
+        throw secondError;
+      }
+      // Do not expose parser internals such as "reading 'sheets'" to users.
+      void firstError;
+      throw new IngestionError('INVALID_XLSX', XLSX_ERROR_MESSAGE);
+    }
+  }
+}
+
 /**
  * Reads every worksheet of the given file, classifies each, and merges the
  * processed ones into one TeamRosterDetection. Throws
  * IngestionError('INVALID_XLSX') when the workbook itself cannot be loaded.
  */
 export async function parseXlsxTeamWorkbook(file: File): Promise<WorkbookTeamRosterResult> {
-  const ExcelJS = (await import('exceljs')).default;
-  const workbook = new ExcelJS.Workbook();
-  try {
-    await workbook.xlsx.load(await file.arrayBuffer());
-  } catch (err) {
-    throw new IngestionError('INVALID_XLSX', `No se pudo leer el archivo XLSX: ${(err as Error).message}`);
-  }
-
-  if (workbook.worksheets.length === 0) {
-    throw new IngestionError('INVALID_XLSX', 'El libro XLSX no contiene ninguna hoja.');
-  }
+  const { worksheets } = await loadXlsxWorksheets(file);
 
   const sheets: SheetSummary[] = [];
   const allRows: StructuredShiftRow[] = [];
@@ -194,7 +277,7 @@ export async function parseXlsxTeamWorkbook(file: File): Promise<WorkbookTeamRos
   let positionalEmployee: DetectedTeamEmployee | null = null;
   let sawTabularSheet = false;
 
-  for (const sheet of workbook.worksheets as unknown as Worksheet[]) {
+  for (const sheet of worksheets) {
     const gridResult = sheetToRosterTable(sheet);
     const positional = positionalCalendarFromSheet(sheet);
     if (positional) {

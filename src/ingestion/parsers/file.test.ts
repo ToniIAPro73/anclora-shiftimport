@@ -217,6 +217,21 @@ describe('analyzeDocumentFile — positional XLSX regression', () => {
     expect(result.quality.warnings).toEqual([]);
     expect(result.shifts.find((shift) => shift.date === '2026-06-16')).toMatchObject({ startTime: '17:00', endTime: '01:00' });
   });
+
+  it('reads the changed workbook and keeps all five requested edits', async () => {
+    const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx'));
+    const file = makeFile('Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx', [buffer], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const result = await analyzeDocumentFile(file, { employeeName: 'Sebastian Pozo Mendoza', employeeIdentifiers: [] }, undefined, { month: 8, year: 2026 });
+    expect(result.shifts).toHaveLength(246);
+    expect(result.quality.warnings).toEqual([]);
+    expect(result.shifts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ date: '2026-01-04', startTime: '20:00', endTime: '04:00' }),
+      expect.objectContaining({ date: '2026-01-15', startTime: '06:00', endTime: '14:00' }),
+      expect.objectContaining({ date: '2026-02-13', startTime: '18:00', endTime: '02:00' }),
+      expect.objectContaining({ date: '2026-05-22', startTime: '16:00', endTime: '00:00' }),
+      expect.objectContaining({ date: '2026-09-11', startTime: '06:00', endTime: '14:00' }),
+    ]));
+  });
 });
 
 describe('cellPositionToItem', () => {
