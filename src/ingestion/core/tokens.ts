@@ -15,6 +15,18 @@ export function isOffToken(value: string): boolean {
 }
 
 /**
+ * Strips a trailing footnote-reference annotation (e.g. `AJ [2]` -> `AJ`,
+ * `DL [12]` -> `DL`) some documents print inline in the same cell/text run
+ * as the shift code. The footnote itself is document metadata (explained in
+ * a separate legend section), never part of the code's identity — matching
+ * must ignore it or an annotated occurrence of an otherwise-known code
+ * fails classification.
+ */
+function stripFootnoteAnnotation(value: string): string {
+  return value.replace(/\s*\[[^[\]]*\]\s*$/, '').trim();
+}
+
+/**
  * Expands a raw cell text into an ordered token stream of
  * times (`HH:mm`), `OFF` markers and `--` segment separators.
  *
@@ -30,7 +42,9 @@ export function expandShiftTokens(value: string, codeProfile?: Map<string, Shift
     return [];
   }
 
-  if (isOffToken(trimmed)) {
+  const core = stripFootnoteAnnotation(trimmed);
+
+  if (isOffToken(core)) {
     return ['OFF'];
   }
 
@@ -39,7 +53,7 @@ export function expandShiftTokens(value: string, codeProfile?: Map<string, Shift
   }
 
   if (codeProfile) {
-    const mapped = resolveCode(trimmed, codeProfile);
+    const mapped = resolveCode(core, codeProfile);
     if (mapped) {
       return mapped.status === 'free' ? ['OFF'] : [mapped.startTime as string, mapped.endTime as string];
     }

@@ -37,11 +37,20 @@ export const TYPE_B_PROFILE: IngestionProfile = {
   // own repeated day-header row and its own copy of every employee's row).
   multiPageEmployee: true,
   rowWindow: {
-    markerMaxX: 100,
+    // Some export variants of this report widen the id column (observed:
+    // plain-number ids at x~107-112, vs. the narrower x~28 layout) — the
+    // bound stays well short of dataMinX so it can't swallow row data.
+    markerMaxX: 120,
     // Names locate the row too: they print on the id marker's line, a few
     // points right of markerMaxX in dense layouts (row-detection extends the
     // name zone to dataMinX for lines anchored by an id marker).
     nameMatching: true,
+    // NOTE: cannot be raised to clear the widened-export variant's employee
+    // name (x~162, see markerMaxX note above) — another real document's
+    // legitimate first day column sits at x~166, a few points past it. The
+    // name leaking into row data on that variant is instead guarded by
+    // identity (locateRowOnPage strips any item matching the target
+    // employee's own name tokens), not by widening this bound.
     dataMinX: 150,
     ceiling: { mode: 'offset', offset: 12, inclusive: true },
     floor: {

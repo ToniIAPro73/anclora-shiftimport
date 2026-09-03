@@ -387,11 +387,19 @@ function locateRowOnPage(
   const floorY = resolveFloor(pageItems, markers, Math.max(...markerIndexes), rules);
   const category = resolveCategory(pageItems, Math.min(...markerIndexes), rules);
 
+  // A layout variant can print the employee's own name/id past dataMinX
+  // (e.g. a widened marker column pushes the name label into what is
+  // normally the data zone). dataMinX alone can't be raised to cover this —
+  // another real layout's legitimate first day column sits only a few
+  // points further right — so the name is instead excluded by identity: an
+  // item that itself matches the target employee's name tokens is never
+  // shift-cell data, regardless of where it printed.
   const rowItems = pageItems.filter(
     (item) =>
       item.x > rules.dataMinX &&
       (inclusive ? item.y <= ceilingY : item.y < ceilingY) &&
-      item.y >= floorY,
+      item.y >= floorY &&
+      !(nameTokens.length > 0 && matchesNameTokens(item.text, nameTokens)),
   );
 
   return rowItems.length > 0 ? { rowItems, page, category } : null;
