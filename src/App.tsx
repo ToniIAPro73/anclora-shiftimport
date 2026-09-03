@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { Shift } from './lib/types';
 import { getMonthDaysISO, getDaysInMonth } from './lib/week';
-import { loadShifts, loadLocalShiftsForMigration, normalizeShift, syncShiftChanges } from './lib/storage';
+import { clearAnonymousShiftDraft, loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
 import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
@@ -14,6 +14,7 @@ import {
   fetchResolvedSession,
   fetchSession,
   logout,
+  setRequestOrganizationId,
   setUnauthorizedHandler,
   switchOrganization,
   completeOnboarding,
@@ -42,7 +43,6 @@ import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
-import { LocalMigrationModal } from './components/shift-dashboard/LocalMigrationModal';
 import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { AreasModal } from './components/shift-dashboard/AreasModal';
@@ -69,8 +69,6 @@ import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
 
-/** localStorage flag: local→remote one-shot migration already done (Fase 1). */
-const MIGRATION_DONE_KEY = 'anclora_shiftimport_migrated_v1';
 /** localStorage flag: local→org format-profile migration already resolved
  * (Format Memory v1). Separate from MIGRATION_DONE_KEY — shift data and
  * format profiles migrate independently. */
@@ -156,9 +154,8 @@ function App() {
     selectedAreaIdRef.current = selectedAreaId;
   }, [selectedAreaId]);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
-  // Fase 1.1: explicit org choice (multi-org) + explicit local migration.
+  // Fase 1.1: explicit organization choice for multi-org accounts.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
-  const [migrationPrompt, setMigrationPrompt] = useState<{ count: number } | null>(null);
   const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isAreasOpen, setIsAreasOpen] = useState(false);
@@ -211,9 +208,8 @@ function App() {
 
   // Authenticated bootstrap: loads the org employees, picks the working
   // employee (self for EMPLOYEE role) and loads that employee's shifts.
-  // Local→remote migration is EXPLICIT (Fase 1.1): local data triggers a
-  // confirmation modal with preview, never a silent upload. The local copy
-  // is never deleted.
+  // Authenticated hydration is remote-only. Anonymous drafts are discarded
+  // when crossing into an authenticated context.
   const hydrateAuthenticated = useCallback(async (nextSession: SessionInfo): Promise<void> => {
     const epoch = authEpochRef.current;
     const [orgEmployees, orgAreas] = await Promise.all([
@@ -262,38 +258,11 @@ function App() {
     }
     setShifts(remoteShifts);
 
-    const migrationState = window.localStorage.getItem(MIGRATION_DONE_KEY);
-    const isSelfEmployee = initialEmployeeId === nextSession.employeeId;
-    if (!migrationState && isSelfEmployee && remoteShifts.length === 0) {
-      const localShifts = loadLocalShiftsForMigration();
-      if (localShifts.length > 0) {
-        setMigrationPrompt({ count: localShifts.length });
-      }
-    }
-
     const formatProfileMigrationState = window.localStorage.getItem(FORMAT_PROFILE_MIGRATION_DONE_KEY);
     if (!formatProfileMigrationState && loadFormatProfiles().length > 0) {
       setFormatProfileMigrationOpen(true);
     }
   }, []);
-
-  const handleMigrationImport = useCallback(async (): Promise<boolean> => {
-    if (!session?.employeeId) {
-      return false;
-    }
-    try {
-      const localShifts = loadLocalShiftsForMigration();
-      // Idempotent: same ids upsert (ON CONFLICT id), repeating creates no duplicates.
-      await syncRemoteShifts(session.employeeId, { upserts: localShifts });
-      setShifts(await loadRemoteShifts(session.employeeId));
-      window.localStorage.setItem(MIGRATION_DONE_KEY, 'done');
-      setMigrationPrompt(null);
-      return true;
-    } catch (error) {
-      console.error('Local migration failed', error);
-      return false;
-    }
-  }, [session]);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,6 +275,7 @@ function App() {
         }
 
         if (resolved) {
+          clearAnonymousShiftDraft();
           setSession(resolved.session);
           setNeedsOrgChoice(resolved.needsOrgChoice);
           if (resolved.needsOrgChoice) {
@@ -314,9 +284,11 @@ function App() {
           try {
             await hydrateAuthenticated(resolved.session);
           } catch (error) {
-            console.error('Failed to load remote shifts, falling back to guest mode', error);
+            console.error('Failed to load remote shifts; refusing anonymous fallback', error);
+            clearAnonymousShiftDraft();
             setSession(null);
-            setShifts(await loadShifts());
+            setShifts([]);
+            navigate('/login');
           }
           return;
         }
@@ -332,6 +304,23 @@ function App() {
         if (shouldShowOnboarding(nextShifts.length)) {
           setIsOnboardingOpen(true);
         }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        // Authentication is unknown (network/5xx/invalid response). Do not
+        // interpret that state as guest mode: anonymous local drafts must not
+        // become visible while the session is unresolved.
+        console.error('Session resolution failed; blocking workspace', error);
+        authEpochRef.current += 1;
+        setRequestOrganizationId(null);
+        clearAnonymousShiftDraft();
+        setSession(null);
+        setNeedsOrgChoice(false);
+        setEmployees([]);
+        setAreas([]);
+        setShifts([]);
+        navigate('/login');
       } finally {
         // The /app shell stays behind a loading gate until the first session
         // resolution (and its hydration) settles — success, fallback or guest.
@@ -349,6 +338,7 @@ function App() {
   }, [hydrateAuthenticated]);
 
   const handleAuthenticated = useCallback(async (nextSession: SessionInfo) => {
+    clearAnonymousShiftDraft();
     setSession(nextSession);
     // The guest first-run guide may already be scheduled from the pre-auth
     // hydration effect (it runs regardless of route); a real session
@@ -373,6 +363,7 @@ function App() {
     if (!nextSession || !nextSession.organizationId) {
       return;
     }
+    clearAnonymousShiftDraft();
     setSession(nextSession);
     setNeedsOrgChoice(false);
     setShifts([]);
@@ -391,6 +382,7 @@ function App() {
   const handleOnboarding = useCallback(async (organizationName: string, employeeName?: string) => {
     try {
       const nextSession = await completeOnboarding(organizationName, employeeName);
+      clearAnonymousShiftDraft();
       setSession(nextSession);
       setNeedsOrgChoice(false);
       await hydrateAuthenticated(nextSession);
@@ -423,12 +415,12 @@ function App() {
       setAreas([]);
       setSelectedAreaId(null);
       setNeedsOrgChoice(false);
-      setMigrationPrompt(null);
       setIsMembersOpen(false);
       setIsAreasOpen(false);
       setIsAuthOpen(false);
     });
-    setShifts(await loadShifts());
+    clearAnonymousShiftDraft();
+    setShifts([]);
     navigate('/login');
   }, []);
 
@@ -773,7 +765,15 @@ function App() {
     targetPeriod: ImportPeriod,
     selector?: { name: string; externalId: string },
     areaId?: string | null,
+    fileName?: string,
+    fileFingerprint?: string,
   ): Promise<boolean> => {
+    // Defense in depth: the modal disables guest confirmation, and the
+    // controller also fails closed so a stale event cannot write locally.
+    if (!session) {
+      clearAnonymousShiftDraft();
+      return false;
+    }
     // Authenticated mode: resolve the target employee first; switching the
     // working set keeps each employee's calendar isolated.
     let importId: string | undefined;
@@ -876,8 +876,10 @@ function App() {
     if (session && upserts.length > 0 && !importId) {
       try {
         const created = await createRemoteImport({
-          fileName: '',
+          fileName: fileName ?? '',
           sourceFormat: newShifts[0]?.sourceFormat ?? '',
+          fileFingerprint,
+          employeeId: targetEmployeeId,
           periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
           periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
           areaId: areaId ?? null,
@@ -931,7 +933,8 @@ function App() {
           setSelectedEmployeeId(targetEmployeeId);
         }
       } else {
-        await syncShiftChanges(working, { upserts, deleteIds });
+        // Unreachable because anonymous confirmation is rejected above.
+        throw new Error('Authenticated session required for import persistence');
       }
       applySuccessTail();
       return true;
@@ -1107,7 +1110,7 @@ function App() {
           setDraftShiftDate(null);
           setIsModalOpen(true);
         }}
-        onImport={() => { if (!isImporting) setIsImportOpen(true); }}
+        onImport={() => { if (!isImporting && authResolved) setIsImportOpen(true); }}
         onOpenImportHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
         onOpenSettings={(role) => {
           if (isImporting) {
@@ -1454,6 +1457,7 @@ function App() {
           identityLocked={Boolean(session)}
           userId={session?.user.id ?? null}
           organizationId={session?.organizationId ?? null}
+          isAuthenticated={Boolean(session)}
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
           allowAreaChoice={session?.role === 'ADMIN'}
@@ -1517,19 +1521,6 @@ function App() {
         isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0}
         onConfirm={handleOnboarding}
         onLogout={() => void handleLogout()}
-      />
-
-      <LocalMigrationModal
-        isOpen={migrationPrompt !== null}
-        shiftCount={migrationPrompt?.count ?? 0}
-        organizationName={session?.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
-        employeeName={employees.find((employee) => employee.id === session?.employeeId)?.name ?? session?.user.displayName ?? ''}
-        onImport={handleMigrationImport}
-        onKeepLocal={() => {
-          window.localStorage.setItem(MIGRATION_DONE_KEY, 'local-only');
-          setMigrationPrompt(null);
-        }}
-        onCancel={() => setMigrationPrompt(null)}
       />
 
       <FormatProfileMigrationModal

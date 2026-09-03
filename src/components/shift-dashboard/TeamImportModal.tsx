@@ -28,6 +28,7 @@ import { ApiError, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { detectImportFlow } from '../../ingestion/import-dispatcher';
+import { fingerprintFile } from '../../lib/file-fingerprint';
 
 interface TeamImportModalProps {
   isOpen: boolean;
@@ -156,6 +157,7 @@ export const TeamImportModal = ({
   // employee (one document, one source event); CSV keeps its existing
   // per-employee Import (unchanged, regression-safe).
   const [sourceFormat, setSourceFormat] = useState<'csv' | 'pdf' | 'xlsx' | 'json' | 'xml'>('csv');
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   // XLSX multi-sheet summary + row-level diagnostics (invalid date,
   // incomplete shift, duplicate, unknown sheet) — additive, never blocks a
   // format that has none (CSV/PDF leave both empty).
@@ -197,6 +199,7 @@ export const TeamImportModal = ({
     setOutcomes([]);
     setImporting(false);
     setSourceFormat('csv');
+    setSourceFile(null);
     setSheetSummaries([]);
     setRowDiagnostics([]);
     setImportAreaId(defaultImportAreaId);
@@ -214,6 +217,7 @@ export const TeamImportModal = ({
   };
 
   const handleFile = async (file: File) => {
+    setSourceFile(file);
     setError('');
     setLoading(true);
     setSheetSummaries([]);
@@ -520,40 +524,7 @@ export const TeamImportModal = ({
     // uploaded file, independent of which branch below ends up creating the
     // Import row(s).
     const monthNames = tl('calendar.months');
-    const batchEmployeeCount = preview.length;
-    const batchShiftCount = preview.reduce((sum, entry) => sum + entry.newCount + entry.conflictCount + entry.unchangedCount, 0);
-    const batchCreatedCount = preview.reduce((sum, entry) => sum + entry.newCount, 0);
-    const batchExistingCount = preview.reduce((sum, entry) => sum + entry.unchangedCount, 0);
-
-    // PDF batches share ONE Import record for the whole document (§12):
-    // created once, up front, best-effort — if this fails, each employee
-    // falls back to its own Import below rather than blocking the batch.
-    let sharedImportId: string | undefined;
-    if (sourceFormat === 'pdf' && preview.some((entry) => entry.newShifts.length > 0)) {
-      const firstDate = preview.find((entry) => entry.newShifts.length > 0)?.newShifts[0]?.date;
-      if (firstDate) {
-        try {
-          const period = periodOf(firstDate);
-          const created = await createRemoteImport({
-            fileName: '',
-            sourceFormat: 'pdf',
-            periodYear: period.year,
-            periodMonth: period.month,
-            areaId: importAreaId ?? null,
-            importMode: 'team',
-            periodKind: 'single',
-            periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
-            employeeCount: batchEmployeeCount,
-            shiftCount: batchShiftCount,
-            createdShiftCount: batchCreatedCount,
-            existingShiftCount: batchExistingCount,
-          });
-          sharedImportId = created.id;
-        } catch (err) {
-          console.error('Failed to create the shared PDF import record; falling back to per-employee imports', err);
-        }
-      }
-    }
+    const fileFingerprint = sourceFile ? await fingerprintFile(sourceFile) : undefined;
 
     // Sequential, best-effort per employee: one employee's failure never
     // blocks the rest, and never rolls back what already succeeded (Fase
@@ -561,28 +532,26 @@ export const TeamImportModal = ({
     for (const entry of preview) {
       try {
         if (entry.newShifts.length > 0) {
-          let importId = sharedImportId;
-          if (!importId) {
-            const period = periodOf(entry.newShifts[0].date);
-            const created = await createRemoteImport({
-              fileName: '',
-              sourceFormat,
-              periodYear: period.year,
-              periodMonth: period.month,
-              areaId: importAreaId ?? null,
-              importMode: 'team',
-              periodKind: 'single',
-              periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
-              employeeCount: 1,
-              shiftCount: entry.newCount + entry.conflictCount + entry.unchangedCount,
-              createdShiftCount: entry.newCount,
-              existingShiftCount: entry.unchangedCount,
-            });
-            importId = created.id;
-          }
+          const period = periodOf(entry.newShifts[0].date);
+          const created = await createRemoteImport({
+            fileName: sourceFile?.name ?? '',
+            sourceFormat,
+            fileFingerprint,
+            employeeId: entry.row.resolvedEmployeeId,
+            periodYear: period.year,
+            periodMonth: period.month,
+            areaId: importAreaId ?? null,
+            importMode: 'team',
+            periodKind: 'single',
+            periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
+            employeeCount: 1,
+            shiftCount: entry.newCount + entry.conflictCount + entry.unchangedCount,
+            createdShiftCount: entry.newCount,
+            existingShiftCount: entry.unchangedCount,
+          });
           await syncRemoteShifts(entry.row.resolvedEmployeeId as string, {
             upserts: entry.newShifts,
-            importId,
+            importId: created.id,
           });
         }
         results.push({ row: entry.row, ok: true, created: entry.newShifts.length });

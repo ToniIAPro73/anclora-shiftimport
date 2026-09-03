@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, requireRole } from './auth.js';
 import { canUseFeature, checkLimit, requireFeature, requireWithinLimit } from './plans.js';
 
@@ -38,6 +38,16 @@ function normalizeShiftInput(raw) {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function importContextFingerprint({ sourceFormat, periodYear, periodMonth, importMode, periodKind, areaId }) {
+  return sha256([
+    sourceFormat, periodYear ?? '', periodMonth ?? '', importMode, periodKind, areaId ?? 'global',
+  ].join('\u001f'));
+}
 
 function mapEmployeeRow(row) {
   return {
@@ -1129,6 +1139,88 @@ export async function createImport(sql, ctx, input) {
   const createdShiftCount = Math.max(0, Math.trunc(Number(input?.createdShiftCount) || 0));
   const existingShiftCount = Math.max(0, Math.trunc(Number(input?.existingShiftCount) || 0));
 
+  // Idempotency is opt-in for new clients and deliberately requires the
+  // server-resolved employee plus a content fingerprint. Legacy callers may
+  // still write history rows without a key, but the actual authenticated
+  // import flows always provide both values.
+  const requestedEmployeeId = String(input?.employeeId ?? '').trim() || null;
+  const employeeId = requestedEmployeeId
+    ? effectiveEmployeeId(ctx, requestedEmployeeId)
+    : (ctx.role === 'EMPLOYEE' ? effectiveEmployeeId(ctx, null) : null);
+  if (employeeId) {
+    await assertEmployeeInOrg(sql, ctx, employeeId);
+  }
+  const fileFingerprint = String(input?.fileFingerprint ?? '').trim().toLowerCase();
+  const hasIdempotencyKey = Boolean(employeeId && /^[0-9a-f]{64}$/.test(fileFingerprint));
+  const contextFingerprint = hasIdempotencyKey
+    ? importContextFingerprint({
+      sourceFormat: String(input?.sourceFormat ?? ''),
+      periodYear: input?.periodYear ?? null,
+      periodMonth: input?.periodMonth ?? null,
+      importMode,
+      periodKind,
+      areaId,
+    })
+    : null;
+
+  if (hasIdempotencyKey) {
+    const rows = areaId
+      ? await sql`
+          INSERT INTO imports (
+            organization_id, imported_by_user_id, employee_id, file_name, source_format,
+            period_year, period_month, status, area_id, import_mode, period_kind,
+            period_label, scope_type, area_name_snapshot, employee_count, shift_count,
+            created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint
+          )
+          VALUES (
+            ${ctx.organizationId}, ${ctx.user.id}, ${employeeId}, ${String(input?.fileName ?? '')},
+            ${String(input?.sourceFormat ?? '')}, ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
+            ${status}, ${areaId}, ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
+            ${areaNameSnapshot}, ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount},
+            ${fileFingerprint}, ${contextFingerprint}
+          )
+          ON CONFLICT (organization_id, employee_id, file_fingerprint, context_fingerprint)
+          WHERE employee_id IS NOT NULL AND file_fingerprint IS NOT NULL AND context_fingerprint IS NOT NULL
+          DO NOTHING
+          RETURNING *
+        `
+      : await sql`
+          INSERT INTO imports (
+            organization_id, imported_by_user_id, employee_id, file_name, source_format,
+            period_year, period_month, status, area_id, import_mode, period_kind,
+            period_label, scope_type, area_name_snapshot, employee_count, shift_count,
+            created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint
+          )
+          VALUES (
+            ${ctx.organizationId}, ${ctx.user.id}, ${employeeId}, ${String(input?.fileName ?? '')},
+            ${String(input?.sourceFormat ?? '')}, ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
+            ${status}, ${areaId}, ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
+            ${areaNameSnapshot}, ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount},
+            ${fileFingerprint}, ${contextFingerprint}
+          )
+          ON CONFLICT (organization_id, employee_id, file_fingerprint, context_fingerprint)
+          WHERE employee_id IS NOT NULL AND file_fingerprint IS NOT NULL AND context_fingerprint IS NOT NULL
+          DO NOTHING
+          RETURNING *
+        `;
+    if (rows.length > 0) {
+      return { ...mapImportRow(rows[0]), deduplicated: false };
+    }
+    const existingRows = await sql`
+      SELECT * FROM imports
+      WHERE organization_id = ${ctx.organizationId}
+        AND employee_id = ${employeeId}
+        AND file_fingerprint = ${fileFingerprint}
+        AND context_fingerprint = ${contextFingerprint}
+      ORDER BY created_at ASC
+      LIMIT 1
+    `;
+    if (existingRows.length === 0) {
+      throw new HttpError(409, 'Import idempotency key could not be resolved');
+    }
+    return { ...mapImportRow(existingRows[0]), deduplicated: true };
+  }
+
   const rows = areaId
     ? await sql`
         INSERT INTO imports (
@@ -1278,10 +1370,9 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
 }
 
 /**
- * Upserts shifts. Conflict unit is (organization, employee, id) — semantic
- * dedupe (fingerprint) happens client-side before this call; two different
- * employees on the same date never collide because employee_id is part of
- * every statement.
+ * Upserts shifts. The client performs reconciliation for conflict UX, while
+ * imported shifts also carry a server-computed semantic key. This protects
+ * retries and concurrent requests even when the client has no prior copy.
  */
 export async function upsertShifts(sql, ctx, rawShifts) {
   const shifts = rawShifts.map(normalizeShiftInput);
@@ -1332,7 +1423,24 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     }
 
     const id = shift.id && UUID_RE.test(shift.id) ? shift.id : randomUUID();
-    const rows = await sql`
+    const semanticFingerprint = shift.origin === 'IMP'
+      ? sha256([employeeId, shift.date, shift.startTime, shift.endTime, shift.location].join('\u001f'))
+      : null;
+    const rows = semanticFingerprint
+      ? await sql`
+      INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
+                          start_time, end_time, location, origin, updated_at, semantic_fingerprint)
+      VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
+              ${shiftAreaId}, ${shift.date}, ${shift.startTime}, ${shift.endTime},
+              ${shift.location}, ${shift.origin}, NOW(), ${semanticFingerprint})
+      ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
+      WHERE semantic_fingerprint IS NOT NULL
+      DO UPDATE SET updated_at = NOW()
+      RETURNING id, organization_id, employee_id, import_id, area_id,
+                TO_CHAR(date, 'YYYY-MM-DD') AS date,
+                start_time, end_time, location, origin
+    `
+      : await sql`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
                           start_time, end_time, location, origin, updated_at)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},

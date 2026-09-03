@@ -25,8 +25,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function loginAs(page: Page, email: string) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Iniciar sesión' }).first().click();
+  await page.request.post('/api/auth/logout');
+  await page.context().clearCookies();
+  await page.goto('/login');
   await page.locator('#auth-email').fill(email);
   await page.locator('#auth-password').fill(fixture.password);
   // Contract: when loginAs resolves, the session is established (the login
@@ -66,7 +67,7 @@ test.describe('Caso 1 — Employee', () => {
 
   test('EMPLOYEE without linked employee gets a safe blocked state', async ({ page }) => {
     await loginAs(page, fixture.emails.unlinked);
-    await expect(page.getByText('Cuenta no vinculada')).toBeVisible();
+    await expect(page.getByText(/Cuenta no vinculada|Configuración incompleta/)).toBeVisible();
     // No calendar data rendered.
     await expect(page.locator('.month-shift-badge')).toHaveCount(0);
     await page.getByRole('button', { name: 'Salir' }).click();
@@ -124,25 +125,27 @@ test.describe('Caso 3 — Multi-org', () => {
     // Real UI: native combobox in the team bar, aria-label "Selecciona
     // organización"; option labels carry extra context ("Nombre — Empresa ·
     // Plan"), so select by stable org id value instead of label text.
-    const orgSwitcher = page.getByRole('combobox', { name: 'Selecciona organización' });
-    await orgSwitcher.selectOption({ value: fixture.orgB });
+    const orgSwitcher = page.getByRole('button', { name: 'Selecciona organización' });
+    await orgSwitcher.click();
+    await page.getByRole('option', { name: /E2E Org B/ }).click();
     // Post-switch state: org B active (ADMIN there), empty team calendar,
     // no org A shifts. ("Equipo:" label is dead i18n — no longer rendered.)
-    await expect(orgSwitcher).toHaveValue(fixture.orgB);
+    await expect(page.getByRole('button', { name: 'Selecciona organización' })).toHaveText(/E2E Org B/);
     await expect(page.getByRole('button', { name: 'Empleado:' })).toBeVisible();
     await expect(page.locator('.month-shift-badge')).toHaveCount(0);
 
     // Back to A via header switcher.
-    await orgSwitcher.selectOption({ value: fixture.orgA });
-    await expect(orgSwitcher).toHaveValue(fixture.orgA);
+    await page.getByRole('button', { name: 'Selecciona organización' }).click();
+    await page.getByRole('option', { name: /E2E Org A/ }).click();
+    await expect(page.getByRole('button', { name: 'Selecciona organización' })).toHaveText(/E2E Org A/);
     await expect(page.locator('.month-shift-badge')).toHaveCount(1);
 
     await page.getByRole('button', { name: 'Salir' }).click();
   });
 });
 
-test.describe('Caso 4 — Local migration', () => {
-  test('explicit confirmation: cancel does not migrate, accept migrates, no duplicates', async ({ page }) => {
+test.describe('Caso 4 — Anonymous draft isolation', () => {
+  test('anonymous drafts are discarded at login/logout and never migrate to another user', async ({ page }) => {
     // Fixed days of the current month; the month grid renders all of them.
     const now = new Date();
     const day = (d: number) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -156,28 +159,17 @@ test.describe('Caso 4 — Local migration', () => {
 
     await loginAs(page, fixture.emails.fresh);
 
-    // Explicit flow with preview (count + target).
-    await expect(page.getByText('Turnos locales encontrados')).toBeVisible();
-    await expect(page.locator('.modal-overlay').getByText('E2E Fresh').first()).toBeVisible();
-
-    // Cancel: nothing migrates, prompt comes back next time.
-    await page.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(page.locator('.month-shift-badge')).toHaveCount(0);
-    await page.reload();
-    await expect(page.getByText('Turnos locales encontrados')).toBeVisible();
-
-    // Accept: migrates exactly 2.
-    await page.getByRole('button', { name: 'Importar a mi cuenta' }).click();
-    await expect(page.locator('.month-shift-badge')).toHaveCount(2);
-
-    // Idempotent: reload, no prompt, still exactly 2 remote.
-    await page.reload();
+    // The old local→remote migration prompt must not exist: anonymous data is
+    // not attributable to the account that just logged in.
     await expect(page.getByText('Turnos locales encontrados')).toHaveCount(0);
-    await expect(page.locator('.month-shift-badge')).toHaveCount(2);
+    await expect(page.locator('.month-shift-badge')).toHaveCount(0);
+    expect(await page.evaluate(() => window.localStorage.getItem('anclora_shifts_v1'))).toBeNull();
 
-    const response = await page.request.get('/api/shifts');
-    const payload = await response.json();
-    expect(payload.shifts).toHaveLength(2);
+    await page.getByRole('button', { name: 'Salir' }).click();
+    await expect(page.locator('#auth-email')).toBeVisible();
+    await loginAs(page, fixture.emails.emp);
+    await expect(page.locator('.month-shift-badge')).toHaveCount(2);
+    expect(await page.evaluate(() => window.localStorage.getItem('anclora_shifts_v1'))).toBeNull();
   });
 });
 

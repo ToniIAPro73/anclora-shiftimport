@@ -30,6 +30,7 @@ import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 import { RemoteArea } from '../../lib/remote';
+import { fingerprintFile } from '../../lib/file-fingerprint';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -40,6 +41,8 @@ interface ImportModalProps {
     selector?: { name: string; externalId: string },
     /** Area the import belongs to (null = org-scoped). Guests never send one. */
     areaId?: string | null,
+    fileName?: string,
+    fileFingerprint?: string,
   ) => Promise<boolean>;
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
@@ -67,6 +70,8 @@ interface ImportModalProps {
   allowAreaChoice?: boolean;
   isImporting?: boolean;
   onImportStateChange?: (importing: boolean) => void;
+  /** Preview is available to guests, but persistence is authenticated-only. */
+  isAuthenticated?: boolean;
 }
 
 /** ImportWarning.code (SCREAMING) → quality.warnings.* i18n key (camelCase). */
@@ -291,7 +296,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
   const { t, tl } = useI18n();
   const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
@@ -301,6 +306,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [confirming, setConfirming] = useState(false);
   const interactionLocked = confirming || isImporting;
   const [errorDiagnosis, setErrorDiagnosis] = useState<ImportDiagnosis | null>(null);
+  const [authError, setAuthError] = useState(false);
   const [periodConflictResolved, setPeriodConflictResolved] = useState(false);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
   const [scanTime, setScanTime] = useState<string | null>(null);
@@ -457,6 +463,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext) => {
     setLoading(true);
     setErrorDiagnosis(null);
+    setAuthError(false);
     setSelfNotFound(false);
     setScanTime(null);
     setAnalysis(null);
@@ -577,6 +584,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setFile(initialFile);
     setParsedShifts([]);
     setErrorDiagnosis(null);
+    setAuthError(false);
     setPeriodConflictResolved(false);
     setScanTime(null);
     void runAnalysis(initialFile);
@@ -651,6 +659,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setFile(selected);
     setParsedShifts([]);
     setErrorDiagnosis(null);
+    setAuthError(false);
     setSelfNotFound(false);
     setPeriodConflictResolved(false);
     setScanTime(null);
@@ -745,6 +754,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       ? { kind: 'multi', periods }
       : { kind: 'single', month: Number.parseInt(selectedPeriod, 10), year: Number.parseInt(selectedYear, 10) };
 
+    if (!isAuthenticated) {
+      setAuthError(true);
+      return;
+    }
+
     // identityLocked: identity is the account's, never local guest profile
     // text — don't let a locked/read-only field write into the local profile.
     if (!identityLocked && userId) {
@@ -782,7 +796,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
       : { name: employeeName.trim(), externalId: employeeId.trim() };
 
-      const persisted = await onConfirmImport(finalShifts, importPeriod, selector, importAreaId);
+      const persisted = await onConfirmImport(
+        finalShifts,
+        importPeriod,
+        selector,
+        importAreaId,
+        file?.name,
+        file ? await fingerprintFile(file) : undefined,
+      );
       if (persisted) {
         onClose();
       }
@@ -1317,15 +1338,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         </div>
         </fieldset>
         <div className="import-modal__footer">
+          {(!isAuthenticated || authError) && (
+            <p role="alert" data-testid="import-auth-required" style={{ margin: '0 0 8px', fontSize: '0.78rem', color: 'var(--color-gold)', textAlign: 'center' }}>
+              {t('importModal.authRequired')}
+            </p>
+          )}
           <button
             className="btn-gold import-process-button"
-            disabled={readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
+            disabled={!isAuthenticated || readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}
           >
             <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
-              {interactionLocked ? t('importModal.importing') : t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length })}
+              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length }) : t('importModal.authRequired')}
             </span>
           </button>
           {diagnosisBlocking && (

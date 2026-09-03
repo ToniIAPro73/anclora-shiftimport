@@ -1,6 +1,7 @@
 import { Shift } from './types';
 
 const STORAGE_KEY = 'anclora_shifts_v1';
+const LEGACY_MIGRATION_KEY = 'anclora_shiftimport_migrated_v1';
 const SHIFTS_API_URL = '/api/shifts';
 // Local-first: remote sync stays disabled (dev and prod) unless explicitly
 // enabled, until authenticated sync with per-user isolation exists.
@@ -48,6 +49,12 @@ const loadLocalShifts = (): Shift[] => {
 /** Raw local copy read, used by the one-shot local→remote migration (Fase 1).
  * The local copy is never deleted by the migration. */
 export const loadLocalShiftsForMigration = (): Shift[] => loadLocalShifts();
+
+/** Anonymous calendar data is a draft and cannot cross an auth boundary. */
+export const clearAnonymousShiftDraft = (): void => {
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(LEGACY_MIGRATION_KEY);
+};
 
 async function readApiShifts(): Promise<Shift[]> {
   const response = await fetch(SHIFTS_API_URL, {

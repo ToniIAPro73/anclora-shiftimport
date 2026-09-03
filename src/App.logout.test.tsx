@@ -73,6 +73,16 @@ function renderApp(route = '/app') {
 }
 
 describe('App — deterministic logout', () => {
+  it('does not expose the importer while authentication is unknown', async () => {
+    mockedFetchResolvedSession.mockRejectedValue(new Error('backend unavailable'));
+
+    renderApp();
+
+    await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: 'Importar' })).toBeNull();
+    expect(window.localStorage.getItem('anclora_shifts_v1')).toBeNull();
+  });
+
   it('clears every auth-scoped state and lands on the login screen', async () => {
     mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
     mockedListRemoteEmployees.mockResolvedValue(employees);

@@ -45,6 +45,7 @@ const T_KEYS = [
   'diagnosis.vlm.VLM_UNAVAILABLE', 'diagnosis.vlm.VLM_TIMEOUT', 'diagnosis.vlm.VLM_RATE_LIMITED',
   'diagnosis.vlm.VLM_INVALID_RESPONSE', 'diagnosis.vlm.VLM_PROVIDER_ERROR', 'diagnosis.vlm.VLM_FILE_TOO_LARGE',
   'importModal.vlmAnalyzing', 'importModal.visualAnalysisBadge',
+  'importModal.authRequired',
   'assistant.vacationOption', 'assistant.otherOption', 'assistant.otherTypeLabel', 'assistant.timesRequired',
 ];
 

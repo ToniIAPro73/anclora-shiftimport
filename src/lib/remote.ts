@@ -38,6 +38,7 @@ export interface RemoteImport {
   existingShiftCount?: number;
   createdAt?: string;
   deletedAt?: string | null;
+  deduplicated?: boolean;
 }
 
 export interface ImportHistoryFilters {
@@ -235,6 +236,8 @@ export async function bulkCreateRemoteEmployees(items: {
 export async function createRemoteImport(input: {
   fileName: string;
   sourceFormat: string;
+  fileFingerprint?: string;
+  employeeId?: string | null;
   periodYear: number | null;
   periodMonth: number | null;
   areaId?: string | null;

@@ -126,10 +126,12 @@ export async function fetchSession(): Promise<SessionInfo | null> {
     return await apiFetch<SessionInfo>('/api/session/me');
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
+      // Only an explicit server-side 401 establishes guest mode. Network,
+      // URL and 5xx failures leave authentication unknown and must reach the
+      // caller so it can keep the operational UI unavailable.
       return null;
     }
-    // Network/URL failure (offline, tests, no backend): stay in guest mode.
-    return null;
+    throw error;
   }
 }
 

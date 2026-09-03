@@ -237,7 +237,7 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(confirmButton.disabled).toBe(true);
     expect(confirmButton.style.cursor).toBe('wait');
     fireEvent.click(confirmButton);
-    expect(onConfirmImport).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
 
     resolveConfirmation(false);
     await waitFor(() => expect(confirmButton.getAttribute('aria-busy')).toBe('false'));

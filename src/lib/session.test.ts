@@ -3,6 +3,7 @@ import { setupLocalStorageMock } from '../test-utils/local-storage';
 import {
   apiFetch,
   ApiError,
+  fetchSession,
   getActiveOrganizationId,
   logout,
   resolveActiveOrganization,
@@ -105,6 +106,12 @@ describe('apiFetch — 401 handling', () => {
 
     await expect(apiFetch('/api/shifts')).rejects.toThrow(ApiError);
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('does not turn network failures into guest mode', async () => {
+    vi.mocked(fetch).mockRejectedValue(new TypeError('network down'));
+
+    await expect(fetchSession()).rejects.toThrow('network down');
   });
 });
 

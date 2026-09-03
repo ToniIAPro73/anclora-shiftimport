@@ -39,8 +39,12 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const created = await createImport(sql, ctx, req.body ?? {});
-      return sendJson(res, 201, { import: created });
+      const payload = req.body ?? {};
+      if (!String(payload.employeeId ?? '').trim() || !/^[0-9a-f]{64}$/i.test(String(payload.fileFingerprint ?? '').trim())) {
+        return sendJson(res, 400, { error: 'employeeId and a SHA-256 fileFingerprint are required' });
+      }
+      const created = await createImport(sql, ctx, payload);
+      return sendJson(res, created.deduplicated ? 200 : 201, { import: created });
     }
 
     if (req.method === 'DELETE') {

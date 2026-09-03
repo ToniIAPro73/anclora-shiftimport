@@ -385,8 +385,10 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
     fireEvent.click(screen.getByText('Importar'));
 
     await waitFor(() => expect(mockedCreateRemoteImport).toHaveBeenCalledWith({
-      fileName: '',
+      fileName: 'equipo.csv',
       sourceFormat: 'csv',
+      fileFingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
+      employeeId: 'emp-ana',
       periodYear: 2026,
       periodMonth: 2,
       areaId: 'area-s',

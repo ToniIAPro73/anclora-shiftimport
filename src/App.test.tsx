@@ -11,6 +11,14 @@ setupLocalStorageMock();
 afterEach(cleanup);
 
 beforeEach(() => {
+  // Guest mode is established only by the server's explicit 401. A missing
+  // backend is now treated as an unknown auth state and blocks the workspace.
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ error: 'Not authenticated' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  ));
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
