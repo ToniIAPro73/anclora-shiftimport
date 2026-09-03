@@ -70,6 +70,26 @@ describe('classifyVlmTrigger', () => {
         .toEqual({ kind: 'VLM_ELIGIBLE', reason: 'unrecognized' });
     });
 
+    it('unrecognized + actionable assistant questions: the assistant wins, VLM is skipped', () => {
+      // The exact regression this guards: an unknown-employee/unknown-format
+      // PDF whose row-selection question is already answerable deterministically
+      // must never be held hostage behind a VLM round trip.
+      expect(classifyVlmTrigger({
+        ...base,
+        quality: quality('UNRECOGNIZED', 0),
+        hasActionableQuestions: true,
+      })).toEqual({ kind: 'VLM_NOT_ELIGIBLE', reason: 'assistant-actionable' });
+    });
+
+    it('empty-items still wins over actionable questions (no items means no real questions either)', () => {
+      expect(classifyVlmTrigger({
+        ...base,
+        itemCount: 0,
+        quality: quality('UNRECOGNIZED', 0),
+        hasActionableQuestions: true,
+      })).toEqual({ kind: 'VLM_ELIGIBLE', reason: 'empty-items' });
+    });
+
     it('blocked-diagnosis: BLOCKED or UNSUPPORTED canonical state', () => {
       const usable = quality('REVIEW', 3);
       expect(classifyVlmTrigger({ ...base, quality: usable, diagnosisState: 'BLOCKED' as ImportState }))

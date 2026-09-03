@@ -10,6 +10,7 @@ import { Shift } from '../../lib/types';
 import { analyzeDocumentFile, DocumentAnalysisResult } from '../../ingestion/parsers/file';
 import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
 import { detectTeamRoster } from '../../ingestion/team-roster';
+import { IngestionError } from '../../lib/ingestion-errors';
 import { ImportModal } from './ImportModal';
 
 vi.mock('../../ingestion/parsers/file', async (importOriginal) => {
@@ -346,6 +347,17 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(apiFetchMock.mock.calls.some(([, opts]) => opts?.method === 'PATCH')).toBe(false);
   });
 
+  it('Format Memory store unavailable (GET fails): analysis still completes, non-blocking warning shown, distinguishable from "no saved formats"', async () => {
+    apiFetchMock.mockReset();
+    apiFetchMock.mockRejectedValueOnce(new Error('network down'));
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+
+    renderImportModal('es', () => {}, { initialFile: csvFile(), organizationId: 'org-store-unavailable-1' });
+
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Listo'));
+    expect(screen.getByRole('status').textContent).toContain('No se ha podido comprobar si ya existía un formato guardado');
+  });
+
   it('unknown format with unmatchable employee: no fabricated shifts, assistant renders, confirm disabled', async () => {
     mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
       shifts: [],
@@ -480,6 +492,29 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
 
     await waitFor(() => expect(screen.getByText('1 nuevos')).toBeTruthy());
     expect(document.querySelectorAll('tbody tr')).toHaveLength(1);
+  });
+
+  it('unsupported format rejects: UNSUPPORTED state rendered, explanatory text, confirm disabled, no assistant', async () => {
+    mockedAnalyzeDocumentFile.mockRejectedValue(new IngestionError('UNSUPPORTED_FORMAT', 'Formato no soportado.'));
+
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('No soportado'));
+    expect(screen.queryByText('Asistente de formato')).toBeNull();
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+  });
+
+  it('technical crash rejects: FAILED state rendered, explanatory text without leaking stack trace, confirm disabled, no assistant', async () => {
+    mockedAnalyzeDocumentFile.mockRejectedValue(new TypeError('Cannot read properties of undefined'));
+
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Error'));
+    expect(screen.queryByText('Asistente de formato')).toBeNull();
+    expect(document.body.textContent).not.toContain('Cannot read properties of undefined');
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
   });
 });
 

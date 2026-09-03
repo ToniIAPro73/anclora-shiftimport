@@ -259,6 +259,11 @@ describe('buildImportDiagnosis — canonical states', () => {
     const employee = noneDiagnosis.diagnostics.find((entry) => entry.code === 'UNKNOWN_EMPLOYEE');
     expect(employee?.blocking).toBe(true);
     expect(employee?.recoverable).toBe(true);
+    expect(noneDiagnosis.recovery).toEqual({
+      eligible: true,
+      strategy: 'answer-question',
+      reason: 'UNKNOWN_EMPLOYEE',
+    });
   });
 
   it('diagnosisFromError: parser crashes and unsupported formats never leak raw exceptions', () => {
@@ -266,10 +271,20 @@ describe('buildImportDiagnosis — canonical states', () => {
     expect(unsupported.state).toBe('UNSUPPORTED');
     expect(unsupported.diagnostics[0].messageKey).toBe('diagnosis.error.UNSUPPORTED_FORMAT');
     expect(unsupported.diagnostics[0].blocking).toBe(true);
+    expect(unsupported.recovery).toEqual({
+      eligible: false,
+      strategy: 'reupload',
+      reason: 'UNSUPPORTED_FORMAT',
+    });
 
     const crash = diagnosisFromError(new TypeError('cell.value is not iterable'));
     expect(crash.state).toBe('FAILED');
     expect(crash.diagnostics[0].code).toBe('PARSER_FAILURE');
+    expect(crash.recovery).toEqual({
+      eligible: false,
+      strategy: 'none',
+      reason: 'PARSER_FAILURE',
+    });
     expect(JSON.stringify(crash)).not.toContain('cell.value');
   });
 });

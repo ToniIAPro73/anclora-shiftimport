@@ -204,6 +204,22 @@ describe('parseEmployeeShiftsFromFile — canonical roster CSV', () => {
   });
 });
 
+describe('analyzeDocumentFile — XLSX with zero recognizable employees', () => {
+  it('returns a structured BLOCKED-eligible result instead of throwing (state-contract fix)', { timeout: 20000 }, async () => {
+    const ExcelJS = (await import('exceljs')).default;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Hoja1');
+    sheet.addRow(['esto no es un cuadrante reconocible']);
+    const buffer = await workbook.xlsx.writeBuffer();
+    const file = makeFile('vacio.xlsx', [buffer], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    const result = await analyzeDocumentFile(file, ANA_SELECTOR, undefined, { month: 7, year: 2026 });
+    expect(result.kind).toBe('excel');
+    expect(result.shifts).toEqual([]);
+    expect(result.questions).toEqual([]);
+  });
+});
+
 describe('analyzeDocumentFile — positional XLSX regression', () => {
   it('returns the individual calendar without using the legend sheet', async () => {
     const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza.xlsx'));

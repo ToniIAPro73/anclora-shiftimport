@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { loadFormatProfiles } from '../../lib/format-profiles';
@@ -156,6 +156,50 @@ describe('ProfileAssistantPanel', () => {
 
     expect(loadFormatProfiles()).toHaveLength(0);
     expect((onComplete.mock.calls[0][0] as AssistantCompletion).profile).toBeNull();
+  });
+
+  it('a saveCandidate failure never blocks the import — onComplete still fires, and the caller is notified', async () => {
+    const { analysis, questions } = setup(TYPE_A_SELECTOR);
+    const onComplete = vi.fn();
+    const onSaveCandidateError = vi.fn();
+    const failingStore: import('../../lib/format-profile-store').FormatProfileStore = {
+      list: async () => [],
+      findMatch: async () => null,
+      saveCandidate: async () => { throw new Error('network down'); },
+      recordUse: async () => {},
+      confirm: async () => { throw new Error('not implemented'); },
+      deprecate: async () => { throw new Error('not implemented'); },
+      reactivate: async () => { throw new Error('not implemented'); },
+      rename: async () => { throw new Error('not implemented'); },
+    };
+
+    render(
+      <I18nProvider>
+        <ProfileAssistantPanel
+          questions={questions}
+          items={TYPE_A_FIXTURE_ITEMS}
+          context={CONTEXT}
+          analysis={analysis}
+          table={null}
+          selector={TYPE_A_SELECTOR}
+          onComplete={onComplete}
+          onCancel={() => {}}
+          store={failingStore}
+          onSaveCandidateError={onSaveCandidateError}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
+    fireEvent.click(screen.getByText('Aplicar y continuar'));
+
+    // The import completes synchronously — it never waits on the save.
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect((onComplete.mock.calls[0][0] as AssistantCompletion).profile).not.toBeNull();
+
+    // The rejected saveCandidate is observed asynchronously, not silently.
+    await waitFor(() => expect(onSaveCandidateError).toHaveBeenCalledTimes(1));
   });
 
   it('calls onCancel without completing', () => {

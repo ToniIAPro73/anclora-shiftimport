@@ -12,6 +12,14 @@
  *   diagnosis is a dead end (BLOCKED/UNSUPPORTED). A usable deterministic
  *   result is never re-analyzed: CORRECT with records is a reliable result,
  *   anything else usable is simply DETERMINISTIC_OK.
+ * - An UNRECOGNIZED/zero-shifts result that already carries actionable
+ *   assistant questions (row-selection, unknown codes, day mapping) is
+ *   NOT re-analyzed either: a human can resolve it deterministically
+ *   through the assistant, and analyzeDocumentFile awaits this whole
+ *   decision before resolving — sending it to VLM would hold the assistant
+ *   hostage behind an extra network round trip for no benefit (see section
+ *   13 of the ingestion-recovery remediation: never call VLM when there is
+ *   already useful human input to ask for).
  */
 import type { ImportResult } from '../lib/import-quality';
 import type { DocumentKind } from './parsers/file';
@@ -19,7 +27,7 @@ import type { ImportState } from './diagnostics';
 
 export type VlmTriggerDecision =
   | { kind: 'DETERMINISTIC_OK' }
-  | { kind: 'VLM_NOT_ELIGIBLE'; reason: 'structured-format' | 'reliable-result' | 'unauthenticated' }
+  | { kind: 'VLM_NOT_ELIGIBLE'; reason: 'structured-format' | 'reliable-result' | 'unauthenticated' | 'assistant-actionable' }
   | { kind: 'VLM_ELIGIBLE'; reason: 'empty-items' | 'unrecognized' | 'blocked-diagnosis' };
 
 export function classifyVlmTrigger(args: {
@@ -28,6 +36,8 @@ export function classifyVlmTrigger(args: {
   quality: ImportResult;
   diagnosisState?: ImportState;
   authenticated: boolean;
+  /** Assistant questions already generated from the deterministic result. */
+  hasActionableQuestions?: boolean;
 }): VlmTriggerDecision {
   if (args.kind !== 'pdf' && args.kind !== 'image') {
     return { kind: 'VLM_NOT_ELIGIBLE', reason: 'structured-format' };
@@ -39,6 +49,9 @@ export function classifyVlmTrigger(args: {
     return { kind: 'VLM_ELIGIBLE', reason: 'empty-items' };
   }
   if (args.quality.state === 'UNRECOGNIZED' && args.quality.shifts.length === 0) {
+    if (args.hasActionableQuestions) {
+      return { kind: 'VLM_NOT_ELIGIBLE', reason: 'assistant-actionable' };
+    }
     return { kind: 'VLM_ELIGIBLE', reason: 'unrecognized' };
   }
   if (args.diagnosisState === 'BLOCKED' || args.diagnosisState === 'UNSUPPORTED') {

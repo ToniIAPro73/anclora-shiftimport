@@ -42,7 +42,8 @@ interface Fixture {
 
 let fixture: Fixture;
 
-test.beforeAll(async () => {
+test.describe.serial('Format Memory v1', () => {
+  test.beforeAll(async () => {
   const sql = neon(loadDatabaseUrl());
   const hash = hashPassword(PASSWORD);
   const stamp = Date.now();
@@ -221,6 +222,9 @@ test.describe.serial('Format Memory v1 — required flow', () => {
     await expect(confirmButton).toBeEnabled();
     await confirmButton.click();
 
+    const resultClose = page.locator('.modal-overlay').getByRole('button', { name: 'Cerrar' });
+    await expect(resultClose).toBeVisible({ timeout: 15_000 });
+    await resultClose.click();
     await expect(page.locator('.modal-overlay')).toHaveCount(0, { timeout: 15_000 });
 
     // Candidate created: verify via the real API, not just UI absence-of-error.
@@ -249,6 +253,11 @@ test.describe.serial('Format Memory v1 — required flow', () => {
   });
 
   test('EMPLOYEE (Ana) again: second import of the SAME fixture asks zero questions, reaches READY, use-count increments', async ({ page }) => {
+    // Clear previously imported shifts so duplicate-schedule prevention (a916f30)
+    // allows confirmation of the second import in the same calendar period.
+    const sql = neon(loadDatabaseUrl());
+    await sql`DELETE FROM shifts WHERE employee_id = ${fixture.empAna}`;
+
     await loginAs(page, fixture.emails.ana);
 
     const profilesBefore = await (await page.request.get('/api/format-profiles')).json();
@@ -274,6 +283,9 @@ test.describe.serial('Format Memory v1 — required flow', () => {
     const confirmButton = page.getByRole('button', { name: /Confirmar Importación/ });
     await expect(confirmButton).toBeEnabled();
     await confirmButton.click();
+    const resultClose = page.locator('.modal-overlay').getByRole('button', { name: 'Cerrar' });
+    await expect(resultClose).toBeVisible({ timeout: 15_000 });
+    await resultClose.click();
     await expect(page.locator('.modal-overlay')).toHaveCount(0, { timeout: 15_000 });
     await recordUseResponse;
 
@@ -321,3 +333,5 @@ test.describe('Format Memory v1 — additional coverage', () => {
     await logout(page);
   });
 });
+});
+

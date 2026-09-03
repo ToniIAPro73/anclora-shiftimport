@@ -64,6 +64,13 @@ interface ProfileAssistantPanelProps {
   /** Session-appropriate persistence (local for guests, organization-scoped
    * for authenticated sessions). Defaults to a local store when omitted. */
   store?: FormatProfileStore;
+  /**
+   * Fired when `store.saveCandidate` rejects. The import itself is never
+   * blocked by this (onComplete still fires) — the caller is expected to
+   * surface a non-blocking warning (Format Memory persistence failure is
+   * never silent, see AGENTS.md "Reglas para cambios").
+   */
+  onSaveCandidateError?: () => void;
 }
 
 type TokenMeaning = AssistantAnswers['tokenMeanings'][string];
@@ -86,6 +93,7 @@ export const ProfileAssistantPanel = ({
   onComplete,
   onCancel,
   store = DEFAULT_LOCAL_STORE,
+  onSaveCandidateError,
 }: ProfileAssistantPanelProps) => {
   const { locale, t } = useI18n();
   const [selectedRow, setSelectedRow] = useState<EmployeeRowCandidate | null>(null);
@@ -147,7 +155,10 @@ export const ProfileAssistantPanel = ({
       const tableAnalysis = analyzeRosterTable(table, selector);
       const profile = buildTabularProfileFromAnswers(table, tableAnalysis, answers);
       if (saveProfile) {
-        void store.saveCandidate(candidateInputFromLocalProfile(profile)).catch(() => {});
+        void store.saveCandidate(candidateInputFromLocalProfile(profile)).catch((error) => {
+          console.error('[ProfileAssistantPanel] Format Memory: saveCandidate failed (tabular)', error);
+          onSaveCandidateError?.();
+        });
         applyTokenAliasesToShiftTypes(profile);
       }
       const { shifts, quality } = buildTabularImportResult(table, answers, context);
@@ -231,7 +242,10 @@ export const ProfileAssistantPanel = ({
     // persist a profile still missing the just-learned codes (and duplicate
     // it on the next apply).
     if (saveProfile) {
-      void store.saveCandidate(candidateInputFromLocalProfile(profile)).catch(() => {});
+      void store.saveCandidate(candidateInputFromLocalProfile(profile)).catch((error) => {
+        console.error('[ProfileAssistantPanel] Format Memory: saveCandidate failed', error);
+        onSaveCandidateError?.();
+      });
       applyTokenAliasesToShiftTypes(profile);
     }
     onComplete({

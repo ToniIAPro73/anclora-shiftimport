@@ -72,9 +72,24 @@ export interface ImportDiagnostic {
   stage: DiagnosticStage;
 }
 
+/**
+ * Single source of truth for "can the user do something about this right
+ * now, and what". Derived from the diagnostics list — never recomputed ad
+ * hoc by the UI. `eligible: false` covers both "nothing to recover"
+ * (BLOCKED with no actionable question) and terminal states (UNSUPPORTED,
+ * FAILED) alike; `strategy`/`reason` explain why.
+ */
+export interface ImportRecovery {
+  eligible: boolean;
+  strategy: RecoveryAction;
+  /** the diagnostic code that drove this decision, or 'NONE' */
+  reason: IngestionErrorCode | 'NONE';
+}
+
 export interface ImportDiagnosis {
   state: ImportState;
   diagnostics: ImportDiagnostic[];
+  recovery: ImportRecovery;
   /**
    * Extraction accounting: how many cell tokens were understood and how
    * many days/tokens remain unresolved. Drives the "26 de 31 días" copy.
@@ -465,12 +480,30 @@ export function buildImportDiagnosis(
   });
 }
 
+/**
+ * Recovery eligibility, derived from evidence already on the diagnostics —
+ * never from the ImportState label alone (section 18: one source of truth).
+ * An actionable diagnostic (recoverable + a concrete recovery action) wins;
+ * otherwise a reupload hint; otherwise nothing to do.
+ */
+function computeRecovery(diagnostics: ImportDiagnostic[]): ImportRecovery {
+  const actionable = diagnostics.find((d) => d.recoverable && d.recovery !== 'none');
+  if (actionable) {
+    return { eligible: true, strategy: actionable.recovery, reason: actionable.code };
+  }
+  const reupload = diagnostics.find((d) => d.recovery === 'reupload');
+  if (reupload) {
+    return { eligible: false, strategy: 'reupload', reason: reupload.code };
+  }
+  return { eligible: false, strategy: 'none', reason: diagnostics[0]?.code ?? 'NONE' };
+}
+
 function finishDiagnosis(
   state: ImportState,
   diagnostics: ImportDiagnostic[],
   summary: ImportDiagnosis['summary'],
 ): ImportDiagnosis {
-  return { state, diagnostics, summary };
+  return { state, diagnostics, recovery: computeRecovery(diagnostics), summary };
 }
 
 /**
@@ -491,16 +524,12 @@ export function diagnosisFromError(error: unknown): ImportDiagnosis {
     safeToImportPartial: false,
     stage: 'extraction',
   };
-  return {
-    state: unsupported ? 'UNSUPPORTED' : 'FAILED',
-    diagnostics: [diagnostic],
-    summary: {
-      recognizedTokens: 0,
-      totalTokens: 0,
-      expectedDays: 0,
-      mappedDays: 0,
-      unresolvedDays: [],
-      unresolvedTokens: [],
-    },
-  };
+  return finishDiagnosis(unsupported ? 'UNSUPPORTED' : 'FAILED', [diagnostic], {
+    recognizedTokens: 0,
+    totalTokens: 0,
+    expectedDays: 0,
+    mappedDays: 0,
+    unresolvedDays: [],
+    unresolvedTokens: [],
+  });
 }

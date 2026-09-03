@@ -686,6 +686,7 @@ async function applyVlmFallback(
     itemCount,
     quality: deterministic.quality,
     authenticated: isVlmFallbackAvailable(),
+    hasActionableQuestions: deterministic.questions.length > 0,
   });
   if (decision.kind !== 'VLM_ELIGIBLE') {
     return deterministic;
@@ -923,7 +924,34 @@ export async function analyzeDocumentFile(
   if (kind === 'excel') {
     const workbook = await parseXlsxTeamWorkbook(file);
     if (workbook.employees.length === 0) {
-      throw new IngestionError('NO_SHIFTS_FOUND', 'No se detectaron turnos importables en el libro XLSX.');
+      // Zero recognizable employees is semantic uncertainty over a
+      // successfully-read workbook, not a technical failure: return a
+      // structured result (buildImportDiagnosis resolves it to BLOCKED with
+      // a NO_SHIFTS_FOUND diagnostic) instead of throwing, so the UI shows
+      // an explanatory diagnosis rather than a raw/terminal error.
+      const emptyContext = contextOverride ?? { month: new Date().getMonth(), year: new Date().getFullYear() };
+      const quality = computeImportResult([], {
+        knownProfileMatched: false,
+        profileDrift: false,
+        periodDetected: false,
+        employeeMatch: 'none',
+        expectedDays: 0,
+        mappedDays: 0,
+        totalTokens: 0,
+        recognizedTokens: 0,
+        unknownTokens: [],
+        invalidTimes: 0,
+        incompleteAssignments: 0,
+      });
+      return {
+        kind,
+        context: emptyContext,
+        shifts: [],
+        quality: { ...quality, shifts: [] },
+        structure: null,
+        questions: [],
+        detectedContext: emptyContext,
+      };
     }
     const shifts = workbook.employees.flatMap((employee) => employee.shifts)
       .map((shift) => ({ ...shift, sourceFormat: kind }));

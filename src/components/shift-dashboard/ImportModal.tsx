@@ -325,6 +325,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [qualityOverride, setQualityOverride] = useState<ImportResult | null>(null);
   const [assistantSession, setAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
   const [assistantDismissed, setAssistantDismissed] = useState(false);
+  // Format Memory persistence never blocks the import (section 15/16): a
+  // failed save/list/use-recording surfaces here instead of failing
+  // silently. Reset on every new analysis so a stale warning from a
+  // previous file never lingers.
+  const [formatMemoryWarning, setFormatMemoryWarning] = useState<'SAVE_FAILED' | 'STORE_UNAVAILABLE' | null>(null);
   // Server-side VLM fallback stage: 'analyzing' while the document is being
   // re-analyzed visually; the abort controller cancels the fetch on
   // reset/close (see resetImportState and the unmount effect).
@@ -471,6 +476,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setAssistantSession(null);
     setAssistantDismissed(false);
     setPeriodConflictResolved(false);
+    setFormatMemoryWarning(null);
     setDetectedFormat(getImportFormatLabel(classifyDocument(target)));
 
     // identityLocked (EMPLOYEE): a document may legitimately be a whole-team
@@ -530,8 +536,17 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       // store (remote for authenticated sessions, local for guests) instead
       // of analysis.ts reading localStorage itself — a remote-fetch failure
       // degrades to "no hint" (still analyzes, just without silent reuse for
-      // this one attempt) rather than blocking the import.
-      const profilesHint = toProfileHintList(await formatProfileStore.list().catch(() => []));
+      // this one attempt) rather than blocking the import. The failure is
+      // still observed (distinct from "the org legitimately has zero saved
+      // formats") so it never disappears silently — section 16.
+      let loadedProfiles: Awaited<ReturnType<typeof formatProfileStore.list>> = [];
+      try {
+        loadedProfiles = await formatProfileStore.list();
+      } catch (listError) {
+        console.error('[ImportModal] Format Memory: profile store unavailable', listError);
+        setFormatMemoryWarning('STORE_UNAVAILABLE');
+      }
+      const profilesHint = toProfileHintList(loadedProfiles);
       const result = await analyzeDocumentFile(target, buildSelector(), profilesHint, effectiveContext, {
         onStage: () => setVlmStage('analyzing'),
         signal: vlmAbort.signal,
@@ -781,10 +796,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       // new candidate version is created instead of silently reusing/
       // overwriting the stable profile. Idempotent per FM-03: repeat drifted
       // imports of the same changed template resolve to the same candidate.
+      // Note: the modal closes right after this (onClose() below on a
+      // successful persisted import), so there is no surviving surface to
+      // show an in-modal warning for these two — they are logged for
+      // observability (section 34) rather than silently swallowed, but are
+      // a known gap for a user-visible non-blocking notice (would need an
+      // app-level toast outliving the modal; out of this session's scope).
       if (organizationId && analysis?.structure?.drift?.drifted) {
-        void createDriftCandidate(formatProfileStore, matchedProfileId, analysis.structure.signature).catch(() => {});
+        void createDriftCandidate(formatProfileStore, matchedProfileId, analysis.structure.signature).catch((driftError) => {
+          console.error('[ImportModal] Format Memory: createDriftCandidate failed', driftError);
+        });
       } else {
-        void formatProfileStore.recordUse(matchedProfileId, 'success').catch(() => {});
+        void formatProfileStore.recordUse(matchedProfileId, 'success').catch((useError) => {
+          console.error('[ImportModal] Format Memory: recordUse failed', useError);
+        });
       }
     }
 
@@ -836,16 +861,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     warningDates.has(shift.date)
     || unknownTokens.some((token) => shift.rawText.includes(token));
 
-  // The assistant opens whenever the diagnosis needs user input (employee
-  // row, unknown codes, day mapping) — including REVIEW-quality imports that
-  // previously dropped unknown codes silently (GS-10).
+  // The assistant opens whenever the diagnosis says so — diagnosis.recovery
+  // (src/ingestion/diagnostics.ts) is the single source of truth for
+  // recoverability; the UI never re-derives it from ImportState. BLOCKED is
+  // terminal by construction in this codebase (buildImportDiagnosis never
+  // returns BLOCKED with an actionable question — see
+  // fixtures/state-contract/README.md), so recovery.eligible already covers
+  // it without listing states here. 'choose-period' recovery (MONTH_MISMATCH)
+  // has its own banner further up, not this panel.
   const showAssistant = !assistantDismissed
     && assistantSession !== null
     && analysis !== null
     && analysis.questions.length > 0
-    && (diagnosis?.state === 'NEEDS_USER_INPUT'
-      || diagnosis?.state === 'BLOCKED'
-      || diagnosis?.state === 'UNSUPPORTED');
+    && diagnosis?.recovery.eligible === true
+    && diagnosis.recovery.strategy === 'answer-question';
 
   // Warnings already surfaced as structured diagnostics are not repeated.
   const DIAGNOSTIC_COVERED_WARNINGS = new Set(['UNKNOWN_SHIFT_TOKEN', 'PARTIAL_EXTRACTION', 'MULTIPLE_EMPLOYEE_MATCHES', 'UNSUPPORTED_SECTION']);
@@ -1230,8 +1259,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   onComplete={handleAssistantComplete}
                   onCancel={() => setAssistantDismissed(true)}
                   store={formatProfileStore}
+                  onSaveCandidateError={() => setFormatMemoryWarning('SAVE_FAILED')}
                 />
               </div>
+            )}
+
+            {formatMemoryWarning && (
+              <p
+                role="status"
+                style={{ margin: '0 0 10px', fontSize: '0.76rem', color: 'var(--color-gold)', lineHeight: 1.5 }}
+              >
+                {t(formatMemoryWarning === 'SAVE_FAILED'
+                  ? 'importModal.formatMemorySaveFailed'
+                  : 'importModal.formatMemoryUnavailable')}
+              </p>
             )}
 
             <div className="import-modal__shifts-list" style={{ border: '1px solid var(--glass-border)', borderRadius: '12px' }}>
