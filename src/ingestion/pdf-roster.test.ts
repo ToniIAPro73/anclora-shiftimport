@@ -119,3 +119,35 @@ describe('detectPdfRoster (TYPE_B id/name drift regression — reduced positiona
     expect(new Set(names).size).toBe(names.length);
   });
 });
+
+// Real production regression: a wider export variant of this report prints
+// names past BOTH markerMaxX and dataMinX (x~162, dataMinX=150) — no real
+// name qualifies as a candidate band at all. The only remaining pure-letter
+// text near the marker column was the "Nomina" column header itself, which
+// got attached to every id as its "name" (nearest band by |Δy| finds
+// whatever is available). That wrong name then round-tripped into
+// analyzeShiftsFromItems as the row-anchor, whose row band stretched from
+// the header at the top of the table down to the target id — pulling in
+// every employee's cells in between into one person's shifts.
+const TYPE_B_WIDE_NAME_FIXTURE: PdfTextItem[] = [
+  textItem('Nomina Empleado', 21.3, 700.0),
+  textItem('L5', 300.0, 600.0),
+  // Both employees' names sit past dataMinX (150) — outside the zone any
+  // real name could be recognized in. Only the header above qualifies as a
+  // letters-only label anywhere near the marker column.
+  textItem('38248', 28.1, 423.9),
+  textItem('Bosch Noguera, Roberto Jaime', 162.1, 423.9),
+  textItem('85919', 28.1, 401.1),
+  textItem('Cerda Cerda, Joan', 162.1, 401.1),
+];
+
+describe('detectPdfRoster (structural-header misattribution regression)', () => {
+  it('never assigns the "Nomina" column header as an employee name', () => {
+    const roster = detectPdfRoster(TYPE_B_WIDE_NAME_FIXTURE);
+    // Safe outcome: no reliable name band exists for either id, so the
+    // roster is either null or simply omits these ids — never "Nomina".
+    const names = roster?.employees.map((employee) => employee.name) ?? [];
+    expect(names).not.toContain('Nomina');
+    expect(names).not.toContain('Nomina Empleado');
+  });
+});
