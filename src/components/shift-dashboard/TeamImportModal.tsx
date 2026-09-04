@@ -710,10 +710,20 @@ export const TeamImportModal = ({
     }
   };
 
+  // R1-M05: the five categories the master prompt requires visible before
+  // CONFIRM (new/modified/duplicate/ignored/error) — duplicates come from
+  // the per-employee shift diff (unchangedCount, already computed at
+  // handleContinueToPreview time), ignored from the workbook sheet summary,
+  // errors from row-level diagnostics (invalid date, incomplete shift,
+  // unknown sheet) — both already computed for the 'select' step banner,
+  // reused here rather than recomputed.
   const totals = {
     employees: preview.length,
     created: preview.reduce((sum, entry) => sum + entry.newCount, 0),
     conflicts: preview.reduce((sum, entry) => sum + entry.conflictCount, 0),
+    duplicates: preview.reduce((sum, entry) => sum + entry.unchangedCount, 0),
+    ignored: sheetSummaries.filter((s) => s.status !== 'processed').length,
+    errors: rowDiagnostics.length,
   };
   const failedOutcomes = outcomes.filter((outcome) => !outcome.ok);
 
@@ -1091,6 +1101,18 @@ export const TeamImportModal = ({
               <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
                 <div style={{ fontSize: '1.4rem', fontWeight: 800, color: totals.conflicts > 0 ? 'var(--danger)' : 'inherit' }}>{totals.conflicts}</div>
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewConflicts')}</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800 }}>{totals.duplicates}</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewDuplicates')}</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: totals.ignored > 0 ? 'var(--color-gold)' : 'inherit' }}>{totals.ignored}</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewIgnored')}</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: totals.errors > 0 ? 'var(--danger)' : 'inherit' }}>{totals.errors}</div>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewErrors')}</div>
               </div>
             </div>
             <div style={{ overflowY: 'auto', display: 'grid', gap: '6px', paddingRight: '4px', flex: 1, minHeight: 0 }}>

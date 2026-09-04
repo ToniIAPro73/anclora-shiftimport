@@ -172,6 +172,49 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     expect(onImported).toHaveBeenCalledTimes(1);
   });
 
+  it('preview summary shows all five R1-M05 categories (new/conflicts/duplicates/ignored/errors), including zeros', async () => {
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [
+        { key: 'e1', externalEmployeeId: '1001', name: 'Ana Martinez', shifts: [rosterShift('2026-03-04')] },
+      ],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({
+      kind: 'recognized',
+      employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: '1001' })],
+    });
+    // Same shift already exists remotely (identical date/start/end/type) —
+    // classifyImportChanges reports it as UNCHANGED, i.e. a duplicate.
+    mockedLoadRemoteShifts.mockResolvedValue([
+      {
+        id: 'shift-existing',
+        date: '2026-03-04',
+        startTime: '08:00',
+        endTime: '16:00',
+        location: '',
+        origin: 'IMP',
+      },
+    ]);
+
+    renderTeamImportModal();
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
+
+    // All five category labels are present pre-confirm, even at zero — the
+    // user must see the full breakdown before deciding to import, not only
+    // the non-zero ones.
+    expect(screen.getByText('Turnos nuevos')).toBeTruthy();
+    expect(screen.getByText('Conflictos (no se sobrescriben)')).toBeTruthy();
+    expect(screen.getByText('Duplicados')).toBeTruthy();
+    expect(screen.getByText('Ignorados')).toBeTruthy();
+    expect(screen.getByText('Errores')).toBeTruthy();
+  });
+
   it('inline "new" employee creation resolves PLAN_LIMIT into the upgrade prompt, not a crash', async () => {
     mockedDetectTeamRoster.mockReturnValue({
       employees: [{ key: 'e1', externalEmployeeId: '', name: 'Nuevo Empleado', shifts: [rosterShift('2026-03-04')] }],
