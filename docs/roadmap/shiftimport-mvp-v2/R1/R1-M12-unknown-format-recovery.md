@@ -1,0 +1,89 @@
+# R1-M12 — Unknown Format Recovery
+
+## 1. Objetivo
+Formalizar como contrato cerrado el flujo de recuperación de formato desconocido: los estados `NEEDS_USER_INPUT`, `BLOCKED`, `FAILED` del `ImportState` de 6 valores, y la decisión de diseño de que `BLOCKED` es terminal.
+
+## 2. Problema que resuelve
+Documentar de forma canónica una decisión de diseño ya tomada (commits 1ee5b8b, fb471bd) para que no se reabra accidentalmente sin pasar por una decisión explícita.
+
+## 3. Estado actual del repositorio
+STATUS: DONE. Commit 1ee5b8b formalizó el ciclo de vida de recuperación y memoria de formato, con README de state-contract y 326 líneas de tests, fijando: `BLOCKED` es terminal permanente; `NEEDS_USER_INPUT` es la única vía recuperable con asistencia del usuario. Commit fb471bd corrigió que `TeamImportModal` colapsaba `NEEDS_USER_INPUT`/`BLOCKED`/`FAILED` en un único error genérico — ahora comparte el mismo pipeline de diagnóstico que `ImportModal`.
+
+## 4. Alcance IN
+Confirmar que ambos modales (individual y team) distinguen visualmente los tres estados terminales/recuperables, y ratificar la decisión de `BLOCKED` como terminal.
+
+## 5. Alcance OUT
+No se reabre la decisión de que `BLOCKED` es terminal — cualquier cambio a esa decisión requiere una microfase nueva y explícita con sign-off de producto (ver sección 22).
+
+## 6. Dependencias
+R1-M01, R1-M11.
+
+## 7. Decisiones arquitectónicas
+Se ratifica: `ImportState` tiene 6 valores; `BLOCKED` terminal; `NEEDS_USER_INPUT` único estado recuperable-con-asistente; `FAILED` distinto de ambos (fallo técnico, no de formato).
+
+## 8. Modelo de datos afectado
+N/A — motivo: `ImportState` es un valor de dominio en memoria/UI, no una columna de tabla nueva.
+
+## 9. API / Backend
+`src/ingestion/diagnostics.ts` — confirmar que el enum de 6 valores y sus transiciones siguen sin cambios desde 1ee5b8b.
+
+## 10. Frontend / UX
+`TeamImportModal.tsx`, `ImportModal.tsx` — confirmar que ambos presentan mensajes distintos y accionables para cada uno de los tres estados (no un genérico "error").
+
+## 11. Seguridad y autorización
+N/A — motivo: fuera de alcance.
+
+## 12. i18n
+Confirmar que los mensajes de cada estado existen en ES/EN.
+
+## 13. Accesibilidad
+Confirmar que el estado se comunica también sin depender solo de color (texto/icono con label).
+
+## 14. Responsive / temas
+N/A — motivo: cubierto por R1-M14 (Import UX Premium) de forma más amplia.
+
+## 15. Observabilidad / errores
+Confirmar que `FAILED` (fallo técnico) se distingue claramente de `BLOCKED` (formato irreconocible) y `NEEDS_USER_INPUT` (formato parcialmente reconocible) en cualquier log/telemetría.
+
+## 16. Migraciones
+Ninguna.
+
+## 17. Compatibilidad y datos existentes
+N/A — motivo: verificación sobre comportamiento ya formalizado.
+
+## 18. Tasks
+
+### T01 — Confirmar paridad de manejo entre ImportModal y TeamImportModal
+Objetivo: Releer ambos modales y confirmar que comparten el mismo pipeline de diagnóstico para los 6 estados desde fb471bd.
+Archivos / módulos probables: `ImportModal.tsx`, `TeamImportModal.tsx`, `src/ingestion/diagnostics.ts`.
+Cambios: Ninguno si confirmado.
+No hacer: No modificar el pipeline compartido.
+Criterios de aceptación:
+- [ ] Confirmado que ambos modales usan el mismo pipeline y distinguen los 3 estados relevantes visualmente.
+Tests: Tests de state-contract (fixtures canónicas de 1ee5b8b) en verde.
+Evidencia esperada: Resultado de tests + cita de código.
+
+### T02 — Ratificar la decisión de BLOCKED terminal en este documento
+Objetivo: Dejar registro explícito de la decisión y su justificación, para que cualquier intento futuro de reabrirla pase primero por este documento.
+Archivos / módulos probables: N/A — solo documentación.
+Cambios: Redactar sección de decisión ratificada.
+No hacer: No proponer alternativas a la decisión en esta microfase — eso sería una decisión de producto fuera de alcance aquí.
+Criterios de aceptación:
+- [ ] Decisión documentada con referencia a commit 1ee5b8b como origen.
+Tests: Ninguno.
+Evidencia esperada: Sección de decisión en este documento.
+
+## 19. Tests obligatorios
+Suite de state-contract (fixtures de 1ee5b8b).
+
+## 20. Evidencias
+Resultado de T01, sección de decisión de T02.
+
+## 21. Gate
+Gates obligatorios: G14 (Documentation), G10 (Unit tests), G11 (E2E — si las fixtures de state-contract corren como E2E).
+
+## 22. Rollback / remediación
+Cambiar el estatus terminal de `BLOCKED` NO es una remediación de esta microfase — requiere una microfase nueva, explícita, con sign-off de producto, dado que es una decisión de diseño ya formalizada y testeada.
+
+## 23. Criterio de DONE
+Flujo de recuperación de formato desconocido documentado como contrato cerrado, paridad entre modales confirmada, decisión de `BLOCKED` terminal ratificada por escrito.
