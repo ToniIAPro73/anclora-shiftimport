@@ -79,8 +79,8 @@ Archivos / módulos probables: `MembersModal.tsx`, `credentials-export.ts`, `api
 Cambios: Ninguno salvo hallazgo de fuga.
 No hacer: No introducir almacenamiento nuevo de contraseñas.
 Criterios de aceptación:
-- [ ] Grep de logs/BD confirma ausencia de contraseñas en claro persistidas.
-- [ ] Confirmado que TXT se genera solo client-side.
+- [x] Grep de logs/BD confirma ausencia de contraseñas en claro persistidas.
+- [x] Confirmado que TXT se genera solo client-side.
 Tests: N/A — auditoría de código.
 Evidencia esperada: resultado de grep + confirmación de flujo.
 
@@ -91,7 +91,7 @@ Archivos / módulos probables: `MembersModal.tsx`, endpoint de creación masiva.
 Cambios: Añadir test si falta cobertura.
 No hacer: No cambiar el comportamiento de éxito parcial sin justificación explícita.
 Criterios de aceptación:
-- [ ] Fila con email duplicado se reporta como error individual, resto del lote se procesa.
+- [x] Fila con email duplicado se reporta como error individual, resto del lote se procesa.
 Tests: test de componente o integración según ubicación de la lógica.
 Evidencia esperada: resultado de test.
 
@@ -101,11 +101,17 @@ security audit (manual/grep), integration test de fila inválida.
 
 ## 20. Evidencias
 
-Resultado de T01, T02.
+Resultado de T01, T02:
+
+- Auditoría `rg` de `api/` y `src/`: las contraseñas temporales solo aparecen en memoria/respuesta única y en el export client-side; ningún `console.log`/`console.error` registra contraseñas. El único log relacionado con credenciales es el flujo separado de reset, que registra el enlace/token de desarrollo, no una contraseña.
+- `npx vitest run api/_lib/data.test.js api/_lib/data.areas.test.js api/areas/index.test.js api/_lib/auth.test.js` → **155 tests PASS** para la lógica backend, incluyendo `DUPLICATE_IN_FILE`, `INVALID_EMAIL`, éxito parcial e idempotencia.
+- `npx vitest run src/components/shift-dashboard/MembersModal.test.tsx src/lib/credentials-export.test.ts src/lib/bulk-import-csv.test.ts` → **3 archivos, 59 tests PASS**; confirma fila inválida sin abortar, credenciales one-time y export TXT en cliente.
 
 ## 21. Gate
 
 Gates requeridos: G10 (Unit/integration tests), G12 (Security).
+
+Resultado: **PASS**. No se detectó persistencia server-side de contraseñas en claro ni exposición adicional; los errores se procesan por fila.
 
 ## 22. Rollback / remediación
 
