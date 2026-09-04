@@ -7,7 +7,17 @@ Formalizar como contrato cerrado el flujo de recuperación de formato desconocid
 Documentar de forma canónica una decisión de diseño ya tomada (commits 1ee5b8b, fb471bd) para que no se reabra accidentalmente sin pasar por una decisión explícita.
 
 ## 3. Estado actual del repositorio
-STATUS: DONE. Commit 1ee5b8b formalizó el ciclo de vida de recuperación y memoria de formato, con README de state-contract y 326 líneas de tests, fijando: `BLOCKED` es terminal permanente; `NEEDS_USER_INPUT` es la única vía recuperable con asistencia del usuario. Commit fb471bd corrigió que `TeamImportModal` colapsaba `NEEDS_USER_INPUT`/`BLOCKED`/`FAILED` en un único error genérico — ahora comparte el mismo pipeline de diagnóstico que `ImportModal`.
+STATUS: DONE, verificado sin regresión.
+
+### T01 — Paridad confirmada
+
+`ImportState` (`src/ingestion/diagnostics.ts:27-33`) sigue teniendo exactamente 6 valores: `READY`, `NEEDS_USER_INPUT`, `PARTIAL`, `BLOCKED`, `UNSUPPORTED`, `FAILED` — sin cambios desde 1ee5b8b. Ambos modales importan y usan las mismas funciones (`buildImportDiagnosis`, `diagnosisFromError`) de `src/ingestion/diagnostics.ts` como única fuente de verdad — `TeamImportModal.tsx:34,266,268,312` y `ImportModal.tsx:363,564` — confirmando que fb471bd sigue vigente: ningún modal deriva su propio estado ad hoc. Suite `state-contract.test.ts` (12 tests, fixtures canónicas de 1ee5b8b): **12/12 en verde**.
+
+### T02 — Decisión ratificada: `BLOCKED` es terminal
+
+Origen: commit `1ee5b8b` ("fix(ingestion): formalize recovery and format memory lifecycle"). Justificación registrada en el propio código (`ImportModal.tsx:848-850`): la capa de diagnóstico (`diagnostics.ts`) es la única fuente de verdad sobre recuperabilidad — la UI nunca re-deriva el estado por su cuenta. `NEEDS_USER_INPUT` es el único estado que ofrece una pregunta accionable al usuario (`recovery.strategy === 'answer-question'`); `BLOCKED` no tiene ninguna vía de recuperación asistida — el documento estructuralmente no permite continuar. `FAILED` es distinto de ambos: fallo técnico (excepción de parseo/red), no un juicio sobre el formato del documento.
+
+**Esta decisión NO se reabre en esta microfase.** Cualquier propuesta futura de hacer `BLOCKED` parcialmente recuperable (p. ej. "preguntar sobre un Excel con cero empleados detectados") requiere una microfase nueva y explícita con sign-off de producto — no un cambio incidental dentro de otra microfase.
 
 ## 4. Alcance IN
 Confirmar que ambos modales (individual y team) distinguen visualmente los tres estados terminales/recuperables, y ratificar la decisión de `BLOCKED` como terminal.
@@ -59,9 +69,9 @@ Archivos / módulos probables: `ImportModal.tsx`, `TeamImportModal.tsx`, `src/in
 Cambios: Ninguno si confirmado.
 No hacer: No modificar el pipeline compartido.
 Criterios de aceptación:
-- [ ] Confirmado que ambos modales usan el mismo pipeline y distinguen los 3 estados relevantes visualmente.
-Tests: Tests de state-contract (fixtures canónicas de 1ee5b8b) en verde.
-Evidencia esperada: Resultado de tests + cita de código.
+- [x] Confirmado que ambos modales usan el mismo pipeline y distinguen los 3 estados relevantes visualmente (ver sección 3).
+Tests: `state-contract.test.ts` — 12/12 en verde.
+Evidencia esperada: Ver sección 3 arriba.
 
 ### T02 — Ratificar la decisión de BLOCKED terminal en este documento
 Objetivo: Dejar registro explícito de la decisión y su justificación, para que cualquier intento futuro de reabrirla pase primero por este documento.
@@ -69,9 +79,9 @@ Archivos / módulos probables: N/A — solo documentación.
 Cambios: Redactar sección de decisión ratificada.
 No hacer: No proponer alternativas a la decisión en esta microfase — eso sería una decisión de producto fuera de alcance aquí.
 Criterios de aceptación:
-- [ ] Decisión documentada con referencia a commit 1ee5b8b como origen.
+- [x] Decisión documentada con referencia a commit 1ee5b8b como origen (ver sección 3).
 Tests: Ninguno.
-Evidencia esperada: Sección de decisión en este documento.
+Evidencia esperada: Sección de decisión en este documento (sección 3).
 
 ## 19. Tests obligatorios
 Suite de state-contract (fixtures de 1ee5b8b).
