@@ -14,7 +14,23 @@ STATUS: DONE.
 
 - Tabla `format_profiles` (migración correspondiente): id, organization_id, logical_profile_id, version, status (`candidate/validated/verified/legacy/deprecated`), signature jsonb (contiene structureHash), source_type (`pdf/tabular`), parser_config, token_aliases, code_times, off_tokens, employee_row_strategy, use_count, successful_use_count, last_used_at, supersedes_profile_id.
 - Migración 0012 añade índice único parcial `(organization_id, structureHash) WHERE status != 'deprecated'`, cerrando una condición de carrera app-level (commit c863223).
-- `api/format-profiles/index.js` implementa el CRUD y la recuperación 23505 tras el índice único.
+- La lógica real vive en `api/_lib/format-profiles.js` (no `api/format-profiles/index.js`, que es solo el wrapper de ruta) — implementa el CRUD y la recuperación 23505 tras el índice único.
+
+### Contrato verificado (T01)
+
+**structureHash**: firma estructural del documento (calculada fuera de este módulo, en `src/ingestion/`), transportada en `signature.structureHash` (string, máx. 64 caracteres, validado en `sanitizeCandidateInput`, `api/_lib/format-profiles.js:80-82`). Es la clave de identidad junto con `organization_id` — no incluye PII, solo estructura.
+
+**Transiciones de `status` confirmadas en código** (`api/_lib/format-profiles.js`):
+
+| Transición | Función | Rol requerido | Condición |
+|---|---|---|---|
+| (create) → `candidate` | `createCandidateFormatProfile` (líneas 265-354) | autenticado | idempotente: repite structureHash existente no-deprecated → devuelve el existente, `created: false` |
+| `candidate` → `validated` | `confirmFormatProfile` (líneas 415-422) | `ADMIN` | optimistic lock por `updated_at`; solo si status actual es `candidate` |
+| `validated`/`verified`/`candidate` → `legacy` | dentro de `confirmFormatProfile`, cuando el nuevo perfil `supersedesProfileId` (líneas 429-436) | `ADMIN` (heredado de la llamada) | se aplica al resto de la familia `logical_profile_id`, no al perfil recién confirmado |
+| cualquiera → `deprecated` | `deprecateFormatProfile` (líneas 438-457) | `ADMIN` | optimistic lock por `updated_at`; idempotente si ya estaba `deprecated` |
+| `legacy`/`deprecated` → `validated` | `reactivateFormatProfile` (líneas 459-472) | `ADMIN` | optimistic lock por `updated_at` |
+
+**Hallazgo (no bloqueante)**: `verified` está declarado en el tipo (`FormatProfileStatus`, `src/lib/format-profiles.ts:339`) y se incluye en el filtro de "familia activa" (línea 435), pero **ningún código transiciona un perfil a `verified`** — es un estado reservado para una promoción automática futura (p.ej. tras N usos exitosos vía `recordFormatProfileUse`/`successful_use_count`) que aún no está conectada. No es una discrepancia con el índice único ni con la invariante de carrera; se documenta como gap conocido, no se implementa aquí (Alcance OUT: no se añaden estados nuevos, y este ya existe declarado — solo falta su disparador).
 
 ## 4. Alcance IN
 
@@ -115,13 +131,15 @@ No hacer:
 No relajar el índice único sin justificación documentada.
 
 Criterios de aceptación:
-- [ ] Confirmado: la condición WHERE del índice coincide exactamente con la condición que dispara la recuperación 23505 en código.
+- [x] Confirmado: la condición WHERE del índice coincide exactamente con la condición que dispara la recuperación 23505 en código.
 
 Tests:
-Revisar test relacionado con format-memory (`qa/e2e-acceptance/specs-local/format-memory.spec.ts`) para confirmar cobertura de la carrera.
+`qa/e2e-acceptance/specs-local/format-memory.spec.ts` es un test Playwright real-browser contra base de datos dev real (no vitest — no está en el `include` de `vitest.config.ts`; confirmado con `npx vitest run` sobre ese path: "No test files found"). Requiere servidor dev local levantado, navegadores Playwright, y credenciales de Neon dev. **No se ejecuta en esta microfase** — ejecutar un E2E real-browser contra infraestructura compartida sin necesidad inmediata está fuera del alcance de una verificación documental, y el estado de CI-gating de exactamente este tipo de test es el objeto explícito de R1-M15 (Import E2E Matrix). La invariante bajo prueba (índice único vs recuperación 23505) queda verificada aquí por lectura estática de código, que es la evidencia real del contrato — no depende de ejecutar el E2E.
 
 Evidencia esperada:
-Cita de línea de código + cita de migración confirmando alineación.
+Cita de línea de código + cita de migración confirmando alineación (ver abajo).
+
+**Verificación T02**: migración 0012 crea `UNIQUE INDEX ... ON format_profiles (organization_id, (signature->>'structureHash')) WHERE status != 'deprecated'` (`db/migrations/0012_format_profiles_structurehash_uniqueness.sql`). La recuperación 23505 en `createCandidateFormatProfile` (`api/_lib/format-profiles.js:341-351`) re-consulta con exactamente `WHERE organization_id = ${ctx.organizationId} AND status != 'deprecated' AND signature->>'structureHash' = ${value.signature.structureHash}` — condición idéntica a la del índice. **Alineación confirmada, sin discrepancia.**
 
 ## 19. Tests obligatorios
 
