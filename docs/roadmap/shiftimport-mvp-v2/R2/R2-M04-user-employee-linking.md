@@ -79,8 +79,8 @@ Archivos / módulos probables: `api/_lib/data.js`, tests en `api/**/*.test.js`.
 Cambios: Añadir casos de test si faltan.
 No hacer: No modificar el mecanismo de vinculación salvo defecto confirmado.
 Criterios de aceptación:
-- [ ] Vincular dos veces el mismo par no duplica ni lanza error inesperado.
-- [ ] Vincular un `user_id` ya vinculado a otro empleado de la misma organización devuelve error claro.
+- [x] Vincular dos veces el mismo par no duplica ni lanza error inesperado.
+- [x] Vincular un `user_id` ya vinculado a otro empleado de la misma organización devuelve error claro.
 Tests: suite existente + nuevos casos.
 Evidencia esperada: resultado de tests.
 
@@ -90,11 +90,17 @@ unit/integration sobre `data.js`.
 
 ## 20. Evidencias
 
-Resultado de tests T01, query de verificación de duplicados.
+Resultado de tests T01, query de verificación de duplicados:
+
+- `npx vitest run api/_lib/data.test.js api/_lib/data.areas.test.js api/areas/index.test.js api/_lib/auth.test.js` → **4 archivos, 155 tests PASS**.
+- Neon dev (read-only): consulta de grupos `(organization_id, user_id)` con más de un empleado → **0 grupos duplicados**.
+- La misma consulta confirmó que la vinculación se mantiene tenant-scoped; no se realizó ninguna escritura de datos.
 
 ## 21. Gate
 
 Gates requeridos: G3 (Domain invariants), G10 (Unit/integration tests).
+
+Resultado: **PASS**. Idempotencia, conflictos de vinculación y ausencia de duplicados en datos existentes confirmados.
 
 ## 22. Rollback / remediación
 
