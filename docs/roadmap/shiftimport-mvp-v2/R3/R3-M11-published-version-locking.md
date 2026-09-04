@@ -120,4 +120,4 @@ Resultado ejecutado: **PASS**.
 Si el test de inmutabilidad revela un gap real en R3-M05: corregir ahí y volver a correr el Gate de R3-M05 también (regresión cross-microfase, documentar en ambas specs).
 
 ## 23. Criterio de DONE
-Inmutabilidad verificada explícitamente, endpoint `new-draft` operativo, UI condicional funcionando, Gate G3+G5+G10 PASS. Commit pendiente de registro.
+Inmutabilidad verificada explícitamente, endpoint `new-draft` operativo, UI condicional funcionando, Gate G3+G5+G10 PASS. Commit: `eab294d` (`feat(scheduling): complete R3-M11 version locking`).
