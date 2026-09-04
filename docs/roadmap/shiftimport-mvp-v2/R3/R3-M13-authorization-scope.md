@@ -113,4 +113,4 @@ Resultado ejecutado: **PASS**.
 Cualquier hueco encontrado es FAIL inmediato — no PASS_WITH_WARNINGS en autorización cross-tenant (riesgo de seguridad real, §9 del prompt maestro).
 
 ## 23. Criterio de DONE
-Matriz completa, suite de test cubriendo la superficie efectiva de Scheduling, cero huecos encontrados, Gate G4+G12 PASS. Commit pendiente de registro.
+Matriz completa, suite de test cubriendo la superficie efectiva de Scheduling, cero huecos encontrados, Gate G4+G12 PASS. Commit: `10a0838` (`test(scheduling): complete R3-M13 authorization audit`).
