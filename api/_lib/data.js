@@ -1393,7 +1393,15 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
  */
 export async function upsertShifts(sql, ctx, rawShifts) {
   const shifts = rawShifts.map(normalizeShiftInput);
-  const saved = [];
+  // R1-M08 atomicity: every shift is validated (and its write parameters
+  // computed) in this first pass, with NO write issued yet. Only once every
+  // shift in the batch has passed validation does the second pass run the
+  // actual INSERTs, as one sql.transaction — so a bad shift anywhere in the
+  // batch throws before anything is written, instead of leaving the shifts
+  // validated before it already committed (each query auto-commits
+  // individually against the Neon HTTP driver when not wrapped in a
+  // transaction).
+  const prepared = [];
 
   for (const shift of shifts) {
     if (!shift.date || !shift.employeeId) {
@@ -1455,8 +1463,16 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     const semanticFingerprint = shift.origin === 'IMP'
       ? sha256([employeeId, shift.date, shift.startTime, shift.endTime, shift.location].join('\u001f'))
       : null;
-    const rows = semanticFingerprint
-      ? await sql`
+    prepared.push({ shift, id, employeeId, shiftAreaId, semanticFingerprint });
+  }
+
+  if (prepared.length === 0) {
+    return [];
+  }
+
+  const rowsPerShift = await sql.transaction((txn) => prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint }) => (
+    semanticFingerprint
+      ? txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
                           start_time, end_time, location, origin, updated_at, semantic_fingerprint)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
@@ -1469,7 +1485,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
                 start_time, end_time, location, origin
     `
-      : await sql`
+      : txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
                           start_time, end_time, location, origin, updated_at)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
@@ -1488,7 +1504,11 @@ export async function upsertShifts(sql, ctx, rawShifts) {
       RETURNING id, organization_id, employee_id, import_id, area_id,
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
                 start_time, end_time, location, origin
-    `;
+    `
+  )));
+
+  const saved = [];
+  for (const rows of rowsPerShift) {
     if (rows.length > 0) {
       saved.push(mapShiftRow(rows[0]));
     }

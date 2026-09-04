@@ -413,6 +413,29 @@ describe('active-employee gate on import', () => {
   });
 });
 
+describe('batch atomicity (R1-M08)', () => {
+  it('a bad shift anywhere in the batch writes nothing, not just the shifts before it', async () => {
+    const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })] });
+    const validFirst = shiftInput({ id: undefined });
+    const invalidSecond = shiftInput({ id: undefined, date: '' }); // fails the date/employeeId check
+    await expect(upsertShifts(sql, adminCtx, [validFirst, invalidSecond]))
+      .rejects.toMatchObject({ status: 400 });
+    // The first shift must never have been written on its own — validation
+    // for the whole batch happens before any INSERT is issued.
+    expect(calls.some((call) => call.text.startsWith('INSERT INTO shifts'))).toBe(false);
+  });
+
+  it('a fully valid batch writes every shift through sql.transaction', async () => {
+    const { sql, state } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })] });
+    const saved = await upsertShifts(sql, adminCtx, [
+      shiftInput({ id: undefined, date: '2026-09-04' }),
+      shiftInput({ id: undefined, date: '2026-09-05' }),
+    ]);
+    expect(saved).toHaveLength(2);
+    expect(state.transactionUsed).toBe(true);
+  });
+});
+
 describe('employee isolation', () => {
   it('EMPLOYEE role reads are forced to its own employee id', async () => {
     const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });

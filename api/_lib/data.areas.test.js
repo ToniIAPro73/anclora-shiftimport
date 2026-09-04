@@ -201,6 +201,11 @@ function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [], us
     }
     return Promise.resolve([]);
   };
+  // upsertShifts (R1-M08 atomicity) batches its INSERTs through
+  // sql.transaction — same fake shape as data.test.js's makeFakeSql: the
+  // tag function passed to fn() is just `sql` itself, and Promise.all
+  // awaits the array of per-shift query promises it builds.
+  sql.transaction = async (fn) => Promise.all(fn(sql));
   return { sql, calls, employees, imports, shifts, areas };
 }
 
