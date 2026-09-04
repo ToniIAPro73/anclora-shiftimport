@@ -1878,6 +1878,68 @@ button[aria-busy='true'] {
   font-size: 0.82rem;
 }
 
+.weekly-planner__history-table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.weekly-planner__history-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+
+.weekly-planner__history-table th,
+.weekly-planner__history-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.weekly-planner__history-table thead th {
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.weekly-planner__history-table tbody th {
+  font-weight: 800;
+}
+
+.weekly-planner__history-table tbody th span,
+.weekly-planner__history-table tbody th small {
+  display: block;
+}
+
+.weekly-planner__history-table tbody th small {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.weekly-planner__history-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 80px;
+  color: var(--text-muted);
+}
+
+.weekly-planner__history-state--error {
+  color: #d66b6b;
+}
+
+.btn-outline--compact {
+  min-height: 32px;
+  padding: 6px 9px;
+  font-size: 0.72rem;
+}
+
 .weekly-planner__delete {
   color: #d66b6b;
   border-color: color-mix(in srgb, #d66b6b 55%, transparent);

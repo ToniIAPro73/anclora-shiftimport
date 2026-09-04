@@ -77,7 +77,7 @@ All MISSING at schema and app level. Full task lists required.
 | R3-M09 | Accessible Table Alternative | DONE — PASS; semantic table, keyboard flow, persisted grid/table toggle and axe smoke verified | R3-M08 | 3 | G7 |
 | R3-M10 | Publication | DONE — PASS; atomic publish, schedule provenance, inactive exclusion and confirmation UI verified | R3-M08 | 3 | G2, G3, G4, G5, G10 |
 | R3-M11 | Published Version Locking | DONE — PASS; published/locked/completed immutability, independent new-draft copy and conditional UI verified | R3-M10 | 3 | G3, G5, G10 |
-| R3-M12 | Version History | MISSING | R3-M11 | 3 | G2, G10 |
+| R3-M12 | Version History | DONE — PASS; complete version metadata listing and read-only version viewer verified | R3-M11 | 2 | G2, G10 |
 | R3-M13 | Authorization / Scope | MISSING | R2-M07, R3-M11 | 4 | G4, G12 |
 | R3-M14 | Future Import → Draft Integration | MISSING | R1-M16, R3-M04 | 5 | G3, G5, G10 |
 | R3-M15 | E2E | MISSING | R3-M00..M14 | 4 | G11, G13 |

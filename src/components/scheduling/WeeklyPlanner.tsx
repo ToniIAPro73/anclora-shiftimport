@@ -6,10 +6,12 @@ import {
   createRemoteScheduleDraftFromVersion,
   createRemoteScheduleDraft,
   deleteRemoteAssignment,
+  listRemoteScheduleVersionHistory,
   listRemoteScheduleVersions,
   loadRemoteScheduleSnapshot,
   publishRemoteScheduleVersion,
   ScheduleSnapshot,
+  ScheduleVersionHistoryEntry,
   ShiftAssignment,
   updateRemoteAssignment,
 } from '../../lib/remote';
@@ -19,6 +21,7 @@ import { ModalShell } from '../ui/ModalShell';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { AccessibleScheduleTable } from './AccessibleScheduleTable';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
+import { ScheduleVersionHistory } from './ScheduleVersionHistory';
 
 interface WeeklyPlannerProps {
   areaId?: string | null;
@@ -85,10 +88,15 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingVersion, setIsCreatingVersion] = useState(false);
+  const [isViewingHistoricalVersion, setIsViewingHistoricalVersion] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyVersions, setHistoryVersions] = useState<ScheduleVersionHistoryEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -113,7 +121,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     }
     return byCell;
   }, [snapshot]);
-  const editable = canEdit && snapshot?.version.status === 'DRAFT';
+  const editable = canEdit && snapshot?.version.status === 'DRAFT' && !isViewingHistoricalVersion;
 
   const refresh = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -122,6 +130,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     setOperationError(null);
     setNotice(null);
     setEditor(null);
+    setIsViewingHistoricalVersion(false);
     try {
       const schedules = await listRemoteScheduleVersions(areaId);
       const matching = schedules.find((schedule) => (
@@ -192,6 +201,37 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
       setOperationError(errorCopy(requestError, t));
     } finally {
       setIsCreatingVersion(false);
+    }
+  };
+
+  const handleOpenHistory = async () => {
+    if (!snapshot) return;
+    setIsHistoryOpen(true);
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      setHistoryVersions(await listRemoteScheduleVersionHistory(snapshot.version.scheduleId));
+    } catch (requestError) {
+      setHistoryError(errorCopy(requestError, t));
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const handleSelectHistoryVersion = async (selected: ScheduleVersionHistoryEntry) => {
+    if (!snapshot) return;
+    setIsHistoryOpen(false);
+    setIsLoading(true);
+    setOperationError(null);
+    setNotice(null);
+    try {
+      const loaded = await loadRemoteScheduleSnapshot(snapshot.version.scheduleId, selected.id);
+      setSnapshot(loaded);
+      setIsViewingHistoricalVersion(true);
+    } catch (requestError) {
+      setOperationError(errorCopy(requestError, t));
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -324,6 +364,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
             </div>
             <div className="weekly-planner__toolbar-actions">
               {!editable && <span className="weekly-planner__locked">{t('planner.locked')}</span>}
+              {isViewingHistoricalVersion && <button type="button" className="btn-outline" onClick={() => void refresh()}>{t('planner.backToCurrent')}</button>}
+              <button type="button" className="btn-outline" onClick={() => void handleOpenHistory()}>{t('planner.versionHistory')}</button>
               {snapshot.version.status === 'PUBLISHED' && <button type="button" className="btn-outline" onClick={() => void handleCreateNewVersion()} disabled={isCreatingVersion}>
                 {isCreatingVersion ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isCreatingVersion ? t('planner.creatingNewVersion') : t('planner.createNewVersion')}
               </button>}
@@ -443,6 +485,25 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
             <p className="weekly-planner__publish-note">{t('planner.publishNote')}</p>
             {publishError && <p className="weekly-planner__editor-error" role="alert" aria-live="polite">{publishError}</p>}
           </div>
+        </ModalShell>
+      )}
+
+      {snapshot && (
+        <ModalShell
+          isOpen={isHistoryOpen}
+          onClose={() => setIsHistoryOpen(false)}
+          title={t('planner.versionHistoryTitle')}
+          closeAriaLabel={t('common.close')}
+          maxWidth="860px"
+        >
+          <p>{t('planner.versionHistoryDescription')}</p>
+          <ScheduleVersionHistory
+            versions={historyVersions}
+            currentVersionId={snapshot.version.id}
+            isLoading={isHistoryLoading}
+            error={historyError}
+            onSelect={(selected) => void handleSelectHistoryVersion(selected)}
+          />
         </ModalShell>
       )}
     </main>

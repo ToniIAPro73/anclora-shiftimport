@@ -247,6 +247,21 @@ function mapScheduleVersion(row) {
   };
 }
 
+function mapScheduleVersionHistory(row) {
+  return {
+    id: row.version_id,
+    scheduleId: row.schedule_id,
+    versionNumber: row.version_number,
+    status: row.status,
+    createdByUserId: row.created_by_user_id,
+    createdByUserName: row.created_by_user_name ?? null,
+    createdAt: row.created_at,
+    publishedByUserId: row.published_by_user_id ?? null,
+    publishedByUserName: row.published_by_user_name ?? null,
+    publishedAt: row.published_at ?? null,
+  };
+}
+
 function mapSchedulingEmployee(row) {
   return {
     id: row.id,
@@ -304,6 +319,30 @@ export async function listScheduleVersions(sql, ctx, { areaId = null } = {}) {
       ORDER BY s.period_start DESC, s.id
     `;
   return rows.map(mapScheduleVersion);
+}
+
+/** Lists every version for one tenant-scoped schedule, newest first. */
+export async function listScheduleVersionHistory(sql, ctx, scheduleId) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId)) throw new HttpError(400, 'scheduleId must be a valid UUID');
+  const rows = await sql`
+    SELECT sv.id AS version_id, sv.schedule_id, sv.version_number, sv.status,
+           sv.created_by_user_id, sv.created_at, sv.published_by_user_id, sv.published_at,
+           s.area_id,
+           creator.display_name AS created_by_user_name,
+           publisher.display_name AS published_by_user_name
+    FROM schedule_versions sv
+    JOIN schedules s ON s.id = sv.schedule_id
+    JOIN users creator ON creator.id = sv.created_by_user_id
+    LEFT JOIN users publisher ON publisher.id = sv.published_by_user_id
+    WHERE sv.schedule_id = ${scheduleId}
+      AND s.organization_id = ${ctx.organizationId}
+    ORDER BY sv.version_number DESC
+  `;
+  if (rows.length === 0) throw new HttpError(404, 'Schedule not found');
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'AREA' && rows[0].area_id !== scope.areaId) throw scheduleScopeError();
+  return rows.map(mapScheduleVersionHistory);
 }
 
 /** Reads one schedule version and the scoped active roster for the planner grid. */

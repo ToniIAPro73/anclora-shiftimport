@@ -91,6 +91,19 @@ export interface NewScheduleDraftResult {
   copiedAssignmentCount: number;
 }
 
+export interface ScheduleVersionHistoryEntry {
+  id: string;
+  scheduleId: string;
+  versionNumber: number;
+  status: ScheduleVersion['status'];
+  createdByUserId: string;
+  createdByUserName?: string | null;
+  createdAt?: string;
+  publishedByUserId?: string | null;
+  publishedByUserName?: string | null;
+  publishedAt?: string | null;
+}
+
 export interface ImportHistoryFilters {
   page?: number;
   pageSize?: number;
@@ -147,6 +160,12 @@ export async function listRemoteScheduleVersions(areaId?: string | null): Promis
   const query = areaId ? `?areaId=${encodeURIComponent(areaId)}` : '';
   const payload = await apiFetch<{ schedules: ScheduleVersion[] }>(`/api/schedules${query}`);
   return payload.schedules;
+}
+
+export async function listRemoteScheduleVersionHistory(scheduleId: string): Promise<ScheduleVersionHistoryEntry[]> {
+  return apiFetch<ScheduleVersionHistoryEntry[]>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions`,
+  );
 }
 
 export async function createRemoteScheduleDraft(input: {

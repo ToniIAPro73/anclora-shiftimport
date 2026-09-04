@@ -20,6 +20,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     createRemoteAssignment: vi.fn(),
     updateRemoteAssignment: vi.fn(),
     deleteRemoteAssignment: vi.fn(),
+    listRemoteScheduleVersionHistory: vi.fn(),
     publishRemoteScheduleVersion: vi.fn(),
   };
 });
@@ -208,5 +209,33 @@ describe('WeeklyPlanner', () => {
     await waitFor(() => expect(remote.createRemoteScheduleDraftFromVersion).toHaveBeenCalledWith('schedule-1', 'version-1'));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Crear nueva versión' })).toBeNull());
     expect(screen.getByText('Borrador editable')).toBeInTheDocument();
+  });
+
+  it('opens version history and loads a selected version read-only', async () => {
+    const current = version({ status: 'PUBLISHED' });
+    const previous = version({ id: 'version-0', versionNumber: 0, status: 'PUBLISHED' });
+    mockedList.mockResolvedValue([current]);
+    mockedLoad.mockResolvedValueOnce(snapshot({ version: current })).mockResolvedValueOnce(snapshot({ version: previous }));
+    vi.mocked(remote.listRemoteScheduleVersionHistory).mockResolvedValue([
+      {
+        id: 'version-1', scheduleId: 'schedule-1', versionNumber: 1, status: 'PUBLISHED',
+        createdByUserId: 'user-1', createdByUserName: 'Planner', createdAt: '2026-09-01T10:00:00.000Z',
+        publishedByUserId: 'user-1', publishedByUserName: 'Planner', publishedAt: '2026-09-02T10:00:00.000Z',
+      },
+      {
+        id: 'version-0', scheduleId: 'schedule-1', versionNumber: 0, status: 'PUBLISHED',
+        createdByUserId: 'user-1', createdAt: '2026-08-25T10:00:00.000Z',
+      },
+    ]);
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Historial de versiones' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Historial de versiones' }));
+    await waitFor(() => expect(screen.getByRole('table', { name: 'Historial de versiones de la planificación' })).toBeInTheDocument());
+    expect(screen.getByText('Versión 1')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ver versión' })[1]);
+    await waitFor(() => expect(remote.loadRemoteScheduleSnapshot).toHaveBeenCalledWith('schedule-1', 'version-0'));
+    expect(screen.getByText('Volver a la versión actual')).toBeInTheDocument();
+    expect(screen.getByText('Solo lectura')).toBeInTheDocument();
   });
 });
