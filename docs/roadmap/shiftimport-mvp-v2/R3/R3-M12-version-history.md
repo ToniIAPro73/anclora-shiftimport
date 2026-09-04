@@ -105,4 +105,4 @@ Resultado ejecutado: **PASS**.
 Bajo riesgo — funcionalidad de solo lectura, remediación trivial en caso de fallo.
 
 ## 23. Criterio de DONE
-Endpoint y UI de historial operativos, Gate G2+G10 PASS. Commit pendiente de registro.
+Endpoint y UI de historial operativos, Gate G2+G10 PASS. Commit: `dc85009` (`feat(scheduling): complete R3-M12 version history`).
