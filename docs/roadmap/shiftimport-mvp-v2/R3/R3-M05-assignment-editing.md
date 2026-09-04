@@ -100,4 +100,4 @@ Resultado ejecutado: **PASS**.
 Si el guard de estado falla en test: no exponer el endpoint hasta corregirlo — una edición sobre versión publicada rompería la invariante de inmutabilidad (R3-M11), riesgo funcional real.
 
 ## 23. Criterio de DONE
-3 endpoints operativos, guard de estado verificado por test, Gate G4+G5+G10 PASS. Commit: `pending`.
+3 endpoints operativos, guard de estado verificado por test, Gate G4+G5+G10 PASS. Implementación: `38cde75`.
