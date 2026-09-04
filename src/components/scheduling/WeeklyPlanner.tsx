@@ -3,6 +3,7 @@ import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
+  createRemoteScheduleDraftFromVersion,
   createRemoteScheduleDraft,
   deleteRemoteAssignment,
   listRemoteScheduleVersions,
@@ -83,6 +84,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [snapshot, setSnapshot] = useState<ScheduleSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingVersion, setIsCreatingVersion] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
@@ -173,6 +175,23 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
       }
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const handleCreateNewVersion = async () => {
+    if (!snapshot || snapshot.version.status !== 'PUBLISHED') return;
+    setIsCreatingVersion(true);
+    setError(null);
+    setOperationError(null);
+    setNotice(null);
+    try {
+      await createRemoteScheduleDraftFromVersion(snapshot.version.scheduleId, snapshot.version.id);
+      await refresh();
+      setNotice(t('planner.newVersionCreated'));
+    } catch (requestError) {
+      setOperationError(errorCopy(requestError, t));
+    } finally {
+      setIsCreatingVersion(false);
     }
   };
 
@@ -305,6 +324,9 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
             </div>
             <div className="weekly-planner__toolbar-actions">
               {!editable && <span className="weekly-planner__locked">{t('planner.locked')}</span>}
+              {snapshot.version.status === 'PUBLISHED' && <button type="button" className="btn-outline" onClick={() => void handleCreateNewVersion()} disabled={isCreatingVersion}>
+                {isCreatingVersion ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isCreatingVersion ? t('planner.creatingNewVersion') : t('planner.createNewVersion')}
+              </button>}
               {editable && <button type="button" className="btn-gold" onClick={() => { setPublishError(null); setIsPublishOpen(true); }} disabled={isPublishing || snapshot.assignments.length === 0}>
                 {isPublishing ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isPublishing ? t('planner.publishing') : t('planner.publish')}
               </button>}

@@ -18,5 +18,7 @@ export function handleError(res, error) {
       ? { conflictingAssignmentId: error.conflictingAssignmentId } : {}),
     ...(status < 500 && Number.isFinite(error?.minimumRestHours)
       ? { minimumRestHours: error.minimumRestHours } : {}),
+    ...(status < 500 && error?.draftVersionId
+      ? { draftVersionId: error.draftVersionId } : {}),
   });
 }

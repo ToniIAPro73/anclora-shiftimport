@@ -85,15 +85,16 @@ describe('ShiftAssignment draft CRUD', () => {
     await expect(deleteAssignment(sql, planner, SCHEDULE, VERSION, ASSIGNMENT)).resolves.toBeUndefined();
   });
 
-  it('rejects every mutation on a non-DRAFT version', async () => {
-    const sql = makeSql({ status: 'PUBLISHED' });
+  it.each(['PUBLISHED', 'LOCKED', 'COMPLETED'])('rejects every mutation on %s versions', async (status) => {
+    const sql = makeSql({ status });
+    const expected = { status: 409, code: 'VERSION_NOT_EDITABLE' };
     await expect(createAssignment(sql, planner, SCHEDULE, VERSION, {
       employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00',
-    })).rejects.toMatchObject({ status: 409, code: 'VERSION_NOT_EDITABLE' });
+    })).rejects.toMatchObject(expected);
     await expect(updateAssignment(sql, planner, SCHEDULE, VERSION, ASSIGNMENT, { location: 'Nope' }))
-      .rejects.toMatchObject({ status: 409, code: 'VERSION_NOT_EDITABLE' });
+      .rejects.toMatchObject(expected);
     await expect(deleteAssignment(sql, planner, SCHEDULE, VERSION, ASSIGNMENT))
-      .rejects.toMatchObject({ status: 409, code: 'VERSION_NOT_EDITABLE' });
+      .rejects.toMatchObject(expected);
   });
 
   it('rejects an assignment outside an area planner scope', async () => {

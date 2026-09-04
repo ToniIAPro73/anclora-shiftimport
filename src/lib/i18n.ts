@@ -166,6 +166,9 @@ const translations: Record<Locale, TranslationTree> = {
       confirmPublish: 'Confirmar publicación',
       publishedNotice: 'Planificación publicada: {{count}} turnos añadidos al calendario.',
       publishedWithExclusions: 'Planificación publicada: {{created}} turnos añadidos; {{excluded}} excluidos por empleado inactivo.',
+      createNewVersion: 'Crear nueva versión',
+      creatingNewVersion: 'Creando nueva versión…',
+      newVersionCreated: 'Nueva versión creada como borrador.',
     },
     shiftModal: {
       titleNew: 'Programar Turno',
@@ -1182,6 +1185,9 @@ const translations: Record<Locale, TranslationTree> = {
       confirmPublish: 'Confirm publication',
       publishedNotice: 'Schedule published: {{count}} shifts added to the calendar.',
       publishedWithExclusions: 'Schedule published: {{created}} shifts added; {{excluded}} excluded for inactive employees.',
+      createNewVersion: 'Create new version',
+      creatingNewVersion: 'Creating new version…',
+      newVersionCreated: 'New version created as a draft.',
     },
     shiftModal: {
       titleNew: 'Schedule Shift',

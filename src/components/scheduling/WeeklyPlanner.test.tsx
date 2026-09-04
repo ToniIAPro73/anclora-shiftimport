@@ -16,6 +16,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     listRemoteScheduleVersions: vi.fn(),
     loadRemoteScheduleSnapshot: vi.fn(),
     createRemoteScheduleDraft: vi.fn(),
+    createRemoteScheduleDraftFromVersion: vi.fn(),
     createRemoteAssignment: vi.fn(),
     updateRemoteAssignment: vi.fn(),
     deleteRemoteAssignment: vi.fn(),
@@ -113,6 +114,7 @@ describe('WeeklyPlanner', () => {
 
     await waitFor(() => expect(screen.getByTestId('weekly-planner')).toHaveAttribute('data-state', 'disabled'));
     expect(screen.getByText('Solo lectura')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Crear nueva versión' })).toBeEnabled();
     expect(screen.queryByRole('button', { name: /Añadir turno para/ })).toBeNull();
     expect(screen.getByRole('button', { name: /09:00/ })).toBeDisabled();
   });
@@ -189,5 +191,22 @@ describe('WeeklyPlanner', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar publicación' }));
     await waitFor(() => expect(remote.publishRemoteScheduleVersion).toHaveBeenCalledWith('schedule-1', 'version-1'));
+  });
+
+  it('creates a new draft from a published version and hides the action once the draft is active', async () => {
+    const published = version({ status: 'PUBLISHED' });
+    const draft = version({ id: 'version-2', versionNumber: 2, status: 'DRAFT' });
+    mockedList.mockResolvedValueOnce([published]).mockResolvedValueOnce([draft]);
+    mockedLoad.mockResolvedValueOnce(snapshot({ version: published })).mockResolvedValueOnce(snapshot({ version: draft }));
+    vi.mocked(remote.createRemoteScheduleDraftFromVersion).mockResolvedValue({
+      newVersionId: 'version-2', scheduleId: 'schedule-1', versionNumber: 2, copiedAssignmentCount: 1,
+    });
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Crear nueva versión' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Crear nueva versión' }));
+    await waitFor(() => expect(remote.createRemoteScheduleDraftFromVersion).toHaveBeenCalledWith('schedule-1', 'version-1'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Crear nueva versión' })).toBeNull());
+    expect(screen.getByText('Borrador editable')).toBeInTheDocument();
   });
 });

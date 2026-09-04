@@ -84,6 +84,13 @@ export interface SchedulePublicationResult {
   excludedAssignmentCount: number;
 }
 
+export interface NewScheduleDraftResult {
+  newVersionId: string;
+  scheduleId: string;
+  versionNumber: number;
+  copiedAssignmentCount: number;
+}
+
 export interface ImportHistoryFilters {
   page?: number;
   pageSize?: number;
@@ -217,6 +224,16 @@ export async function publishRemoteScheduleVersion(
 ): Promise<SchedulePublicationResult> {
   return apiFetch<SchedulePublicationResult>(
     `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/publish`,
+    { method: 'POST' },
+  );
+}
+
+export async function createRemoteScheduleDraftFromVersion(
+  scheduleId: string,
+  versionId: string,
+): Promise<NewScheduleDraftResult> {
+  return apiFetch<NewScheduleDraftResult>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/new-draft`,
     { method: 'POST' },
   );
 }

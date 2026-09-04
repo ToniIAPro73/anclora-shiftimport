@@ -203,6 +203,54 @@ test('planner publishes atomically and excludes an employee deactivated before p
   await page.getByRole('button', { name: 'Salir' }).click();
 });
 
+test('planner forks a published version into an independent draft', async ({ page }) => {
+  await loginAs(page, fixture.emails.planner);
+  const headers = { 'x-organization-id': fixture.orgA };
+  const scheduleResponse = await page.request.post('/api/schedules', {
+    headers,
+    data: { areaId: fixture.areaA, periodStart: '2026-11-09' },
+  });
+  expect(scheduleResponse.status()).toBe(201);
+  const schedule = await scheduleResponse.json();
+  const assignmentUrl = `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/assignments`;
+  const created = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-11-10', startTime: '09:00', endTime: '17:00', location: 'Copied' },
+  });
+  expect(created.status()).toBe(201);
+
+  const published = await page.request.post(
+    `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/publish`, { headers },
+  );
+  expect(published.status()).toBe(200);
+
+  const forked = await page.request.post(
+    `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/new-draft`, { headers },
+  );
+  expect(forked.status()).toBe(201);
+  const newDraft = await forked.json();
+  expect(newDraft).toMatchObject({
+    scheduleId: schedule.scheduleId, versionNumber: 2, copiedAssignmentCount: 1,
+  });
+  const sourceSnapshot = await page.request.get(
+    `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}`, { headers },
+  );
+  const draftSnapshot = await page.request.get(
+    `/api/schedules/${schedule.scheduleId}/versions/${newDraft.newVersionId}`, { headers },
+  );
+  expect((await sourceSnapshot.json()).version.status).toBe('PUBLISHED');
+  expect((await draftSnapshot.json()).assignments).toEqual([
+    expect.objectContaining({ location: 'Copied', employeeId: fixture.empA1 }),
+  ]);
+
+  const conflict = await page.request.post(
+    `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/new-draft`, { headers },
+  );
+  expect(conflict.status()).toBe(409);
+  expect(await conflict.json()).toMatchObject({ code: 'SCHEDULE_DRAFT_EXISTS', draftVersionId: newDraft.newVersionId });
+  await page.getByRole('button', { name: 'Salir' }).click();
+});
+
 test('planner can open the weekly UI and create an empty draft', async ({ page }) => {
   await loginAs(page, fixture.emails.planner);
   await expect(page.getByRole('button', { name: 'Planificar' })).toBeVisible();

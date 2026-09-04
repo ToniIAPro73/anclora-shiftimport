@@ -531,6 +531,115 @@ export async function createScheduleDraft(sql, ctx, input = {}) {
   };
 }
 
+/** Creates an independent DRAFT from a published or terminal version. */
+export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  }
+  const scope = resolveAccessScope(ctx);
+  const newVersionId = randomUUID();
+  const isAreaScoped = scope.type === 'AREA';
+  const scopedAreaId = isAreaScoped ? scope.areaId : null;
+
+  let transactionResult;
+  try {
+    transactionResult = await sql.transaction((txn) => [txn`
+      WITH target AS MATERIALIZED (
+        SELECT sv.id AS version_id, sv.schedule_id, sv.status,
+               s.organization_id, s.area_id
+        FROM schedule_versions sv
+        JOIN schedules s ON s.id = sv.schedule_id
+        WHERE sv.id = ${versionId}
+          AND sv.schedule_id = ${scheduleId}
+          AND s.organization_id = ${ctx.organizationId}
+        FOR UPDATE
+      ),
+      draft_conflict AS MATERIALIZED (
+        SELECT existing.id AS draft_version_id
+        FROM schedule_versions existing
+        JOIN target t ON t.schedule_id = existing.schedule_id
+        WHERE existing.status = 'DRAFT'
+        ORDER BY existing.version_number
+        LIMIT 1
+      ),
+      next_version AS (
+        SELECT t.schedule_id, t.status, t.area_id,
+               COALESCE(MAX(sv.version_number), 0) + 1 AS version_number,
+               (SELECT draft_version_id FROM draft_conflict) AS draft_version_id
+        FROM target t
+        LEFT JOIN schedule_versions sv ON sv.schedule_id = t.schedule_id
+        GROUP BY t.schedule_id, t.status, t.area_id
+      ),
+      created AS (
+        INSERT INTO schedule_versions
+          (id, schedule_id, version_number, status, created_by_user_id)
+        SELECT ${newVersionId}, n.schedule_id, n.version_number, 'DRAFT', ${ctx.user.id}
+        FROM next_version n
+        WHERE n.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+          AND n.draft_version_id IS NULL
+          AND (${isAreaScoped} = FALSE OR n.area_id = ${scopedAreaId})
+        RETURNING id, schedule_id, version_number
+      ),
+      copied AS (
+        INSERT INTO shift_assignments
+          (schedule_version_id, employee_id, date, start_time, end_time, location)
+        SELECT c.id, sa.employee_id, sa.date, sa.start_time, sa.end_time, sa.location
+        FROM shift_assignments sa
+        JOIN target t ON t.version_id = sa.schedule_version_id
+        JOIN created c ON TRUE
+        RETURNING id
+      )
+      SELECT
+        EXISTS (SELECT 1 FROM target) AS found,
+        (SELECT status FROM target LIMIT 1) AS current_status,
+        (SELECT area_id FROM target LIMIT 1) AS area_id,
+        (SELECT draft_version_id FROM draft_conflict LIMIT 1) AS draft_version_id,
+        (SELECT id FROM created LIMIT 1) AS new_version_id,
+        (SELECT schedule_id FROM created LIMIT 1) AS schedule_id,
+        (SELECT version_number FROM created LIMIT 1) AS version_number,
+        (SELECT COUNT(*)::integer FROM copied) AS copied_assignment_count
+    `]);
+  } catch (error) {
+    if (error?.code === '23505') {
+      const conflict = new HttpError(409, 'A draft already exists for this schedule');
+      conflict.code = 'SCHEDULE_DRAFT_EXISTS';
+      throw conflict;
+    }
+    throw error;
+  }
+
+  const outcome = transactionResult?.[0]?.[0];
+  if (!outcome?.found) throw new HttpError(404, 'Schedule version not found');
+  if (scope.type === 'AREA' && outcome.area_id !== scope.areaId) throw scheduleScopeError();
+  if (outcome.current_status === 'DRAFT') {
+    const error = new HttpError(409, 'Only a published version can create a new draft');
+    error.code = 'VERSION_NOT_PUBLISHED';
+    throw error;
+  }
+  if (!['PUBLISHED', 'LOCKED', 'COMPLETED'].includes(outcome.current_status)) {
+    const error = new HttpError(409, 'Schedule version cannot create a new draft');
+    error.code = 'VERSION_NOT_EDITABLE';
+    throw error;
+  }
+  if (outcome.draft_version_id) {
+    const error = new HttpError(409, 'A draft already exists for this schedule');
+    error.code = 'SCHEDULE_DRAFT_EXISTS';
+    error.draftVersionId = outcome.draft_version_id;
+    throw error;
+  }
+  if (!outcome.new_version_id) {
+    throw new HttpError(409, 'Schedule version cannot create a new draft');
+  }
+
+  return {
+    newVersionId: outcome.new_version_id,
+    scheduleId: outcome.schedule_id,
+    versionNumber: Number(outcome.version_number),
+    copiedAssignmentCount: Number(outcome.copied_assignment_count ?? 0),
+  };
+}
+
 /**
  * Publishes one draft and materializes its active assignments as historical
  * shifts. Neon HTTP transactions are non-interactive, so validation,
