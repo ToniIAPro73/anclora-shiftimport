@@ -106,6 +106,14 @@ test.describe('§11 import integrity E2E (real PDF)', () => {
     expect(created, 'employee 30394 must exist in the org after the CSV import').toBeTruthy();
     expect(created.name).toBe(TARGET_NAME);
 
+    // R2 employee lifecycle: CSV-created employees start pending_access. Link
+    // the pre-provisioned test account through the authenticated ADMIN API so
+    // the employee becomes active before imported shifts are accepted.
+    const linkResponse = await page.request.patch('/api/employees', {
+      data: { id: created.id, userId: fixture.freshTargetId },
+    });
+    expect(linkResponse.status()).toBe(200);
+
     await page.keyboard.press('Escape'); // close MembersModal
 
     // ---- Fase C: import the real September PDF (team roster flow) ----

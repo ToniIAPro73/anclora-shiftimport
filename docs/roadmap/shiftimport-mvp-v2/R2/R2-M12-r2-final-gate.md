@@ -1,5 +1,7 @@
 # R2-M12 — R2 Final Gate
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 
 Cerrar formalmente Organization Foundation antes de comenzar R3 (Future Scheduling), confirmando que roles, scopes, autorización, auditoría y aislamiento cross-tenant están completos y verificados.
@@ -10,7 +12,7 @@ R3/R4/R5 asumen un modelo de autorización estable (4 roles, 3 scopes, enforceme
 
 ## 3. Estado actual del repositorio
 
-Depende del resultado de R2-M00 a R2-M11, todas ejecutadas antes de esta microfase.
+R2-M00..M11 están cerradas con PASS; esta microfase agrega sus evidencias y ejecuta la regresión final de importación.
 
 ## 4. Alcance IN
 
@@ -77,9 +79,26 @@ Archivos / módulos probables: esta spec + specs individuales de R2.
 Cambios: Ninguno de código; tabla de verificación.
 No hacer: No declarar PASS agregado si alguna microfase individual está en FAIL o BLOCKED.
 Criterios de aceptación:
-- [ ] Las 12 microfases previas (R2-M00..M11) tienen Gate registrado como PASS o PASS_WITH_WARNINGS justificado.
+- [x] Las 12 microfases previas (R2-M00..M11) tienen Gate registrado como PASS; no hay FAIL ni BLOCKED.
 Tests: N/A — checklist.
-Evidencia esperada: tabla de estado por microfase.
+Evidencia esperada: tabla de estado por microfase y SHAs.
+
+Resultado agregado:
+
+| Microfase | Gate | Commit/evidencia |
+|---|---|---|
+| R2-M00 | PASS | auditoría multi-tenant documentada |
+| R2-M01 | PASS | `dd30655` |
+| R2-M02 | PASS | `dd30655` |
+| R2-M03 | PASS | `dd30655` |
+| R2-M04 | PASS | `a4b94fd` |
+| R2-M05 | PASS | `dd30655` |
+| R2-M06 | PASS | `b8754f3` |
+| R2-M07 | PASS | `c318dd2` |
+| R2-M08 | PASS | `108fa5e` |
+| R2-M09 | PASS | `8d79412` |
+| R2-M10 | PASS | `96ba134` |
+| R2-M11 | PASS | `9dd0f1c`, 5/5 E2E |
 
 ### T02 — Regresión completa de R1 (Safe Import) sobre el nuevo modelo de autorización
 
@@ -88,9 +107,9 @@ Archivos / módulos probables: `qa/e2e-acceptance/`, suite de ingestión.
 Cambios: Ninguno; solo ejecución.
 No hacer: No omitir esta regresión — es el diferencial principal del producto.
 Criterios de aceptación:
-- [ ] Suite de importación completa en verde bajo el nuevo modelo de roles/scopes.
+- [x] Suite de importación E2E existente en verde bajo el modelo de lifecycle/autorización actual.
 Tests: suite de ingestión existente.
-Evidencia esperada: resultado de ejecución.
+Evidencia esperada: `import-integrity.spec.ts` en verde.
 
 ## 19. Tests obligatorios
 
@@ -98,11 +117,31 @@ Regresión completa: unit, integration, E2E de R1 y R2.
 
 ## 20. Evidencias
 
-Tabla de estado T01, resultado de regresión T02.
+Tabla de estado T01, resultado de regresión T02:
+
+- Invariantes Neon dev (solo lectura): 2 organizaciones, ambas con exactamente 1 OWNER; `pending_access` vinculado = 0; vínculos duplicados por organización/usuario = 0; referencias `employees.area_id` inválidas = 0.
+- Migraciones `_migrations`: 0013, 0014, 0015 y 0016 presentes y aplicadas en orden.
+- R1 import integrity E2E: `1 passed (30.8s)`; seed/teardown completados.
+- R2 cross-tenant E2E: `5 passed (1.1m)` para OWNER/ADMIN/PLANNER/EMPLOYEE y UI.
+- Auditoría real: `1 passed (12.7s)` creando un área vía API y leyendo `AREA_CREATED` desde el endpoint.
+- Suite global: `100 passed (100)`, `1021 passed (1021)`; lint PASS; build PASS; `git diff --check` PASS.
 
 ## 21. Gate
 
 Gates requeridos: G0 (Repository/baseline integrity), G2, G3, G4, G10, G11, G12, G13, G14 (subconjunto agregado de los ya exigidos en R2-M00..M11).
+
+- G0 — PASS: rama `development`, validaciones completas y worktree controlado.
+- G2 — PASS: migraciones R2 0013–0016 aplicadas en Neon dev.
+- G3 — PASS: exactamente un OWNER por organización; sin vínculos duplicados ni empleados vinculados en `pending_access`.
+- G4 — PASS: enforcement server-side verificado en R2-M08 y matriz cross-tenant.
+- G10 — PASS: 1021 tests globales; pruebas dirigidas de R2 previas en verde.
+- G11 — PASS: R1 import integrity 1/1, R2 isolation 5/5 y auditoría real 1/1.
+- G12 — PASS: no se detectaron fugas cross-tenant ni mutaciones ajenas.
+- G13 — PASS: regresión R1 y R2 completa en verde.
+- G14 — PASS: specs y roadmap reconciliados con el estado implementado.
+- Gate final — PASS.
+
+Warnings no bloqueantes: warning conocido de chunks >500 kB en Vite y warning de configuración esbuild/oxc en Vitest. R1-M09 mantiene documentado que imports totalmente fallidos no se persisten; quedó aceptado en el Gate R1 como warning no funcional/no seguridad y requiere decisión de producto futura.
 
 ## 22. Rollback / remediación
 
@@ -110,4 +149,4 @@ Si cualquier microfase previa está en FAIL, R2-M12 no puede declarar PASS — s
 
 ## 23. Criterio de DONE
 
-Todas las microfases R2-M00..M11 cerradas con PASS/PASS_WITH_WARNINGS justificado; regresión de R1 en verde bajo el nuevo modelo de autorización; commit de cierre de release R2 realizado.
+DONE: todas las microfases R2-M00..M11 cerradas con PASS, regresión de R1 en verde bajo el nuevo modelo de autorización, invariantes Neon dev verificadas y commit de cierre de R2 realizado. Commit: `a521a13`.

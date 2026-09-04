@@ -43,6 +43,7 @@ export default async function globalSetup() {
   const empId = await mkUser('emp@e2e.test', 'E2E Uno');
   const multiId = await mkUser('multi@e2e.test', 'E2E Multi');
   const freshId = await mkUser('fresh@e2e.test', 'E2E Fresh');
+  const freshTargetId = await mkUser('fresh-target@e2e.test', 'E2E Import Target');
   const unlinkedId = await mkUser('unlinked@e2e.test', 'E2E Sin Vínculo');
   const ownerId = await mkUser('owner@e2e.test', 'E2E Owner');
   const plannerId = await mkUser('planner@e2e.test', 'E2E Planner');
@@ -55,6 +56,7 @@ export default async function globalSetup() {
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${multiId}, ${orgA}, 'EMPLOYEE')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${multiId}, ${orgB}, 'ADMIN')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${freshId}, ${orgFresh}, 'ADMIN')`;
+  await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${freshTargetId}, ${orgFresh}, 'EMPLOYEE')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${unlinkedId}, ${orgA}, 'EMPLOYEE')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${ownerId}, ${orgA}, 'OWNER')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role, scoped_area_id) VALUES (${plannerId}, ${orgA}, 'PLANNER', ${areaA})`;
@@ -98,7 +100,7 @@ export default async function globalSetup() {
   writeFileSync(FIXTURE_PATH, JSON.stringify({
     password: PASSWORD,
     orgA, orgB, orgFresh,
-    adminId, empId, multiId, freshId, unlinkedId, ownerId, plannerId, ownerBId, plannerBId, employeeBId,
+    adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, plannerId, ownerBId, plannerBId, employeeBId,
     empA1, empA2, empFresh, empB1, areaA, areaB, importB, shiftB,
     orgAName: 'E2E Org A',
     orgBName: 'E2E Org B',
@@ -107,6 +109,7 @@ export default async function globalSetup() {
       emp: 'emp@e2e.test',
       multi: 'multi@e2e.test',
       fresh: 'fresh@e2e.test',
+      freshTarget: 'fresh-target@e2e.test',
       unlinked: 'unlinked@e2e.test',
       owner: 'owner@e2e.test',
       planner: 'planner@e2e.test',
