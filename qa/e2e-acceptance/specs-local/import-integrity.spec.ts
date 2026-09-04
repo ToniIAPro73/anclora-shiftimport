@@ -37,7 +37,6 @@ const TARGET_NAME = 'Casero Bosquet, Ana Maria';
 // Ground truth: manually read off the real PDF, day 1-15 (see
 // src/ingestion/fixtures/real/expected/september-2026.expected.json).
 const EXPECTED_TIMED_DAYS = 8; // 4,5,6,7,8,13,14,15 — always timed regardless of DL handling
-const EXPECTED_DL_DAYS = 7; // 1,2,3,9,10,11,12
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -142,11 +141,24 @@ test.describe('§11 import integrity E2E (real PDF)', () => {
     const { shifts } = await shiftsResponse.json();
     const septemberShifts = shifts.filter((s: { date: string }) => s.date.startsWith('2026-09'));
 
+    // Since R3-M14, future timed rows are planned assignments rather than
+    // historical shifts. Read the drafts as the second half of the same
+    // reconciliation, without treating future LIBRE markers as assignments.
+    const schedulesResponse = await page.request.get('/api/schedules');
+    expect(schedulesResponse.status()).toBe(200);
+    const schedules = (await schedulesResponse.json()).schedules as Array<{ scheduleId: string; id: string }>;
+    const plannedSeptember = (await Promise.all(schedules.map(async (schedule) => {
+      const snapshotResponse = await page.request.get(`/api/schedules/${schedule.scheduleId}/versions/${schedule.id}`);
+      expect(snapshotResponse.status()).toBe(200);
+      return (await snapshotResponse.json()).assignments as Array<{ employeeId: string; date: string; startTime: string; endTime: string }>;
+    }))).flat().filter((assignment) => assignment.employeeId === created.id && assignment.date.startsWith('2026-09'));
+
     // ---- Fase F: reconcile PDF vs persisted ----
     const timedShifts = septemberShifts.filter((s: { startTime: string }) => s.startTime !== '');
-    expect(timedShifts.length, 'all 8 timed days (4-8,13-15) must be persisted, none silently dropped').toBe(EXPECTED_TIMED_DAYS);
+    const timedRows = [...timedShifts, ...plannedSeptember];
+    expect(timedRows.length, 'all 8 timed days (4-8,13-15) must be persisted in history or drafts').toBe(EXPECTED_TIMED_DAYS);
 
-    const byDate = new Map(timedShifts.map((s: { date: string; startTime: string; endTime: string }) => [s.date, s]));
+    const byDate = new Map(timedRows.map((s: { date: string; startTime: string; endTime: string }) => [s.date, s]));
     const expectedTimes: Record<string, { start: string; end: string }> = {
       '2026-09-04': { start: '14:00', end: '22:00' },
       '2026-09-05': { start: '17:00', end: '01:00' },
@@ -169,8 +181,16 @@ test.describe('§11 import integrity E2E (real PDF)', () => {
     // pdf-team-import.ts). The sample is roster[0] (PDF order), independent
     // of which employees exist in this org, so it's deterministic across
     // runs for this fixed PDF — confirmed by direct run: 7/7.
-    const dlDays = septemberShifts.length - timedShifts.length;
-    expect(dlDays, 'all 7 DL days (1,2,3,9,10,11,12) must be persisted as rest shifts, none silently dropped').toBe(EXPECTED_DL_DAYS);
-    expect(septemberShifts.length, 'total September shifts must equal all 15 source days — expected == persisted').toBe(EXPECTED_TIMED_DAYS + EXPECTED_DL_DAYS);
+    const expectedHistoricalDlDays = [1, 2, 3, 9, 10, 11, 12]
+      .map((day) => `2026-09-${String(day).padStart(2, '0')}`)
+      .filter((date) => date <= new Date().toISOString().slice(0, 10));
+    const historicalDlDates = septemberShifts
+      .filter((s: { startTime: string }) => s.startTime === '')
+      .map((s: { date: string }) => s.date)
+      .sort();
+    expect(historicalDlDates, 'historical DL days remain persisted as rest shifts').toEqual(expectedHistoricalDlDays);
+    expect(septemberShifts.length + plannedSeptember.length, 'history plus drafts contains every persistable source day').toBe(
+      EXPECTED_TIMED_DAYS + expectedHistoricalDlDays.length,
+    );
   });
 });

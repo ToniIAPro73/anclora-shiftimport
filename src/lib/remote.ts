@@ -63,6 +63,7 @@ export interface SchedulingEmployee {
 export interface ShiftAssignment {
   id: string;
   scheduleVersionId: string;
+  importId?: string | null;
   employeeId: string;
   date: string;
   startTime: string;
@@ -82,6 +83,30 @@ export interface SchedulePublicationResult {
   createdShiftCount: number;
   excludedAssignments: Array<{ assignmentId: string; employeeId: string }>;
   excludedAssignmentCount: number;
+}
+
+export interface FutureImportResult {
+  classification: 'FUTURE' | 'MIXED';
+  cutoff: string;
+  importId: string;
+  deduplicated: boolean;
+  historical: { submittedCount: number; persistedCount: number; deletedCount: number };
+  future: {
+    submittedCount: number;
+    createdAssignmentCount: number;
+    existingAssignmentCount: number;
+    draftCount: number;
+    createdDraftCount: number;
+    drafts: Array<{
+      scheduleId: string;
+      scheduleVersionId: string;
+      versionNumber: number;
+      periodStart: string;
+      periodEnd: string;
+      areaId: string | null;
+    }>;
+  };
+  import: RemoteImport;
 }
 
 export interface NewScheduleDraftResult {
@@ -444,6 +469,26 @@ export async function createRemoteImport(input: {
     body: JSON.stringify(input),
   });
   return payload.import;
+}
+
+export async function confirmRemoteFutureImport(input: {
+  fileName: string;
+  sourceFormat: string;
+  fileFingerprint: string;
+  employeeId: string;
+  shifts: Array<Pick<Shift, 'id' | 'date' | 'startTime' | 'endTime' | 'location' | 'origin' | 'sourceFormat'> & { employeeId?: string; areaId?: string | null }>;
+  deleteIds?: string[];
+  periodYear: number | null;
+  periodMonth: number | null;
+  areaId?: string | null;
+  importMode?: 'individual' | 'team';
+  periodKind?: 'single' | 'multi';
+  periodLabel?: string;
+}): Promise<FutureImportResult> {
+  return apiFetch<FutureImportResult>('/api/imports/confirm-split', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 /** Org-scoped import history, paginated. Read access follows the same

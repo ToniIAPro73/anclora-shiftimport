@@ -19,10 +19,12 @@ import {
   switchOrganization,
   completeOnboarding,
   isAdminRole,
+  ApiError,
   SessionInfo,
 } from './lib/session';
 import {
   createRemoteEmployee,
+  confirmRemoteFutureImport,
   createRemoteImport,
   listRemoteAreas,
   listRemoteEmployees,
@@ -908,9 +910,16 @@ function App() {
       return false;
     }
 
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const futureUpserts = upserts.filter((shift) => shift.date > todayIso);
+    const historicalUpserts = upserts.filter((shift) => shift.date <= todayIso);
+    const requiresPlanningImport = futureUpserts.length > 0;
+
     // The import record represents a write, so register it only after the
     // duplicate/conflict reconciliation has produced actual upserts.
-    if (session && upserts.length > 0 && !importId) {
+    // FUTURE/MIXED is registered by the single transactional endpoint below;
+    // creating its history row here would break all-or-nothing semantics.
+    if (session && upserts.length > 0 && !importId && !requiresPlanningImport) {
       try {
         const created = await createRemoteImport({
           fileName: fileName ?? '',
@@ -938,8 +947,8 @@ function App() {
     // reconciliation comes back PASS, whether that's discovered on the
     // happy path or re-derived in the catch block below after a request
     // that rejected but still committed server-side.
-    const applySuccessTail = () => {
-      setShifts(working);
+    const applySuccessTail = (nextShifts = working) => {
+      setShifts(nextShifts);
       const visiblePeriod = targetPeriod.kind === 'single'
         ? targetPeriod
         : targetPeriod.periods[0] ?? { month: currentMonth, year: currentYear };
@@ -956,6 +965,47 @@ function App() {
 
     try {
       if (session && targetEmployeeId) {
+        if (requiresPlanningImport) {
+          const futureResult = await confirmRemoteFutureImport({
+            fileName: fileName ?? '',
+            sourceFormat: newShifts[0]?.sourceFormat ?? '',
+            fileFingerprint: fileFingerprint ?? '',
+            employeeId: targetEmployeeId,
+            shifts: upserts.map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
+            deleteIds,
+            periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
+            periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
+            areaId: areaId ?? null,
+            importMode: 'individual',
+            periodKind: targetPeriod.kind,
+            periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
+          });
+          const persisted = historicalUpserts.length > 0
+            ? await loadRemoteShifts(targetEmployeeId)
+            : [];
+          const reconciliation = historicalUpserts.length > 0
+            ? reconcileImport(historicalUpserts, persisted)
+            : null;
+          if (reconciliation?.status === 'FAIL') {
+            console.error('Mixed import reconciliation FAILED', { ...futureResult, employeeId: targetEmployeeId, reconciliation });
+            setImportResult(reconciliation);
+            return false;
+          }
+          if (reconciliation) setImportResult(reconciliation);
+          if (targetEmployeeId !== selectedEmployeeId) {
+            setSelectedEmployeeId(targetEmployeeId);
+          }
+          const localHistoricalWorking = working.filter(
+            (shift) => !futureUpserts.some((incoming) => incoming.id === shift.id),
+          );
+          window.alert(t('importModal.futureImportConfirmed', {
+            assignments: futureResult.future.submittedCount,
+            drafts: futureResult.future.draftCount,
+          }));
+          applySuccessTail(localHistoricalWorking);
+          return true;
+        }
+
         const { saved } = await syncRemoteShifts(targetEmployeeId, { upserts, deleteIds, importId });
         const reconciliation = reconcileImport(upserts, saved);
         if (reconciliation.status === 'FAIL') {
@@ -977,6 +1027,18 @@ function App() {
       return true;
     } catch (error) {
       console.error('Failed to persist imported shifts', error);
+      if (requiresPlanningImport) {
+        if (error instanceof ApiError && error.code === 'FUTURE_IMPORT_REQUIRES_PLANNING') {
+          window.alert(t('importConflict.futurePlanningRequired'));
+        } else {
+          window.alert(t('importConflict.importSaveFailed'));
+        }
+        // The server endpoint is one transaction: an error means the
+        // history, draft and assignments were all rolled back. Do not run
+        // the historical recovery path, which could misrepresent a partial
+        // mixed import as successful.
+        return false;
+      }
       // A mid-batch failure (e.g. a plan-limit check tripping on shift N of
       // M) can leave 1..N-1 already committed server-side even though this
       // call rejected — telling the user "nothing was saved" here would

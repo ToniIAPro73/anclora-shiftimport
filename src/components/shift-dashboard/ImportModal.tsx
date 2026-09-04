@@ -349,6 +349,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const importAlreadyExists = importDiff.unchanged.length > 0
     && importDiff.new.length === 0
     && importDiff.changed.length === 0;
+  const temporalSummary = useMemo(() => {
+    const cutoff = new Date().toISOString().slice(0, 10);
+    const ready = parsedShifts.filter(hasImportableShiftData);
+    return {
+      historical: ready.filter((shift) => shift.date <= cutoff).length,
+      future: ready.filter((shift) => shift.date > cutoff).length,
+    };
+  }, [parsedShifts]);
 
   const selectedContext = useMemo<CalendarImportContext | undefined>(
     () => selectedPeriod === 'multi' ? undefined : {
@@ -1350,6 +1358,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 {importDiff.new.length > 0 && <span>{t('importModal.diffNew', { count: importDiff.new.length })}</span>}
                 {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
                 {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
+                {temporalSummary.historical > 0 && <span data-testid="import-historical-count">{t('importModal.temporalHistorical', { count: temporalSummary.historical })}</span>}
+                {temporalSummary.future > 0 && <span data-testid="import-future-count">{t('importModal.temporalFutureDraft', { count: temporalSummary.future })}</span>}
               </div>
             )}
 

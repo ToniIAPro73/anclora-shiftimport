@@ -36,8 +36,8 @@ const csvBuffer = Buffer.from([
 
 const uiCsvBuffer = Buffer.from([
   'fecha,inicio,fin,tipo,empleado',
-  '2026-09-20,08:00,16:00,regular,E2E Uno',
-  '2026-09-21,08:00,16:00,regular,E2E Uno',
+  '2026-08-20,08:00,16:00,regular,E2E Uno',
+  '2026-08-21,08:00,16:00,regular,E2E Uno',
 ].join('\n'));
 
 test('anonymous CSV preview cannot confirm or write local/remote data', async ({ page }) => {
@@ -164,11 +164,11 @@ test('authenticated user can import the CSV in the UI and repeating it creates n
 
   await importCsvThroughUi();
   const first = await page.request.get(`/api/shifts?employeeId=${fixture.empA1}`);
-  const firstRows = (await first.json()).shifts.filter((shift: { date: string }) => ['2026-09-20', '2026-09-21'].includes(shift.date));
+  const firstRows = (await first.json()).shifts.filter((shift: { date: string }) => ['2026-08-20', '2026-08-21'].includes(shift.date));
   expect(firstRows).toHaveLength(2);
 
   await importCsvThroughUi(true);
   const second = await page.request.get(`/api/shifts?employeeId=${fixture.empA1}`);
-  const secondRows = (await second.json()).shifts.filter((shift: { date: string }) => ['2026-09-20', '2026-09-21'].includes(shift.date));
+  const secondRows = (await second.json()).shifts.filter((shift: { date: string }) => ['2026-08-20', '2026-08-21'].includes(shift.date));
   expect(secondRows).toHaveLength(2);
 });

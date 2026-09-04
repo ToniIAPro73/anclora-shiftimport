@@ -17,6 +17,7 @@ import {
   createRemoteEmployee,
   updateRemoteEmployee,
   bulkCreateRemoteEmployees,
+  confirmRemoteFutureImport,
   BulkCreateResult,
   createRemoteImport,
   syncRemoteShifts,
@@ -667,38 +668,78 @@ export const TeamImportModal = ({
     const monthNames = tl('calendar.months');
     const fileFingerprint = sourceFile ? await fingerprintFile(sourceFile) : undefined;
 
-    // Sequential, best-effort per employee: one employee's failure never
-    // blocks the rest, and never rolls back what already succeeded (Fase
-    // 1.2F.8 partial-failure strategy — no cross-employee transaction).
-    for (const entry of preview) {
-      try {
-        if (entry.newShifts.length > 0) {
-          const period = periodOf(entry.newShifts[0].date);
-          const created = await createRemoteImport({
-            fileName: sourceFile?.name ?? '',
-            sourceFormat,
-            fileFingerprint,
-            employeeId: entry.row.resolvedEmployeeId,
-            periodYear: period.year,
-            periodMonth: period.month,
-            areaId: importAreaId ?? null,
-            importMode: 'team',
-            periodKind: 'single',
-            periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
-            employeeCount: 1,
-            shiftCount: entry.newCount + entry.conflictCount + entry.unchangedCount,
-            createdShiftCount: entry.newCount,
-            existingShiftCount: entry.unchangedCount,
-          });
-          await syncRemoteShifts(entry.row.resolvedEmployeeId as string, {
-            upserts: entry.newShifts,
-            importId: created.id,
-          });
-        }
+    const cutoff = new Date().toISOString().slice(0, 10);
+    const hasFutureData = preview.some((entry) => entry.newShifts.some((shift) => shift.date > cutoff));
+    if (hasFutureData) {
+      // A team file containing any future row is one atomic import. The
+      // backend classifies every row and rejects the whole request when the
+      // effective planning capability/scope is insufficient.
+      const submitted = preview.flatMap((entry) => entry.newShifts
+        // A future day without actual times (e.g. a LIBRE marker) has no
+        // schedulable assignment representation. Historical rows retain the
+        // legacy blank-time behavior; future timed rows go to the draft.
+        .filter((shift) => shift.date <= cutoff || (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.startTime) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.endTime)))
+        .map((shift) => ({
+        ...shift,
+        employeeId: entry.row.resolvedEmployeeId as string,
+        areaId: importAreaId ?? null,
+        })));
+      const firstPeriod = periodOf(submitted[0].date);
+      const periodKeys = new Set(submitted.map((shift) => {
+        const period = periodOf(shift.date);
+        return `${period.year}-${period.month}`;
+      }));
+      const futureResult = await confirmRemoteFutureImport({
+        fileName: sourceFile?.name ?? '',
+        sourceFormat,
+        fileFingerprint: fileFingerprint ?? '',
+        employeeId: [...new Set(submitted.map((shift) => shift.employeeId))].sort()[0],
+        shifts: submitted,
+        areaId: importAreaId ?? null,
+        importMode: 'team',
+        periodKind: periodKeys.size > 1 ? 'multi' : 'single',
+        periodYear: firstPeriod.year,
+        periodMonth: firstPeriod.month,
+        periodLabel: periodKeys.size > 1
+          ? t('importModal.multiPeriod')
+          : `${monthNames[firstPeriod.month] ?? firstPeriod.month} ${firstPeriod.year}`,
+      });
+      for (const entry of preview) {
         results.push({ row: entry.row, ok: true, created: entry.newShifts.length });
-      } catch (err) {
-        console.error('Team import failed for employee', entry.row.name, err);
-        results.push({ row: entry.row, ok: false, created: 0 });
+      }
+      console.info('Atomic future team import confirmed', futureResult);
+    } else {
+      // Historical-only team imports retain their established behavior.
+      for (const entry of preview) {
+        try {
+          if (entry.newShifts.length > 0) {
+            const period = periodOf(entry.newShifts[0].date);
+            const created = await createRemoteImport({
+              fileName: sourceFile?.name ?? '',
+              sourceFormat,
+              fileFingerprint,
+              employeeId: entry.row.resolvedEmployeeId,
+              periodYear: period.year,
+              periodMonth: period.month,
+              areaId: importAreaId ?? null,
+              importMode: 'team',
+              periodKind: 'single',
+              periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
+              employeeCount: 1,
+              shiftCount: entry.newCount + entry.conflictCount + entry.unchangedCount,
+              createdShiftCount: entry.newCount,
+              existingShiftCount: entry.unchangedCount,
+            });
+            await syncRemoteShifts(entry.row.resolvedEmployeeId as string, {
+              upserts: entry.newShifts,
+              importId: created.id,
+            });
+          }
+          results.push({ row: entry.row, ok: true, created: entry.newShifts.length });
+        } catch (err) {
+          console.error('Team import failed for employee', entry.row.name, err);
+          results.push({ row: entry.row, ok: false, created: 0 });
+        }
       }
     }
       setOutcomes(results);

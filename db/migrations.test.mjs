@@ -11,6 +11,7 @@ const schedulesMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 
 const scheduleVersionsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0018_schedule_versions.sql');
 const shiftAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0019_shift_assignments.sql');
 const shiftScheduleVersionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0020_shifts_schedule_version.sql');
+const shiftAssignmentImportMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0021_shift_assignments_import_id.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -143,5 +144,21 @@ describe('0020 shifts schedule version migration contract', () => {
   it('adds an idempotent provenance lookup index', async () => {
     const sql = await readFile(shiftScheduleVersionMigrationPath, 'utf8');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shifts_schedule_version_idx');
+  });
+});
+
+describe('0021 shift assignment import provenance migration contract', () => {
+  it('adds only the nullable assignment-to-import provenance FK', async () => {
+    const sql = await readFile(shiftAssignmentImportMigrationPath, 'utf8');
+    const executableSql = sql.replace(/--.*$/gm, '');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS import_id UUID');
+    expect(sql).toContain('REFERENCES imports (id) ON DELETE SET NULL');
+    expect(executableSql).not.toContain('schedule_version_id');
+    expect(executableSql).not.toContain('CREATE TABLE import_schedule');
+  });
+
+  it('adds an idempotent provenance lookup index', async () => {
+    const sql = await readFile(shiftAssignmentImportMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_import_idx');
   });
 });

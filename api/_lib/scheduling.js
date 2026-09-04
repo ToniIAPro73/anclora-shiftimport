@@ -224,6 +224,7 @@ function mapAssignment(row) {
     id: row.id,
     scheduleVersionId: row.schedule_version_id,
     employeeId: row.employee_id,
+    importId: row.import_id ?? null,
     date: databaseDateToIso(row.date),
     startTime: String(row.start_time).slice(0, 5),
     endTime: String(row.end_time).slice(0, 5),
@@ -379,7 +380,7 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
     `;
   const assignmentQuery = scopedAreaId
     ? sql`
-      SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
+      SELECT sa.id, sa.schedule_version_id, sa.import_id, sa.employee_id, sa.date,
              sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
@@ -390,7 +391,7 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
       ORDER BY sa.date, sa.start_time, sa.employee_id, sa.id
     `
     : sql`
-      SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
+      SELECT sa.id, sa.schedule_version_id, sa.import_id, sa.employee_id, sa.date,
              sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id

@@ -56,7 +56,7 @@ export async function recordAuditEvent(sql, ctx, {
   }
 }
 
-function normalizeShiftInput(raw) {
+export function normalizeShiftInput(raw) {
   return {
     id: String(raw?.id ?? '').trim() || null,
     employeeId: String(raw?.employeeId ?? '').trim(),
@@ -76,9 +76,10 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function importContextFingerprint({ sourceFormat, periodYear, periodMonth, importMode, periodKind, areaId }) {
+export function importContextFingerprint({ sourceFormat, periodYear, periodMonth, importMode, periodKind, areaId, employeeIds = [] }) {
   return sha256([
     sourceFormat, periodYear ?? '', periodMonth ?? '', importMode, periodKind, areaId ?? 'global',
+    [...employeeIds].sort().join(','),
   ].join('\u001f'));
 }
 
@@ -95,7 +96,7 @@ function mapEmployeeRow(row) {
   };
 }
 
-function mapImportRow(row) {
+export function mapImportRow(row) {
   return {
     id: row.id,
     organizationId: row.organization_id,
