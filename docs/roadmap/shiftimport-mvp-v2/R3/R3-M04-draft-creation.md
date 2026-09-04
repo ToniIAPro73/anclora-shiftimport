@@ -100,4 +100,4 @@ Resultado ejecutado: **PASS**.
 Si el Gate falla por bug de autorización: no exponer el endpoint sin fix — revertir el commit del endpoint antes que dejarlo accesible sin guard correcto.
 
 ## 23. Criterio de DONE
-Endpoint operativo, guards verificados por test, Gate G4+G5+G10 PASS. Commit: `aac8adf`.
+Endpoint operativo, guards verificados por test, Gate G4+G5+G10 PASS. Implementación: `4df1a5c`.
