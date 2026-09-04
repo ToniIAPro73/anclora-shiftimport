@@ -93,8 +93,8 @@ No hacer:
 No modificar queries en esta microfase — cualquier gap encontrado se traslada a R2-M08/R2-M11 como hallazgo, no se corrige aquí.
 
 Criterios de aceptación:
-- [ ] Tabla de verificación completa para las 6 tablas de negocio.
-- [ ] Cualquier gap identificado documentado con archivo:línea.
+- [x] Tabla de verificación completa para las 6 tablas de negocio (ver sección 20).
+- [x] Cualquier gap identificado documentado con archivo:línea — ninguno encontrado.
 
 Tests:
 N/A — auditoría de lectura de código, no de ejecución.
@@ -110,6 +110,19 @@ N/A — motivo: microfase de auditoría documental sin cambios ejecutables.
 
 - Extracto de `00-BASELINE.md` sección "Modelo DB".
 - Tabla de verificación producida en T01.
+
+### Tabla de verificación T01
+
+| Tabla | `organization_id NOT NULL` | Migración | Scoping confirmado en `api/_lib/data.js` |
+|---|---|---|---|
+| `memberships` | ✅ | `0001_init.sql:26` | `:458-459`, `:517`, `:672`, `:724`, `:732` (INSERT), `:1002` — todas con `WHERE organization_id = ${ctx.organizationId}` |
+| `employees` | ✅ | `0001_init.sql:40` | Verificado exhaustivamente en R1-M02 (`bulkCreateEmployees`, líneas 330-332) |
+| `imports` | ✅ | `0001_init.sql:59` | Verificado exhaustivamente en R1-M09/R1-M10 (`listImports`, `deleteImport`) |
+| `shifts` | ✅ | `0001_init.sql:74` | Verificado exhaustivamente en R1-M08/R1-M10 (`upsertShifts`, `deleteImport`) |
+| `areas` | ✅ | `0008_areas_optional.sql:9` | `assertAreaInOrg` (`:133-141`), `resolveAreaIdByName` (`:149-159`) — ambas con `WHERE ... organization_id = ${ctx.organizationId}` |
+| `format_profiles` | ✅ | `0009_format_profiles.sql:11` | Verificado exhaustivamente en R1-M01 (`createCandidateFormatProfile` y todas las transiciones de estado) |
+
+**Ningún gap encontrado.** Las 6 tablas de negocio tienen `organization_id NOT NULL` a nivel de esquema y todo acceso revisado (directamente en esta microfase o heredado de la verificación exhaustiva de R1) filtra por `ctx.organizationId`. Consistente con el criterio de R2-M00: no se corrige nada aquí (no hay nada que corregir); la verificación E2E dedicada de aislamiento cross-tenant queda, como estaba previsto, en R2-M11.
 
 ## 21. Gate
 
