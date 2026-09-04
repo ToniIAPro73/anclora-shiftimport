@@ -233,6 +233,141 @@ function mapAssignment(row) {
   };
 }
 
+function mapScheduleVersion(row) {
+  return {
+    id: row.version_id,
+    scheduleId: row.schedule_id,
+    areaId: row.area_id ?? null,
+    versionNumber: row.version_number,
+    status: row.status,
+    periodStart: databaseDateToIso(row.period_start),
+    periodEnd: databaseDateToIso(row.period_end),
+    createdAt: row.created_at,
+    publishedAt: row.published_at ?? null,
+  };
+}
+
+function mapSchedulingEmployee(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    externalEmployeeId: row.external_employee_id ?? null,
+    areaId: row.area_id ?? null,
+  };
+}
+
+function schedulingScopeAreaId(ctx, requestedAreaId = null) {
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'AREA') {
+    if (requestedAreaId && requestedAreaId !== scope.areaId) {
+      throw scheduleScopeError();
+    }
+    return scope.areaId;
+  }
+  return requestedAreaId || null;
+}
+
+/** Lists the latest version for each tenant-scoped schedule for draft discovery. */
+export async function listScheduleVersions(sql, ctx, { areaId = null } = {}) {
+  requireRole(ctx, 'PLANNER');
+  const scopedAreaId = schedulingScopeAreaId(ctx, areaId);
+  const rows = scopedAreaId
+    ? await sql`
+      SELECT s.id AS schedule_id, s.area_id, s.period_start, s.period_end,
+             sv.id AS version_id, sv.version_number, sv.status,
+             sv.created_at, sv.published_at
+      FROM schedules s
+      JOIN LATERAL (
+        SELECT id, version_number, status, created_at, published_at
+        FROM schedule_versions
+        WHERE schedule_id = s.id
+        ORDER BY version_number DESC
+        LIMIT 1
+      ) sv ON TRUE
+      WHERE s.organization_id = ${ctx.organizationId}
+        AND s.area_id = ${scopedAreaId}
+      ORDER BY s.period_start DESC, s.id
+    `
+    : await sql`
+      SELECT s.id AS schedule_id, s.area_id, s.period_start, s.period_end,
+             sv.id AS version_id, sv.version_number, sv.status,
+             sv.created_at, sv.published_at
+      FROM schedules s
+      JOIN LATERAL (
+        SELECT id, version_number, status, created_at, published_at
+        FROM schedule_versions
+        WHERE schedule_id = s.id
+        ORDER BY version_number DESC
+        LIMIT 1
+      ) sv ON TRUE
+      WHERE s.organization_id = ${ctx.organizationId}
+      ORDER BY s.period_start DESC, s.id
+    `;
+  return rows.map(mapScheduleVersion);
+}
+
+/** Reads one schedule version and the scoped active roster for the planner grid. */
+export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
+  requireRole(ctx, 'PLANNER');
+  const rows = await sql`
+    SELECT sv.id AS version_id, sv.schedule_id, sv.version_number, sv.status,
+           sv.created_at, sv.published_at,
+           s.organization_id, s.area_id, s.period_start, s.period_end
+    FROM schedule_versions sv
+    JOIN schedules s ON s.id = sv.schedule_id
+    WHERE sv.id = ${versionId}
+      AND sv.schedule_id = ${scheduleId}
+      AND s.organization_id = ${ctx.organizationId}
+  `;
+  if (rows.length === 0) throw new HttpError(404, 'Schedule version not found');
+  const schedule = rows[0];
+  const scopedAreaId = schedulingScopeAreaId(ctx, schedule.area_id ?? null);
+  const employeeQuery = scopedAreaId
+    ? sql`
+      SELECT id, name, external_employee_id, area_id
+      FROM employees
+      WHERE organization_id = ${ctx.organizationId}
+        AND status = 'active'
+        AND area_id = ${scopedAreaId}
+      ORDER BY name ASC, id
+    `
+    : sql`
+      SELECT id, name, external_employee_id, area_id
+      FROM employees
+      WHERE organization_id = ${ctx.organizationId}
+        AND status = 'active'
+      ORDER BY name ASC, id
+    `;
+  const assignmentQuery = scopedAreaId
+    ? sql`
+      SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
+             sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
+      FROM shift_assignments sa
+      JOIN employees e ON e.id = sa.employee_id
+      WHERE sa.schedule_version_id = ${versionId}
+        AND e.organization_id = ${ctx.organizationId}
+        AND e.status = 'active'
+        AND e.area_id = ${scopedAreaId}
+      ORDER BY sa.date, sa.start_time, sa.employee_id, sa.id
+    `
+    : sql`
+      SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
+             sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
+      FROM shift_assignments sa
+      JOIN employees e ON e.id = sa.employee_id
+      WHERE sa.schedule_version_id = ${versionId}
+        AND e.organization_id = ${ctx.organizationId}
+        AND e.status = 'active'
+      ORDER BY sa.date, sa.start_time, sa.employee_id, sa.id
+    `;
+  const [employeeRows, assignmentRows] = await Promise.all([employeeQuery, assignmentQuery]);
+  return {
+    version: mapScheduleVersion(schedule),
+    employees: employeeRows.map(mapSchedulingEmployee),
+    assignments: assignmentRows.map(mapAssignment),
+  };
+}
+
 export async function createAssignment(sql, ctx, scheduleId, versionId, input = {}) {
   requireRole(ctx, 'PLANNER');
   const schedule = await loadScheduleVersion(sql, ctx, scheduleId, versionId);

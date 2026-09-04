@@ -51,6 +51,7 @@ import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryMo
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
+import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
 import { AuthScreen } from './components/AuthScreen';
 import { ForgotPasswordScreen } from './components/ForgotPasswordScreen';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
@@ -1008,6 +1009,17 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (!authResolved || route !== '/app/schedule') {
+      return;
+    }
+    if (!session) {
+      navigate('/login');
+    } else if (session.role === 'EMPLOYEE' || needsOrgChoice) {
+      navigate('/app');
+    }
+  }, [authResolved, needsOrgChoice, route, session]);
+
   if (legalPath === 'privacy' || legalPath === 'terms' || legalPath === 'legal') {
     return (
       <>
@@ -1108,7 +1120,7 @@ function App() {
   // the first session resolution is in flight, `session === null` would
   // otherwise be misread as "guest" and flash the operational UI (and its
   // guest chrome) before the authenticated state lands.
-  if (!authResolved && route === '/app') {
+  if (!authResolved && (route === '/app' || route === '/app/schedule')) {
     return (
       <>
         <div className="container" role="status" style={{ padding: '48px 16px', color: 'var(--text-muted)' }}>
@@ -1131,6 +1143,22 @@ function App() {
       && !session.employeeId && employees.length === 0,
   );
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
+  const plannerAreaId = session?.role === 'PLANNER'
+    ? (activeMembership?.scopedAreaId ?? null)
+    : effectiveAreaId;
+
+  if (route === '/app/schedule' && authResolved && session && session.role !== 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete) {
+    return (
+      <>
+        <WeeklyPlanner
+          areaId={plannerAreaId}
+          canEdit={session.role === 'OWNER' || session.role === 'ADMIN' || session.role === 'PLANNER'}
+          onBack={() => navigate('/app')}
+        />
+        <CookieConsent />
+      </>
+    );
+  }
 
   return (
     <div className={`container${isImporting || isSavingShift ? ' app--busy' : ''}`} aria-busy={isImporting || isSavingShift}>
@@ -1327,6 +1355,16 @@ function App() {
                 style={{ padding: '6px 12px', fontWeight: 700 }}
               >
                 {t('areas.manage')}
+              </button>
+            )}
+            {session.role !== 'EMPLOYEE' && (
+              <button
+                type="button"
+                className="btn-gold"
+                onClick={() => { if (!isImporting) navigate('/app/schedule'); }}
+                style={{ padding: '6px 12px', minHeight: '36px', fontWeight: 800 }}
+              >
+                {t('planner.navLabel')}
               </button>
             )}
             <button

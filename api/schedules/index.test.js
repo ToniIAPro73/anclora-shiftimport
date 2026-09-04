@@ -120,8 +120,8 @@ describe('POST /api/schedules', () => {
 
 describe('schedule endpoint methods', () => {
   it('rejects unsupported methods', async () => {
-    const res = await call('GET');
+    const res = await call('PATCH');
     expect(res.statusCode).toBe(405);
-    expect(res.headers.allow).toBe('POST');
+    expect(res.headers.allow).toBe('GET, POST');
   });
 });

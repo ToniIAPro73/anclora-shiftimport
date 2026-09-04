@@ -152,3 +152,19 @@ test('planner enforces 11 hours of rest and accepts the exact boundary', async (
   await page.request.delete(`${assignmentUrl}/${boundary.assignment.id}`, { headers });
   await page.getByRole('button', { name: 'Salir' }).click();
 });
+
+test('planner can open the weekly UI and create an empty draft', async ({ page }) => {
+  await loginAs(page, fixture.emails.planner);
+  await expect(page.getByRole('button', { name: 'Planificar' })).toBeVisible();
+  await page.getByRole('button', { name: 'Planificar' }).click();
+  await expect(page).toHaveURL(/\/app\/schedule$/);
+  await expect(page.getByRole('heading', { name: 'Planificador semanal' })).toBeVisible();
+  await expect(page.getByText('Todavía no hay un borrador para esta semana')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Crear borrador semanal' }).click();
+  await expect(page.getByRole('table')).toBeVisible();
+  await expect(page.getByRole('rowheader', { name: /E2E Uno/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Volver al calendario' }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await page.getByRole('button', { name: 'Salir' }).click();
+});

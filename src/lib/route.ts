@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
-export type Route = '/' | '/pricing' | '/login' | '/signup' | '/forgot-password' | '/reset-password' | '/app';
+export type Route = '/' | '/pricing' | '/login' | '/signup' | '/forgot-password' | '/reset-password' | '/app' | '/app/schedule';
 
-const KNOWN_ROUTES: Route[] = ['/', '/pricing', '/login', '/signup', '/forgot-password', '/reset-password', '/app'];
+const KNOWN_ROUTES: Route[] = ['/', '/pricing', '/login', '/signup', '/forgot-password', '/reset-password', '/app', '/app/schedule'];
 
 /**
  * Fase 1.2A public/private routing. Unknown paths (including legacy deep

@@ -1,5 +1,7 @@
 # R3-M08 — Weekly Planner UI
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 UI para que un PLANNER cree/edite un draft de planificación semanal (grid empleado × día) usando los endpoints de R3-M04/M05/M06/M07.
 
@@ -7,7 +9,7 @@ UI para que un PLANNER cree/edite un draft de planificación semanal (grid emple
 Primera superficie visual del dominio Scheduling — sin ella, Scheduling solo es utilizable vía API directa.
 
 ## 3. Estado actual del repositorio
-MISSING. **Bloqueada por R0-M05**: hoy no existe split de routing — `src/App.tsx` aloja todo el dashboard post-login, `src/pages/` solo tiene `LandingPage.tsx`/`PricingPage.tsx`. Esta microfase NO puede empezar hasta que R0-M05 esté en Gate PASS con una decisión de enrutado tomada.
+PARTIAL / IMPLEMENTED. R0-M05 confirmó que el router hand-rolled `src/lib/route.ts` ya existe y debe extenderse incrementalmente; no se instala React Router. La vista nueva se integra en `/app/schedule`.
 
 ## 4. Alcance IN
 - Vista semanal: filas = empleados del área/organización, columnas = días de la semana del `Schedule`.
@@ -19,7 +21,7 @@ MISSING. **Bloqueada por R0-M05**: hoy no existe split de routing — `src/App.t
 Publicación (R3-M10 — botón existe aquí pero la lógica de publicar vive en esa microfase). Vista alternativa accesible en tabla (R3-M09, componente hermano).
 
 ## 6. Dependencias
-**R0-M05 (bloqueante)**, R3-M04, R3-M05, R3-M06, R3-M07.
+R0-M05 (PASS), R3-M04, R3-M05, R3-M06, R3-M07.
 
 ## 7. Decisiones arquitectónicas
 Nuevo directorio `src/components/scheduling/` (no reutilizar `shift-dashboard/`, que es específico del histórico importado — mezclar draft-editing con la vista de histórico aumentaría el acoplamiento sin necesidad). Sigue el design system existente — antes de crear cualquier modal nuevo, revisar `ModalShell` y primitives ya existentes (§23 del prompt maestro).
@@ -28,10 +30,10 @@ Nuevo directorio `src/components/scheduling/` (no reutilizar `shift-dashboard/`,
 N/A — solo consumo de API existente.
 
 ## 9. API / Backend
-Consume `POST/PATCH/DELETE /api/schedules/.../assignments` (R3-M05) y `GET` (implícito, a añadir en esta microfase si no existe ya un GET de lectura de versión+assignments — confirmar y, si falta, añadirlo como parte de T01 de esta microfase, no como microfase nueva).
+Consume `GET /api/schedules`, `GET /api/schedules/:scheduleId/versions/:versionId` y `POST/PATCH/DELETE /api/schedules/.../assignments` (R3-M05). Todos los handlers aplican organization y scope en backend.
 
 ## 10. Frontend / UX
-Grid semanal responsive, con estados de carga/vacío/error siguiendo el patrón premium ya usado en `TeamImportModal`/`ImportModal` (feedback durante operaciones largas, sin layout shifts, §22 del prompt maestro).
+Grid semanal responsive, con estados de carga/vacío/error siguiendo el patrón premium ya usado en `TeamImportModal`/`ImportModal` (feedback durante operaciones largas, sin layout shifts, §22 del prompt maestro). El editor inline evita un modal paralelo y permite teclado, foco visible y scroll horizontal controlado.
 
 ## 11. Seguridad y autorización
 La UI oculta acciones de edición si el usuario no es PLANNER+, pero el backend (R3-M05/M13) es la barrera real — la UI nunca es la única autorización (§25 del prompt maestro).
@@ -56,13 +58,14 @@ N/A — UI nueva y aislada.
 
 ## 18. Tasks
 
-### T01 — Endpoint de lectura de versión + assignments (si falta)
+### T01 — Endpoint de lectura de versión + assignments y discovery
 Objetivo: `GET /api/schedules/:scheduleId/versions/:versionId` devolviendo versión + lista de assignments + empleados del área.
 Archivos / módulos probables: `api/schedules/[scheduleId]/versions/[versionId]/index.js`.
 Cambios: nuevo handler de lectura.
 No hacer: no mezclar con los endpoints de mutación de R3-M05.
 Criterios de aceptación:
-- [ ] Devuelve versión, assignments, y empleados activos del área/organización.
+- [x] `GET /api/schedules/:scheduleId/versions/:versionId` devuelve versión, assignments y empleados activos del área/organización.
+- [x] `GET /api/schedules` lista la última versión de cada schedule dentro del tenant y scope para que la UI pueda descubrir drafts.
 Tests: integración.
 Evidencia esperada: resultado de test.
 
@@ -72,9 +75,9 @@ Archivos / módulos probables: `src/components/scheduling/WeeklyPlanner.tsx` (nu
 Cambios: componente nuevo + hooks de datos.
 No hacer: no acoplar con `shift-dashboard/`.
 Criterios de aceptación:
-- [ ] Crear/editar/eliminar assignment desde la UI refleja el estado real del backend.
-- [ ] Errores 422/409/403 se muestran de forma diferenciada.
-- [ ] Estados loading/empty/error/disabled implementados.
+- [x] Crear/editar/eliminar assignment desde la UI refleja el estado real del backend.
+- [x] Errores 422/409/403 se muestran de forma diferenciada.
+- [x] Estados loading/empty/error/disabled implementados.
 Tests: component test (React Testing Library o equivalente ya usado en el repo).
 Evidencia esperada: test + captura de los 4 estados (loading/empty/error/disabled) en claro y oscuro.
 
@@ -84,21 +87,45 @@ Archivos / módulos probables: dependiente de la decisión de R0-M05 (a document
 Cambios: integración en el shell de navegación.
 No hacer: no introducir una librería de routing distinta a la decidida en R0-M05.
 Criterios de aceptación:
-- [ ] PLANNER+ puede navegar a la vista; EMPLOYEE no ve la entrada de menú (y el backend igualmente la rechaza si se accede directo).
+- [x] PLANNER+ puede navegar a `/app/schedule`; EMPLOYEE no ve la entrada de menú y el backend rechaza la lectura por rol.
 Tests: E2E básico de navegación (parte de R3-M15, aquí solo smoke test manual documentado).
 Evidencia esperada: captura de navegación funcionando.
 
 ## 19. Tests obligatorios
-`unit/component`, `accessibility` (básico), `responsive`.
+`unit/component`, `integration/API`, `accessibility` (básico), `responsive`, `E2E` smoke.
 
 ## 20. Evidencias
-Componente commiteado, tests en PASS, capturas dark/light/estados adjuntas.
+Implementación:
+- `api/_lib/scheduling.js`: discovery tenant/scope-scoped y snapshot de versión con empleados activos y assignments.
+- `api/schedules/index.js` + `api/schedules/[scheduleId]/versions/[versionId]/index.js`: lectura de drafts/versiones y snapshot autenticado.
+- `src/components/scheduling/WeeklyPlanner.tsx`: grid empleado × día, creación/edición/eliminación, estados loading/empty/error/disabled y traducciones ES/EN.
+- `src/App.tsx` + `src/lib/route.ts`: acceso PLANNER+ en `/app/schedule`; EMPLOYEE no recibe entrada de navegación.
+- `src/components/scheduling/WeeklyPlanner.test.tsx`: 5 tests de componente PASS.
+- `api/schedules/version.test.js`, `api/schedules/index.test.js`, `src/lib/route.test.ts`: tests API/routing PASS.
+- `qa/e2e-acceptance/specs-local/scheduling-draft.spec.ts`: 5/5 E2E PASS, incluyendo UI, scope AREA, edición/borrado, permisos EMPLOYEE y regla de descanso de 11 horas.
+
+Validación:
+- `npm test`: 104 archivos, 1048 tests PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS; warning conocido de chunks >500 kB.
+- `git diff --check`: PASS.
+- `agent-browser` contra `http://localhost:3199`: ruta `/app/schedule`, grid renderizado, tema claro/oscuro, ES/EN y viewport 390px verificados.
+- axe 4.12.1: 0 violations; los elementos `incomplete` restantes corresponden al gradiente global cuyo fondo no puede inferirse automáticamente.
+- Responsive: a 390px `document.documentElement.scrollWidth === clientWidth === body.scrollWidth`; la tabla permanece operable dentro de su región desplazable.
 
 ## 21. Gate
-Gates requeridos: **G6** (UX/UI), **G9** (Responsive/temas). BLOCKED si R0-M05 no está en PASS.
+Gates requeridos: **G6** (UX/UI), **G9** (Responsive/temas), con G4/G10/G11 como soporte de la superficie conectada.
+
+Resultado ejecutado: **PASS**.
+
+- G4 — PASS: lectura y mutaciones pasan por API autenticada y scoped; la UI no es la única barrera.
+- G6 — PASS: grid operativo, feedback de operaciones, estados diferenciados, foco visible y editor inline sin modal paralelo.
+- G9 — PASS: dark/light, ES/EN y responsive 390px verificados con navegador.
+- G10 — PASS: suite unitaria/API completa, lint, build y diff check PASS.
+- G11 — PASS: 5/5 E2E con `vercel dev` y Neon development.
 
 ## 22. Rollback / remediación
 Si el Gate falla por accesibilidad/responsive: no commitear hasta corregir — es una microfase con impacto visible directo al usuario final PLANNER.
 
 ## 23. Criterio de DONE
-R0-M05 en PASS, grid operativo con los 3 tasks completos, estados verificados en ambos temas y responsive, Gate G6+G9 PASS.
+R0-M05 en PASS, grid operativo con los 3 tasks completos, estados verificados en ambos temas y responsive, Gate G6+G9 PASS. Commit de implementación pendiente de registro.

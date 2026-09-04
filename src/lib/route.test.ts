@@ -8,6 +8,7 @@ describe('resolveRoute', () => {
     expect(resolveRoute('/login')).toBe('/login');
     expect(resolveRoute('/signup')).toBe('/signup');
     expect(resolveRoute('/app')).toBe('/app');
+    expect(resolveRoute('/app/schedule')).toBe('/app/schedule');
   });
 
   it('strips a trailing slash before matching', () => {

@@ -41,6 +41,41 @@ export interface RemoteImport {
   deduplicated?: boolean;
 }
 
+export interface ScheduleVersion {
+  id: string;
+  scheduleId: string;
+  areaId: string | null;
+  versionNumber: number;
+  status: 'DRAFT' | 'PUBLISHED' | 'LOCKED' | 'COMPLETED';
+  periodStart: string;
+  periodEnd: string;
+  createdAt?: string;
+  publishedAt?: string | null;
+}
+
+export interface SchedulingEmployee {
+  id: string;
+  name: string;
+  externalEmployeeId: string | null;
+  areaId: string | null;
+}
+
+export interface ShiftAssignment {
+  id: string;
+  scheduleVersionId: string;
+  employeeId: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string | null;
+}
+
+export interface ScheduleSnapshot {
+  version: ScheduleVersion;
+  employees: SchedulingEmployee[];
+  assignments: ShiftAssignment[];
+}
+
 export interface ImportHistoryFilters {
   page?: number;
   pageSize?: number;
@@ -91,6 +126,87 @@ export async function loadRemoteShifts(employeeId: string): Promise<Shift[]> {
     `/api/shifts?employeeId=${encodeURIComponent(employeeId)}`,
   );
   return payload.shifts.map(toShift);
+}
+
+export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {
+  const query = areaId ? `?areaId=${encodeURIComponent(areaId)}` : '';
+  const payload = await apiFetch<{ schedules: ScheduleVersion[] }>(`/api/schedules${query}`);
+  return payload.schedules;
+}
+
+export async function createRemoteScheduleDraft(input: {
+  periodStart: string;
+  areaId?: string | null;
+}): Promise<ScheduleVersion> {
+  const payload = await apiFetch<{
+    scheduleId: string;
+    scheduleVersionId: string;
+    versionNumber: number;
+    status: ScheduleVersion['status'];
+  }>('/api/schedules', {
+    method: 'POST',
+    body: JSON.stringify({ periodStart: input.periodStart, areaId: input.areaId ?? undefined }),
+  });
+  return {
+    id: payload.scheduleVersionId,
+    scheduleId: payload.scheduleId,
+    areaId: input.areaId ?? null,
+    versionNumber: payload.versionNumber,
+    status: payload.status,
+    periodStart: input.periodStart,
+    periodEnd: addDaysToIso(input.periodStart, 6),
+  };
+}
+
+export async function loadRemoteScheduleSnapshot(
+  scheduleId: string,
+  versionId: string,
+): Promise<ScheduleSnapshot> {
+  return apiFetch<ScheduleSnapshot>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}`,
+  );
+}
+
+export async function createRemoteAssignment(
+  scheduleId: string,
+  versionId: string,
+  input: Pick<ShiftAssignment, 'employeeId' | 'date' | 'startTime' | 'endTime' | 'location'>,
+): Promise<ShiftAssignment> {
+  const payload = await apiFetch<{ assignment: ShiftAssignment }>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/assignments`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );
+  return payload.assignment;
+}
+
+export async function updateRemoteAssignment(
+  scheduleId: string,
+  versionId: string,
+  assignmentId: string,
+  input: Partial<Pick<ShiftAssignment, 'employeeId' | 'date' | 'startTime' | 'endTime' | 'location'>>,
+): Promise<ShiftAssignment> {
+  const payload = await apiFetch<{ assignment: ShiftAssignment }>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/assignments/${encodeURIComponent(assignmentId)}`,
+    { method: 'PATCH', body: JSON.stringify(input) },
+  );
+  return payload.assignment;
+}
+
+export async function deleteRemoteAssignment(
+  scheduleId: string,
+  versionId: string,
+  assignmentId: string,
+): Promise<void> {
+  await apiFetch<void>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/assignments/${encodeURIComponent(assignmentId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+function addDaysToIso(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 /**
