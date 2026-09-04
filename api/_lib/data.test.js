@@ -1225,7 +1225,19 @@ describe('bulk user provisioning + automatic linking (bulkAddMembers)', () => {
     expect(summary).toEqual({ created: 1, linked: 1, existing: 0, failed: 0 });
     expect(calls.some((c) => c.text.startsWith('INSERT INTO memberships'))).toBe(true);
     const link = calls.find((c) => c.text.startsWith('UPDATE employees'));
-    expect(link.values).toEqual([results[0].userId, EMP_A1, ORG_A]);
+    expect(link.values).toEqual([results[0].userId, 'active', null, EMP_A1, ORG_A]);
+  });
+
+  it('case A2: linking a pending_access employee auto-transitions it to active', async () => {
+    const { sql, calls } = makeFakeSql({
+      ...adminOnly(),
+      employees: [employeeRow(EMP_A1, ORG_A, { external_employee_id: 'X1', status: 'pending_access' })],
+    });
+    await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'nueva@example.com', name: 'Nueva', role: 'EMPLOYEE', externalEmployeeId: 'X1' },
+    ], fakeHash);
+    const link = calls.find((c) => c.text.startsWith('UPDATE employees'));
+    expect(link.values[1]).toBe('active');
   });
 
   it('case B: new email + empty external id -> creates user and membership, no link', async () => {

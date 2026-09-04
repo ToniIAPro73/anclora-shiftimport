@@ -912,11 +912,16 @@ export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
     const wasAlreadyLinked = Boolean(employee && employee.userId === userId);
     let justLinked = false;
     if (employee && employee.userId !== userId) {
+      // Mirrors the PENDING_ACCESS -> ACTIVE transition in the single-employee
+      // update path (see above): linking a user gives the employee access.
+      const newStatus = employee.status === 'pending_access' ? 'active' : employee.status;
+      const newDeactivatedAt = newStatus === 'active' ? null : employee.deactivatedAt ?? null;
       await sql`
-        UPDATE employees SET user_id = ${userId}, updated_at = NOW()
+        UPDATE employees
+        SET user_id = ${userId}, status = ${newStatus}, deactivated_at = ${newDeactivatedAt}, updated_at = NOW()
         WHERE id = ${employee.id} AND organization_id = ${ctx.organizationId}
       `;
-      employee = { ...employee, userId };
+      employee = { ...employee, userId, status: newStatus };
       employeeByUserId.set(userId, employee);
       if (row.externalEmployeeId) {
         employeesByExternalId.set(row.externalEmployeeId, employee);
