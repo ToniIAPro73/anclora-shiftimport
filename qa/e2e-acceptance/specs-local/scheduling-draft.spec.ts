@@ -63,3 +63,30 @@ test('employee cannot create a scheduling draft', async ({ page }) => {
   expect(response.status()).toBe(403);
   await page.getByRole('button', { name: 'Salir' }).click();
 });
+
+test('planner can create, edit, and delete a draft assignment', async ({ page }) => {
+  await loginAs(page, fixture.emails.planner);
+  const headers = { 'x-organization-id': fixture.orgA };
+  const scheduleResponse = await page.request.post('/api/schedules', {
+    headers,
+    data: { areaId: fixture.areaA, periodStart: '2026-09-28' },
+  });
+  expect(scheduleResponse.status()).toBe(201);
+  const schedule = await scheduleResponse.json();
+  const assignmentUrl = `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/assignments`;
+  const created = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk' },
+  });
+  expect(created.status()).toBe(201);
+  const assignment = await created.json();
+  const assignmentItemUrl = `${assignmentUrl}/${assignment.assignment.id}`;
+
+  const updated = await page.request.patch(assignmentItemUrl, { headers, data: { location: 'Lobby' } });
+  expect(updated.status()).toBe(200);
+  expect((await updated.json()).assignment.location).toBe('Lobby');
+
+  const deleted = await page.request.delete(assignmentItemUrl, { headers });
+  expect(deleted.status()).toBe(204);
+  await page.getByRole('button', { name: 'Salir' }).click();
+});
