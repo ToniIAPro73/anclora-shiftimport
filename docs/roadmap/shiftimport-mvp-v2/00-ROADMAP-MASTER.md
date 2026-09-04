@@ -55,7 +55,7 @@ Baseline shows R1 is the most mature area of the product. Most microfases below 
 | R2-M07 | ORGANIZATION / AREA / SELF Scopes | DONE — migration 0015, centralized resolver, scoped data queries and PLANNER UI | R2-M06 | 4 | G3, G4 |
 | R2-M08 | API Authorization Enforcement (server-side, never UI-only) | DONE — centralized authentication/context and endpoint inventory verified | R2-M07 | 6 | G4, G12 |
 | R2-M09 | Organization Audit Events | DONE — migration 0016, emission helper and OWNER/ADMIN endpoint | R2-M08 | 3 | G2, G10 |
-| R2-M10 | Onboarding Reconciliation | PARTIAL | R2-M01, R2-M06 | 3 | G6, G10 |
+| R2-M10 | Onboarding Reconciliation | DONE — onboarding crea OWNER y conserva la transacción existente | R2-M01, R2-M06 | 2 | G10 |
 | R2-M11 | Cross-Tenant Isolation E2E | PARTIAL — org_id scoping exists everywhere; dedicated isolation E2E unconfirmed | R2-M08 | 4 | G11, G12, G13 |
 | R2-M12 | R2 Final Gate | — | R2-M00..M11 | 1 | G0-G15 (subset per spec) |
 

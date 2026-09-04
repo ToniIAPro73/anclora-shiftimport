@@ -3,7 +3,7 @@ import { getSql, requireAuthenticatedContext, resolveContext } from '../_lib/aut
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * Unified onboarding: creates the organization, an ADMIN membership
+ * Unified onboarding: creates the organization, an OWNER membership
  * and optionally a self-linked Employee (when employeeName is provided).
  * Idempotency guard: a user with any existing membership has already
  * onboarded and cannot repeat this step.
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
       `,
       sql`
         INSERT INTO memberships (user_id, organization_id, role)
-        VALUES (${ctx.user.id}, ${organizationId}, 'ADMIN')
+        VALUES (${ctx.user.id}, ${organizationId}, 'OWNER')
       `,
     ];
     // Step 3: optional self-linked Employee ACTIVE
