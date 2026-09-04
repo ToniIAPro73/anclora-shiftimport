@@ -1074,7 +1074,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               >
                 {loading ? (
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 }}>
-                    <Loader2 size={18} style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }} />
+                    <Loader2 size={18} className="icon-spin" style={{ flexShrink: 0 }} />
                     {/* The VLM-analyzing label is a full sentence: it must
                         wrap and grow the button, never clip mid-word. */}
                     <span style={{ whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.3, minWidth: 0 }}>

@@ -1258,6 +1258,24 @@ button[aria-busy='true'] {
   to { transform: rotate(360deg); }
 }
 
+/* Reusable loading-icon spin (R1-M14): any inline spinner icon (Loader2,
+ * import progress, etc.) should use this class instead of an inline
+ * `style={{ animation: 'spin ...' }}` so prefers-reduced-motion is
+ * respected in one place. Slowed rather than removed under the reduced-
+ * motion preference — a busy indicator with zero motion no longer reads as
+ * "in progress", so this keeps the state legible while cutting the rate of
+ * continuous movement by 4x. */
+.icon-spin {
+  animation: spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-spin,
+  .app-operation-lock__spinner {
+    animation-duration: 4s;
+  }
+}
+
 @media (max-width: 1280px) {
   .totals-line-values {
     font-size: 0.58rem;
