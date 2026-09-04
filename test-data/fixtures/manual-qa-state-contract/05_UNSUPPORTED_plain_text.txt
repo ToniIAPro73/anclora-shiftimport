@@ -1,0 +1,10 @@
+ANCLORA SHIFTIMPORT QA FIXTURE
+
+This is deliberately a .txt file.
+It contains schedule-like data but TXT is outside the supported import contract.
+
+Employee: QA-UNSUPPORTED-01
+2026-10-05 08:00-16:00
+2026-10-06 08:00-16:00
+
+Expected state: UNSUPPORTED with a clear user-facing explanation.

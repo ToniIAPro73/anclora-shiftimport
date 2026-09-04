@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useI18n } from '../../lib/use-i18n';
 import type { PlanId } from '../../lib/plans';
@@ -30,6 +30,20 @@ import { UpgradePrompt } from './UpgradePrompt';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { detectImportFlow } from '../../ingestion/import-dispatcher';
 import { fingerprintFile } from '../../lib/file-fingerprint';
+import { analyzeDocumentFile, DocumentAnalysisResult, extractDocumentItems } from '../../ingestion/parsers/file';
+import { buildImportDiagnosis, diagnosisFromError, ImportDiagnosis } from '../../ingestion/diagnostics';
+import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
+import { EmployeeSelector } from '../../ingestion/core/row-detection';
+import { PdfTextItem } from '../../ingestion/core/text-items';
+import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
+import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
+
+/** No employee identity is known yet when the team-roster detectors can't
+ * classify the file — this selector only feeds the shared diagnosis
+ * pipeline (analyzeDocumentFile/buildImportDiagnosis), the same one
+ * ImportModal uses, so TeamImportModal never invents its own taxonomy for
+ * NEEDS_USER_INPUT/BLOCKED/FAILED. */
+const WILDCARD_SELECTOR: EmployeeSelector = { employeeName: '', employeeIdentifiers: [] };
 
 interface TeamImportModalProps {
   isOpen: boolean;
@@ -171,6 +185,17 @@ export const TeamImportModal = ({
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ created: number; existing: number; failed: number } | null>(null);
+  // Fallback diagnosis (single source of truth: analyzeDocumentFile +
+  // buildImportDiagnosis/diagnosisFromError, the same pipeline ImportModal
+  // uses) for whenever the team-roster-specific detectors above can't
+  // classify the file as a multi-employee roster. Without this, any file
+  // they can't parse — regardless of whether it's genuinely a broken team
+  // file, a real NEEDS_USER_INPUT/BLOCKED/FAILED case, or simply an
+  // unregistered PDF layout — collapsed into one generic uploadError.
+  const [fallbackDiagnosis, setFallbackDiagnosis] = useState<ImportDiagnosis | null>(null);
+  const [fallbackResult, setFallbackResult] = useState<DocumentAnalysisResult | null>(null);
+  const [fallbackAssistantSession, setFallbackAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
+  const fallbackFileRef = useRef<File | null>(null);
   const interactionLocked = importing || isImporting;
 
   useEffect(() => {
@@ -209,6 +234,9 @@ export const TeamImportModal = ({
     setBulkConfirmOpen(false);
     setBulkBusy(false);
     setBulkResult(null);
+    setFallbackDiagnosis(null);
+    setFallbackResult(null);
+    setFallbackAssistantSession(null);
   };
 
   const handleClose = () => {
@@ -219,9 +247,108 @@ export const TeamImportModal = ({
     onClose();
   };
 
+  /**
+   * Runs whenever the team-roster-specific detectors above can't classify a
+   * file (null detection, zero employees, or a thrown parse error). Instead
+   * of collapsing every one of those into the same generic uploadError, this
+   * routes the file through the exact same pipeline ImportModal uses
+   * (analyzeDocumentFile -> buildImportDiagnosis / diagnosisFromError) so
+   * NEEDS_USER_INPUT/BLOCKED/FAILED/PARTIAL are derived from the real
+   * ImportDiagnosis, never invented locally. No employee identity is known
+   * yet at this point, hence the wildcard selector — it only feeds the
+   * shared diagnosis, it never stands in for a resolved employee.
+   */
+  const runFallbackDiagnosis = async (file: File): Promise<void> => {
+    setFallbackAssistantSession(null);
+    try {
+      const result = await analyzeDocumentFile(file, WILDCARD_SELECTOR, undefined, undefined, {});
+      const diagnosis = buildImportDiagnosis(result);
+      setFallbackResult(result);
+      setFallbackDiagnosis(diagnosis);
+
+      if (diagnosis.recovery.eligible && diagnosis.recovery.strategy === 'answer-question' && result.questions.length > 0) {
+        try {
+          const items = await extractDocumentItems(file);
+          setFallbackAssistantSession({
+            items,
+            itemAnalysis: analyzeItemsForImport(items, result.context, WILDCARD_SELECTOR),
+          });
+        } catch (extractError) {
+          console.error('Team import fallback: assistant item extraction failed', extractError);
+        }
+        return;
+      }
+
+      if ((diagnosis.state === 'READY' || diagnosis.state === 'PARTIAL') && result.shifts.length > 0) {
+        // A single identifiable set of shifts came out of the shared
+        // pipeline after all (e.g. exactly one employee, just on a layout
+        // the team-roster scanner doesn't recognize) — resolve it against
+        // the org directory the same way every other detected row already
+        // is, instead of leaving a working file stuck on an error screen.
+        const match = await matchRemoteEmployee({ name: '', externalId: '' });
+        const employee: DetectedTeamEmployee = {
+          key: file.name,
+          externalEmployeeId: '',
+          name: '',
+          shifts: result.shifts,
+        };
+        setSourceFormat(result.kind === 'pdf' ? 'pdf' : result.kind === 'excel' ? 'xlsx' : 'csv');
+        setRows([{
+          key: employee.key,
+          externalEmployeeId: employee.externalEmployeeId,
+          name: employee.name,
+          detected: employee,
+          status: match.kind,
+          candidates: match.kind === 'recognized' ? [] : match.employees,
+          resolvedEmployeeId: match.kind === 'recognized' ? match.employees[0]?.id ?? null : null,
+          selected: false,
+          busy: false,
+        }]);
+        setStep('select');
+      }
+    } catch (err) {
+      setFallbackResult(null);
+      setFallbackDiagnosis(diagnosisFromError(err));
+    }
+  };
+
+  const handleFallbackAssistantComplete = async (completion: AssistantCompletion): Promise<void> => {
+    // The picked row's label is display-only (never persisted, same rule as
+    // EmployeeRowCandidate.label) — used here only to re-run the exact same
+    // org-directory matching every other detected roster row already goes
+    // through, never stored as-is.
+    const label = completion.rowLabel ?? '';
+    const match = await matchRemoteEmployee({ name: label, externalId: '' });
+    const employee: DetectedTeamEmployee = {
+      key: fallbackFileRef.current?.name ?? label,
+      externalEmployeeId: '',
+      name: label,
+      shifts: completion.shifts,
+    };
+    setRows([{
+      key: employee.key,
+      externalEmployeeId: employee.externalEmployeeId,
+      name: employee.name,
+      detected: employee,
+      status: match.kind,
+      candidates: match.kind === 'recognized' ? [] : match.employees,
+      resolvedEmployeeId: match.kind === 'recognized' ? match.employees[0]?.id ?? null : null,
+      selected: false,
+      busy: false,
+    }]);
+    setFallbackDiagnosis(null);
+    setFallbackAssistantSession(null);
+    setFallbackResult(null);
+    setStep('select');
+  };
+
   const handleFile = async (file: File) => {
     setSourceFile(file);
+    fallbackFileRef.current = file;
     setError('');
+    setFallbackDiagnosis(null);
+    setFallbackResult(null);
+    setFallbackAssistantSession(null);
     setLoading(true);
     setSheetSummaries([]);
     setRowDiagnostics([]);
@@ -285,7 +412,7 @@ export const TeamImportModal = ({
       }
 
       if (!detection || detectImportFlow(detection.employees) === 'blocked') {
-        setError(t('teamImport.uploadError'));
+        await runFallbackDiagnosis(file);
         return;
       }
       setSourceFormat(format);
@@ -332,7 +459,7 @@ export const TeamImportModal = ({
       setStep('select');
     } catch (err) {
       console.error('Team roster detection failed', err);
-      setError(t('teamImport.uploadError'));
+      await runFallbackDiagnosis(file);
     } finally {
       setLoading(false);
     }
@@ -607,6 +734,65 @@ export const TeamImportModal = ({
 
         {error && (
           <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
+        )}
+
+        {fallbackDiagnosis && (
+          <div
+            data-testid="team-import-fallback-diagnosis"
+            role="alert"
+            style={{
+              margin: '0 0 12px',
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: `1px solid ${fallbackDiagnosis.state === 'BLOCKED' || fallbackDiagnosis.state === 'FAILED' || fallbackDiagnosis.state === 'UNSUPPORTED' ? 'var(--danger-border)' : 'var(--glass-border)'}`,
+              background: fallbackDiagnosis.state === 'BLOCKED' || fallbackDiagnosis.state === 'FAILED' || fallbackDiagnosis.state === 'UNSUPPORTED' ? 'var(--danger-bg)' : 'var(--panel-muted-bg)',
+              fontSize: '0.85rem',
+              lineHeight: 1.5,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <span
+              data-testid="team-import-fallback-state"
+              style={{
+                ...STATE_CHIP_STYLES[fallbackDiagnosis.state],
+                alignSelf: 'flex-start',
+                borderRadius: '999px',
+                padding: '4px 12px',
+                fontSize: '0.72rem',
+                fontWeight: 800,
+              }}
+            >
+              {t(STATE_I18N_KEYS[fallbackDiagnosis.state])}
+            </span>
+            {fallbackDiagnosis.diagnostics.map((diagnostic, diagnosticIndex) => (
+              <p key={`${diagnostic.code}-${diagnosticIndex}`} style={{ margin: 0 }}>
+                {t(diagnostic.messageKey, diagnostic.details ?? {})}
+              </p>
+            ))}
+            {fallbackDiagnosis.diagnostics.length === 0 && (
+              <p style={{ margin: 0 }}>{t('teamImport.uploadError')}</p>
+            )}
+            {fallbackAssistantSession && fallbackResult && (
+              <div style={{ marginTop: '6px' }}>
+                <ProfileAssistantPanel
+                  questions={fallbackResult.questions}
+                  items={fallbackAssistantSession.items}
+                  context={fallbackResult.context}
+                  analysis={fallbackAssistantSession.itemAnalysis}
+                  table={fallbackResult.table ?? null}
+                  selector={WILDCARD_SELECTOR}
+                  onComplete={(completion) => void handleFallbackAssistantComplete(completion)}
+                  onCancel={() => {
+                    setFallbackDiagnosis(null);
+                    setFallbackAssistantSession(null);
+                    setFallbackResult(null);
+                  }}
+                />
+              </div>
+            )}
+          </div>
         )}
 
         {step === 'upload' && (

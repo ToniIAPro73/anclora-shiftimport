@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'fs';
+import { createRequire } from 'node:module';
+import { GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { detectTeamRoster } from '../../ingestion/team-roster';
 import * as remote from '../../lib/remote';
 import { RemoteArea, RemoteEmployee } from '../../lib/remote';
 import { TeamImportModal } from './TeamImportModal';
+
+// Node has no DOM Worker: point PDF.js at the legacy worker module resolved
+// from disk, same setup as src/ingestion/parsers/pdf.integration.test.ts.
+const require = createRequire(import.meta.url);
+GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.min.mjs');
 
 vi.mock('../../ingestion/team-roster', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../ingestion/team-roster')>();
@@ -472,5 +480,88 @@ describe('TeamImportModal — inactive employee awareness (Bloque E)', () => {
     await waitFor(() => expect(screen.getByText('Existente — Inactivo')).toBeTruthy());
     expect(screen.getByText('0 creados · 1 ya existentes · 0 errores')).toBeTruthy();
     expect((screen.getByLabelText('Ana Inactiva') as HTMLInputElement).disabled).toBe(true);
+  });
+});
+
+/**
+ * Regression for the 2026-09-04 reopened ingestion audit: manual UI testing
+ * against six real state-contract fixtures found TeamImportModal collapsing
+ * NEEDS_USER_INPUT (02), BLOCKED (04) and FAILED (06) into one identical
+ * generic `teamImport.uploadError` string — a second, disconnected
+ * taxonomy that never consulted ImportDiagnosis. These tests exercise the
+ * REAL fixture files (test-data/fixtures/manual-qa-state-contract/, copied
+ * verbatim from the manually-tested files) through the real, unmocked
+ * detection + analyzeDocumentFile/buildImportDiagnosis pipeline — no
+ * diagnosis mocks.
+ *
+ * Known gap (see FILES_CHANGED/REMAINING_GAPS in the remediation report):
+ * without a live `/api/ingestion/vlm` backend, the VLM visual fallback
+ * cannot run in this test environment, so 02 and 04 both resolve to the
+ * deterministic UNSUPPORTED diagnosis here rather than the
+ * NEEDS_USER_INPUT / BLOCKED-recoverable split their filenames name — that
+ * split is gated on VLM actually succeeding, only observable in a real
+ * authenticated session. What IS fully provable here, and is the concrete
+ * regression this covers: none of them show the old generic string, and 06
+ * (a genuine parse failure, not a layout the VLM could rescue) always
+ * reaches diagnosisFromError -> FAILED, which reads distinctly from both.
+ */
+describe('TeamImportModal — real fixture diagnosis fallback (state-contract re-audit)', () => {
+  const FIXTURES_DIR = `${__dirname}/../../../test-data/fixtures/manual-qa-state-contract`;
+
+  function realPdfFixture(name: string): File {
+    return new File([readFileSync(`${FIXTURES_DIR}/${name}`)], name, { type: 'application/pdf' });
+  }
+
+  beforeEach(() => {
+    // These tests exercise the real detectPdfTeamRoster/analyzeDocumentFile
+    // pipeline (unmocked) — matchRemoteEmployee is only reachable from the
+    // README/roster-row-construction branches, not the diagnosis-only ones
+    // below, but is stubbed defensively so a future branch change never
+    // hangs on an unmocked network call.
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+  });
+
+  it('02_NEEDS_USER_INPUT (real PDF, unregistered layout): never shows the old generic "not a team template" string', async () => {
+    renderTeamImportModal(() => {}, 'ADMIN');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [realPdfFixture('02_NEEDS_USER_INPUT_unknown_codes.pdf')] } });
+
+    const panel = await waitFor(() => screen.getByTestId('team-import-fallback-diagnosis'), { timeout: 10000 });
+    expect(panel.textContent).not.toContain('No se ha podido reconocer este archivo como una plantilla de equipo');
+    // Deterministic (no live VLM in this test env): honest UNSUPPORTED_LAYOUT
+    // diagnosis instead of the old false "not a team template" claim.
+    expect(screen.getByTestId('team-import-fallback-state').textContent).toBe('No soportado');
+  });
+
+  it('04_BLOCKED_RECOVERABLE (real PDF, freeform single-employee layout): never shows the old generic string, and is not silently treated as importable', async () => {
+    renderTeamImportModal(() => {}, 'ADMIN');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [realPdfFixture('04_BLOCKED_RECOVERABLE_freeform.pdf')] } });
+
+    const panel = await waitFor(() => screen.getByTestId('team-import-fallback-diagnosis'), { timeout: 10000 });
+    expect(panel.textContent).not.toContain('No se ha podido reconocer este archivo como una plantilla de equipo');
+    expect(screen.getByTestId('team-import-fallback-state').textContent).toBe('No soportado');
+  });
+
+  it('06_FAILED_TECHNICAL (real corrupt PDF): resolves to FAILED via diagnosisFromError, with a message distinct from 02/04, no stack trace', async () => {
+    renderTeamImportModal(() => {}, 'ADMIN');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [realPdfFixture('06_FAILED_TECHNICAL_corrupt.pdf')] } });
+
+    const panel = await waitFor(() => screen.getByTestId('team-import-fallback-diagnosis'), { timeout: 10000 });
+    expect(screen.getByTestId('team-import-fallback-state').textContent).toBe('Error');
+    expect(panel.textContent).not.toContain('No se ha podido reconocer este archivo como una plantilla de equipo');
+    // Distinct from the 02/04 (UNSUPPORTED) message.
+    expect(panel.textContent).not.toContain('estructura de este documento');
+    // No internal detail (parser name, stack trace) leaked to the user.
+    expect(panel.textContent?.toLowerCase()).not.toContain('pdf.js');
+    expect(panel.textContent?.toLowerCase()).not.toContain('invalid pdf structure');
+  });
+
+  it('05_UNSUPPORTED (.txt): still rejected at the file-picker boundary, never reaches the detection pipeline', () => {
+    renderTeamImportModal(() => {}, 'ADMIN');
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).not.toContain('text/plain');
+    expect(input.accept.split(',').map((entry) => entry.trim())).not.toContain('.txt');
   });
 });

@@ -13,7 +13,6 @@ import {
   buildImportDiagnosis,
   diagnosisFromError,
   ImportDiagnosis,
-  ImportState,
 } from '../../ingestion/diagnostics';
 import { EmployeeSelector } from '../../ingestion/core/row-detection';
 import { detectTeamRoster } from '../../ingestion/team-roster';
@@ -29,6 +28,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
+import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { RemoteArea } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
 
@@ -84,24 +84,6 @@ const WARNING_I18N_KEYS: Record<ImportWarningCode, string> = {
   PARTIAL_EXTRACTION: 'quality.warnings.partialExtraction',
   UNKNOWN_CELL: 'quality.warnings.unknownCell',
   UNSUPPORTED_SECTION: 'quality.warnings.unsupportedSection',
-};
-
-const STATE_I18N_KEYS: Record<ImportState, string> = {
-  READY: 'diagnosis.stateReady',
-  NEEDS_USER_INPUT: 'diagnosis.stateNeedsInput',
-  PARTIAL: 'diagnosis.statePartial',
-  BLOCKED: 'diagnosis.stateBlocked',
-  UNSUPPORTED: 'diagnosis.stateUnsupported',
-  FAILED: 'diagnosis.stateFailed',
-};
-
-const STATE_CHIP_STYLES: Record<ImportState, React.CSSProperties> = {
-  READY: { background: 'var(--info-bg)', border: '1px solid var(--info-border)', color: 'var(--color-accent)' },
-  NEEDS_USER_INPUT: { background: 'var(--gold-tint-bg)', border: '1px solid var(--color-gold)', color: 'var(--color-gold)' },
-  PARTIAL: { background: 'var(--gold-tint-bg)', border: '1px solid var(--color-gold)', color: 'var(--color-gold)' },
-  BLOCKED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
-  UNSUPPORTED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
-  FAILED: { background: 'var(--danger-bg)', border: '1px solid var(--danger-border)', color: 'var(--danger)' },
 };
 
 const MAX_VISIBLE_WARNINGS = 4;

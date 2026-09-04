@@ -47,6 +47,12 @@ export interface AssistantCompletion {
   quality: ImportResult;
   /** persisted profile, or null when the user opted out of saving it */
   profile: UserFormatProfile | null;
+  /** The row label the user picked (display-only, never persisted — same
+   * rule as EmployeeRowCandidate.label), when a row-selection question was
+   * answered. Lets a caller with no employee identity of its own (e.g. a
+   * team-roster upload analyzed with a wildcard selector) label the
+   * resulting row for display and re-run its own employee matching. */
+  rowLabel?: string;
 }
 
 interface ProfileAssistantPanelProps {
@@ -166,6 +172,7 @@ export const ProfileAssistantPanel = ({
         shifts,
         quality: { ...quality, shifts },
         profile: saveProfile ? profile : null,
+        rowLabel: selectedRow?.label,
       });
       return;
     }
@@ -252,6 +259,7 @@ export const ProfileAssistantPanel = ({
       shifts,
       quality: { ...quality, shifts },
       profile: saveProfile ? profile : null,
+      rowLabel: selectedRow?.label,
     });
   };
 
