@@ -12,10 +12,25 @@ Evitar que microfases posteriores reintroduzcan el bug corregido en `3d866e0` (v
 
 ## 3. Estado actual del repositorio
 
+STATUS: DONE, brecha de datos real encontrada y corregida (con aprobación explícita) en esta microfase.
+
 - `employees.status CHECK IN ('pending_access','active','inactive')` (migraciones 0001/0005/0006).
 - `deactivated_at` columna (migración 0005).
 - Bug corregido en `3d866e0`: bulk-link ahora transiciona a `active` igual que el link individual, en `api/_lib/data.js`.
 - El selector de empleados del dashboard filtra por `status === 'active'` — motivo por el que el bug era visible (empleados invisibles hasta el fix).
+
+### T01 — Cobertura de test cerrada
+
+Código confirmado con paridad exacta entre ambos caminos: `updateEmployee` (link individual, `api/_lib/data.js:537-540`) y el path bulk (mismo bloque de lógica, ya corregido en `3d866e0`) — ambos transicionan `pending_access → active` cuando se vincula un usuario. Cobertura de test:
+- Bulk-link → `active`: ya existente (caso A2, `data.test.js:1264`).
+- **Individual link → `active`: brecha real de cobertura encontrada** — el fixture de "links a free employee to a free member user" (`data.test.js:1157`) siempre partía de `status: 'active'` por defecto, así que la transición nunca se ejercitaba. Nuevo test añadido: "linking a pending_access employee auto-transitions it to active (individual path, parity with bulk case A2)".
+- Transición a `inactive`: ya cubierta exhaustivamente (`data.test.js:537,556,566,597,606`).
+
+### T02 — Reconciliación de datos preexistentes ejecutada (con aprobación explícita del usuario)
+
+Query de detección (solo lectura) contra Neon dev: `SELECT ... FROM employees WHERE user_id IS NOT NULL AND status = 'pending_access'` → **16 filas afectadas** en 2 organizaciones, leftover real del bug pre-`3d866e0` (empleados vinculados a un usuario pero nunca activados).
+
+Presentado al usuario antes de cualquier escritura (regla del master prompt §24). **Aprobado explícitamente.** Ejecutado: `UPDATE employees SET status = 'active', deactivated_at = NULL, updated_at = NOW() WHERE user_id IS NOT NULL AND status = 'pending_access'` — idempotente (una segunda ejecución no encontraría filas), acotado exactamente a la firma del bug (no toca ningún otro empleado). **16 filas reconciliadas**, confirmado por `RETURNING id, organization_id, name`.
 
 ## 4. Alcance IN
 
@@ -82,11 +97,11 @@ Archivos / módulos probables: `api/_lib/data.js`, tests asociados en `api/**/*.
 Cambios: Añadir/confirmar test que cubra ambos caminos explícitamente.
 No hacer: No modificar la lógica de transición si el test ya pasa — solo cerrar el gap de cobertura si existe.
 Criterios de aceptación:
-- [ ] Test cubre link individual → `active`.
-- [ ] Test cubre bulk-link → `active`.
-- [ ] Test cubre transición a `inactive`.
-Tests: suite existente + nuevo caso si falta.
-Evidencia esperada: resultado de `npm test` para el archivo relevante.
+- [x] Test cubre link individual → `active` (nuevo, cerrado en esta microfase).
+- [x] Test cubre bulk-link → `active` (ya existente, caso A2).
+- [x] Test cubre transición a `inactive` (ya existente, exhaustivo).
+Tests: `api/_lib/data.test.js` — 105/105 en verde (104 + 1 nuevo).
+Evidencia esperada: resultado de `npm test` (sección 20).
 
 ### T02 — Reconciliación de datos preexistentes (si aplica)
 
@@ -95,10 +110,10 @@ Archivos / módulos probables: script puntual en `db/` o consulta de verificaci�
 Cambios: Query de solo lectura primero; si hay filas afectadas, proponer script de corrección para aprobación explícita antes de ejecutar sobre Neon de desarrollo.
 No hacer: No ejecutar ningún UPDATE sin confirmación explícita del usuario (regla de base de datos del master prompt, sección 24).
 Criterios de aceptación:
-- [ ] Query de detección ejecutada y resultado documentado.
-- [ ] Si hay filas afectadas, propuesta de corrección presentada para aprobación (no ejecutada automáticamente).
+- [x] Query de detección ejecutada y resultado documentado — 16 filas afectadas (sección 3).
+- [x] Corrección presentada para aprobación explícita ANTES de ejecutar (AskUserQuestion) — aprobada por el usuario, ejecutada después, no antes.
 Tests: N/A — operación de datos, no de código.
-Evidencia esperada: resultado de la query de detección.
+Evidencia esperada: resultado de la query de detección y de la corrección (sección 3), ambos con `RETURNING` como evidencia verificable.
 
 ## 19. Tests obligatorios
 
@@ -106,11 +121,13 @@ unit/integration sobre `data.js`.
 
 ## 20. Evidencias
 
-Resultado de tests T01, resultado de query T02.
+`npm test`: 96 archivos, 991 tests, todos en verde (990 + 1 nuevo). Query de detección: 16 filas. Corrección ejecutada tras aprobación: 16 filas reconciliadas (`RETURNING` confirmado).
 
 ## 21. Gate
 
 Gates requeridos: G3 (Domain invariants), G10 (Unit/integration tests).
+
+Resultado: **PASS**. Brecha de cobertura de test cerrada; brecha de datos real (16 filas en dev Neon) detectada, presentada para aprobación antes de escribir, aprobada, y corregida con un UPDATE acotado e idempotente.
 
 ## 22. Rollback / remediación
 

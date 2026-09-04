@@ -1161,6 +1161,21 @@ describe('1:1 user ↔ employee link guards (updateEmployee)', () => {
     expect(update.values[3]).toBe(USER_EMP);
   });
 
+  // R2-M02: the individual link path has the same pending_access -> active
+  // auto-transition as the bulk path (case A2 below) — this was the exact
+  // gap commit 3d866e0 closed for bulk-link; this test closes the matching
+  // coverage gap for the individual path (its fixtures elsewhere always
+  // start 'active', so the transition itself was never actually exercised).
+  it('linking a pending_access employee auto-transitions it to active (individual path, parity with bulk case A2)', async () => {
+    const { sql, calls } = makeFakeSql({
+      ...memberFixtures(),
+      employees: [employeeRow(EMP_A1, ORG_A, { status: 'pending_access' })],
+    });
+    await updateEmployee(sql, adminCtx, { id: EMP_A1, userId: USER_EMP });
+    const update = calls.find((call) => call.text.startsWith('UPDATE employees'));
+    expect(update.values[2]).toBe('active');
+  });
+
   it('relinking an already-linked employee to a different user → 409 EMPLOYEE_ALREADY_LINKED', async () => {
     const { sql, calls } = makeFakeSql({
       ...memberFixtures(),
