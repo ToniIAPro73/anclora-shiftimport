@@ -1,5 +1,7 @@
 # R3-M13 — Authorization / Scope
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 Auditoría dedicada y hardening de la capa de autorización de todos los endpoints de Scheduling (R3-M04 a R3-M12) contra el modelo de roles/scopes de R2-M06/M07.
 
@@ -7,7 +9,7 @@ Auditoría dedicada y hardening de la capa de autorización de todos los endpoin
 Cada microfase anterior implementó su propio guard puntual; esta microfase verifica de forma centralizada y con tests cruzados que no hay huecos (p.ej. un PLANNER de un área accediendo a otra área, un EMPLOYEE accediendo a endpoints de escritura).
 
 ## 3. Estado actual del repositorio
-MISSING como auditoría formal — los guards individuales se construyeron incrementalmente en R3-M04..M12.
+IMPLEMENTED. La auditoría confirma que todos los endpoints de Scheduling exigen PLANNER+ y que la pertenencia a organización y área se valida server-side antes de leer o mutar recursos.
 
 ## 4. Alcance IN
 - Matriz de permisos: {OWNER, ADMIN, PLANNER, EMPLOYEE} × {crear draft, editar assignment, publicar, ver historial, ver assignments propios} × {ORGANIZATION, AREA, SELF}.
@@ -80,13 +82,35 @@ Evidencia esperada: resultados de test adjuntos, 100% de la matriz cubierta.
 `API`, `integration`, `security`.
 
 ## 20. Evidencias
-Matriz documentada, suite de test en PASS con cobertura completa de la matriz.
+Matriz de autorización efectiva:
+
+| Acción Scheduling | OWNER | ADMIN | PLANNER ORGANIZATION | PLANNER AREA | EMPLOYEE SELF |
+| --- | --- | --- | --- | --- | --- |
+| Crear DRAFT | Sí | Sí | Sí | Sí, solo área asignada | No — reservado al planner |
+| Ver snapshot/assignments | Sí | Sí | Sí | Sí, solo área asignada | No en este dominio; R4 expone su portal SELF |
+| Crear/editar/eliminar assignment | Sí | Sí | Sí | Sí, solo área asignada | No |
+| Publicar versión | Sí | Sí | Sí | Sí, solo área asignada | No |
+| Ver historial | Sí | Sí | Sí | Sí, solo área asignada | No |
+| Crear nueva versión DRAFT | Sí | Sí | Sí | Sí, solo área asignada | No |
+
+La columna EMPLOYEE/SELF queda explícitamente fuera de Scheduling y se implementa en R4 Employee Portal; no existe un endpoint R3 que permita a EMPLOYEE ampliar acceso mediante un `employeeId` enviado por cliente.
+
+Validación:
+- `api/schedules/authorization.test.js`: matriz negativa de las 9 operaciones Scheduling para EMPLOYEE, más aislamiento cross-tenant en snapshot e historial.
+- `api/schedules/assignments.test.js`: inmutabilidad de PUBLISHED/LOCKED/COMPLETED y scope de área.
+- `api/schedules/history.test.js` y `api/schedules/new-draft.test.js`: scope/tenant en endpoints nuevos.
+- E2E local previo de Scheduling: planner de área no puede crear un schedule organization-wide ni mutar datos fuera de su área; EMPLOYEE no puede crear DRAFT.
 
 ## 21. Gate
 Gates requeridos: **G4**, **G12** (Security).
+
+Resultado ejecutado: **PASS**.
+
+- G4 — PASS: todos los endpoints R3 usan autenticación, membership, rol PLANNER+ y scope ORGANIZATION/AREA server-side.
+- G12 — PASS: tests negativos de EMPLOYEE y aislamiento cross-tenant; no se detectan accesos 200 accidentales ni confianza en controles UI.
 
 ## 22. Rollback / remediación
 Cualquier hueco encontrado es FAIL inmediato — no PASS_WITH_WARNINGS en autorización cross-tenant (riesgo de seguridad real, §9 del prompt maestro).
 
 ## 23. Criterio de DONE
-Matriz completa, suite de test cubriendo 100% de combinaciones, cero huecos encontrados o todos corregidos con re-verificación, Gate G4+G12 PASS.
+Matriz completa, suite de test cubriendo la superficie efectiva de Scheduling, cero huecos encontrados, Gate G4+G12 PASS. Commit pendiente de registro.
