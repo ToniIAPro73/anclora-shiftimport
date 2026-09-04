@@ -8,6 +8,8 @@
 **Clasificación de producto:** Premium B2C / Prosumer & B2B Team SaaS  
 **Documento canónico:** `docs/DAFO_ANCLORA_SHIFTIMPORT_2026-08-26.md`  
 
+> **Nota (2026-09-04):** este análisis es un snapshot estratégico fechado. El posicionamiento de producto vigente se formalizó como B2B/B2B2E en `README.md`/`README.en.md` (R0-M01, ver `docs/roadmap/shiftimport-mvp-v2/R0/`). La clasificación "B2C/Prosumer & B2B" de este documento refleja el análisis del 2026-08-26, no el contrato de producto actual.
+
 ---
 
 ## Resumen ejecutivo
