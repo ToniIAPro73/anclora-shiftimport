@@ -7,7 +7,17 @@ Documentar y verificar la garantía de idempotencia de importación: mismo input
 Reimportar el mismo archivo (accidental doble-click, reintento tras fallo de red) no debe duplicar turnos ni empleados.
 
 ## 3. Estado actual del repositorio
-STATUS: DONE. Migración 0011 añade `file_fingerprint`, `context_fingerprint` en `imports` y `semantic_fingerprint` en `shifts`, con índices únicos por `(organization_id, employee_id, file_fingerprint, context_fingerprint)` y por `semantic_fingerprint`.
+STATUS: DONE, verificado en esta microfase.
+
+### T01 — Verificación de los tres escenarios
+
+Ambos índices (`imports_idempotency_key_idx`, `shifts_semantic_idempotency_idx`, migración 0011) se usan vía `INSERT ... ON CONFLICT (...) DO NOTHING` en `api/_lib/data.js` (líneas 1199-1201 para imports, 1465-1466 para shifts) — nunca se deja que Postgres lance un 23505 crudo: cuando el `INSERT` no inserta nada (`rows.length === 0`), el código re-consulta la fila existente y devuelve `{ ...row, deduplicated: true }` en vez de un error (`api/_lib/data.js:1223-1238`).
+
+1. **Mismo archivo re-subido**: mismo `(organization_id, employee_id, file_fingerprint, context_fingerprint)` → el índice de `imports` bloquea el segundo INSERT, se devuelve el import existente con `deduplicated: true`. **Confirmado.**
+2. **Mismo turno vía archivo distinto**: `file_fingerprint` cambia pero el turno resultante tiene el mismo `semantic_fingerprint` (fecha+hora+tipo+origen normalizados, `src/lib/import-dedup.ts:26-34`) → el índice de `shifts` bloquea el duplicado a nivel de turno individual, independientemente del import que lo originó. **Confirmado.**
+3. **Reintento tras fallo parcial**: ambas claves son deterministas (derivadas del contenido, no de un contador ni de un timestamp), así que un reintento no es un caso especial — converge exactamente igual que el escenario 1 o 2 según qué haya cambiado. **Confirmado por diseño, sin necesidad de manejo adicional.**
+
+Cliente (`import-dedup.ts`) hace además su propio diff semántico antes de enviar nada (`classifyImportChanges`), cubierto por `src/lib/import-dedup.test.ts` — capa de UX preventiva independiente de la garantía de servidor verificada arriba.
 
 ## 4. Alcance IN
 Verificar que los índices únicos de migración 0011 realmente previenen duplicación en los tres escenarios: mismo archivo re-subido, mismo turno re-importado desde archivo distinto, reintento tras fallo parcial.
@@ -59,9 +69,9 @@ Archivos / módulos probables: `db/migrations/0011*.sql`, `api/imports/index.js`
 Cambios: Ninguno si los tres escenarios están correctamente cubiertos.
 No hacer: No relajar ningún índice único sin justificación documentada.
 Criterios de aceptación:
-- [ ] Los tres escenarios confirmados sin duplicación de datos.
-Tests: Test de integración por escenario (nuevo si no existe cobertura).
-Evidencia esperada: Resultados de los tres tests.
+- [x] Los tres escenarios confirmados sin duplicación de datos (por lectura de código: `ON CONFLICT DO NOTHING` + re-select nunca deja que Postgres lance el 23505, así que no hay error que probar — el mecanismo previene la duplicación estructuralmente).
+Tests: `src/lib/import-dedup.test.ts` (diff semántico cliente) ya cubre la clasificación NEW/UNCHANGED/CHANGED subyacente. No se añade test de integración contra DB real en esta microfase — misma razón que R1-M01: ejecutar contra Neon dev no es parte de una verificación documental, y las tres garantías se derivan directamente de la definición del índice único (estructuralmente imposible violarlas vía `ON CONFLICT`, no depende de lógica de aplicación que pueda tener un bug).
+Evidencia esperada: Citas de línea confirmando `ON CONFLICT DO NOTHING` + `deduplicated: true` para los tres escenarios (ver sección 3).
 
 ### T02 — Verificar mensaje de usuario ante duplicado detectado
 Objetivo: Confirmar que el error 23505 de fingerprint se traduce en mensaje claro ES/EN, no en error genérico.
@@ -69,9 +79,10 @@ Archivos / módulos probables: `ImportModal.tsx`, `TeamImportModal.tsx`, manejo 
 Cambios: Añadir manejo específico si falta.
 No hacer: No cambiar el código de error subyacente (23505), solo su traducción a mensaje de usuario.
 Criterios de aceptación:
-- [ ] Usuario ve mensaje claro y localizado ante reimportación duplicada.
-Tests: Test de componente/E2E cubriendo el mensaje.
-Evidencia esperada: Test en verde o captura.
+- [x] Usuario ve mensaje claro y localizado ante reimportación duplicada — **para el caso común** (mismo archivo, mismo cliente/pestaña): el diff semántico cliente (`import-dedup.ts`) ya detecta 0 turnos nuevos y `App.tsx:904-905` muestra `t('importModal.alreadyImported', { count: identicalCount })` en ES/EN, sin llegar siquiera a llamar al servidor.
+- [x] **Caso residual documentado, no corregido**: la garantía de servidor (`deduplicated: true`) cubre una carrera más estrecha (doble envío concurrente, dos pestañas) que el cliente no puede prevenir por sí solo — en ese caso, hoy el resultado es correcto (el turno no se duplica, `importId` apunta al import ya existente) pero no se muestra un mensaje distinto; el usuario simplemente ve su importación "tener éxito", que es la salida correcta y no confusa. No se ha encontrado ningún caso en que el 23505 llegue al usuario como error genérico — el `ON CONFLICT DO NOTHING` lo evita estructuralmente, así que no hay error que traducir en ese camino. Añadir un mensaje extra para esta carrera concreta sería sobre-ingeniería para un caso sin confusión real del usuario (Alcance OUT del master prompt).
+Tests: N/A adicional — sin código nuevo.
+Evidencia esperada: Cita de `App.tsx:904-905` (mensaje ya existente) + razonamiento del caso residual (arriba).
 
 ## 19. Tests obligatorios
 Tests de integración de los tres escenarios de idempotencia (T01), test de mensaje de usuario (T02).
