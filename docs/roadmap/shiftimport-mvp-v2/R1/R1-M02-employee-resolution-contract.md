@@ -9,6 +9,15 @@ La lógica de qué fila de un archivo importado corresponde a qué `employee` ex
 ## 3. Estado actual del repositorio
 STATUS: DONE. `team-roster.ts` implementa detección multi-empleado; `employees` tiene unique `(organization_id, external_employee_id)` cuando presente; acceptance-corpus GS-01..10 cubre rosters multi-empleado.
 
+### Contrato de resolución verificado (T01), `bulkCreateEmployees` en `api/_lib/data.js:325-441`
+
+1. Carga todos los empleados existentes de la organización (`WHERE organization_id = ${ctx.organizationId}`, línea 330-332) en dos mapas en memoria: `byExternalId` y `byName` (lowercased) — incluye empleados de **cualquier** status, para que uno `inactive` se reporte como `existing_inactive` en vez de duplicarse.
+2. Para cada fila del import: si trae `externalEmployeeId`, matchea por ese id; si no, matchea por nombre (case-insensitive). Sin `name` → `status: 'failed', reason: 'invalid'`.
+3. Si hay match → `status: 'existing'` (o `'existing_inactive'`), no crea nada.
+4. Si no hay match → valida límite de plan (`maxEmployees`) y resolución de área; si pasa, `INSERT ... status 'pending_access'` con `ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING` (líneas 408-421) — protege contra una fila duplicada dentro del mismo batch o una carrera concurrente; si pierde la carrera, re-consulta y reporta `'existing'` en vez de fallar.
+5. Nunca crea un `User` — `user_id` queda `NULL` (comentario explícito línea 321-322); vincular un usuario es responsabilidad de otro flujo (R2-M04, ya DONE).
+6. Fallo parcial es el diseño: una fila mala (`'failed'`) nunca aborta el resto del batch (línea 323).
+
 ## 4. Alcance IN
 Documentar reglas de matching (por external_employee_id, por nombre cuando no hay id) y comportamiento cuando no hay match (crea empleado `pending_access` vs error).
 
@@ -69,9 +78,9 @@ Archivos / módulos probables: `api/_lib/data.js`.
 Cambios: Ninguno si correcto; si se detecta fuga, registrar como hallazgo bloqueante.
 No hacer: No relajar el scope por organización.
 Criterios de aceptación:
-- [ ] Toda consulta de resolución de empleado incluye `organization_id` en el WHERE.
+- [x] Toda consulta de resolución de empleado incluye `organization_id` en el WHERE.
 Tests: Ninguno adicional — revisión de código.
-Evidencia esperada: Cita de líneas confirmando el scope.
+Evidencia esperada: `api/_lib/data.js:330-332` — `SELECT * FROM employees WHERE organization_id = ${ctx.organizationId}` es la única fuente de los mapas `byExternalId`/`byName` usados para matching; ninguna fila de otra organización puede entrar en el índice en memoria. **Sin fuga cross-tenant.**
 
 ## 19. Tests obligatorios
 Suite existente de team-roster / acceptance-corpus (GS-01..10) debe seguir en verde.
