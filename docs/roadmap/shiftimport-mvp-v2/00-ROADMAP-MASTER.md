@@ -80,7 +80,7 @@ All MISSING at schema and app level. Full task lists required.
 | R3-M12 | Version History | DONE — PASS; complete version metadata listing and read-only version viewer verified | R3-M11 | 2 | G2, G10 |
 | R3-M13 | Authorization / Scope | DONE — PASS; role/scope matrix audited with negative role and cross-tenant tests | R2-M07, R3-M12 | 2 | G4, G12 |
 | R3-M14 | Future Import → Draft Integration | DONE — PASS | R1-M16, R3-M04, R3-M05, R3-M13 | 5 | G3, G4, G5, G10, G12, G13, G15 |
-| R3-M15 | E2E | MISSING | R3-M00..M14 | 4 | G11, G13 |
+| R3-M15 | E2E | DONE — PASS; browser flow verified twice, negative authz/cross-tenant and Safe Import regression verified | R3-M00..M14 | 2 | G11, G13 |
 | R3-M16 | R3 Final Gate | — | R3-M00..M15 | 1 | G0-G15 (subset per spec) |
 
 ## R4 — Employee Portal

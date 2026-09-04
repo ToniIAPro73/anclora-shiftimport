@@ -1,6 +1,6 @@
-import { getSql, requireOrgContext, resolveContext } from '../../../../_lib/auth.js';
-import { listScheduleVersionHistory } from '../../../../_lib/scheduling.js';
-import { handleError, sendJson } from '../../../../_lib/http.js';
+import { getSql, requireOrgContext, resolveContext } from '../../../_lib/auth.js';
+import { listScheduleVersionHistory } from '../../../_lib/scheduling.js';
+import { handleError, sendJson } from '../../../_lib/http.js';
 
 /** GET /api/schedules/:scheduleId/versions — read-only version history. */
 export default async function handler(req, res) {
