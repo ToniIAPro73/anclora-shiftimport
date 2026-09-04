@@ -161,6 +161,8 @@ export const FormatProfilesModal = ({ isOpen, onClose, store, canManage }: Forma
             <div style={{ color: 'var(--text-subtle)', fontSize: '0.78rem', marginTop: '2px' }}>
               {t(profile.sourceType === 'pdf' ? 'formatProfiles.sourcePdf' : 'formatProfiles.sourceTabular')}
               {' · '}
+              {t('formatProfiles.columns', { count: profile.signature.columnCount })}
+              {' · '}
               {t('formatProfiles.scope')}
               {' · '}
               {formatDate(profile.lastUsedAt)}

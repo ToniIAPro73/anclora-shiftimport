@@ -313,24 +313,44 @@ export async function createCandidateFormatProfile(sql, ctx, input) {
     logicalProfileId = crypto.randomUUID();
   }
 
-  const rows = await sql`
-    INSERT INTO format_profiles (
-      organization_id, logical_profile_id, version, status, signature, source_type,
-      display_name, parser_config, token_aliases, code_times, off_tokens,
-      employee_row_strategy, employee_row_index, day_column_map, tabular_memory,
-      created_by_user_id, supersedes_profile_id
-    ) VALUES (
-      ${ctx.organizationId}, ${logicalProfileId}, ${version}, 'candidate',
-      ${JSON.stringify(value.signature)}::jsonb, ${value.sourceType}, ${value.displayName},
-      ${JSON.stringify(value.parserConfig)}::jsonb, ${JSON.stringify(value.tokenAliases)}::jsonb,
-      ${JSON.stringify(value.codeTimes)}::jsonb, ${JSON.stringify(value.offTokens)}::jsonb,
-      ${value.employeeRowStrategy}, ${value.employeeRowIndex}, ${value.dayColumnMap ? JSON.stringify(value.dayColumnMap) : null}::jsonb,
-      ${value.tabularMemory ? JSON.stringify(value.tabularMemory) : null}::jsonb,
-      ${ctx.user.id}, ${supersedesProfileId}
-    )
-    RETURNING *
-  `;
-  return { profile: mapProfileRow(rows[0]), created: true };
+  try {
+    const rows = await sql`
+      INSERT INTO format_profiles (
+        organization_id, logical_profile_id, version, status, signature, source_type,
+        display_name, parser_config, token_aliases, code_times, off_tokens,
+        employee_row_strategy, employee_row_index, day_column_map, tabular_memory,
+        created_by_user_id, supersedes_profile_id
+      ) VALUES (
+        ${ctx.organizationId}, ${logicalProfileId}, ${version}, 'candidate',
+        ${JSON.stringify(value.signature)}::jsonb, ${value.sourceType}, ${value.displayName},
+        ${JSON.stringify(value.parserConfig)}::jsonb, ${JSON.stringify(value.tokenAliases)}::jsonb,
+        ${JSON.stringify(value.codeTimes)}::jsonb, ${JSON.stringify(value.offTokens)}::jsonb,
+        ${value.employeeRowStrategy}, ${value.employeeRowIndex}, ${value.dayColumnMap ? JSON.stringify(value.dayColumnMap) : null}::jsonb,
+        ${value.tabularMemory ? JSON.stringify(value.tabularMemory) : null}::jsonb,
+        ${ctx.user.id}, ${supersedesProfileId}
+      )
+      RETURNING *
+    `;
+    return { profile: mapProfileRow(rows[0]), created: true };
+  } catch (error) {
+    // format_profiles_org_structurehash_active_idx (migration 0012): two
+    // concurrent saves of the identical (organization_id, structureHash)
+    // both passed the existingIdentical SELECT above before either INSERT
+    // committed. The database is the tiebreaker — whichever request lost
+    // the race reuses the winner's row instead of surfacing a raw 500.
+    if (error?.code === '23505') {
+      const winner = await sql`
+        SELECT * FROM format_profiles
+        WHERE organization_id = ${ctx.organizationId}
+          AND status != 'deprecated'
+          AND signature->>'structureHash' = ${value.signature.structureHash}
+      `;
+      if (winner.length > 0) {
+        return { profile: mapProfileRow(winner[0]), created: false };
+      }
+    }
+    throw error;
+  }
 }
 
 export async function renameFormatProfile(sql, ctx, id, displayName, updatedAt) {

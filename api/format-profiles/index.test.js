@@ -181,6 +181,23 @@ function makeFakeSql({ profiles = [] } = {}) {
         created_by_user_id: userId,
         supersedes_profile_id: supersedesProfileId,
       });
+      if (state.forceUniqueViolationOnce) {
+        state.forceUniqueViolationOnce = false;
+        // Simulates migration 0012's format_profiles_org_structurehash_active_idx
+        // firing because a concurrent request's INSERT committed first — the
+        // handler is expected to recover via a re-SELECT, not throw a 500.
+        const winner = profileRow({
+          id: randomUUID(),
+          organization_id: organizationId,
+          logical_profile_id: randomUUID(),
+          status: 'candidate',
+          signature: JSON.parse(signatureJson),
+        });
+        profiles.push(winner);
+        const error = new Error('duplicate key value violates unique constraint "format_profiles_org_structurehash_active_idx"');
+        error.code = '23505';
+        return Promise.reject(error);
+      }
       profiles.push(row);
       return Promise.resolve([row]);
     }
@@ -307,6 +324,19 @@ describe('POST /api/format-profiles (create candidate)', () => {
     const second = await call('POST', { body: validCandidateBody({ displayName: 'Otro nombre' }) });
     expect(second.statusCode).toBe(200);
     expect(second.body.profile.id).toBe(first.body.profile.id);
+  });
+
+  it('concurrent save race (migration 0012 unique index fires): recovers via re-select instead of a raw 500', async () => {
+    // Both requests pass the existingIdentical SELECT (nothing saved yet),
+    // then this one's INSERT hits the unique constraint because the other
+    // request's INSERT committed first — same shape as two browsers saving
+    // the identical structureHash for the same org at once.
+    state.forceUniqueViolationOnce = true;
+    const res = await call('POST', { body: validCandidateBody() });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.profile).toBeTruthy();
+    // Never crashes into an unhandled 500, and never inserts the loser's row.
+    expect(state.profiles).toHaveLength(1);
   });
 });
 

@@ -260,6 +260,7 @@ export const TeamImportModal = ({
    */
   const runFallbackDiagnosis = async (file: File): Promise<void> => {
     setFallbackAssistantSession(null);
+    setLoading(true);
     try {
       const result = await analyzeDocumentFile(file, WILDCARD_SELECTOR, undefined, undefined, {});
       const diagnosis = buildImportDiagnosis(result);
@@ -309,6 +310,8 @@ export const TeamImportModal = ({
     } catch (err) {
       setFallbackResult(null);
       setFallbackDiagnosis(diagnosisFromError(err));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -773,6 +776,21 @@ export const TeamImportModal = ({
             ))}
             {fallbackDiagnosis.diagnostics.length === 0 && (
               <p style={{ margin: 0 }}>{t('teamImport.uploadError')}</p>
+            )}
+            {fallbackDiagnosis.diagnostics.some((diagnostic) => diagnostic.messageKey.startsWith('diagnosis.vlm.')) && sourceFile && (
+              // The vlm.* diagnostic text explicitly tells the user to
+              // retry with "Procesar archivo" — that action has to exist
+              // here too, not just in ImportModal, or the message points
+              // at a button that isn't on screen.
+              <button
+                type="button"
+                className="btn-outline"
+                style={{ padding: '8px 12px', minHeight: 'auto', fontWeight: 700, alignSelf: 'flex-start' }}
+                disabled={loading}
+                onClick={() => void runFallbackDiagnosis(sourceFile)}
+              >
+                {t('importModal.process')}
+              </button>
             )}
             {fallbackAssistantSession && fallbackResult && (
               <div style={{ marginTop: '6px' }}>
