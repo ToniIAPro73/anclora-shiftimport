@@ -9,7 +9,7 @@
 
 ## Arquitectura
 
-- **Frontend**: Vite + React. `src/App.tsx` is the app shell; `src/pages/` currently holds only `LandingPage.tsx` and `PricingPage.tsx` — the entire post-login dashboard lives inside `App.tsx` + `src/components/shift-dashboard/*`, no router-driven split yet.
+- **Frontend**: Vite + React. `src/App.tsx` is the app shell; `src/pages/` currently holds only `LandingPage.tsx` and `PricingPage.tsx`. A small hand-rolled top-level router already exists (`src/lib/route.ts`: `Route` union, `pushState`-based `navigate`/`useRoute`, tested in `route.test.ts`, consumed by `App.tsx` and `PublicHeader.tsx`) covering `/`, `/pricing`, `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/app` — but it has no nested/sub-route support, so the entire post-login dashboard still lives as one surface inside `App.tsx` (1680 lines) + `src/components/shift-dashboard/*`. (Corrected 2026-09-04 during R0-M05 — see `R0/MODULE-BOUNDARIES.md`.)
 - **Backend**: Vercel serverless functions under `api/` (file-route convention, e.g. `api/employees/index.js`, `api/imports/index.js`). No standalone Express/Nest server in production. `server.mjs` / `proxy-server.mjs` / `server-export.mjs` are local dev-only harnesses.
 - **DB**: Postgres (Neon), raw SQL via `db/migrations/*.sql`, forward-only, applied by `db/migrate.mjs`. No ORM. `api/_lib/data.js` (1524 lines) is the entire data-access layer.
 - **Auth**: `api/_lib/auth.js` — cookie session (hashed tokens in `sessions`), role guard `ADMIN > EMPLOYEE`.
@@ -77,7 +77,7 @@ DB-level unique index on `(organization_id, structureHash) WHERE status != 'depr
 ## Deuda / riesgos
 
 - **Role model gap**: migrating 2 roles → 4 roles + 3 scopes is a real schema migration with a data-backfill decision (who becomes OWNER), not purely additive. Flag as R0-M03 / R2-M06 design risk.
-- **No dashboard router split**: `src/App.tsx` hosts the whole post-login app; `src/pages/` only has landing/pricing. R3 (Scheduling) and R4 (Employee Portal) UI need a real routing decision, not an assumed structure.
+- **No nested/sub-route support**: a top-level router exists (`src/lib/route.ts`) but `src/App.tsx` still hosts the whole post-login dashboard as one surface. R3 (Scheduling) and R4 (Employee Portal) UI add new top-level route entries following the existing `route.ts` pattern — no new routing library needed (see `R0/MODULE-BOUNDARIES.md`).
 - **`BLOCKED` is a terminal dead-end by explicit design decision** (dated 2026-09-04, commit 1ee5b8b). Any future capability to recover a `BLOCKED` import would require deliberately revisiting that decision.
 - **`api/_lib/data.js` is a 1524-line single file** — the entire data-access layer. New domains (scheduling, approvals) will either bloat it further or force a module-boundary decision — relevant to R0-M05.
 - No CI config confirmed in this pass — needs explicit check in R0-M00 whether lint/typecheck/tests run on push or only locally.
@@ -94,4 +94,4 @@ DB-level unique index on `(organization_id, structureHash) WHERE status != 'depr
 
 - Confirm CI status (does `npm test`/lint/typecheck run automatically on push?) — part of R0-M00.
 - Decide OWNER backfill rule before writing R0-M03 in detail.
-- Decide dashboard routing approach before writing R3/R4 frontend sections in detail.
+- ~~Decide dashboard routing approach~~ — resolved in R0-M05: extend the existing `src/lib/route.ts` incrementally, no new routing library.
