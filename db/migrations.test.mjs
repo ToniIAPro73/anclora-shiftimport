@@ -9,6 +9,7 @@ const scopedAreaMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)),
 const auditEventsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0016_organization_audit_events.sql');
 const schedulesMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0017_schedules.sql');
 const scheduleVersionsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0018_schedule_versions.sql');
+const shiftAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0019_shift_assignments.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -108,5 +109,25 @@ describe('0018 schedule versions migration contract', () => {
   it('adds a schedule/version lookup index', async () => {
     const sql = await readFile(scheduleVersionsMigrationPath, 'utf8');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS schedule_versions_schedule_idx');
+  });
+});
+
+describe('0019 shift assignments migration contract', () => {
+  it('creates planned assignments with UUID foreign keys and time fields', async () => {
+    const sql = await readFile(shiftAssignmentsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS shift_assignments');
+    expect(sql).toContain('schedule_version_id UUID NOT NULL REFERENCES schedule_versions (id) ON DELETE CASCADE');
+    expect(sql).toContain('employee_id UUID NOT NULL REFERENCES employees (id) ON DELETE CASCADE');
+    expect(sql).toContain('date DATE NOT NULL');
+    expect(sql).toContain('start_time TIME NOT NULL');
+    expect(sql).toContain('end_time TIME NOT NULL');
+    expect(sql).toContain('location TEXT');
+  });
+
+  it('adds planner and foreign-key lookup indexes without an overlap constraint', async () => {
+    const sql = await readFile(shiftAssignmentsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_version_employee_date_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_employee_idx');
+    expect(sql).toContain('Overlap/rest validation is intentionally handled');
   });
 });

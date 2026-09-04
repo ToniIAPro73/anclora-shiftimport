@@ -1,5 +1,7 @@
 # R3-M03 — ShiftAssignment
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 Crear `shift_assignments`, la unidad "empleado X trabaja turno Y en fecha Z" dentro de una `schedule_versions`.
 
@@ -7,7 +9,7 @@ Crear `shift_assignments`, la unidad "empleado X trabaja turno Y en fecha Z" den
 Cierra el modelo de datos base de Scheduling: sin esta tabla no hay dónde representar la planificación propuesta antes de publicar.
 
 ## 3. Estado actual del repositorio
-MISSING. Depende de `schedule_versions` (R3-M02).
+MISSING. Depende de `schedule_versions` (R3-M02), ya migrada como `0018_schedule_versions.sql`. El esquema usa UUID; la siguiente migración disponible es `0019_shift_assignments.sql`.
 
 ## 4. Alcance IN
 - Tabla `shift_assignments`: id, schedule_version_id, employee_id, date, start_time, end_time, location (nullable), created_at, updated_at.
@@ -28,9 +30,9 @@ R3-M02.
 ## 8. Modelo de datos afectado
 ```sql
 CREATE TABLE shift_assignments (
-  id SERIAL PRIMARY KEY,
-  schedule_version_id INTEGER NOT NULL REFERENCES schedule_versions(id),
-  employee_id INTEGER NOT NULL REFERENCES employees(id),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  schedule_version_id UUID NOT NULL REFERENCES schedule_versions(id) ON DELETE CASCADE,
+  employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
   date DATE NOT NULL,
   start_time TIME NOT NULL,
   end_time TIME NOT NULL,
@@ -64,21 +66,21 @@ N/A.
 N/A — sin código de aplicación aún.
 
 ## 16. Migraciones
-`db/migrations/0015_shift_assignments.sql`, forward-only, aditiva.
+`db/migrations/0019_shift_assignments.sql`, forward-only, aditiva, con `IF NOT EXISTS` para el patrón idempotente del repo.
 
 ## 17. Compatibilidad y datos existentes
 Sin impacto en `shifts` ni otras tablas existentes — tabla completamente nueva y aislada hasta R3-M10 (publicación).
 
 ## 18. Tasks
 
-### T01 — Migración `0015_shift_assignments.sql`
+### T01 — Migración `0019_shift_assignments.sql`
 Objetivo: crear tabla e índice según sección 8.
-Archivos / módulos probables: `db/migrations/0015_shift_assignments.sql`.
+Archivos / módulos probables: `db/migrations/0019_shift_assignments.sql`.
 Cambios: CREATE TABLE + índice compuesto.
 No hacer: no añadir aún constraint de solapamiento (eso es lógica de aplicación en R3-M06, no una constraint de DB genérica, porque el rango de solapamiento no es expresable con un UNIQUE simple).
 Criterios de aceptación:
-- [ ] Migración aplica limpio.
-- [ ] FKs a `schedule_versions` y `employees` verificadas (insert con id inexistente falla).
+- [x] Migración aplica limpio.
+- [x] FKs a `schedule_versions` y `employees` verificadas (insert con id inexistente falla).
 Tests: test de migración verificando FKs y el índice.
 Evidencia esperada: output de migración + test.
 
@@ -86,13 +88,24 @@ Evidencia esperada: output de migración + test.
 `db`.
 
 ## 20. Evidencias
-Migración commiteada, test en PASS.
+- `node --env-file=.env.development.local db/migrate.mjs`: `apply 0019_shift_assignments.sql (5 statements)`, `done 0019_shift_assignments.sql`.
+- `npx vitest run db/migrations.test.mjs`: **1 file passed, 15 tests passed**.
+- Neon dev: tabla creada con UUID, `DATE`, `TIME`, `TEXT` nullable y timestamps `TIMESTAMPTZ`.
+- Neon dev: FK inválida de `schedule_version_id` rechazada por `shift_assignments_schedule_version_id_fkey`.
+- Neon dev: FK inválida de `employee_id` rechazada por `shift_assignments_employee_id_fkey`.
+- Neon dev: la prueba dejó `schedules = 0`, `schedule_versions = 0` y `shift_assignments = 0`; no se persistieron fixtures.
+- Índices observados: `(schedule_version_id, employee_id, date)` y `employee_id`; no se introdujo constraint de solapamiento.
 
 ## 21. Gate
 Gates requeridos: **G2**, **G3**.
+
+Resultado ejecutado: **PASS**.
+
+- G2 Database/migrations: PASS — migración `0019` aplicada y estructura/FKs/índices verificados en Neon dev.
+- G3 Domain invariants: PASS — assignments tenant-scoped por la cadena de FKs; split shifts por fecha siguen permitidos y overlap/rest quedan reservados a R3-M06/M07.
 
 ## 22. Rollback / remediación
 DROP TABLE seguro — tabla aislada, sin dependientes hasta R3-M10.
 
 ## 23. Criterio de DONE
-Migración 0015 aplicada, FKs verificadas, Gate G2+G3 PASS.
+Migración 0019 aplicada, FKs verificadas, Gate G2+G3 PASS. Commit: `pending`.
