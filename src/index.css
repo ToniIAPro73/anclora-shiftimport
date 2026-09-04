@@ -1483,6 +1483,19 @@ button[aria-busy='true'] {
   gap: 10px;
 }
 
+.weekly-planner__toolbar-actions {
+  justify-content: flex-end;
+}
+
+.weekly-planner__toolbar-actions .btn-gold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 0.76rem;
+}
+
 .weekly-planner__status {
   display: inline-flex;
   align-items: center;
@@ -1837,6 +1850,32 @@ button[aria-busy='true'] {
 
 .weekly-planner__editor-actions span {
   flex: 1;
+}
+
+.weekly-planner__publish-summary {
+  display: grid;
+  gap: 12px;
+  color: var(--text-primary);
+  line-height: 1.55;
+}
+
+.weekly-planner__publish-summary p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.weekly-planner__publish-summary strong {
+  display: block;
+  padding: 14px 16px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--color-gold) 12%, var(--panel-muted-bg));
+  border: 1px solid color-mix(in srgb, var(--color-gold) 38%, var(--glass-border));
+  border-radius: 12px;
+  font-size: 1.05rem;
+}
+
+.weekly-planner__publish-note {
+  font-size: 0.82rem;
 }
 
 .weekly-planner__delete {

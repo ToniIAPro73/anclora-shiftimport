@@ -530,3 +530,166 @@ export async function createScheduleDraft(sql, ctx, input = {}) {
     status: version.status,
   };
 }
+
+/**
+ * Publishes one draft and materializes its active assignments as historical
+ * shifts. Neon HTTP transactions are non-interactive, so validation,
+ * transition, and materialization intentionally live in one CTE statement:
+ * the database either returns a published result with every insert, or makes
+ * no write at all.
+ */
+export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  }
+
+  const transactionResult = await sql.transaction((txn) => [txn`
+    WITH target AS MATERIALIZED (
+      SELECT sv.id AS version_id, sv.schedule_id, sv.status,
+             s.organization_id, s.area_id
+      FROM schedule_versions sv
+      JOIN schedules s ON s.id = sv.schedule_id
+      WHERE sv.id = ${versionId}
+        AND sv.schedule_id = ${scheduleId}
+        AND s.organization_id = ${ctx.organizationId}
+      FOR UPDATE
+    ),
+    all_assignments AS MATERIALIZED (
+      SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
+             sa.start_time, sa.end_time, sa.location, e.status AS employee_status
+      FROM shift_assignments sa
+      JOIN target t ON t.version_id = sa.schedule_version_id
+      JOIN employees e ON e.id = sa.employee_id
+        AND e.organization_id = t.organization_id
+    ),
+    active_assignments AS MATERIALIZED (
+      SELECT * FROM all_assignments WHERE employee_status = 'active'
+    ),
+    assignment_intervals AS MATERIALIZED (
+      SELECT a.*,
+             (a.date + a.start_time) AS start_at,
+             (a.date + a.end_time
+               + CASE WHEN a.end_time <= a.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END
+             ) AS end_at
+      FROM active_assignments a
+    ),
+    overlap_conflicts AS (
+      SELECT a.id AS conflicting_assignment_id
+      FROM assignment_intervals a
+      JOIN assignment_intervals b
+        ON a.employee_id = b.employee_id
+       AND a.id < b.id
+      WHERE a.start_at < b.end_at
+        AND b.start_at < a.end_at
+      ORDER BY a.id, b.id
+      LIMIT 1
+    ),
+    rest_conflicts AS (
+      SELECT a.id AS conflicting_assignment_id
+      FROM assignment_intervals a
+      JOIN assignment_intervals b
+        ON a.employee_id = b.employee_id
+       AND a.id < b.id
+      WHERE NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
+        AND (
+          (b.start_at >= a.end_at AND b.start_at - a.end_at < INTERVAL '11 hours')
+          OR (a.start_at >= b.end_at AND a.start_at - b.end_at < INTERVAL '11 hours')
+        )
+      ORDER BY a.id, b.id
+      LIMIT 1
+    ),
+    conflicts AS (
+      SELECT 'OVERLAP'::text AS error_code, conflicting_assignment_id, NULL::integer AS minimum_rest_hours, 1 AS priority
+      FROM overlap_conflicts
+      UNION ALL
+      SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 2
+      FROM rest_conflicts
+    ),
+    validation AS (
+      SELECT
+        (SELECT error_code FROM conflicts ORDER BY priority LIMIT 1) AS error_code,
+        (SELECT conflicting_assignment_id FROM conflicts ORDER BY priority LIMIT 1) AS conflicting_assignment_id,
+        (SELECT minimum_rest_hours FROM conflicts ORDER BY priority LIMIT 1) AS minimum_rest_hours
+    ),
+    excluded AS (
+      SELECT
+        COUNT(*) FILTER (WHERE employee_status <> 'active')::integer AS excluded_count,
+        COALESCE(
+          json_agg(
+            json_build_object('assignmentId', id, 'employeeId', employee_id)
+            ORDER BY id
+          ) FILTER (WHERE employee_status <> 'active'),
+          '[]'::json
+        ) AS excluded_assignments
+      FROM all_assignments
+    ),
+    updated AS (
+      UPDATE schedule_versions sv
+      SET status = 'PUBLISHED', published_at = NOW(), published_by_user_id = ${ctx.user.id}
+      FROM target t, validation v
+      WHERE sv.id = t.version_id
+        AND t.status = 'DRAFT'
+        AND v.error_code IS NULL
+      RETURNING sv.id, sv.published_at
+    ),
+    materialized AS (
+      INSERT INTO shifts (
+        organization_id, employee_id, import_id, area_id, date,
+        start_time, end_time, location, origin, schedule_version_id
+      )
+      SELECT t.organization_id, a.employee_id, NULL, t.area_id, a.date,
+             TO_CHAR(a.start_time, 'HH24:MI'), TO_CHAR(a.end_time, 'HH24:MI'),
+             COALESCE(a.location, ''), 'schedule', a.schedule_version_id
+      FROM active_assignments a
+      JOIN target t ON TRUE
+      JOIN updated u ON u.id = t.version_id
+      RETURNING id
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      (SELECT status FROM target LIMIT 1) AS current_status,
+      validation.error_code,
+      validation.conflicting_assignment_id,
+      validation.minimum_rest_hours,
+      (SELECT published_at FROM updated LIMIT 1) AS published_at,
+      (SELECT COUNT(*)::integer FROM materialized) AS created_shift_count,
+      excluded.excluded_count,
+      excluded.excluded_assignments
+    FROM validation
+    CROSS JOIN excluded
+  `]);
+
+  const outcome = transactionResult?.[0]?.[0];
+  if (!outcome?.found) {
+    throw new HttpError(404, 'Schedule version not found');
+  }
+  if (outcome.current_status !== 'DRAFT') {
+    const error = new HttpError(409, 'Schedule version is already published or locked');
+    error.code = 'VERSION_NOT_EDITABLE';
+    throw error;
+  }
+  if (outcome.error_code === 'OVERLAP') {
+    const error = new HttpError(422, 'Assignment overlaps an existing assignment');
+    error.code = 'OVERLAP';
+    error.conflictingAssignmentId = outcome.conflicting_assignment_id;
+    throw error;
+  }
+  if (outcome.error_code === 'REST_RULE_VIOLATION') {
+    const error = new HttpError(422, `Minimum rest period is ${MINIMUM_REST_HOURS} hours`);
+    error.code = 'REST_RULE_VIOLATION';
+    error.minimumRestHours = MINIMUM_REST_HOURS;
+    error.conflictingAssignmentId = outcome.conflicting_assignment_id;
+    throw error;
+  }
+
+  return {
+    status: 'PUBLISHED',
+    publishedAt: outcome.published_at,
+    createdShiftCount: Number(outcome.created_shift_count ?? 0),
+    excludedAssignments: Array.isArray(outcome.excluded_assignments)
+      ? outcome.excluded_assignments
+      : [],
+    excludedAssignmentCount: Number(outcome.excluded_count ?? 0),
+  };
+}

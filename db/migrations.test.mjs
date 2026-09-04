@@ -10,6 +10,7 @@ const auditEventsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url))
 const schedulesMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0017_schedules.sql');
 const scheduleVersionsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0018_schedule_versions.sql');
 const shiftAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0019_shift_assignments.sql');
+const shiftScheduleVersionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0020_shifts_schedule_version.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -129,5 +130,18 @@ describe('0019 shift assignments migration contract', () => {
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_version_employee_date_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_employee_idx');
     expect(sql).toContain('Overlap/rest validation is intentionally handled');
+  });
+});
+
+describe('0020 shifts schedule version migration contract', () => {
+  it('adds a nullable provenance foreign key without changing existing rows', async () => {
+    const sql = await readFile(shiftScheduleVersionMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS schedule_version_id UUID');
+    expect(sql).toContain('REFERENCES schedule_versions (id) ON DELETE SET NULL');
+  });
+
+  it('adds an idempotent provenance lookup index', async () => {
+    const sql = await readFile(shiftScheduleVersionMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shifts_schedule_version_idx');
   });
 });

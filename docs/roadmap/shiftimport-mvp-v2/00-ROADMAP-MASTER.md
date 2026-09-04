@@ -75,7 +75,7 @@ All MISSING at schema and app level. Full task lists required.
 | R3-M07 | Rest Rule Baseline | DONE — PASS; product/legal approved 11h on 2026-09-04 | R3-M06 | 2 | G3, G10 |
 | R3-M08 | Weekly Planner UI | DONE — PASS; `/app/schedule` route, API snapshot and grid, responsive/a11y smoke verified | R0-M05, R3-M07 | 3 | G6, G9 |
 | R3-M09 | Accessible Table Alternative | DONE — PASS; semantic table, keyboard flow, persisted grid/table toggle and axe smoke verified | R3-M08 | 3 | G7 |
-| R3-M10 | Publication | MISSING | R3-M08 | 4 | G4, G5 |
+| R3-M10 | Publication | DONE — PASS; atomic publish, schedule provenance, inactive exclusion and confirmation UI verified | R3-M08 | 3 | G2, G3, G4, G5, G10 |
 | R3-M11 | Published Version Locking | MISSING | R3-M10 | 3 | G3, G5 |
 | R3-M12 | Version History | MISSING | R3-M11 | 3 | G2, G10 |
 | R3-M13 | Authorization / Scope | MISSING | R2-M07, R3-M11 | 4 | G4, G12 |

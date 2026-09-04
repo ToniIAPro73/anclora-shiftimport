@@ -153,6 +153,56 @@ test('planner enforces 11 hours of rest and accepts the exact boundary', async (
   await page.getByRole('button', { name: 'Salir' }).click();
 });
 
+test('planner publishes atomically and excludes an employee deactivated before publication', async ({ page }) => {
+  await loginAs(page, fixture.emails.planner);
+  const headers = { 'x-organization-id': fixture.orgA };
+  const scheduleResponse = await page.request.post('/api/schedules', {
+    headers,
+    data: { areaId: fixture.areaA, periodStart: '2026-11-02' },
+  });
+  expect(scheduleResponse.status()).toBe(201);
+  const schedule = await scheduleResponse.json();
+  const assignmentUrl = `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/assignments`;
+  expect((await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-11-03', startTime: '09:00', endTime: '17:00', location: 'Scheduled' },
+  })).status()).toBe(201);
+  expect((await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA2, date: '2026-11-03', startTime: '09:00', endTime: '17:00', location: 'Excluded' },
+  })).status()).toBe(201);
+
+  await loginAs(page, fixture.emails.owner);
+  const deactivated = await page.request.patch('/api/employees', {
+    headers,
+    data: { id: fixture.empA2, status: 'inactive' },
+  });
+  expect(deactivated.status()).toBe(200);
+
+  await loginAs(page, fixture.emails.planner);
+  const published = await page.request.post(
+    `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/publish`,
+    { headers },
+  );
+  expect(published.status()).toBe(200);
+  expect(await published.json()).toMatchObject({
+    status: 'PUBLISHED', createdShiftCount: 1, excludedAssignmentCount: 1,
+  });
+
+  const shifts = await page.request.get('/api/shifts?areaId=' + encodeURIComponent(fixture.areaA), { headers });
+  expect(shifts.status()).toBe(200);
+  expect((await shifts.json()).shifts.filter((shift: { date: string; origin: string }) => shift.date === '2026-11-03')).toEqual([
+    expect.objectContaining({ origin: 'schedule', location: 'Scheduled' }),
+  ]);
+
+  const repeated = await page.request.post(
+    `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/publish`,
+    { headers },
+  );
+  expect(repeated.status()).toBe(409);
+  await page.getByRole('button', { name: 'Salir' }).click();
+});
+
 test('planner can open the weekly UI and create an empty draft', async ({ page }) => {
   await loginAs(page, fixture.emails.planner);
   await expect(page.getByRole('button', { name: 'Planificar' })).toBeVisible();

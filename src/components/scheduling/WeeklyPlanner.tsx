@@ -7,12 +7,14 @@ import {
   deleteRemoteAssignment,
   listRemoteScheduleVersions,
   loadRemoteScheduleSnapshot,
+  publishRemoteScheduleVersion,
   ScheduleSnapshot,
   ShiftAssignment,
   updateRemoteAssignment,
 } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { LanguageToggle } from '../ui/LanguageToggle';
+import { ModalShell } from '../ui/ModalShell';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { AccessibleScheduleTable } from './AccessibleScheduleTable';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
@@ -82,6 +84,9 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublishOpen, setIsPublishOpen] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -212,6 +217,24 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     }
   };
 
+  const handlePublish = async () => {
+    if (!snapshot || !editable) return;
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      const result = await publishRemoteScheduleVersion(snapshot.version.scheduleId, snapshot.version.id);
+      setIsPublishOpen(false);
+      setNotice(result.excludedAssignmentCount > 0
+        ? t('planner.publishedWithExclusions', { created: result.createdShiftCount, excluded: result.excludedAssignmentCount })
+        : t('planner.publishedNotice', { count: result.createdShiftCount }));
+      await refresh();
+    } catch (requestError) {
+      setPublishError(errorCopy(requestError, t));
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   return (
     <main className="weekly-planner" data-testid="weekly-planner" data-state={isLoading ? 'loading' : error ? 'error' : snapshot && !editable ? 'disabled' : snapshot ? 'ready' : 'empty'}>
       <header className="weekly-planner__header">
@@ -280,7 +303,12 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
               </span>
               <span className="weekly-planner__meta">{t('planner.assignmentCount', { count: snapshot.assignments.length })}</span>
             </div>
-            {!editable && <span className="weekly-planner__locked">{t('planner.locked')}</span>}
+            <div className="weekly-planner__toolbar-actions">
+              {!editable && <span className="weekly-planner__locked">{t('planner.locked')}</span>}
+              {editable && <button type="button" className="btn-gold" onClick={() => { setPublishError(null); setIsPublishOpen(true); }} disabled={isPublishing || snapshot.assignments.length === 0}>
+                {isPublishing ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isPublishing ? t('planner.publishing') : t('planner.publish')}
+              </button>}
+            </div>
           </div>
 
           {snapshot.employees.length === 0 ? (
@@ -369,6 +397,31 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
             />
           )}
         </>
+      )}
+
+      {snapshot && editable && (
+        <ModalShell
+          isOpen={isPublishOpen}
+          onClose={() => { if (!isPublishing) setIsPublishOpen(false); }}
+          title={t('planner.publishTitle')}
+          closeAriaLabel={t('common.close')}
+          maxWidth="520px"
+          footer={(
+            <>
+              <button type="button" className="btn-outline" onClick={() => setIsPublishOpen(false)} disabled={isPublishing}>{t('common.cancel')}</button>
+              <button type="button" className="btn-gold" onClick={() => void handlePublish()} disabled={isPublishing}>
+                {isPublishing ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isPublishing ? t('planner.publishing') : t('planner.confirmPublish')}
+              </button>
+            </>
+          )}
+        >
+          <div className="weekly-planner__publish-summary">
+            <p>{t('planner.publishDescription')}</p>
+            <strong>{t('planner.publishSummary', { count: snapshot.assignments.length })}</strong>
+            <p className="weekly-planner__publish-note">{t('planner.publishNote')}</p>
+            {publishError && <p className="weekly-planner__editor-error" role="alert" aria-live="polite">{publishError}</p>}
+          </div>
+        </ModalShell>
       )}
     </main>
   );

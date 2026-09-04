@@ -124,10 +124,10 @@ export const ModalShell = ({
           : { maxWidth, maxHeight: '90vh', overflowY: 'auto' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexShrink: 0 }}>
-          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{title}</h3>
+          <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{title}</h2>
           {!blocking && (
             <button type="button" className="theme-toggle" onClick={onClose} aria-label={closeAriaLabel}>
-              <X size={18} />
+              <X size={18} aria-hidden="true" />
             </button>
           )}
         </div>

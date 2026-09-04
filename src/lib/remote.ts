@@ -76,6 +76,14 @@ export interface ScheduleSnapshot {
   assignments: ShiftAssignment[];
 }
 
+export interface SchedulePublicationResult {
+  status: 'PUBLISHED';
+  publishedAt: string;
+  createdShiftCount: number;
+  excludedAssignments: Array<{ assignmentId: string; employeeId: string }>;
+  excludedAssignmentCount: number;
+}
+
 export interface ImportHistoryFilters {
   page?: number;
   pageSize?: number;
@@ -200,6 +208,16 @@ export async function deleteRemoteAssignment(
   await apiFetch<void>(
     `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/assignments/${encodeURIComponent(assignmentId)}`,
     { method: 'DELETE' },
+  );
+}
+
+export async function publishRemoteScheduleVersion(
+  scheduleId: string,
+  versionId: string,
+): Promise<SchedulePublicationResult> {
+  return apiFetch<SchedulePublicationResult>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/publish`,
+    { method: 'POST' },
   );
 }
 

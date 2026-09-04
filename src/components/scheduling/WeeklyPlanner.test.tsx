@@ -19,6 +19,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     createRemoteAssignment: vi.fn(),
     updateRemoteAssignment: vi.fn(),
     deleteRemoteAssignment: vi.fn(),
+    publishRemoteScheduleVersion: vi.fn(),
   };
 });
 
@@ -166,5 +167,27 @@ describe('WeeklyPlanner', () => {
     fireEvent.click(addButton);
     expect(screen.getByRole('form', { name: 'Añadir turno' })).toBeInTheDocument();
     expect(screen.getByLabelText('Empleado')).toHaveFocus();
+  });
+
+  it('requires explicit confirmation before publishing the draft', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot());
+    vi.mocked(remote.publishRemoteScheduleVersion).mockResolvedValue({
+      status: 'PUBLISHED',
+      publishedAt: '2026-09-04T10:00:00.000Z',
+      createdShiftCount: 1,
+      excludedAssignments: [],
+      excludedAssignmentCount: 0,
+    });
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publicar' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+    expect(screen.getByRole('dialog', { name: 'Publicar planificación' })).toBeInTheDocument();
+    expect(screen.getByText('1 turnos se materializarán')).toBeInTheDocument();
+    expect(remote.publishRemoteScheduleVersion).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar publicación' }));
+    await waitFor(() => expect(remote.publishRemoteScheduleVersion).toHaveBeenCalledWith('schedule-1', 'version-1'));
   });
 });
