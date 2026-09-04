@@ -1,5 +1,7 @@
 # R0-M05 — Architecture & Module Boundaries
 
+> **EXECUTION NOTE (2026-09-04)**: the routing decision below ("introduce React Router now") was written before investigation and turned out to be based on a false premise — `src/lib/route.ts` already implements a working, tested, hand-rolled router. Tasks T02–T04/T06 as written (evaluate/install a routing library, verify theme after wrapping `App.tsx`) were superseded during execution. The actual decision taken, with full justification, is in [`MODULE-BOUNDARIES.md`](./MODULE-BOUNDARIES.md) section 2: extend `route.ts` incrementally, install nothing. No code was changed in this microfase. Gate still PASSED (G1, G15) against the corrected decision — see commit `e3753c3`.
+
 ## 1. Objetivo
 
 Decidir y documentar (sin ejecutar todavía) la estrategia de división de `api/_lib/data.js` (1524 líneas, capa de acceso a datos monolítica) por dominio, y decidir el enfoque de enrutamiento del dashboard (`src/App.tsx`) necesario antes de que R3 (Scheduling) y R4 (Employee Portal) puedan añadir superficies de UI nuevas.
