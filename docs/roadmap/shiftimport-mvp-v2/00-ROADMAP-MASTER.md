@@ -66,7 +66,7 @@ All MISSING at schema and app level. Full task lists required.
 | Microfase | Objetivo | Repo status | Dependencias | Nº tasks (est.) | Gates |
 |---|---|---|---|---:|---|
 | R3-M00 | Scheduling Domain Baseline | DONE — PASS | R2-M12 | 3 | G1, G3 |
-| R3-M01 | Schedule Schema | MISSING | R3-M00 | 4 | G2 |
+| R3-M01 | Schedule Schema | DONE — PASS | R3-M00 | 4 | G2 |
 | R3-M02 | ScheduleVersion | MISSING | R3-M01 | 4 | G2, G3 |
 | R3-M03 | ShiftAssignment | MISSING | R3-M02 | 4 | G2, G3 |
 | R3-M04 | Draft Creation | MISSING | R3-M03 | 4 | G4, G5 |

@@ -1,5 +1,7 @@
 # R3-M01 — Schedule Schema
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 
 Crear la tabla `schedules` como contenedor lógico de una planificación futura por organización, área opcional y periodo semanal.
@@ -10,7 +12,7 @@ Sin `schedules` no hay dónde agrupar versiones de planificación por periodo/á
 
 ## 3. Estado actual del repositorio
 
-MISSING. Última migración aplicada: `0012_format_profiles_structurehash_uniqueness.sql`. Próxima migración: `0013`.
+MISSING. El repo ya contiene las migraciones R2 `0013`–`0016`; por tanto, la siguiente migración real es `0017_schedules.sql`. El esquema usa UUID en todas las entidades núcleo, no INTEGER/SERIAL.
 
 ## 4. Alcance IN
 
@@ -35,12 +37,12 @@ R3-M00 (dominio fijado).
 
 ```sql
 CREATE TABLE schedules (
-  id SERIAL PRIMARY KEY,
-  organization_id INTEGER NOT NULL REFERENCES organizations(id),
-  area_id INTEGER REFERENCES areas(id),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  area_id UUID REFERENCES areas(id) ON DELETE SET NULL,
   period_start DATE NOT NULL,
   period_end DATE NOT NULL,
-  created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+  created_by_user_id UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (organization_id, area_id, period_start)
 );
@@ -85,7 +87,7 @@ N/A — sin código de aplicación en esta microfase.
 
 ## 16. Migraciones
 
-`db/migrations/0013_schedules.sql` — forward-only, aditiva, sin impacto en datos existentes. Rollback lógico: `DROP TABLE schedules` es seguro mientras no existan `schedule_versions` que referencien la tabla (documentar en sección 22).
+`db/migrations/0017_schedules.sql` — forward-only, aditiva, sin impacto en datos existentes. Rollback lógico: `DROP TABLE schedules` es seguro mientras no existan `schedule_versions` que referencien la tabla (documentar en sección 22). Se usan `IF NOT EXISTS` siguiendo la convención real de las migraciones R2.
 
 ## 17. Compatibilidad y datos existentes
 
@@ -93,13 +95,13 @@ Tabla nueva, no afecta filas existentes de `shifts`/`imports`/etc.
 
 ## 18. Tasks
 
-### T01 — Migración `0013_schedules.sql`
+### T01 — Migración `0017_schedules.sql`
 
 Objetivo:
 Crear la tabla `schedules` con sus índices y constraints según sección 8.
 
 Archivos / módulos probables:
-- `db/migrations/0013_schedules.sql` (nuevo)
+- `db/migrations/0017_schedules.sql` (nuevo)
 
 Cambios:
 - CREATE TABLE + índices + unique parcial.
@@ -108,14 +110,14 @@ No hacer:
 - No añadir columnas de estado (eso vive en `schedule_versions`).
 
 Criterios de aceptación:
-- [ ] Migración aplica limpio sobre HEAD actual vía `db/migrate.mjs`.
-- [ ] Constraint de unicidad verificada con un insert duplicado que falla.
+- [x] Migración aplica limpio sobre HEAD actual vía `db/migrate.mjs`.
+- [x] Constraint de unicidad verificada con un insert duplicado que falla.
 
 Tests:
 - Test de migración en `db/*.test.mjs` (patrón ya usado por migraciones anteriores) verificando creación de tabla y constraints.
 
 Evidencia esperada:
-- Output de `db/migrate.mjs` aplicando 0013.
+- Output de `db/migrate.mjs` aplicando 0017.
 - Resultado del test de migración.
 
 ## 19. Tests obligatorios
@@ -124,14 +126,20 @@ Evidencia esperada:
 
 ## 20. Evidencias
 
-- Migración commiteada.
-- Resultado de test de migración adjunto al informe de microfase.
+- `node --env-file=.env.development.local db/migrate.mjs`: `apply 0017_schedules.sql (6 statements)`, `done 0017_schedules.sql`.
+- `npx vitest run db/migrations.test.mjs`: **1 file passed, 10 tests passed**.
+- Neon dev: tabla `schedules` creada con 7 columnas UUID/DATE/TIMESTAMPTZ, 3 foreign keys e índices esperados.
+- Neon dev: `schedules` tenía 0 filas antes y después de la prueba.
+- Neon dev: segundo Schedule global para la misma organización y `period_start` rechazado por `schedules_organization_period_global_idx`; la transacción de prueba revirtió el primer insert.
+- Índices observados: unique `(organization_id, area_id, period_start)`, unique parcial global, lookup por organización y lookup por organización/periodo.
 
 ## 21. Gate
 
 Gates requeridos: **G2** (Database/migrations).
 
-- G2: migración forward-safe, idempotente en el sentido de que reaplicarla sobre un HEAD ya migrado no rompe nada (usa `IF NOT EXISTS` donde el patrón del repo lo use — verificar convención en migraciones 0008-0012 antes de escribir 0013).
+- G2: migración forward-safe, idempotente en el sentido de que reaplicarla sobre un HEAD ya migrado no rompe nada (usa `IF NOT EXISTS` siguiendo la convención real de las migraciones R2).
+
+Resultado ejecutado: **PASS**.
 
 ## 22. Rollback / remediación
 
@@ -139,4 +147,4 @@ Si el Gate falla por constraint incorrecta: corregir el SQL, no hacer `ALTER` de
 
 ## 23. Criterio de DONE
 
-Migración 0013 aplicada en Neon de desarrollo, test de migración en PASS, Gate G2 PASS.
+Migración 0017 aplicada en Neon de desarrollo, test de migración en PASS, Gate G2 PASS. Commit: `pending`.

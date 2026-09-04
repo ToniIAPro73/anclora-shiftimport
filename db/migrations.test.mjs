@@ -7,6 +7,7 @@ const migrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migratio
 const ownerInvariantMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0014_single_owner_per_organization.sql');
 const scopedAreaMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0015_membership_scoped_area.sql');
 const auditEventsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0016_organization_audit_events.sql');
+const schedulesMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0017_schedules.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -58,5 +59,30 @@ describe('0016 organization audit events migration contract', () => {
     expect(sql).toContain("'MEMBER_ROLE_CHANGED'");
     expect(sql).toContain("'AREA_DEACTIVATED'");
     expect(sql).toContain("'EMPLOYEE_USER_LINKED'");
+  });
+});
+
+describe('0017 schedules migration contract', () => {
+  it('creates an organization-scoped scheduling container with optional area', async () => {
+    const sql = await readFile(schedulesMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS schedules');
+    expect(sql).toContain('organization_id UUID NOT NULL REFERENCES organizations (id) ON DELETE CASCADE');
+    expect(sql).toContain('area_id UUID REFERENCES areas (id) ON DELETE SET NULL');
+    expect(sql).toContain('period_start DATE NOT NULL');
+    expect(sql).toContain('period_end DATE NOT NULL');
+    expect(sql).toContain('created_by_user_id UUID NOT NULL REFERENCES users (id)');
+  });
+
+  it('enforces one schedule per organization, area, and period including global schedules', async () => {
+    const sql = await readFile(schedulesMigrationPath, 'utf8');
+    expect(sql).toContain('UNIQUE (organization_id, area_id, period_start)');
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS schedules_organization_period_global_idx');
+    expect(sql).toContain('WHERE area_id IS NULL');
+  });
+
+  it('adds tenant and period lookup indexes using the repository idempotent pattern', async () => {
+    const sql = await readFile(schedulesMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS schedules_organization_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS schedules_organization_period_idx');
   });
 });
