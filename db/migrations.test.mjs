@@ -8,6 +8,7 @@ const ownerInvariantMigrationPath = resolve(dirname(fileURLToPath(import.meta.ur
 const scopedAreaMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0015_membership_scoped_area.sql');
 const auditEventsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0016_organization_audit_events.sql');
 const schedulesMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0017_schedules.sql');
+const scheduleVersionsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0018_schedule_versions.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -84,5 +85,28 @@ describe('0017 schedules migration contract', () => {
     const sql = await readFile(schedulesMigrationPath, 'utf8');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS schedules_organization_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS schedules_organization_period_idx');
+  });
+});
+
+describe('0018 schedule versions migration contract', () => {
+  it('creates versioned scheduling state with UUID foreign keys and bounded status', async () => {
+    const sql = await readFile(scheduleVersionsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS schedule_versions');
+    expect(sql).toContain('schedule_id UUID NOT NULL REFERENCES schedules (id) ON DELETE CASCADE');
+    expect(sql).toContain('created_by_user_id UUID NOT NULL REFERENCES users (id)');
+    expect(sql).toContain("CHECK (status IN ('DRAFT', 'PUBLISHED', 'LOCKED', 'COMPLETED'))");
+    expect(sql).toContain('CHECK (version_number > 0)');
+  });
+
+  it('enforces unique version numbers and one active draft per schedule', async () => {
+    const sql = await readFile(scheduleVersionsMigrationPath, 'utf8');
+    expect(sql).toContain('UNIQUE (schedule_id, version_number)');
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS schedule_versions_one_draft_idx');
+    expect(sql).toContain("WHERE status = 'DRAFT'");
+  });
+
+  it('adds a schedule/version lookup index', async () => {
+    const sql = await readFile(scheduleVersionsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS schedule_versions_schedule_idx');
   });
 });
