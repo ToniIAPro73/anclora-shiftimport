@@ -368,7 +368,7 @@ export async function createEmployee(sql, ctx, input) {
 }
 
 /**
- * ADMIN only: create many employees in one request (multi-employee import
+ * ADMIN/OWNER only: create many employees in one request (multi-employee import
  * "create all new" flow). Every item is revalidated server-side against the
  * org's CURRENT roster (never trusts what the client believed at upload
  * time) and processed sequentially — no concurrency, so the plan-limit
@@ -653,7 +653,7 @@ export async function updateEmployeeName(sql, ctx, employeeId, name) {
 }
 
 /**
- * ADMIN only: permanently delete an employee. Only possible when the
+ * ADMIN/OWNER only: permanently delete an employee. Only possible when the
  * employee has NO shift history — shifts.employee_id is ON DELETE CASCADE,
  * so a raw delete would silently destroy it; employees with history must be
  * deactivated instead (409 EMPLOYEE_HAS_HISTORY).
@@ -705,7 +705,7 @@ function mapMemberRow(row) {
   };
 }
 
-/** ADMIN only: members of the active organization. */
+/** ADMIN/OWNER only: members of the active organization. */
 export async function listMembers(sql, ctx) {
   requireRole(ctx, 'ADMIN');
   const rows = await sql`
@@ -743,7 +743,7 @@ async function countOrgManagers(sql, organizationId) {
 }
 
 /**
- * ADMIN only: add a member to the active organization.
+ * ADMIN/OWNER only: add a member to the active organization.
  * - Existing registered user (by email): password not required.
  * - New user, password supplied: ADMIN sets an initial password (min 8) and
  *   hands it over out-of-band.
@@ -754,7 +754,7 @@ async function countOrgManagers(sql, organizationId) {
  *   plaintext. No email infrastructure exists yet — documented limitation,
  *   this is the explicit out-of-band handoff for both the single and bulk
  *   add-member flows.
- * Role escalation is impossible: only ADMIN reaches this function and the
+ * Role escalation is impossible: only ADMIN/OWNER reaches this function and the
  * role whitelist is enforced here.
  */
 export async function addMember(sql, ctx, input, hashPasswordFn) {
@@ -846,7 +846,7 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * ADMIN only: bulk user provisioning + automatic User<->Employee linking
+ * ADMIN/OWNER only: bulk user provisioning + automatic User<->Employee linking
  * (multi-row CSV import, "Usuarios" tab). Each row is independent —
  * one bad row never aborts the rest (same partial-success shape as
  * bulkCreateEmployees). Never creates an Employee: `externalEmployeeId`
@@ -1131,7 +1131,7 @@ export async function removeMember(sql, ctx, input) {
 // ------------------------------------------------------------- organizations
 
 /**
- * ADMIN only: rename the active organization. `plan` is deliberately not
+ * ADMIN/OWNER only: rename the active organization. `plan` is deliberately not
  * editable here (R2-M01 scope: no billing integration exists yet to keep it
  * consistent with).
  */
@@ -1153,7 +1153,7 @@ export async function updateOrganizationName(sql, ctx, rawName) {
 }
 
 /**
- * ADMIN only: full reset of the active organization's OPERATIONAL data.
+ * ADMIN/OWNER only: full reset of the active organization's OPERATIONAL data.
  * Deletes, org-scoped and inside ONE transaction (a mid-failure rolls
  * everything back), in FK-safe order:
  *   1) shifts   (shifts.employee_id → employees, shifts.import_id → imports)
@@ -1440,7 +1440,7 @@ export async function createImport(sql, ctx, input) {
 }
 
 /**
- * Deletes exactly one import (ADMIN only): the shifts it created are HARD
+ * Deletes exactly one import (ADMIN/OWNER only): the shifts it created are HARD
  * deleted, scoped strictly by `import_id` (never period/employee/area/origin
  * — see the feature spec's "Turnos importados" rules), so a manual shift
  * that happens to be identical in date/time/employee is never touched

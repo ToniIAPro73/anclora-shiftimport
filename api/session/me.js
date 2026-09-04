@@ -1,4 +1,4 @@
-import { getSql, resolveContext } from '../_lib/auth.js';
+import { getSql, requireAuthenticatedContext, resolveContext } from '../_lib/auth.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /** Current session: user, memberships and active-organization context. */
@@ -9,10 +9,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const ctx = await resolveContext(req, getSql());
-    if (!ctx) {
-      return sendJson(res, 401, { error: 'Not authenticated' });
-    }
+    const ctx = requireAuthenticatedContext(await resolveContext(req, getSql()));
     return sendJson(res, 200, {
       user: ctx.user,
       organizationId: ctx.organizationId,

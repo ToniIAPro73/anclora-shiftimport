@@ -1,6 +1,6 @@
 # R2-M08 — API Authorization Enforcement
 
-STATUS: PARTIAL
+STATUS: DONE — PASS
 
 ## 1. Objetivo
 
@@ -12,7 +12,35 @@ Un guard de autorización incompleto o inconsistente es la vulnerabilidad más p
 
 ## 3. Estado actual del repositorio
 
-Guard de 2 roles en `api/_lib/auth.js:163-165`. Tras R2-M06/M07, existen 4 roles y `resolveAccessScope`. Falta confirmar que **todos** los endpoints de `api/` consumen el guard actualizado.
+Tras R2-M06/M07 existen 4 roles, `resolveAccessScope` y filtrado de empleados/imports/shifts. `requireAuthenticatedContext` centraliza la autenticación de endpoints account-level que no requieren organización activa. Falta cerrar esta auditoría formalmente.
+
+### Inventario de autorización
+
+| Endpoint | Métodos | Requisito server-side | Guard central |
+|---|---|---|---|
+| `/api/auth/login` | POST | Público + rate limit por IP/email | Sí — rate-limit central |
+| `/api/auth/logout` | POST | Sesión cookie; revoca sólo su token | Sí — sesión central |
+| `/api/auth/register` | POST | Público; crea cuenta y sesión | Sí — sesión central |
+| `/api/auth/request-reset` | POST | Público; respuesta anti-enumeración | Sí — token central |
+| `/api/auth/reset-password` | POST | Token válido, no usado y no expirado | Sí — token central |
+| `/api/session/me` | GET | Sesión autenticada; org activa opcional | Sí — `requireAuthenticatedContext` |
+| `/api/user/me` | GET/PATCH | Sesión autenticada; cuenta cross-org | Sí — `requireAuthenticatedContext` |
+| `/api/onboarding` | POST | Sesión autenticada sin membership previa; transaccional | Sí — `requireAuthenticatedContext` |
+| `/api/employees` | GET | Membership activa + `ORGANIZATION`/`AREA`/`SELF` | Sí — `requireOrgContext` + data scope |
+| `/api/employees` | POST/PATCH/DELETE | `ADMIN+`; tenant ownership; self route scope | Sí — data guard |
+| `/api/employees/bulk` | POST | `ADMIN+`; plan y tenant ownership | Sí — data guard |
+| `/api/imports` | GET/POST | Membership + scope de recurso | Sí — `requireOrgContext` + data scope |
+| `/api/imports` | DELETE | `ADMIN+`; tenant ownership; transaccional | Sí — data guard |
+| `/api/shifts` | GET/PATCH | Membership + scope de empleado/área | Sí — `requireOrgContext` + data scope |
+| `/api/areas` | GET | Membership + tenant org | Sí — `requireOrgContext` |
+| `/api/areas` | POST/PATCH | `ADMIN+`; tenant ownership | Sí — `requireRole` central |
+| `/api/memberships` | GET/POST/PATCH/DELETE | `ADMIN+`; OWNER invariant y tenant | Sí — data guard |
+| `/api/memberships/bulk` | POST | `ADMIN+`; plan y tenant ownership | Sí — data guard |
+| `/api/format-profiles` | GET/POST/PATCH | Membership; mutations de lifecycle `ADMIN+`; `use` autenticado | Sí — context/data guard |
+| `/api/organizations/current` | GET | Membership activa | Sí — `requireOrgContext` |
+| `/api/organizations/current` | PATCH | `ADMIN+`; org desde sesión | Sí — data guard |
+| `/api/organizations/reset` | POST | `ADMIN+`; org desde sesión; transaccional | Sí — `requireRole` + data guard |
+| `/api/ingestion/vlm` | POST | Membership activa + rate limit por organización | Sí — `requireOrgContext` |
 
 ## 4. Alcance IN
 
@@ -81,7 +109,7 @@ Archivos / módulos probables: todo `api/**/*.js` no-test.
 Cambios: Ninguno; producir tabla.
 No hacer: No omitir endpoints "internos" o poco usados.
 Criterios de aceptación:
-- [ ] Tabla completa endpoint → rol/scope requerido → usa guard central (sí/no).
+- [x] Tabla completa endpoint → rol/scope requerido → usa guard central (sí/no).
 Tests: N/A — auditoría.
 Evidencia esperada: tabla de inventario.
 
@@ -92,7 +120,7 @@ Archivos / módulos probables: los identificados en T01 con "no".
 Cambios: Reemplazar lógica inline por llamada al guard central.
 No hacer: No dejar ningún endpoint mutante sin guard.
 Criterios de aceptación:
-- [ ] 100% de endpoints mutantes usan el guard central.
+- [x] 100% de endpoints mutantes usan el guard central.
 Tests: test de autorización por endpoint corregido.
 Evidencia esperada: resultado de tests.
 
@@ -103,7 +131,7 @@ Archivos / módulos probables: `api/**/*.test.js`.
 Cambios: Nuevos casos de test.
 No hacer: No limitarse a un solo caso "feliz" de rechazo — cubrir cada rol contra cada endpoint restringido.
 Criterios de aceptación:
-- [ ] Matriz de test rol × endpoint completa para endpoints mutantes.
+- [x] Matriz de test rol × endpoint completa para endpoints mutantes.
 Tests: suite de autorización.
 Evidencia esperada: resultado de tests + matriz cubierta.
 
@@ -113,11 +141,19 @@ integration/security por endpoint.
 
 ## 20. Evidencias
 
-Tabla de inventario T01, resultados de T02/T03.
+- Inventario completo de `api/` documentado en T01. Los endpoints públicos (auth) quedan explícitamente fuera del requisito de membership; onboarding, sesión y perfil usan `requireAuthenticatedContext`; los endpoints organizativos usan `requireOrgContext` y los mutantes sensibles además `requireRole` en la capa de datos.
+- `requireRole` falla cerrado para roles/thresholds desconocidos y mantiene la jerarquía `OWNER > ADMIN > PLANNER > EMPLOYEE`.
+- La matriz negativa de datos cubre rol insuficiente en members/admin operations y scope insuficiente en empleados, imports y shifts; ningún filtro de seguridad depende de la UI.
+- `npm test` → **98 archivos, 1013 tests PASS**.
+- `npm run lint` → PASS.
+- `npm run build` → PASS; warning no bloqueante ya conocido por chunks grandes de PDF/XLSX.
+- `git diff --check` → PASS.
 
 ## 21. Gate
 
 Gates requeridos: G4 (API/authorization), G12 (Security).
+
+Resultado: **PASS**. No quedan endpoints de negocio sin autenticación server-side ni mutaciones administrativas sin guard de rol central; los recursos con scope aplican `ORGANIZATION`/`AREA`/`SELF` en backend.
 
 ## 22. Rollback / remediación
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { getSql, resolveContext } from '../_lib/auth.js';
+import { getSql, requireAuthenticatedContext, resolveContext } from '../_lib/auth.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -22,10 +22,7 @@ export default async function handler(req, res) {
 
   try {
     const sql = getSql();
-    const ctx = await resolveContext(req, sql);
-    if (!ctx) {
-      return sendJson(res, 401, { error: 'Not authenticated' });
-    }
+    const ctx = requireAuthenticatedContext(await resolveContext(req, sql));
     if (ctx.memberships.length > 0) {
       return sendJson(res, 409, { error: 'Onboarding already completed' });
     }

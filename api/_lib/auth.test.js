@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { parseSessionToken, requireOrgContext, requireRole, resolveAccessScope, resolveContext, SESSION_COOKIE } from './auth.js';
+import { parseSessionToken, requireAuthenticatedContext, requireOrgContext, requireRole, resolveAccessScope, resolveContext, SESSION_COOKIE } from './auth.js';
 
 /**
  * Security-context tests (Fase 1.1): multi-org resolution must never pick
@@ -127,6 +127,18 @@ describe('requireOrgContext', () => {
     expect(() => requireOrgContext(null)).toThrowError(expect.objectContaining({ status: 401 }));
     expect(() => requireOrgContext({ organizationId: null })).toThrowError(expect.objectContaining({ status: 400 }));
     expect(requireOrgContext({ organizationId: 'org-1' }).organizationId).toBe('org-1');
+  });
+});
+
+describe('requireAuthenticatedContext', () => {
+  it('allows account-level contexts without an active organization', () => {
+    const ctx = { user: { id: 'user-1' }, organizationId: null };
+    expect(requireAuthenticatedContext(ctx)).toBe(ctx);
+  });
+
+  it('returns 401 without a session context', () => {
+    expect(() => requireAuthenticatedContext(null))
+      .toThrowError(expect.objectContaining({ status: 401 }));
   });
 });
 

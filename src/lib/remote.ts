@@ -182,7 +182,7 @@ export interface RemoteOrganization {
   plan: string | null;
 }
 
-/** ADMIN only: rename the active organization. `plan` is read-only (no
+/** ADMIN/OWNER only: rename the active organization. `plan` is read-only (no
  * billing integration exists yet, R2-M01 scope). */
 export async function updateRemoteOrganizationName(name: string): Promise<RemoteOrganization> {
   const payload = await apiFetch<{ organization: RemoteOrganization }>('/api/organizations/current', {
@@ -201,7 +201,7 @@ export async function updateOwnEmployeeName(name: string): Promise<RemoteEmploye
   return payload.employee;
 }
 
-/** ADMIN only: link an existing org member user to a free employee (or
+/** ADMIN/OWNER only: link an existing org member user to a free employee (or
  * unlink with null). The server rejects with 409 `EMPLOYEE_ALREADY_LINKED`
  * when the employee already has another user and 409 `USER_ALREADY_LINKED`
  * when the user already has another employee. */
@@ -213,7 +213,7 @@ export async function linkEmployeeUser(employeeId: string, userId: string | null
   return payload.employee;
 }
 
-/** Hard delete (ADMIN only). The server rejects with 409
+/** Hard delete (ADMIN/OWNER only). The server rejects with 409
  * `EMPLOYEE_HAS_HISTORY` when the employee has shift history (kept; the
  * caller should offer deactivation instead) and 400 `LAST_ADMIN` when the
  * employee is linked to the org's last ADMIN user. */
@@ -278,7 +278,7 @@ export async function createRemoteImport(input: {
 
 /** Org-scoped import history, paginated. Read access follows the same
  * broad-role convention as /api/areas — EMPLOYEE can view, deletion is
- * ADMIN-only (the server rejects a non-ADMIN delete with 403). */
+ * ADMIN/OWNER-only (the server rejects a lower role with 403). */
 export async function listRemoteImports(filters: ImportHistoryFilters = {}): Promise<ImportHistoryPage> {
   const params = new URLSearchParams();
   if (filters.page) params.set('page', String(filters.page));
@@ -293,7 +293,7 @@ export async function listRemoteImports(filters: ImportHistoryFilters = {}): Pro
   return apiFetch<ImportHistoryPage>(`/api/imports${query ? `?${query}` : ''}`);
 }
 
-/** ADMIN only: deletes exactly this import's created shifts (by import_id)
+/** ADMIN/OWNER only: deletes exactly this import's created shifts (by import_id)
  * and soft-deletes the import row. Manual shifts and shifts from other
  * imports are never touched — see deleteImport in api/_lib/data.js. */
 export async function deleteRemoteImport(id: string): Promise<{ deleted: boolean; importId: string; deletedShiftCount: number }> {
@@ -443,7 +443,7 @@ export async function removeRemoteMember(userId: string): Promise<void> {
   });
 }
 
-/** ADMIN only: restore the organization to its initial operational state
+/** ADMIN/OWNER only: restore the organization to its initial operational state
  * (deletes shifts, imports, employees and user↔employee links; keeps the
  * organization and the admin account). Org-scoped, irreversible. */
 export async function resetOrganization(): Promise<{ reset: boolean; deleted: { shifts: number; imports: number; employees: number } }> {

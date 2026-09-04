@@ -1,6 +1,5 @@
-import { getSql } from '../_lib/auth.js';
+import { getSql, requireAuthenticatedContext, resolveContext } from '../_lib/auth.js';
 import { handleError, sendJson } from '../_lib/http.js';
-import { hashToken } from '../_lib/auth.js';
 
 /**
  * GET  /api/user/me   — current user's profile (account-level)
@@ -12,23 +11,8 @@ import { hashToken } from '../_lib/auth.js';
 export default async function handler(req, res) {
   try {
     const sql = getSql();
-    const cookieHeader = String(req.headers?.cookie ?? '');
-    const match = cookieHeader.match(/anclora_session=([^;]+)/);
-    const token = match?.[1];
-    if (!token) {
-      return sendJson(res, 401, { error: 'Not authenticated' });
-    }
-    const rows = await sql`
-      SELECT u.id, u.email, u.display_name
-      FROM sessions s
-      JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ${hashToken(token)}
-        AND s.expires_at > NOW()
-    `;
-    if (rows.length === 0) {
-      return sendJson(res, 401, { error: 'Not authenticated' });
-    }
-    const user = { id: rows[0].id, email: rows[0].email, displayName: rows[0].display_name };
+    const ctx = requireAuthenticatedContext(await resolveContext(req, sql));
+    const user = ctx.user;
 
     if (req.method === 'GET') {
       return sendJson(res, 200, { user });

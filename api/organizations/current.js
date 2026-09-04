@@ -8,7 +8,7 @@ import { handleError, sendJson } from '../_lib/http.js';
  *       "your organization" info); values are already in ctx (see
  *       resolveContext in _lib/auth.js), so this reads no extra row.
  * PATCH /api/organizations/current — rename the active organization.
- *       ADMIN only (checked in updateOrganizationName, not just here —
+ *       ADMIN/OWNER only (checked in updateOrganizationName, not just here —
  *       master prompt §25). `plan` is not editable (no billing yet).
  *
  * Tenant isolation: organization_id always comes from the session context,

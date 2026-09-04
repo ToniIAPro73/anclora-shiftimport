@@ -5,7 +5,7 @@ import { handleError, sendJson } from '../_lib/http.js';
 /**
  * POST /api/organizations/reset — deletes the active organization's
  * operational data (shifts, imports, employees) inside one transaction.
- * ADMIN only; the organization, users, memberships and sessions survive —
+ * ADMIN/OWNER only; the organization, users, memberships and sessions survive —
  * see resetOrganization in _lib/data.js for the keep/delete decision.
  * Tenant isolation comes from ctx.organizationId (session) only.
  */

@@ -5,7 +5,7 @@ import { handleError, sendJson } from '../_lib/http.js';
 
 /**
  * POST /api/memberships/bulk — bulk user provisioning + automatic
- * User<->Employee linking (Usuarios CSV import, ADMIN only, Team plan).
+ * User<->Employee linking (Usuarios CSV import, ADMIN/OWNER only, Team plan).
  * Body: { members: [{ key, email, name?, role, externalEmployeeId? }] }.
  * `key` is a client-supplied correlation id, echoed back per result, never
  * stored. Never creates an Employee — `externalEmployeeId` only resolves an

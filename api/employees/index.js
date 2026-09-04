@@ -4,7 +4,7 @@ import { handleError, sendJson } from '../_lib/http.js';
 
 /**
  * GET  /api/employees                — org-scoped list (EMPLOYEE sees only self)
- * GET  /api/employees?areaId=X       — list filtered by area (ADMIN dashboard
+ * GET  /api/employees?areaId=X       — list filtered by area (ADMIN/OWNER dashboard
  *                                      area context; ignored for EMPLOYEE)
  * GET  /api/employees?match=1        — matching for the importer (body-less:
  *                                      externalId/name as query params)

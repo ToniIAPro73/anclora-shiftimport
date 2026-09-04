@@ -163,6 +163,15 @@ export function requireOrgContext(ctx) {
   return ctx;
 }
 
+/** Authentication guard for account-level endpoints that intentionally do not
+ * require an active organization (registration onboarding and user profile). */
+export function requireAuthenticatedContext(ctx) {
+  if (!ctx) {
+    throw new HttpError(401, 'Not authenticated');
+  }
+  return ctx;
+}
+
 /** Role guard: OWNER > ADMIN > PLANNER > EMPLOYEE. */
 export function requireRole(ctx, minimum) {
   const rank = { EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 };
