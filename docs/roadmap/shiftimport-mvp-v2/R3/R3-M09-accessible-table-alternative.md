@@ -108,4 +108,4 @@ Resultado ejecutado: **PASS**.
 Si axe reporta violaciones críticas: no commitear como PASS_WITH_WARNINGS — accesibilidad es el objetivo central de esta microfase, un warning aquí no es aceptable per §9 del prompt maestro (no hay microfase futura que lo absorba, esta ES esa microfase).
 
 ## 23. Criterio de DONE
-Vista tabla operativa, cero violaciones axe críticas/serias, navegación por teclado completa verificada, Gate G7 PASS. Commit de implementación pendiente de registro.
+Vista tabla operativa, cero violaciones axe críticas/serias, navegación por teclado completa verificada, Gate G7 PASS. Commit de implementación: `6e71c23`.
