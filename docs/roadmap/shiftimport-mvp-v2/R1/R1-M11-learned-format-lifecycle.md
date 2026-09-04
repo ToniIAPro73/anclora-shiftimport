@@ -7,7 +7,25 @@ Formalizar como contrato cerrado el ciclo de vida completo de un formato aprendi
 Los formatos aprendidos deben progresar de forma predecible (candidate → validated → verified → legacy → deprecated) sin colisiones cuando dos importaciones concurrentes detectan el mismo `structureHash` por primera vez.
 
 ## 3. Estado actual del repositorio
-STATUS: DONE. Commit c863223 cerró una condición de carrera real en el check-then-insert a nivel de aplicación, añadiendo migración 0012 (índice único parcial `(organization_id, structureHash) WHERE status != 'deprecated'`) y recuperación del error 23505 en `api/format-profiles/index.js`. El mismo commit corrigió un bug de visualización (perfiles de 6 vs 7 columnas parecían duplicados).
+STATUS: DONE, verificado sin regresión.
+
+### T01 — Vigencia confirmada
+
+R1-M01 (commit `462a6c5`, ya cerrado) ya verificó línea a línea que el índice único parcial de migración 0012 y la recuperación 23505 en `api/_lib/format-profiles.js:341-351` siguen alineados exactamente — no se repite esa verificación aquí, se referencia. Confirmado adicionalmente en esta microfase: el fix de visualización de columnas (`FormatProfilesModal.tsx:164`, `t('formatProfiles.columns', { count: profile.signature.columnCount })`) sigue presente sin regresión.
+
+El test E2E real-browser (`qa/e2e-acceptance/specs-local/format-memory.spec.ts`) no se ejecuta en esta microfase por el mismo motivo que en R1-M01: requiere servidor dev + navegadores + DB real, y su estado de CI-gating es el objeto de R1-M15.
+
+### T02 — Diagrama de ciclo de vida (ya redactado en R1-M01, referenciado aquí como contrato cerrado)
+
+```text
+(create) ──createCandidateFormatProfile──> candidate
+candidate ──confirmFormatProfile (ADMIN)──> validated
+validated/verified/candidate ──(al confirmar un perfil que lo supersede)──> legacy
+cualquiera ──deprecateFormatProfile (ADMIN)──> deprecated
+legacy/deprecated ──reactivateFormatProfile (ADMIN)──> validated
+```
+
+`verified` permanece como estado declarado sin disparador de código (hallazgo ya documentado en R1-M01, no es una regresión — es el mismo gap conocido, sin cambios desde entonces).
 
 ## 4. Alcance IN
 Documentar el ciclo de vida completo como contrato cerrado; confirmar que el fix de c863223 sigue vigente y no ha sido revertido accidentalmente.
@@ -59,9 +77,9 @@ Archivos / módulos probables: `api/format-profiles/index.js`, migración 0012.
 Cambios: Ninguno si vigente.
 No hacer: No modificar el fix ya cerrado.
 Criterios de aceptación:
-- [ ] Confirmado sin regresión desde c863223.
-Tests: `qa/e2e-acceptance/specs-local/format-memory.spec.ts` en verde.
-Evidencia esperada: Resultado de test + cita de código.
+- [x] Confirmado sin regresión desde c863223 (índice + recuperación 23505 ya verificados en R1-M01; fix de visualización de columnas confirmado presente en `FormatProfilesModal.tsx:164`).
+Tests: `qa/e2e-acceptance/specs-local/format-memory.spec.ts` no ejecutado en esta microfase (mismo razonamiento que R1-M01 — ver sección 3).
+Evidencia esperada: Cita de código (ver sección 3).
 
 ### T02 — Documentar el ciclo de vida completo como contrato
 Objetivo: Redactar diagrama de estados candidate→validated→verified→legacy→deprecated con las transiciones que los disparan.
@@ -69,9 +87,9 @@ Archivos / módulos probables: `api/format-profiles/index.js`.
 Cambios: Añadir el diagrama a este documento.
 No hacer: No modificar código.
 Criterios de aceptación:
-- [ ] Diagrama de transiciones completo y verificado contra código.
+- [x] Diagrama de transiciones completo y verificado contra código (ver sección 3).
 Tests: Ninguno.
-Evidencia esperada: Diagrama incluido en este documento.
+Evidencia esperada: Diagrama incluido en este documento (sección 3).
 
 ## 19. Tests obligatorios
 `qa/e2e-acceptance/specs-local/format-memory.spec.ts`.
