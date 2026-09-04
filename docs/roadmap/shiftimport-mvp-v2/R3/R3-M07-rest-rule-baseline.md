@@ -107,4 +107,4 @@ Resultado ejecutado: **PASS**.
 Si el valor confirmado cambia después de implementado: es un cambio de constante, no de schema — remediación trivial, nueva microfase de ajuste si el piloto lo requiere.
 
 ## 23. Criterio de DONE
-Valor confirmado por producto/legal, validación operativa, casos límite cubiertos por test, Gate G3+G10 PASS. Commit de implementación: pendiente de registrar tras el commit local.
+Valor confirmado por producto/legal, validación operativa, casos límite cubiertos por test, Gate G3+G10 PASS. Commit de implementación: `79b3faf`.
