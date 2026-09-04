@@ -14,6 +14,7 @@ import {
   listShifts,
   removeMember,
   resetOrganization,
+  updateOrganizationName,
   updateEmployee,
   updateMemberRole,
   upsertShifts,
@@ -56,7 +57,7 @@ const shiftRow = (over = {}) => ({
   ...over,
 });
 
-function makeFakeSql({ employees = [], memberships = [], imports = [], users = [], shifts = [], areas = [] } = {}) {
+function makeFakeSql({ employees = [], memberships = [], imports = [], users = [], shifts = [], areas = [], organizations = [] } = {}) {
   const calls = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
@@ -341,6 +342,15 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         return Promise.resolve(removed.map((row) => ({ id: row.id })));
       }
       return Promise.resolve([{ id: values[0] }]);
+    }
+    // updateOrganizationName (values: [name, organizationId])
+    if (text.startsWith('UPDATE organizations SET name')) {
+      const org = organizations.find((o) => o.id === values[1]);
+      if (!org) {
+        return Promise.resolve([]);
+      }
+      org.name = values[0];
+      return Promise.resolve([{ id: org.id, name: org.name, plan: org.plan ?? null }]);
     }
     return Promise.resolve([]);
   };
@@ -1470,5 +1480,31 @@ describe('organization reset', () => {
     expect(fixtures.employees).toHaveLength(3);
     expect(fixtures.imports).toHaveLength(2);
     expect(fixtures.shifts).toHaveLength(3);
+  });
+});
+
+describe('organization settings (R2-M01)', () => {
+  it('ADMIN can rename the active organization', async () => {
+    const { sql } = makeFakeSql({ organizations: [{ id: ORG_A, name: 'Old Name', plan: 'team' }] });
+    const result = await updateOrganizationName(sql, adminCtx, '  New Name  ');
+    expect(result).toEqual({ id: ORG_A, name: 'New Name', plan: 'team' });
+  });
+
+  it('EMPLOYEE cannot rename the organization', async () => {
+    const { sql } = makeFakeSql({ organizations: [{ id: ORG_A, name: 'Old Name', plan: 'team' }] });
+    await expect(updateOrganizationName(sql, employeeCtx, 'New Name'))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('rejects an empty name', async () => {
+    const { sql } = makeFakeSql({ organizations: [{ id: ORG_A, name: 'Old Name', plan: 'team' }] });
+    await expect(updateOrganizationName(sql, adminCtx, '   '))
+      .rejects.toMatchObject({ status: 400 });
+  });
+
+  it('cannot rename another organization (404, no leak)', async () => {
+    const { sql } = makeFakeSql({ organizations: [{ id: ORG_B, name: 'Other Org', plan: 'team' }] });
+    await expect(updateOrganizationName(sql, adminCtx, 'New Name'))
+      .rejects.toMatchObject({ status: 404 });
   });
 });

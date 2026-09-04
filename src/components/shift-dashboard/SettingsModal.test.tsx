@@ -15,6 +15,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     updateUserDisplayName: vi.fn(),
     updateOwnEmployeeName: vi.fn(),
     resetOrganization: vi.fn(),
+    updateRemoteOrganizationName: vi.fn(),
   };
 });
 
@@ -27,6 +28,7 @@ beforeEach(() => {
 const mockedUpdateUserDisplayName = vi.mocked(remote.updateUserDisplayName);
 const mockedUpdateOwnEmployeeName = vi.mocked(remote.updateOwnEmployeeName);
 const mockedResetOrganization = vi.mocked(remote.resetOrganization);
+const mockedUpdateRemoteOrganizationName = vi.mocked(remote.updateRemoteOrganizationName);
 
 type SessionProp = NonNullable<ComponentProps<typeof SettingsModal>['session']>;
 
@@ -281,5 +283,56 @@ describe('SettingsModal — danger zone (organization reset)', () => {
     expect(onOrganizationReset).not.toHaveBeenCalled();
     // The modal stays open so the admin can retry or cancel.
     expect(screen.getByText('Restaurar organización')).toBeTruthy();
+  });
+});
+
+describe('SettingsModal — organization name (R2-M01)', () => {
+  const openTeamTab = () => fireEvent.click(screen.getByText('Equipo'));
+
+  it('ADMIN sees an editable name field and saving calls the API + notifies', async () => {
+    mockedUpdateRemoteOrganizationName.mockResolvedValue({ id: 'org-1', name: 'Acme Renamed', plan: 'team' });
+    const onOrganizationNameChange = vi.fn();
+    renderSettings({ session: makeSession(), onOrganizationNameChange });
+
+    openTeamTab();
+    const input = screen.getByLabelText('Nombre') as HTMLInputElement;
+    expect(input.value).toBe('Acme');
+
+    fireEvent.change(input, { target: { value: 'Acme Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(mockedUpdateRemoteOrganizationName).toHaveBeenCalledWith('Acme Renamed'));
+    await waitFor(() => expect(onOrganizationNameChange).toHaveBeenCalledTimes(1));
+  });
+
+  // EMPLOYEE never reaches the "Equipo" tab at all (getAvailableTabs) —
+  // already covered by the "no team tab" tests in the reset describe block
+  // above. The role==='ADMIN' check inside TeamSection's org-name field is
+  // defensive (never trust a single gate, master prompt §25) but not
+  // independently reachable through normal navigation, so it has no
+  // separate test here.
+
+  it('a failed rename shows an inline error and does not notify', async () => {
+    mockedUpdateRemoteOrganizationName.mockRejectedValue(new Error('boom'));
+    const onOrganizationNameChange = vi.fn();
+    renderSettings({ session: makeSession(), onOrganizationNameChange });
+
+    openTeamTab();
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Acme Renamed' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => expect(screen.getByText('No se pudo guardar el nombre de la organización')).toBeTruthy());
+    expect(onOrganizationNameChange).not.toHaveBeenCalled();
+  });
+
+  it('save is disabled when the name is unchanged or empty', () => {
+    renderSettings({ session: makeSession() });
+    openTeamTab();
+    const saveButton = screen.getByRole('button', { name: 'Guardar cambios' }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true); // unchanged
+
+    const input = screen.getByLabelText('Nombre');
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect(saveButton.disabled).toBe(true); // empty/whitespace
   });
 });

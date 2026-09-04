@@ -1022,6 +1022,28 @@ export async function removeMember(sql, ctx, input) {
 // ------------------------------------------------------------- organizations
 
 /**
+ * ADMIN only: rename the active organization. `plan` is deliberately not
+ * editable here (R2-M01 scope: no billing integration exists yet to keep it
+ * consistent with).
+ */
+export async function updateOrganizationName(sql, ctx, rawName) {
+  requireRole(ctx, 'ADMIN');
+  const name = String(rawName ?? '').trim();
+  if (!name) {
+    throw new HttpError(400, 'Organization name is required');
+  }
+  const rows = await sql`
+    UPDATE organizations SET name = ${name}, updated_at = NOW()
+    WHERE id = ${ctx.organizationId}
+    RETURNING id, name, plan
+  `;
+  if (rows.length === 0) {
+    throw new HttpError(404, 'Organization not found');
+  }
+  return { id: rows[0].id, name: rows[0].name, plan: rows[0].plan };
+}
+
+/**
  * ADMIN only: full reset of the active organization's OPERATIONAL data.
  * Deletes, org-scoped and inside ONE transaction (a mid-failure rolls
  * everything back), in FK-safe order:

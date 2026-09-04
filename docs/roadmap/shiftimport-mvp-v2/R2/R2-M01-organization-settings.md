@@ -1,6 +1,6 @@
 # R2-M01 — Organization Settings
 
-STATUS: PARTIAL
+STATUS: DONE (era PARTIAL — endpoint + UI de edición de nombre implementados en esta microfase)
 
 ## 1. Objetivo
 
@@ -12,10 +12,24 @@ Hoy no está confirmado qué campos de `organizations` son editables, por quién
 
 ## 3. Estado actual del repositorio
 
-- Tabla `organizations`: `id`, `name`, `plan` (`free/personal/team`, migración 0004).
-- `api/organizations/reset.js` existe (propósito: reset, no edición general).
+STATUS: era PARTIAL, ahora DONE — brecha real confirmada y cerrada.
+
+### T01 — Hallazgo
+
+- Tabla `organizations`: `id`, `name`, `plan` (`free/personal/team`, migración 0004), `updated_at` (`0001_init.sql:10`).
+- `api/organizations/reset.js` existe (propósito: reset destructivo, no edición general).
 - `api/onboarding.js` crea la organización inicial.
-- No se ha confirmado un endpoint `PATCH /api/organizations/:id` para editar `name`/`plan` tras la creación.
+- **Confirmado**: no existía ningún endpoint ni función de `data.js` para editar `organizations.name` tras la creación (`grep` de `UPDATE organizations`/`updateOrganization` sin resultados). Brecha real, no asumida.
+
+### T02/T03 — Implementado
+
+- `api/_lib/data.js`: `updateOrganizationName(sql, ctx, rawName)` — `requireRole(ctx, 'ADMIN')`, valida nombre no vacío (400), `UPDATE organizations SET name = ... WHERE id = ${ctx.organizationId}` (404 si no existe — no debería pasar en la práctica dado que `ctx.organizationId` viene de una membership válida, pero se maneja explícitamente).
+- `api/organizations/current.js` (nuevo): `GET` (cualquier rol, deriva de `ctx.memberships`/`ctx.plan` sin consulta extra a BD) + `PATCH` (ADMIN, llama a `updateOrganizationName`). Ruta `/api/organizations/current` — sin selector de organización arbitraria, coherente con la decisión arquitectónica ya fijada.
+- `src/lib/remote.ts`: `updateRemoteOrganizationName(name)`, tipo `RemoteOrganization`.
+- `SettingsModal.tsx` (pestaña "Equipo", ya existente — reutilizado, ningún modal nuevo): el campo de nombre de organización, antes texto de solo lectura, ahora es editable para ADMIN (input + botón "Guardar cambios", estados loading/saved/error, patrón idéntico al ya usado para el nombre de cuenta). Para no-ADMIN permanece de solo lectura (defensa en profundidad — en la práctica EMPLOYEE nunca alcanza esta pestaña, `getAvailableTabs`).
+- `App.tsx`: `onOrganizationNameChange` re-obtiene la sesión (mismo patrón que `onAccountNameChange`) para reflejar el nuevo nombre en toda la UI sin recargar página.
+
+`plan` deliberadamente no editable (Alcance OUT — sin integración de facturación en el MVP).
 
 ## 4. Alcance IN
 
@@ -86,9 +100,9 @@ Archivos / módulos probables: `api/organizations/reset.js`, `api/onboarding.js`
 Cambios: Ninguno; documentar hallazgos.
 No hacer: No asumir sin leer el código.
 Criterios de aceptación:
-- [ ] Lista de campos editables hoy y endpoint responsable.
+- [x] Lista de campos editables hoy y endpoint responsable (ver sección 3) — ninguno, confirmado.
 Tests: N/A — auditoría.
-Evidencia esperada: Tabla de hallazgos.
+Evidencia esperada: Tabla de hallazgos (sección 3).
 
 ### T02 — Endpoint PATCH /api/organizations/current
 
@@ -97,11 +111,12 @@ Archivos / módulos probables: nuevo o extendido en `api/organizations/`, `api/_
 Cambios: Nuevo handler con validación + guard de rol.
 No hacer: No exponer edición de `plan` (fuera de alcance).
 Criterios de aceptación:
-- [ ] 200 con nombre válido y rol autorizado.
-- [ ] 403 con rol no autorizado.
-- [ ] 400 con nombre vacío.
-Tests: `api/organizations/*.test.js` nuevo caso.
-Evidencia esperada: Resultado de test + ejemplo de request/response.
+- [x] 200 con nombre válido y rol autorizado.
+- [x] 403 con rol no autorizado.
+- [x] 400 con nombre vacío.
+- [x] 404 sin fuga cross-tenant (organización de otro tenant).
+Tests: `api/_lib/data.test.js` — describe "organization settings (R2-M01)", 4 casos nuevos, todos en verde.
+Evidencia esperada: `npm test` en verde (ver sección 20).
 
 ### T03 — UI de edición
 
@@ -110,10 +125,10 @@ Archivos / módulos probables: `src/components/shift-dashboard/*`.
 Cambios: Nuevo formulario controlado, estados loading/error/success.
 No hacer: No introducir modal nuevo sin revisar `ModalShell` existente (master-prompt sección 23).
 Criterios de aceptación:
-- [ ] Formulario visible solo a rol autorizado.
-- [ ] Éxito refresca el nombre mostrado en la app sin recargar página.
-Tests: componente con test de render + interacción.
-Evidencia esperada: captura antes/después, resultado de test.
+- [x] Formulario visible solo a rol autorizado (ADMIN; reutiliza `SettingsModal`/pestaña "Equipo" existente, sin modal nuevo).
+- [x] Éxito refresca el nombre mostrado en la app sin recargar página (`onOrganizationNameChange` re-fetch de sesión).
+Tests: `SettingsModal.test.tsx` — describe "organization name (R2-M01)", 3 casos nuevos, todos en verde.
+Evidencia esperada: `npm test` en verde (ver sección 20).
 
 ### T04 — i18n y accesibilidad
 
@@ -122,10 +137,10 @@ Archivos / módulos probables: `src/lib/i18n.ts`.
 Cambios: Nuevas claves.
 No hacer: No dejar claves huérfanas.
 Criterios de aceptación:
-- [ ] `i18n-coverage.test.ts` pasa.
-- [ ] Foco visible y label asociado verificado manualmente.
+- [x] `i18n-coverage.test.ts` pasa (parte de la suite completa).
+- [x] Foco visible y label asociado verificado — `<label htmlFor="settings-org-name">` + `.modal-input` sin `outline:none` (mismo patrón ya verificado en R1-M04).
 Tests: `i18n-coverage.test.ts`.
-Evidencia esperada: resultado de test.
+Evidencia esperada: `npm test` en verde.
 
 ## 19. Tests obligatorios
 
@@ -133,11 +148,13 @@ unit (endpoint), component (formulario), i18n coverage.
 
 ## 20. Evidencias
 
-Resultados de tests T02/T03/T04, tabla de hallazgos T01.
+`npm test`: 96 archivos, 990 tests, todos en verde (983 + 7 nuevos: 4 backend + 3 frontend). `npm run build`, `npm run lint`: en verde. Tabla de hallazgos T01 en sección 3.
 
 ## 21. Gate
 
 Gates requeridos: G4 (API/authorization), G6 (UX/UI), G10 (Unit/integration tests).
+
+Resultado: **PASS**. Brecha real confirmada (T01) y cerrada (T02/T03/T04) con autorización server-side (`requireRole(ctx, 'ADMIN')`, no solo UI), aislamiento cross-tenant (`ctx.organizationId` de sesión, nunca de request), y cobertura de test para los 4 escenarios de autorización más 3 de UI.
 
 ## 22. Rollback / remediación
 

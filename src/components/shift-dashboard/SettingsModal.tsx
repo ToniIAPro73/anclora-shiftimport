@@ -17,7 +17,7 @@ import { SearchableSelect } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
 import { SessionInfo } from '../../lib/session';
 import { RemoteEmployee } from '../../lib/remote';
-import { resetOrganization, updateUserDisplayName, updateOwnEmployeeName } from '../../lib/remote';
+import { resetOrganization, updateUserDisplayName, updateOwnEmployeeName, updateRemoteOrganizationName } from '../../lib/remote';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -38,6 +38,8 @@ interface SettingsModalProps {
   onAccountNameChange?: () => void;
   /** Callback after a successful organization reset (reload org data). */
   onOrganizationReset?: () => void;
+  /** Callback after a successful organization rename (refresh session). */
+  onOrganizationNameChange?: () => void;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -322,12 +324,14 @@ function TeamSection({
   selectedEmployeeId,
   onOpenMembers,
   onOrganizationReset,
+  onOrganizationNameChange,
 }: {
   session: SettingsModalProps['session'];
   employees: RemoteEmployee[];
   selectedEmployeeId: string | null;
   onOpenMembers?: () => void;
   onOrganizationReset?: () => void;
+  onOrganizationNameChange?: () => void;
 }) {
   const { t } = useI18n();
   const activeMembership = session?.memberships.find(m => m.organizationId === session.organizationId);
@@ -335,6 +339,35 @@ function TeamSection({
   const [resetConfirmText, setResetConfirmText] = useState('');
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState('');
+  // R2-M01: organization name is only editable by ADMIN; initialized from
+  // the current membership and re-synced if it changes underneath us
+  // (switching active organization).
+  const [orgName, setOrgName] = useState(activeMembership?.organizationName ?? '');
+  const [orgNameSaving, setOrgNameSaving] = useState(false);
+  const [orgNameSaved, setOrgNameSaved] = useState(false);
+  const [orgNameError, setOrgNameError] = useState('');
+
+  useEffect(() => {
+    setOrgName(activeMembership?.organizationName ?? '');
+  }, [activeMembership?.organizationName]);
+
+  const handleSaveOrgName = async () => {
+    const trimmed = orgName.trim();
+    if (!trimmed || trimmed === activeMembership?.organizationName) return;
+    setOrgNameSaving(true);
+    setOrgNameError('');
+    try {
+      await updateRemoteOrganizationName(trimmed);
+      onOrganizationNameChange?.();
+      setOrgNameSaved(true);
+      setTimeout(() => setOrgNameSaved(false), 2000);
+    } catch (error) {
+      console.error('Failed to update organization name', error);
+      setOrgNameError(t('settings.orgNameSaveError'));
+    } finally {
+      setOrgNameSaving(false);
+    }
+  };
 
   const closeResetModal = () => {
     setIsResetOpen(false);
@@ -374,10 +407,35 @@ function TeamSection({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
         <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.organizationInfo')}</h3>
         <div style={{ display: 'grid', gap: 'var(--space-sm)', fontSize: '0.85rem' }}>
-          <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgName')}</span>
-            <span style={{ fontWeight: 600 }}>{activeMembership?.organizationName}</span>
-          </div>
+          {session?.role === 'ADMIN' ? (
+            <div>
+              <label style={labelStyle} htmlFor="settings-org-name">{t('settings.orgName')}</label>
+              <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', flexWrap: 'wrap' }}>
+                <input
+                  id="settings-org-name"
+                  className="modal-input"
+                  style={{ maxWidth: '320px' }}
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  disabled={orgNameSaving}
+                />
+                <button
+                  className="btn-gold"
+                  style={{ width: 'fit-content' }}
+                  onClick={handleSaveOrgName}
+                  disabled={orgNameSaving || !orgName.trim() || orgName.trim() === activeMembership?.organizationName}
+                >
+                  {orgNameSaving ? t('auth.working') : orgNameSaved ? t('settings.saved') : t('settings.saveChanges')}
+                </button>
+              </div>
+              {orgNameError && <p role="alert" style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--danger)' }}>{orgNameError}</p>}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgName')}</span>
+              <span style={{ fontWeight: 600 }}>{activeMembership?.organizationName}</span>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
             <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.yourRole')}</span>
             <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t(`role.${(session?.role ?? '').toLowerCase()}`)}</span>
@@ -663,6 +721,7 @@ export const SettingsModal = ({
   onOpenMembers,
   onAccountNameChange,
   onOrganizationReset,
+  onOrganizationNameChange,
 }: SettingsModalProps) => {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('profile');
@@ -729,6 +788,7 @@ export const SettingsModal = ({
             selectedEmployeeId={selectedEmployeeId}
             onOpenMembers={onOpenMembers}
             onOrganizationReset={onOrganizationReset}
+            onOrganizationNameChange={onOrganizationNameChange}
           />
         );
       case 'shiftTypes':

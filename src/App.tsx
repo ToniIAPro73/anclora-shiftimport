@@ -1444,6 +1444,17 @@ function App() {
             void hydrateAuthenticated(session);
           }
         }}
+        onOrganizationNameChange={() => {
+          // Same reasoning as onAccountNameChange: the renamed org's name
+          // lives in session.memberships, which hydrateAuthenticated does
+          // not refresh — re-fetch the session so it's reflected immediately.
+          void (async () => {
+            const fresh = await fetchSession();
+            if (fresh) {
+              setSession(fresh);
+            }
+          })();
+        }}
       />
 
       <OnboardingModal

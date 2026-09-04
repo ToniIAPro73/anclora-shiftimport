@@ -176,6 +176,22 @@ export async function updateRemoteEmployee(input: {
   return payload.employee;
 }
 
+export interface RemoteOrganization {
+  id: string;
+  name: string;
+  plan: string | null;
+}
+
+/** ADMIN only: rename the active organization. `plan` is read-only (no
+ * billing integration exists yet, R2-M01 scope). */
+export async function updateRemoteOrganizationName(name: string): Promise<RemoteOrganization> {
+  const payload = await apiFetch<{ organization: RemoteOrganization }>('/api/organizations/current', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+  return payload.organization;
+}
+
 /** EMPLOYEE (or ADMIN): update own employee's name via /self endpoint. */
 export async function updateOwnEmployeeName(name: string): Promise<RemoteEmployee> {
   const payload = await apiFetch<{ employee: RemoteEmployee }>('/api/employees?self=true', {
