@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createAssignment, deleteAssignment, rangesOverlap, updateAssignment } from '../_lib/scheduling.js';
+import {
+  calculateRestGapMinutes,
+  createAssignment,
+  deleteAssignment,
+  rangesOverlap,
+  updateAssignment,
+} from '../_lib/scheduling.js';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const AREA = '22222222-2222-4222-8222-222222222222';
@@ -47,6 +53,22 @@ describe('ShiftAssignment draft CRUD', () => {
     expect(rangesOverlap('09:00', '13:00', '12:00', '17:00')).toBe(true);
     expect(rangesOverlap('12:00', '17:00', '09:00', '13:00')).toBe(true);
     expect(rangesOverlap('10:00', '11:00', '09:00', '17:00')).toBe(true);
+  });
+
+  it('calculates rest across dates, including the inclusive 11-hour boundary', () => {
+    const first = { date: '2026-09-29', start_time: '09:00', end_time: '17:00' };
+    expect(calculateRestGapMinutes(first, {
+      date: '2026-09-30', start_time: '04:00', end_time: '12:00',
+    })).toBe(660);
+    expect(calculateRestGapMinutes(first, {
+      date: '2026-09-30', start_time: '03:59', end_time: '12:00',
+    })).toBe(659);
+    expect(calculateRestGapMinutes(first, {
+      date: '2026-09-30', start_time: '09:00', end_time: '17:00',
+    })).toBe(960);
+    expect(calculateRestGapMinutes(first, {
+      date: new Date(2026, 8, 30), start_time: '04:00', end_time: '12:00',
+    })).toBe(660);
   });
 
   it('creates an assignment inside the schedule period', async () => {

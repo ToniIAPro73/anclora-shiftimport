@@ -5,7 +5,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function databaseDateToIso(value) {
-  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  if (!(value instanceof Date)) return String(value).slice(0, 10);
+  // PostgreSQL DATE has no timezone. The Neon driver may materialize it as a
+  // local-midnight Date, so using toISOString() can shift it to the prior day
+  // in positive-offset environments.
+  return [value.getFullYear(), value.getMonth() + 1, value.getDate()]
+    .map((part, index) => index === 0 ? String(part).padStart(4, '0') : String(part).padStart(2, '0'))
+    .join('-');
 }
 
 function normalizePeriodStart(value) {
@@ -64,6 +70,32 @@ function normalizeTime(value, field) {
 function timeToMinutes(value) {
   const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
   return hours * 60 + minutes;
+}
+
+export const MINIMUM_REST_HOURS = 11;
+const MINIMUM_REST_MINUTES = MINIMUM_REST_HOURS * 60;
+
+function dateToDayNumber(value) {
+  const date = databaseDateToIso(value);
+  const [year, month, day] = date.split('-').map(Number);
+  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+}
+
+function assignmentInterval(assignment) {
+  const start = dateToDayNumber(assignment.date) * 1440 + timeToMinutes(assignment.start_time);
+  let end = dateToDayNumber(assignment.date) * 1440 + timeToMinutes(assignment.end_time);
+  // Preserve the existing shift convention: an end time at or before the
+  // start time represents an overnight assignment.
+  if (end <= start) end += 1440;
+  return { start, end };
+}
+
+export function calculateRestGapMinutes(first, second) {
+  const a = assignmentInterval(first);
+  const b = assignmentInterval(second);
+  if (a.end <= b.start) return b.start - a.end;
+  if (b.end <= a.start) return a.start - b.end;
+  return null;
 }
 
 /** Half-open interval rule: touching assignments are valid, overlap is not. */
@@ -154,6 +186,39 @@ async function assertNoAssignmentOverlap(sql, { scheduleVersionId, employeeId, d
   }
 }
 
+async function assertMinimumRest(sql, {
+  scheduleVersionId, employeeId, date, startTime, endTime, excludeId = null,
+}) {
+  const rows = excludeId
+    ? await sql`
+      SELECT id, date, start_time, end_time
+      FROM shift_assignments
+      WHERE schedule_version_id = ${scheduleVersionId}
+        AND employee_id = ${employeeId}
+        AND date BETWEEN (${date}::date - 2) AND (${date}::date + 2)
+        AND id <> ${excludeId}
+    `
+    : await sql`
+      SELECT id, date, start_time, end_time
+      FROM shift_assignments
+      WHERE schedule_version_id = ${scheduleVersionId}
+        AND employee_id = ${employeeId}
+        AND date BETWEEN (${date}::date - 2) AND (${date}::date + 2)
+    `;
+  const candidate = { date, start_time: startTime, end_time: endTime };
+  const conflict = rows
+    .map((row) => ({ row, gap: calculateRestGapMinutes(candidate, row) }))
+    .filter(({ gap }) => gap !== null && gap < MINIMUM_REST_MINUTES)
+    .sort((a, b) => a.gap - b.gap)[0];
+  if (conflict) {
+    const error = new HttpError(422, `Minimum rest period is ${MINIMUM_REST_HOURS} hours`);
+    error.code = 'REST_RULE_VIOLATION';
+    error.minimumRestHours = MINIMUM_REST_HOURS;
+    error.conflictingAssignmentId = conflict.row.id;
+    throw error;
+  }
+}
+
 function mapAssignment(row) {
   return {
     id: row.id,
@@ -178,6 +243,9 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
   await assertNoAssignmentOverlap(sql, {
+    scheduleVersionId: versionId, employeeId, date, startTime, endTime,
+  });
+  await assertMinimumRest(sql, {
     scheduleVersionId: versionId, employeeId, date, startTime, endTime,
   });
   const location = input.location === undefined || input.location === null ? null : String(input.location).trim() || null;
@@ -213,6 +281,9 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
   await assertNoAssignmentOverlap(sql, {
+    scheduleVersionId: versionId, employeeId, date, startTime, endTime, excludeId: assignmentId,
+  });
+  await assertMinimumRest(sql, {
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, excludeId: assignmentId,
   });
   const location = input.location === undefined ? assignment.location : (input.location === null ? null : String(input.location).trim() || null);

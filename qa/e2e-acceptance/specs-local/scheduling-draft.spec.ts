@@ -91,7 +91,7 @@ test('planner can create, edit, and delete a draft assignment', async ({ page })
 
   const adjacent = await page.request.post(assignmentUrl, {
     headers,
-    data: { employeeId: fixture.empA1, date: '2026-09-29', startTime: '17:00', endTime: '18:00' },
+    data: { employeeId: fixture.empA1, date: '2026-09-30', startTime: '09:00', endTime: '17:00' },
   });
   expect(adjacent.status()).toBe(201);
   const adjacentAssignment = await adjacent.json();
@@ -102,7 +102,7 @@ test('planner can create, edit, and delete a draft assignment', async ({ page })
   expect((await updated.json()).assignment.location).toBe('Lobby');
 
   const overlapOnUpdate = await page.request.patch(adjacentItemUrl, {
-    headers, data: { startTime: '16:00', endTime: '20:00' },
+    headers, data: { date: '2026-09-29', startTime: '16:00', endTime: '20:00' },
   });
   expect(overlapOnUpdate.status()).toBe(422);
   expect(await overlapOnUpdate.json()).toMatchObject({ code: 'OVERLAP', conflictingAssignmentId: assignment.assignment.id });
@@ -111,5 +111,44 @@ test('planner can create, edit, and delete a draft assignment', async ({ page })
   expect(deleted.status()).toBe(204);
   const deletedAdjacent = await page.request.delete(adjacentItemUrl, { headers });
   expect(deletedAdjacent.status()).toBe(204);
+  await page.getByRole('button', { name: 'Salir' }).click();
+});
+
+test('planner enforces 11 hours of rest and accepts the exact boundary', async ({ page }) => {
+  await loginAs(page, fixture.emails.planner);
+  const headers = { 'x-organization-id': fixture.orgA };
+  const scheduleResponse = await page.request.post('/api/schedules', {
+    headers,
+    data: { areaId: fixture.areaA, periodStart: '2026-10-05' },
+  });
+  expect(scheduleResponse.status()).toBe(201);
+  const schedule = await scheduleResponse.json();
+  const assignmentUrl = `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/assignments`;
+
+  const firstResponse = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-10-06', startTime: '09:00', endTime: '17:00' },
+  });
+  expect(firstResponse.status()).toBe(201);
+  const first = await firstResponse.json();
+
+  const tooLittleRest = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-10-07', startTime: '03:59', endTime: '12:00' },
+  });
+  expect(tooLittleRest.status()).toBe(422);
+  expect(await tooLittleRest.json()).toMatchObject({
+    code: 'REST_RULE_VIOLATION', minimumRestHours: 11, conflictingAssignmentId: first.assignment.id,
+  });
+
+  const exactBoundary = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-10-07', startTime: '04:00', endTime: '12:00' },
+  });
+  expect(exactBoundary.status()).toBe(201);
+  const boundary = await exactBoundary.json();
+
+  await page.request.delete(`${assignmentUrl}/${first.assignment.id}`, { headers });
+  await page.request.delete(`${assignmentUrl}/${boundary.assignment.id}`, { headers });
   await page.getByRole('button', { name: 'Salir' }).click();
 });

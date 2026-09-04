@@ -16,5 +16,7 @@ export function handleError(res, error) {
     ...(status < 500 && error?.code ? { code: error.code } : {}),
     ...(status < 500 && error?.conflictingAssignmentId
       ? { conflictingAssignmentId: error.conflictingAssignmentId } : {}),
+    ...(status < 500 && Number.isFinite(error?.minimumRestHours)
+      ? { minimumRestHours: error.minimumRestHours } : {}),
   });
 }

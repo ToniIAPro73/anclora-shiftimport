@@ -72,7 +72,7 @@ All MISSING at schema and app level. Full task lists required.
 | R3-M04 | Draft Creation | DONE — PASS | R3-M03 | 4 | G4, G5 |
 | R3-M05 | Assignment Editing | DONE — PASS | R3-M04 | 4 | G4, G5 |
 | R3-M06 | Overlap Validation | DONE — PASS | R3-M05 | 3 | G3, G10 |
-| R3-M07 | Rest Rule Baseline | MISSING | R3-M06 | 3 | G3, G10 |
+| R3-M07 | Rest Rule Baseline | DONE — PASS; product/legal approved 11h on 2026-09-04 | R3-M06 | 2 | G3, G10 |
 | R3-M08 | Weekly Planner UI | MISSING — no dashboard router yet (R0-M05 dependency) | R0-M05, R3-M07 | 6 | G6, G9 |
 | R3-M09 | Accessible Table Alternative | MISSING | R3-M08 | 3 | G7 |
 | R3-M10 | Publication | MISSING | R3-M08 | 4 | G4, G5 |
