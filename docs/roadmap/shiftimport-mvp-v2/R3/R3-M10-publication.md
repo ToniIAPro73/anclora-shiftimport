@@ -128,4 +128,4 @@ Resultado ejecutado: **PASS**.
 Si la atomicidad falla en test: no commitear — este es el punto de mayor riesgo de integridad de datos de todo R3 (crea filas reales en `shifts`, tabla ya consumida por el resto del producto).
 
 ## 23. Criterio de DONE
-Migración aplicada, publicación atómica verificada por test (incluyendo fallo simulado), UI de confirmación operativa, Gate G2+G3+G4+G5+G10 PASS. Commit de implementación pendiente de registro.
+Migración aplicada, publicación atómica verificada por test (incluyendo fallo simulado), UI de confirmación operativa, Gate G2+G3+G4+G5+G10 PASS. Commit: `8949ad7` (`feat(scheduling): complete R3-M10 publication`).
