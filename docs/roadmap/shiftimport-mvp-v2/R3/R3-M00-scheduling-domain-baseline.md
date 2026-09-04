@@ -1,5 +1,7 @@
 # R3-M00 — Scheduling Domain Baseline
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 
 Fijar el vocabulario, los límites y las decisiones arquitectónicas del dominio de planificación futura (Scheduling) antes de tocar esquema o código, para que R3-M01..M16 se construyan sobre una base común y no se reinterprete el modelo microfase a microfase.
@@ -161,7 +163,11 @@ N/A — microfase puramente documental, sin código.
 ## 20. Evidencias
 
 - `docs/product/SCHEDULING_DOMAIN.md` commiteado.
-- SHAs de R0-M05 y R2-M06/M07 registrados.
+- R0-M05: PASS, commit `e3753c3` (decisión de extender `src/lib/route.ts`).
+- R2-M06: PASS, commit `b8754f3` (OWNER/ADMIN/PLANNER/EMPLOYEE).
+- R2-M07: PASS, commit `c318dd2` (ORGANIZATION/AREA/SELF).
+- R2-M12: PASS, commit `974fe68` (Gate final de R2 y regresión cross-tenant).
+- Verificación de consistencia: el documento mantiene `Schedule` sin estado propio, `ScheduleVersion` como máquina de estados y `ShiftAssignment` separado de `shifts`; no introduce tablas, endpoints ni UI.
 
 ## 21. Gate
 
@@ -172,10 +178,15 @@ Gates requeridos: **G1** (Architecture), **G3** (Domain invariants).
 
 Resultado: PASS / PASS_WITH_WARNINGS / FAIL / BLOCKED (§9 del prompt maestro).
 
+Resultado ejecutado: **PASS**.
+
+- G1 Architecture: PASS — contrato de dominio y decisión de reutilizar `shifts` documentados; el detalle físico queda reservado a R3-M01/M02/M03.
+- G3 Domain invariants: PASS — ciclo de `ScheduleVersion` separado de Acknowledgement y Change Request; no existe transición de retroceso ni `CHANGE_REQUESTED` como estado de turno.
+
 ## 22. Rollback / remediación
 
 Si el Gate falla, no hay código que revertir — se corrige el documento y se repite el Gate. Si la causa es una dependencia (R0-M05 o R2-M06/07) no cerrada, el resultado es BLOCKED, no FAIL.
 
 ## 23. Criterio de DONE
 
-`docs/product/SCHEDULING_DOMAIN.md` commiteado, Gate G1+G3 en PASS, dependencias R0-M05/R2-M06/M07 confirmadas PASS con SHA registrado.
+`docs/product/SCHEDULING_DOMAIN.md` commiteado, Gate G1+G3 en PASS, dependencias R0-M05/R2-M06/M07 confirmadas PASS con SHA registrado. Commit: `pending`.
