@@ -164,6 +164,17 @@ test('planner can open the weekly UI and create an empty draft', async ({ page }
   await page.getByRole('button', { name: 'Crear borrador semanal' }).click();
   await expect(page.getByRole('table')).toBeVisible();
   await expect(page.getByRole('rowheader', { name: /E2E Uno/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Tabla accesible' }).click();
+  await expect(page.getByRole('table')).toHaveClass(/weekly-planner__table/);
+  await page.reload();
+  await expect(page.getByRole('table')).toHaveClass(/weekly-planner__table/);
+  const addButton = page.getByRole('button', { name: /Añadir turno para/ }).first();
+  await addButton.focus();
+  await expect(addButton).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('form', { name: 'Añadir turno' })).toBeVisible();
+  await expect(page.locator('#planner-editor-employee')).toBeFocused();
+  await page.getByRole('button', { name: 'Cancelar' }).click();
   await page.getByRole('button', { name: 'Volver al calendario' }).click();
   await expect(page).toHaveURL(/\/app$/);
   await page.getByRole('button', { name: 'Salir' }).click();

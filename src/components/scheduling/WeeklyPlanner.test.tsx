@@ -25,7 +25,10 @@ vi.mock('../../lib/remote', async (importOriginal) => {
 afterEach(() => {
   cleanup();
 });
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+});
 
 const version = (overrides: Partial<ScheduleVersion> = {}): ScheduleVersion => ({
   id: 'version-1',
@@ -127,5 +130,41 @@ describe('WeeklyPlanner', () => {
     await waitFor(() => expect(remote.updateRemoteAssignment).toHaveBeenCalledWith(
       'schedule-1', 'version-1', 'assignment-1', expect.objectContaining({ location: 'Lobby' }),
     ));
+  });
+
+  it('switches to the semantic table and persists that presentation choice', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot());
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tabla accesible' })).toHaveAttribute('aria-pressed', 'false'));
+    fireEvent.click(screen.getByRole('button', { name: 'Tabla accesible' }));
+
+    await waitFor(() => expect(screen.getByRole('table')).toHaveClass('weekly-planner__table'));
+    expect(screen.getByRole('columnheader', { name: 'Fecha' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Editar turno de Ana Planner/ })).toBeInTheDocument();
+    expect(window.localStorage.getItem('anclora_shiftimport_planner_view_v1')).toBe('table');
+
+    cleanup();
+    renderPlanner();
+    await waitFor(() => expect(screen.getByRole('table')).toHaveClass('weekly-planner__table'));
+    expect(screen.getByRole('button', { name: 'Tabla accesible' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps table actions native and focusable for keyboard users', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({ assignments: [] }));
+    renderPlanner();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tabla accesible' }));
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+
+    const addButton = screen.getAllByRole('button', { name: /Añadir turno para Ana Planner/ })[0];
+    addButton.focus();
+    expect(document.activeElement).toBe(addButton);
+    fireEvent.keyDown(addButton, { key: 'Enter', code: 'Enter' });
+    fireEvent.click(addButton);
+    expect(screen.getByRole('form', { name: 'Añadir turno' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Empleado')).toHaveFocus();
   });
 });

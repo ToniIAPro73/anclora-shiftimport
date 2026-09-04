@@ -1366,6 +1366,41 @@ button[aria-busy='true'] {
   gap: 10px;
 }
 
+.weekly-planner__view-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 11px;
+}
+
+.weekly-planner__view-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.weekly-planner__view-button:hover {
+  color: var(--text-primary);
+  background: var(--panel-muted-bg);
+  transform: none;
+}
+
+.weekly-planner__view-button[aria-pressed='true'] {
+  color: var(--text-primary);
+  background: var(--panel-muted-bg);
+  border-color: var(--glass-border);
+  box-shadow: 0 2px 8px rgba(4, 10, 34, 0.12);
+}
+
 .weekly-planner__header-tools {
   flex-direction: column;
   align-items: flex-end;
@@ -1491,6 +1526,111 @@ button[aria-busy='true'] {
 .weekly-planner__grid-wrap:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
+}
+
+.weekly-planner__table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 var(--inner-highlight);
+}
+
+.weekly-planner__table-wrap:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.weekly-planner__table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82rem;
+}
+
+.weekly-planner__table caption {
+  padding: 14px 16px;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-align: left;
+}
+
+.weekly-planner__table th,
+.weekly-planner__table td {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  vertical-align: middle;
+  text-align: left;
+}
+
+.weekly-planner__table thead th {
+  color: var(--text-subtle);
+  background: var(--panel-muted-bg);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.weekly-planner__table tbody th {
+  min-width: 150px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--panel-muted-bg) 70%, var(--glass-bg));
+  font-weight: 800;
+}
+
+.weekly-planner__table tbody th span,
+.weekly-planner__table tbody th small {
+  display: block;
+}
+
+.weekly-planner__table tbody th small {
+  margin-top: 3px;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.weekly-planner__table tr:last-child td,
+.weekly-planner__table tr:last-child th {
+  border-bottom: 0;
+}
+
+.weekly-planner__table th:last-child,
+.weekly-planner__table td:last-child {
+  border-right: 0;
+}
+
+.weekly-planner__table td:nth-child(2),
+.weekly-planner__table td:nth-child(3) {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.weekly-planner__table-muted {
+  color: var(--text-subtle);
+  font-style: italic;
+}
+
+.weekly-planner__table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 180px;
+}
+
+.weekly-planner__table-actions .btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 6px 9px;
+  font-size: 0.72rem;
+  white-space: nowrap;
 }
 
 .weekly-planner__grid {
@@ -1757,6 +1897,17 @@ button[aria-busy='true'] {
 
   .weekly-planner__view-tools {
     justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .weekly-planner__view-switcher {
+    order: 3;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .weekly-planner__view-button {
+    flex: 1;
   }
 
   .weekly-planner__toolbar {

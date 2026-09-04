@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
@@ -14,6 +14,8 @@ import {
 import { useI18n } from '../../lib/use-i18n';
 import { LanguageToggle } from '../ui/LanguageToggle';
 import { ThemeToggle } from '../ui/ThemeToggle';
+import { AccessibleScheduleTable } from './AccessibleScheduleTable';
+import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
 
 interface WeeklyPlannerProps {
   areaId?: string | null;
@@ -22,14 +24,8 @@ interface WeeklyPlannerProps {
   initialPeriodStart?: string;
 }
 
-interface EditorState {
-  id: string | null;
-  employeeId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  location: string;
-}
+const VIEW_PREFERENCE_KEY = 'anclora_shiftimport_planner_view_v1';
+type PlannerView = 'grid' | 'table';
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
@@ -56,7 +52,7 @@ function formatDay(value: string, locale: 'es' | 'en'): string {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 
-function initialEditor(employeeId: string, date: string, assignment?: ShiftAssignment): EditorState {
+function initialEditor(employeeId: string, date: string, assignment?: ShiftAssignment): AssignmentEditorState {
   return {
     id: assignment?.id ?? null,
     employeeId: assignment?.employeeId ?? employeeId,
@@ -89,7 +85,14 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [error, setError] = useState<string | null>(null);
   const [operationError, setOperationError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [editor, setEditor] = useState<EditorState | null>(null);
+  const [editor, setEditor] = useState<AssignmentEditorState | null>(null);
+  const [view, setView] = useState<PlannerView>(() => {
+    try {
+      return window.localStorage.getItem(VIEW_PREFERENCE_KEY) === 'table' ? 'table' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
   const requestId = useRef(0);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(periodStart, index)), [periodStart]);
@@ -138,6 +141,14 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(VIEW_PREFERENCE_KEY, view);
+    } catch {
+      // Presentation preference is best-effort when storage is unavailable.
+    }
+  }, [view]);
+
   const shiftWeek = (delta: number) => setPeriodStart((current) => addDays(current, delta * 7));
 
   const handleCreateDraft = async () => {
@@ -183,12 +194,13 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     }
   };
 
-  const handleDelete = async () => {
-    if (!editor?.id || !snapshot || !editable || !window.confirm(t('planner.deleteConfirm'))) return;
+  const handleDelete = async (assignment?: ShiftAssignment) => {
+    const targetId = assignment?.id ?? editor?.id;
+    if (!targetId || !snapshot || !editable || !window.confirm(t('planner.deleteConfirm'))) return;
     setIsSaving(true);
     setOperationError(null);
     try {
-      await deleteRemoteAssignment(snapshot.version.scheduleId, snapshot.version.id, editor.id);
+      await deleteRemoteAssignment(snapshot.version.scheduleId, snapshot.version.id, targetId);
       setEditor(null);
       setNotice(t('planner.assignmentDeleted'));
       const loaded = await loadRemoteScheduleSnapshot(snapshot.version.scheduleId, snapshot.version.id);
@@ -222,6 +234,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
             </button>
           </div>
           <div className="weekly-planner__view-tools">
+            <div className="weekly-planner__view-switcher" role="group" aria-label={t('planner.viewModeLabel')}>
+              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'grid'} onClick={() => setView('grid')}>{t('planner.gridView')}</button>
+              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'table'} onClick={() => setView('table')}>{t('planner.tableView')}</button>
+            </div>
             <ThemeToggle />
             <LanguageToggle />
           </div>
@@ -272,6 +288,23 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
               <h2>{t('planner.noEmployeesTitle')}</h2>
               <p>{t('planner.noEmployeesDescription')}</p>
             </div>
+          ) : view === 'table' ? (
+            <AccessibleScheduleTable
+              days={days}
+              locale={locale}
+              snapshot={snapshot}
+              assignmentsByCell={assignmentsByCell}
+              editable={Boolean(editable)}
+              editor={editor}
+              isSaving={isSaving}
+              operationError={operationError}
+              onAdd={(employeeId, date) => setEditor(initialEditor(employeeId, date))}
+              onEdit={(employeeId, date, assignment) => setEditor(initialEditor(employeeId, date, assignment))}
+              onChangeEditor={setEditor}
+              onCloseEditor={() => setEditor(null)}
+              onSave={handleSave}
+              onDelete={(assignment) => void handleDelete(assignment)}
+            />
           ) : (
             <div className="weekly-planner__grid-wrap" role="region" aria-label={t('planner.gridLabel')} tabIndex={0}>
               <table className="weekly-planner__grid">
@@ -323,42 +356,17 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
             </div>
           )}
 
-          {editor && (
-            <form className="weekly-planner__editor" onSubmit={handleSave} aria-label={editor.id ? t('planner.editTitle') : t('planner.addTitle')}>
-              <div className="weekly-planner__editor-heading">
-                <div>
-                  <p className="weekly-planner__eyebrow">{editor.id ? t('planner.editEyebrow') : t('planner.addEyebrow')}</p>
-                  <h2>{editor.id ? t('planner.editTitle') : t('planner.addTitle')}</h2>
-                </div>
-                <button type="button" className="theme-toggle" onClick={() => setEditor(null)} aria-label={t('common.close')} disabled={isSaving}><span aria-hidden="true">×</span></button>
-              </div>
-              <div className="weekly-planner__editor-fields">
-                <label>{t('planner.employeeLabel')}
-                  <select value={editor.employeeId} onChange={(event) => setEditor({ ...editor, employeeId: event.target.value })} disabled={isSaving}>
-                    {snapshot.employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.name}</option>)}
-                  </select>
-                </label>
-                <label>{t('planner.dateLabel')}
-                  <input type="date" value={editor.date} min={snapshot.version.periodStart} max={snapshot.version.periodEnd} onChange={(event) => setEditor({ ...editor, date: event.target.value })} disabled={isSaving} required />
-                </label>
-                <label>{t('planner.startLabel')}
-                  <input type="time" value={editor.startTime} onChange={(event) => setEditor({ ...editor, startTime: event.target.value })} disabled={isSaving} required />
-                </label>
-                <label>{t('planner.endLabel')}
-                  <input type="time" value={editor.endTime} onChange={(event) => setEditor({ ...editor, endTime: event.target.value })} disabled={isSaving} required />
-                </label>
-                <label>{t('planner.locationLabel')}
-                  <input value={editor.location} onChange={(event) => setEditor({ ...editor, location: event.target.value })} disabled={isSaving} placeholder={t('planner.locationPlaceholder')} />
-                </label>
-              </div>
-              {operationError && <p className="weekly-planner__editor-error" role="alert">{operationError}</p>}
-              <div className="weekly-planner__editor-actions">
-                {editor.id && <button type="button" className="btn-outline weekly-planner__delete" onClick={() => void handleDelete()} disabled={isSaving}><Trash2 size={16} /> {t('planner.deleteAssignment')}</button>}
-                <span />
-                <button type="button" className="btn-outline" onClick={() => setEditor(null)} disabled={isSaving}>{t('common.cancel')}</button>
-                <button type="submit" className="btn-gold" disabled={isSaving}>{isSaving ? <Loader2 className="icon-spin" size={16} /> : <Save size={16} />} {t('common.save')}</button>
-              </div>
-            </form>
+          {view === 'grid' && editor && (
+            <ScheduleAssignmentEditor
+              snapshot={snapshot}
+              editor={editor}
+              isSaving={isSaving}
+              operationError={operationError}
+              onChange={setEditor}
+              onClose={() => setEditor(null)}
+              onSave={handleSave}
+              onDelete={() => void handleDelete()}
+            />
           )}
         </>
       )}
