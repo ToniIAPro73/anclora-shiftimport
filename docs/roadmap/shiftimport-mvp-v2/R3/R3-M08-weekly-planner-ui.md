@@ -128,4 +128,4 @@ Resultado ejecutado: **PASS**.
 Si el Gate falla por accesibilidad/responsive: no commitear hasta corregir — es una microfase con impacto visible directo al usuario final PLANNER.
 
 ## 23. Criterio de DONE
-R0-M05 en PASS, grid operativo con los 3 tasks completos, estados verificados en ambos temas y responsive, Gate G6+G9 PASS. Commit de implementación pendiente de registro.
+R0-M05 en PASS, grid operativo con los 3 tasks completos, estados verificados en ambos temas y responsive, Gate G6+G9 PASS. Commit de implementación: `0490289`.
