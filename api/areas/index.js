@@ -1,4 +1,5 @@
 import { getSql, requireOrgContext, requireRole, resolveContext } from '../_lib/auth.js';
+import { recordAuditEvent } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -57,6 +58,12 @@ export default async function handler(req, res) {
           RETURNING id, name, code, active, created_at
         `;
         const row = rows[0];
+        await recordAuditEvent(sql, ctx, {
+          eventType: 'AREA_CREATED',
+          targetType: 'AREA',
+          targetId: row.id,
+          metadata: { name: row.name, code: row.code },
+        });
         return sendJson(res, 201, {
           area: { id: row.id, name: row.name, code: row.code, active: row.active, createdAt: row.created_at },
         });
@@ -89,6 +96,12 @@ export default async function handler(req, res) {
           RETURNING id, name, code, active, created_at
         `;
         const row = rows[0];
+        await recordAuditEvent(sql, ctx, {
+          eventType: 'AREA_DEACTIVATED',
+          targetType: 'AREA',
+          targetId: row.id,
+          metadata: { name: row.name },
+        });
         return sendJson(res, 200, {
           area: { id: row.id, name: row.name, code: row.code, active: row.active, createdAt: row.created_at },
         });
@@ -107,6 +120,12 @@ export default async function handler(req, res) {
           RETURNING id, name, code, active, created_at
         `;
         const row = rows[0];
+        await recordAuditEvent(sql, ctx, {
+          eventType: 'AREA_UPDATED',
+          targetType: 'AREA',
+          targetId: row.id,
+          metadata: { name: row.name, code: row.code },
+        });
         return sendJson(res, 200, {
           area: { id: row.id, name: row.name, code: row.code, active: row.active, createdAt: row.created_at },
         });

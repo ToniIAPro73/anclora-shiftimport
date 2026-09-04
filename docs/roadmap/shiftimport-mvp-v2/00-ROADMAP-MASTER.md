@@ -53,8 +53,8 @@ Baseline shows R1 is the most mature area of the product. Most microfases below 
 | R2-M05 | Bulk Provisioning | DONE — `MembersModal.tsx`, `credentials-export.ts` | R2-M04 | 1 | G10, G12 |
 | R2-M06 | OWNER / ADMIN / PLANNER / EMPLOYEE roles | DONE — migration 0013/0014, backfill and invariant verified on Neon dev | R0-M03 | 6 | G2, G3, G4 |
 | R2-M07 | ORGANIZATION / AREA / SELF Scopes | DONE — migration 0015, centralized resolver, scoped data queries and PLANNER UI | R2-M06 | 4 | G3, G4 |
-| R2-M08 | API Authorization Enforcement (server-side, never UI-only) | PARTIAL — 2-role guard exists, needs extension to new roles/scopes | R2-M07 | 6 | G4, G12 |
-| R2-M09 | Organization Audit Events | MISSING | R2-M08 | 4 | G2, G10 |
+| R2-M08 | API Authorization Enforcement (server-side, never UI-only) | DONE — centralized authentication/context and endpoint inventory verified | R2-M07 | 6 | G4, G12 |
+| R2-M09 | Organization Audit Events | DONE — migration 0016, emission helper and OWNER/ADMIN endpoint | R2-M08 | 3 | G2, G10 |
 | R2-M10 | Onboarding Reconciliation | PARTIAL | R2-M01, R2-M06 | 3 | G6, G10 |
 | R2-M11 | Cross-Tenant Isolation E2E | PARTIAL — org_id scoping exists everywhere; dedicated isolation E2E unconfirmed | R2-M08 | 4 | G11, G12, G13 |
 | R2-M12 | R2 Final Gate | — | R2-M00..M11 | 1 | G0-G15 (subset per spec) |

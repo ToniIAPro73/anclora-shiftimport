@@ -1,6 +1,6 @@
 # RBAC Model — Design for R2-M06/M07/M08
 
-Status: **ROLES + SCOPES IMPLEMENTED (R2-M06/R2-M07)**. API enforcement remains centralized in `api/_lib/auth.js` and `api/_lib/data.js`; broader endpoint authorization hardening remains R2-M08.
+Status: **ROLES + SCOPES + API ENFORCEMENT + AUDIT IMPLEMENTED (R2-M06–R2-M09)**. API enforcement remains centralized in `api/_lib/auth.js` and `api/_lib/data.js`; organization audit events are stored in `organization_audit_events` and read through the OWNER/ADMIN-only endpoint.
 
 Vocabulary follows [`DOMAIN-GLOSSARY.md`](./DOMAIN-GLOSSARY.md): Membership, Role, Scope, Organization, Area, Employee. No new terms introduced here.
 
@@ -10,7 +10,7 @@ Vocabulary follows [`DOMAIN-GLOSSARY.md`](./DOMAIN-GLOSSARY.md): Membership, Rol
 - `api/_lib/data.js`: `VALID_ROLES` includes the four MVP roles.
 - `api/_lib/auth.js`: `requireRole(ctx, minimum)` uses rank `{ EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 }`; `resolveAccessScope` returns `ORGANIZATION`, `AREA`, or `SELF`.
 - Migration 0015 adds nullable `memberships.scoped_area_id`; `PLANNER + NULL` resolves to `ORGANIZATION`, `PLANNER + area` to `AREA`, and `EMPLOYEE` resolves to `SELF` through its linked employee.
-- Employee/import/shift reads and writes consume the centralized scope contract; broader authorization/event auditing remains in R2-M08/R2-M09.
+- Employee/import/shift reads and writes consume the centralized scope contract; endpoint authorization is enforced through R2-M08 and sensitive organization mutations emit R2-M09 audit events.
 
 ## 2. Target model: 4 roles × 3 scopes
 

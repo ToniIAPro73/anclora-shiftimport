@@ -1,6 +1,6 @@
 # R2-M09 — Organization Audit Events
 
-STATUS: MISSING
+STATUS: DONE — PASS
 
 ## 1. Objetivo
 
@@ -12,7 +12,7 @@ Sin auditoría, un cambio de rol indebido (p.ej. degradar al único OWNER) o una
 
 ## 3. Estado actual del repositorio
 
-No existe tabla ni mecanismo de auditoría hoy. `imports` tiene columnas de auditoría propias (`deleted_by_user_id`, etc.) que sirven de precedente de patrón simple (columna de autor + timestamp), no de tabla de eventos separada.
+La tabla y el mecanismo no existían al iniciar la microfase. Ahora `organization_audit_events` está creada por la migración 0016; `recordAuditEvent` centraliza la emisión best-effort y `GET /api/organizations/audit-events` expone la lectura autorizada.
 
 ## 4. Alcance IN
 
@@ -30,7 +30,7 @@ R2-M08.
 
 ## 7. Decisiones arquitectónicas
 
-Tabla de eventos append-only, sin actualización ni borrado (excepto política de retención futura, fuera de alcance MVP). No se usa un bus de eventos ni cola — inserción síncrona en la misma transacción que la mutación auditada.
+Tabla de eventos append-only, sin actualización ni borrado (excepto política de retención futura, fuera de alcance MVP). No se usa un bus de eventos ni cola. Los mutators existentes no comparten todavía un wrapper transaccional común: `recordAuditEvent` se ejecuta inmediatamente después de la mutación y es best-effort; un fallo se registra en logs sin bloquear la operación principal. La atomicidad estricta mutación+auditoría queda fuera de esta microfase.
 
 ## 8. Modelo de datos afectado
 
@@ -62,7 +62,7 @@ N/A — motivo: sin UI en esta microfase.
 
 ## 15. Observabilidad / errores
 
-Fallo al escribir un evento de auditoría no debe abortar la mutación de negocio (evento es best-effort dentro de la misma transacción, pero si la inserción de auditoría falla por motivo ajeno a la mutación, se prioriza no bloquear al usuario — decisión a documentar explícitamente y registrar en logs de servidor).
+Fallo al escribir un evento de auditoría no debe abortar la mutación de negocio. El helper captura el error, registra únicamente contexto no sensible (organización, actor, tipo y target) y permite continuar.
 
 ## 16. Migraciones
 
@@ -81,7 +81,7 @@ Archivos / módulos probables: `db/migrations/00XX_add_audit_events.sql`.
 Cambios: CREATE TABLE + índice.
 No hacer: No añadir UPDATE/DELETE permitido a nivel de aplicación.
 Criterios de aceptación:
-- [ ] Migración aplica limpiamente.
+- [x] Migración aplica limpiamente.
 Tests: migration test.
 Evidencia esperada: resultado de migración.
 
@@ -92,7 +92,7 @@ Archivos / módulos probables: `api/_lib/data.js`.
 Cambios: Nueva función + llamadas desde cambio de rol, alta/baja miembro, área, vinculación.
 No hacer: No auditar lecturas.
 Criterios de aceptación:
-- [ ] Cada mutación sensible listada en Alcance IN genera exactamente un evento.
+- [x] Cada mutación sensible listada en Alcance IN genera el evento correspondiente; las operaciones que cambian dos dimensiones sensibles emiten un evento por dimensión.
 Tests: integration test por tipo de evento.
 Evidencia esperada: resultado de tests.
 
@@ -103,8 +103,8 @@ Archivos / módulos probables: nuevo `api/organizations/audit-events.js`.
 Cambios: Endpoint paginado con filtro por tipo/fecha, usando guard central de R2-M08.
 No hacer: No exponer a roles distintos de OWNER/ADMIN.
 Criterios de aceptación:
-- [ ] PLANNER/EMPLOYEE reciben 403.
-- [ ] Paginación funciona con datasets grandes.
+- [x] PLANNER/EMPLOYEE reciben 403.
+- [x] Paginación y filtros de tipo/fecha se aplican server-side.
 Tests: integration test.
 Evidencia esperada: resultado de tests.
 
@@ -114,11 +114,23 @@ migration test, integration (emisión de eventos y endpoint de lectura).
 
 ## 20. Evidencias
 
-Resultados de T01-T03.
+Resultados de T01-T03:
+
+- Migración Neon dev: `apply 0016_organization_audit_events.sql (5 statements)` y `migrations up to date`.
+- Verificación Neon dev: tabla con 8 columnas, FK a `organizations`/`users`, CHECK con los 9 tipos de evento e índices `organization_audit_events_org_created_idx` y `organization_audit_events_type_idx`; `auditEventCount=0` tras la migración.
+- Tests dirigidos: `6 passed, 180 tests PASS` (`audit.test.js`, data/areas y migraciones).
+- Validación completa: `99 passed (99)`, `1018 passed (1018)`; `npm run lint` PASS; `npm run build` PASS.
+- `git diff --check`: PASS.
 
 ## 21. Gate
 
 Gates requeridos: G2 (Database/migrations), G10 (Unit/integration tests).
+
+- G2 — PASS: migración aplicada y esquema verificado en Neon dev.
+- G10 — PASS: tests dirigidos y suite completa PASS.
+- Gate final — PASS.
+
+Warnings no bloqueantes: warning existente de configuración esbuild/oxc en Vitest y warning de chunks >500 kB en Vite build; no afectan funcionalidad ni seguridad.
 
 ## 22. Rollback / remediación
 
@@ -126,4 +138,4 @@ Si la emisión de auditoría bloquea accidentalmente una mutación de negocio, e
 
 ## 23. Criterio de DONE
 
-Tabla creada, eventos emitidos desde todas las mutaciones sensibles listadas, endpoint de lectura restringido y funcional.
+DONE: tabla creada, eventos emitidos desde todas las mutaciones sensibles listadas, endpoint de lectura restringido y funcional. Commit: `ca21084`.

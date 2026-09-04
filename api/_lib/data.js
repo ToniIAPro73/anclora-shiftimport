@@ -23,6 +23,39 @@ export function normalizeShiftDate(value) {
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 }
 
+/**
+ * Append one organization audit event. Audit must never become an accidental
+ * availability dependency for the business mutation, so failures are logged
+ * without metadata and the caller continues. Metadata is intentionally a
+ * small, caller-curated object; passwords, tokens and contact details are
+ * never accepted from these call sites.
+ */
+export async function recordAuditEvent(sql, ctx, {
+  eventType, targetType, targetId = null, metadata = {},
+}) {
+  if (!ctx?.organizationId || !ctx?.user?.id) {
+    return;
+  }
+  try {
+    await sql`
+      INSERT INTO organization_audit_events (
+        organization_id, actor_user_id, event_type, target_type, target_id, metadata
+      ) VALUES (
+        ${ctx.organizationId}, ${ctx.user.id}, ${eventType}, ${targetType}, ${targetId}, ${JSON.stringify(metadata)}::jsonb
+      )
+    `;
+  } catch (error) {
+    console.error('[audit-event] write failed', {
+      organizationId: ctx.organizationId,
+      actorUserId: ctx.user.id,
+      eventType,
+      targetType,
+      targetId,
+      error: error instanceof Error ? error.message : 'unknown error',
+    });
+  }
+}
+
 function normalizeShiftInput(raw) {
   return {
     id: String(raw?.id ?? '').trim() || null,
@@ -631,6 +664,22 @@ export async function updateEmployee(sql, ctx, input) {
     WHERE id = ${id} AND organization_id = ${ctx.organizationId}
     RETURNING *
   `;
+  if (current.userId !== userId) {
+    await recordAuditEvent(sql, ctx, {
+      eventType: userId ? 'EMPLOYEE_USER_LINKED' : 'EMPLOYEE_USER_UNLINKED',
+      targetType: 'EMPLOYEE',
+      targetId: id,
+      metadata: { userId },
+    });
+  }
+  if (current.areaId !== areaId) {
+    await recordAuditEvent(sql, ctx, {
+      eventType: 'EMPLOYEE_AREA_CHANGED',
+      targetType: 'EMPLOYEE',
+      targetId: id,
+      metadata: { fromAreaId: current.areaId, toAreaId: areaId },
+    });
+  }
   return mapEmployeeRow(rows[0]);
 }
 
@@ -836,7 +885,20 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
       UPDATE employees SET user_id = ${userId}, updated_at = NOW()
       WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
     `;
+    await recordAuditEvent(sql, ctx, {
+      eventType: 'EMPLOYEE_USER_LINKED',
+      targetType: 'EMPLOYEE',
+      targetId: employeeId,
+      metadata: { userId },
+    });
   }
+
+  await recordAuditEvent(sql, ctx, {
+    eventType: 'MEMBER_ADDED',
+    targetType: 'USER',
+    targetId: userId,
+    metadata: { role, scopedAreaId },
+  });
 
   return temporaryPassword
     ? { userId, email, role, scopedAreaId, temporaryPassword }
@@ -975,6 +1037,7 @@ export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
 
     // Membership: reuse if it already exists (idempotent rerun), else create.
     const existingMembership = membershipByUserId.get(userId);
+    let membershipCreated = false;
     if (!existingMembership) {
       await sql`
         INSERT INTO memberships (user_id, organization_id, role)
@@ -982,6 +1045,7 @@ export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
       `;
       membershipByUserId.set(userId, { user_id: userId, role: row.role, email: row.email });
       userIdByEmail.set(row.email, userId);
+      membershipCreated = true;
     }
 
     // Link (only when the row named an employee, the employee is free or
@@ -1004,6 +1068,23 @@ export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
         employeesByExternalId.set(row.externalEmployeeId, employee);
       }
       justLinked = true;
+    }
+
+    if (membershipCreated) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'MEMBER_ADDED',
+        targetType: 'USER',
+        targetId: userId,
+        metadata: { role: row.role, scopedAreaId: null },
+      });
+    }
+    if (justLinked) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'EMPLOYEE_USER_LINKED',
+        targetType: 'EMPLOYEE',
+        targetId: employee.id,
+        metadata: { userId },
+      });
     }
 
     const status = created
@@ -1085,6 +1166,19 @@ export async function updateMemberRole(sql, ctx, input) {
     UPDATE memberships SET role = ${role}, scoped_area_id = ${scopedAreaId}
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
   `;
+  if (rows[0].role !== role || (rows[0].scoped_area_id ?? null) !== scopedAreaId) {
+    await recordAuditEvent(sql, ctx, {
+      eventType: 'MEMBER_ROLE_CHANGED',
+      targetType: 'USER',
+      targetId: userId,
+      metadata: {
+        fromRole: rows[0].role,
+        toRole: role,
+        fromScopedAreaId: rows[0].scoped_area_id ?? null,
+        toScopedAreaId: scopedAreaId,
+      },
+    });
+  }
   return { userId, role, scopedAreaId };
 }
 
@@ -1125,7 +1219,77 @@ export async function removeMember(sql, ctx, input) {
     UPDATE employees SET user_id = NULL, updated_at = NOW()
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
   `;
+  await recordAuditEvent(sql, ctx, {
+    eventType: 'MEMBER_REMOVED',
+    targetType: 'USER',
+    targetId: userId,
+    metadata: { previousRole: rows[0].role },
+  });
   return { userId };
+}
+
+// ------------------------------------------------------- audit events
+
+function mapAuditEventRow(row) {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    actorUserId: row.actor_user_id,
+    eventType: row.event_type,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    metadata: row.metadata ?? {},
+    createdAt: row.created_at,
+  };
+}
+
+/** OWNER/ADMIN-only, organization-scope audit history. */
+export async function listAuditEvents(sql, ctx, {
+  eventType = null, from = null, to = null, page = 1, pageSize = 50,
+} = {}) {
+  requireRole(ctx, 'ADMIN');
+  if (resolveAccessScope(ctx).type !== 'ORGANIZATION') {
+    throw scopeForbidden('Audit history requires organization scope');
+  }
+  const safePageSize = Math.min(Math.max(Number(pageSize) || 50, 1), 100);
+  const safePage = Math.max(Number(page) || 1, 1);
+  const start = (safePage - 1) * safePageSize;
+  const filters = {
+    eventType: String(eventType ?? '').trim() || null,
+    from: String(from ?? '').trim() || null,
+    to: String(to ?? '').trim() || null,
+  };
+  if (filters.from && Number.isNaN(new Date(filters.from).getTime())) {
+    throw new HttpError(400, 'Invalid audit start date');
+  }
+  if (filters.to && Number.isNaN(new Date(filters.to).getTime())) {
+    throw new HttpError(400, 'Invalid audit end date');
+  }
+
+  const rows = await sql`
+    SELECT id, organization_id, actor_user_id, event_type, target_type, target_id, metadata, created_at
+    FROM organization_audit_events
+    WHERE organization_id = ${ctx.organizationId}
+      AND (${filters.eventType}::text IS NULL OR event_type = ${filters.eventType})
+      AND (${filters.from}::timestamptz IS NULL OR created_at >= ${filters.from})
+      AND (${filters.to}::timestamptz IS NULL OR created_at <= ${filters.to})
+    ORDER BY created_at DESC, id DESC
+    LIMIT ${safePageSize} OFFSET ${start}
+  `;
+  const totals = await sql`
+    SELECT count(*)::int AS count
+    FROM organization_audit_events
+    WHERE organization_id = ${ctx.organizationId}
+      AND (${filters.eventType}::text IS NULL OR event_type = ${filters.eventType})
+      AND (${filters.from}::timestamptz IS NULL OR created_at >= ${filters.from})
+      AND (${filters.to}::timestamptz IS NULL OR created_at <= ${filters.to})
+  `;
+  return {
+    events: rows.map(mapAuditEventRow),
+    total: totals[0]?.count ?? 0,
+    page: safePage,
+    pageSize: safePageSize,
+  };
 }
 
 // ------------------------------------------------------------- organizations
