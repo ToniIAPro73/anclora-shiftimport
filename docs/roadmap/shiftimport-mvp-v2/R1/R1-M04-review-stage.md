@@ -9,6 +9,17 @@ El stage REVIEW (presentación de datos parseados al usuario para corrección an
 ## 3. Estado actual del repositorio
 STATUS: DONE. Implementado en `ImportModal.tsx` / `TeamImportModal.tsx`, permitiendo edición/corrección de filas detectadas antes de avanzar.
 
+### Contrato de edición verificado (T01)
+
+Tabla real (`ImportModal.tsx:1262`) con una fila `<tr>` por turno detectado. Campos editables vía `handleUpdateShift(index, field, value)`: `date`, `shiftType`, `startTime`, `endTime` (líneas 1283-1311). El campo `sourceFormat` es de solo lectura (`readOnly`, línea ~1290) — informativo, no editable. Validación visual: filas con `incomplete` (hora `'??:??'`) o vinculadas a un warning de `quality.state === 'REVIEW'` se resaltan con `background: var(--danger-row-bg)` (`needsAttention`, líneas 1276-1281) — marcado de error inline, no bloqueo de avance forzado en esta etapa (el bloqueo real de escritura ocurre en CONFIRM, R1-M06).
+
+### Verificación T02 — accesibilidad de la tabla de revisión
+
+- Inputs de la tabla usan la clase `.modal-input` (`src/index.css:975`), que **no** sobreescribe `outline` — mantiene el anillo de foco nativo del navegador.
+- Los otros usos de `outline: none` en `index.css` (líneas 514, 1026, 1060, 1681) están todos emparejados con un indicador de foco de reemplazo (`border-color: var(--color-accent)` u equivalente) — patrón de foco visible custom, no foco eliminado.
+- Navegación por teclado: son `<input>` HTML estándar dentro de `<table>`/`<tr>`/`<td>` — orden de tabulación nativo del navegador, sin `tabIndex` negativo que los excluya.
+- **Sin hallazgo que derivar a R1-M14** — accesibilidad básica (foco visible, navegación por teclado) confirmada por lectura de código.
+
 ## 4. Alcance IN
 Documentar qué campos son editables en REVIEW, qué validaciones se aplican antes de permitir avanzar a COMPARE.
 
