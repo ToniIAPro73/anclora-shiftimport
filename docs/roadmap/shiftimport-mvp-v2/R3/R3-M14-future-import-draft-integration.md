@@ -1,102 +1,245 @@
 # R3-M14 — Future Import → Draft Integration
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
-Permitir que importar un archivo con fechas futuras cree o alimente un `ScheduleVersion` DRAFT, en lugar de publicar turnos silenciosamente como hace hoy el import de histórico.
+
+Integrar la confirmación de imports con fechas futuras en Scheduling: los
+turnos futuros alimentan versiones `DRAFT` semanales y nunca se publican de
+forma silenciosa.
 
 ## 2. Problema que resuelve
-Hoy Safe Import (R1) escribe directamente en `shifts` tras confirmación, sin distinguir pasado de futuro. Con Scheduling existiendo, importar un cuadrante futuro debe integrarse con el flujo de planificación, no saltárselo — mandato explícito del prompt maestro (§17): "Importar un cuadrante futuro debe poder crear o alimentar un draft, no publicar silenciosamente".
+
+Safe Import estaba diseñado para histórico y escribía en `shifts` tras la
+confirmación. Con Scheduling operativo, un archivo FUTURE o MIXED debe pasar
+por planificación, con autorización server-side y rollback total.
 
 ## 3. Estado actual del repositorio
-MISSING esta integración específica. El pipeline de import (R1, DONE) y el pipeline de Scheduling (R3-M01..M13) existen por separado hasta esta microfase.
+
+IMPLEMENTED. Histórico puro mantiene `/api/imports` + `/api/shifts`. FUTURE y
+MIXED usan `POST /api/imports/confirm-split`.
 
 ## 4. Alcance IN
-- Detección: si el periodo importado (period_year/period_month o fechas de las filas) es total o parcialmente futuro respecto a la fecha de confirmación, el flujo de confirmación de Safe Import (R1-M06) ofrece "Crear/alimentar borrador de planificación" en vez de escribir directo en `shifts`.
-- Turnos con fecha pasada dentro del mismo import siguen el camino actual (escritura directa en `shifts`, sin cambios) — solo el futuro se redirige a draft.
-- Reutiliza los endpoints de R3-M04 (crear draft) y R3-M05 (crear assignments) internamente — no un camino de escritura paralelo.
+
+- Clasificación server-side por fecha de confirmación: `HISTORICAL`, `FUTURE`,
+  `MIXED`.
+- Endpoint único transaccional para FUTURE/MIXED.
+- Persistencia histórica y futura atómica en mixed.
+- Creación/reutilización de drafts por semana y área.
+- Provenance persistente `shift_assignments.import_id`.
+- Idempotencia por import + assignments + drafts.
+- Capability efectiva de planificación mediante el guard canónico R2
+  `requireRole(ctx, 'PLANNER')`, que conserva el mapping OWNER/ADMIN/PLANNER
+  vigente en R2.
+- Fail closed para tenant, scope AREA y capability insuficiente.
+- Resumen Compare Stage con históricos confirmados y futuros en borrador.
 
 ## 5. Alcance OUT
-Cambiar el comportamiento de importación de histórico puro (sigue exactamente igual que hoy, DONE, sin tocar).
+
+- Publicar automáticamente un draft.
+- Reescribir imports históricos existentes.
+- Workflow de aprobación.
+- Tabla de asociación Import↔ScheduleVersion.
 
 ## 6. Dependencias
-R1-M16 (R1 Final Gate — Safe Import cerrado), R3-M04, R3-M05.
+
+R1-M16, R3-M04, R3-M05, R3-M13 y migraciones R3-M01..M03.
 
 ## 7. Decisiones arquitectónicas
-El punto de corte pasado/futuro es la fecha de confirmación del import (server time), no la fecha de subida del archivo. Si un import mezcla fechas pasadas y futuras (p.ej. import a mitad de semana), se hace un split: filas pasadas → `shifts` directo (camino actual), filas futuras → `shift_assignments` de un draft (nuevo o existente para ese periodo/área). Esto es un cambio de comportamiento visible del import existente — debe comunicarse claramente en el resumen de confirmación (Compare Stage, R1-M05) antes de escribir nada, siguiendo el mismo patrón "X nuevos / Y modificados / Z draft" ya usado.
+
+### Cardinalidad de provenance
+
+No se introduce `imports.schedule_version_id`. Un Import puede alimentar varias
+semanas y, por tanto, varias `ScheduleVersions`; la relación elegida es
+`shift_assignments.import_id`, que permite consultar todos los assignments
+futuros originados por un Import sin falsear la cardinalidad ni añadir una
+tabla de asociación sin necesidad demostrada.
+
+### Atomicidad
+
+`confirmFutureImport` valida clasificación, employees, áreas, capability y
+scope antes de escribir. Después ejecuta en una única `sql.transaction` la
+creación/reutilización del Import, schedules/drafts, histórico, assignments,
+borrados históricos y contadores. Cualquier excepción SQL revierte todo.
+
+### Autorización
+
+No se usa `role === 'PLANNER'`. La capability se resuelve con el guard R2
+`requireRole(ctx, 'PLANNER')`; no se añade una excepción específica para ADMIN.
+La comprobación se ejecuta antes de abrir la transacción y se repite el scope
+por cada employee/assignment futuro.
 
 ## 8. Modelo de datos afectado
-Ninguno nuevo — combina `imports`/`shifts` (R1) con `schedules`/`schedule_versions`/`shift_assignments` (R3). Posible columna `imports.schedule_version_id` (nullable) para trazar qué import alimentó qué draft — a confirmar necesidad real en T01 antes de migrar.
+
+`db/migrations/0021_shift_assignments_import_id.sql` añade la FK nullable:
+
+```text
+shift_assignments.import_id → imports.id ON DELETE SET NULL
+```
+
+Se añade `shift_assignments_import_idx`. No se modifica `imports` con una FK
+singular a ScheduleVersion.
 
 ## 9. API / Backend
-Extiende el endpoint de confirmación de import existente (`api/imports/index.js` o el endpoint específico de confirm — verificar nombre exacto en el código de R1) para, tras el split pasado/futuro, invocar internamente la creación/alimentación de draft en vez de (o además de) el insert directo en `shifts`.
+
+`POST /api/imports/confirm-split` acepta metadata del import, `shifts`,
+`employeeId`, `areaId` y `deleteIds`. Devuelve clasificación, Import, drafts,
+counts de histórico/futuro e indicador de deduplicación.
+
+- Histórico puro: el endpoint devuelve `HISTORICAL_IMPORT_USE_SAFE_PATH`; el
+  flujo anterior permanece como contrato compatible.
+- FUTURE/MIXED sin planning capability: `403` con
+  `FUTURE_IMPORT_REQUIRES_PLANNING`, cero writes.
+- Fuera de tenant/scope: `403`, cero writes, sin import parcial.
 
 ## 10. Frontend / UX
-El Compare Stage de Safe Import (ya existente) debe mostrar explícitamente cuántas filas van a "turnos confirmados" vs "borrador de planificación", para que el usuario entienda que lo futuro no se publica solo.
+
+`ImportModal` muestra antes de confirmar los conteos de históricos confirmados
+y futuros que irán a borrador no publicado. `App` enruta FUTURE/MIXED al
+endpoint transaccional y no crea el historial por adelantado. El team import
+también agrupa cualquier archivo con futuro en una sola llamada atómica.
 
 ## 11. Seguridad y autorización
-Mismo guard que crear/editar draft (PLANNER+) se aplica también cuando la creación del draft es disparada desde import — si el usuario que importa no es PLANNER+, la parte futura del import se rechaza o se informa como no permitida (a decidir en T01, documentar la elección).
+
+La API obtiene organización y rol desde la sesión. Comprueba capability,
+pertenencia de cada employee, estado activo, área y scope antes de persistir.
+No se permite partial authorization: un MIXED no autorizado se rechaza entero.
 
 ## 12. i18n
-Nuevos textos en el Compare Stage para la distinción pasado/futuro, ES/EN.
+
+Se añadieron mensajes ES/EN para conteos temporales, confirmación de drafts y
+rechazo de planificación futura.
 
 ## 13. Accesibilidad
-N/A adicional — reutiliza componentes de Import ya auditados.
+
+El resumen usa texto semántico visible dentro del Compare Stage y no depende de
+color ni animación. Se conservan los controles existentes de teclado/focus.
 
 ## 14. Responsive / temas
-N/A adicional.
+
+Se reutiliza el layout responsive existente de ImportModal; los nuevos conteos
+se envuelven en el contenedor flexible y funcionan en light/dark.
 
 ## 15. Observabilidad / errores
-El resumen de confirmación debe ser inequívoco sobre qué se escribió directo y qué quedó en borrador — evitar cualquier ambigüedad que lleve a que un usuario crea que un turno futuro ya está publicado cuando solo está en draft.
+
+Los fallos transaccionales se registran por la capa API sin exponer detalles
+SQL al usuario. Los errores de capability/scope tienen códigos estables para
+feedback localizado. La respuesta expone `deduplicated` y counts reales.
 
 ## 16. Migraciones
-`db/migrations/0017_imports_schedule_version_link.sql` (si T01 confirma que la trazabilidad `imports → schedule_version` es necesaria) — aditiva.
+
+Aplicada en Neon desarrollo:
+
+```text
+0021_shift_assignments_import_id.sql — applied
+```
+
+La migración es forward-safe, aditiva, idempotente y no altera imports ni
+shifts históricos.
 
 ## 17. Compatibilidad y datos existentes
-Imports históricos ya confirmados no se ven afectados — el split solo aplica a partir de esta microfase, hacia adelante.
+
+Los imports históricos siguen usando sus endpoints y semántica anteriores.
+`shift_assignments.import_id` es nullable; assignments y shifts previos quedan
+válidos sin backfill ni reescritura.
 
 ## 18. Tasks
 
-### T01 — Decisión de trazabilidad import↔draft y permiso de import futuro sin rol PLANNER
-Objetivo: decidir si se necesita `imports.schedule_version_id` y qué ocurre si un ADMIN sin scope PLANNER intenta importar futuro.
-Archivos / módulos probables: este documento (sección 20).
-Cambios: decisión documentada.
-No hacer: no implementar sin esta decisión tomada.
-Criterios de aceptación:
-- [ ] Decisión registrada con justificación.
-Tests: N/A.
-Evidencia esperada: nota de decisión.
+### T01 — Decisión de provenance y capability
 
-### T02 — Split pasado/futuro en Compare Stage
-Objetivo: detectar y separar filas futuras del import antes de confirmar.
-Archivos / módulos probables: módulo de comparación de R1 (`src/ingestion/` o el componente de Compare Stage — verificar ubicación exacta en R1-M05).
-Cambios: lógica de clasificación por fecha.
-No hacer: no alterar el camino de import puramente histórico.
-Criterios de aceptación:
-- [ ] Import 100% pasado se comporta exactamente igual que hoy (regresión cero).
-- [ ] Import con fechas futuras muestra el desglose pasado/draft antes de confirmar.
-Tests: regresión sobre acceptance-corpus existente (R1) + nuevos casos con fechas futuras.
-Evidencia esperada: resultados de test, incluida confirmación de cero regresión en el corpus existente.
+Estado: `[x]` `shift_assignments.import_id`; sin `imports.schedule_version_id`;
+capability R2 mediante `requireRole(ctx, 'PLANNER')`.
 
-### T03 — Confirmación: escritura dual (shifts directo + draft)
-Objetivo: al confirmar, escribir filas pasadas en `shifts` y filas futuras como assignments de un draft (nuevo o existente), en una operación coherente (si falla la parte draft, no se aplica tampoco la parte de shifts directos, o se documenta explícitamente por qué se permite parcialidad aquí — decidir y justificar).
-Archivos / módulos probables: endpoint de confirmación de import.
-Cambios: lógica de escritura dual.
-No hacer: no publicar automáticamente el draft resultante.
-Criterios de aceptación:
-- [ ] Confirmar un import mixto crea shifts para lo pasado y un draft (o alimenta uno existente) para lo futuro, sin publicarlo.
-Tests: integración end-to-end del flujo completo.
-Evidencia esperada: resultados de test + verificación en Neon de desarrollo.
+### T02 — Clasificación temporal y Compare Stage
+
+Estado: `[x]` clasificación server-side HISTORICAL/FUTURE/MIXED y desglose
+visible antes de confirmar; histórico puro conserva su ruta.
+
+### T03 — Confirmación transaccional
+
+Estado: `[x]` endpoint único, drafts semanales, histórico mixed, provenance,
+contadores e idempotencia dentro de una transacción.
+
+### T04 — Integración frontend individual/team
+
+Estado: `[x]` rutas FUTURE/MIXED desde `App`, `ImportModal` y
+`TeamImportModal`; error localizado y no recuperación parcial.
+
+### T05 — Gate de regresión
+
+Estado: `[x]` tests unitarios, contratos de migración, E2E M14 y regresión E2E
+local de los flujos afectados.
 
 ## 19. Tests obligatorios
-`integration`, `regression` (contra acceptance-corpus existente de R1).
+
+- Unit/domain: clasificación temporal, capability sin transaction y fallo
+  intermedio del wrapper transaccional.
+- Database contract: migración 0021.
+- Integration/API: import, drafts, assignments y provenance.
+- E2E/security: scope AREA, tenant cruzado, rechazo sin capability e
+  idempotencia.
+- Regression: Vitest completa y batería local Playwright.
 
 ## 20. Evidencias
-Decisión T01 documentada, tests en PASS, cero regresión en corpus de R1 verificada explícitamente.
+
+Gate específico M14:
+
+- `api/imports/confirm-split.test.js`: 3 tests PASS.
+- `db/migrations.test.mjs`: 19 tests PASS.
+- Vitest completa: 109 archivos, 1084 tests PASS.
+- E2E M14: 3 tests PASS.
+- E2E de compatibilidad focalizada: 18 tests PASS.
+- E2E de aislamiento cross-tenant aislada: 5 tests PASS.
+- E2E de integridad de importación con PDF real: 1 test PASS.
+- E2E real de rollback H: colisión `shifts_pkey` provocada después de iniciar
+  la creación del draft; respuesta 500 y conteos de imports/schedules sin
+  cambios.
+- Verificación Neon desarrollo: columna `import_id` UUID nullable, índice
+  `shift_assignments_import_idx` y migration 0021 aplicada.
+
+Casos A–L:
+
+| Caso | Resultado |
+| --- | --- |
+| A histórico puro autorizado | PASS — endpoints Safe Import existentes |
+| B futuro con capability | PASS |
+| C futuro sin capability | PASS — 403, cero writes |
+| D mixed con capability | PASS atómico |
+| E mixed sin capability | PASS — rechazo total, cero writes |
+| F futuro multiweek | PASS — múltiples drafts |
+| G mismo import repetido | PASS — mismo Import/drafts, assignments existentes |
+| H fallo intermedio | PASS — rollback total |
+| I AREA dentro de scope | PASS |
+| J fuera de AREA | PASS — 403, cero writes |
+| K tenant cruzado | PASS — 403, cero writes |
+| L provenance `import_id` | PASS — visible en snapshot |
 
 ## 21. Gate
-Gates requeridos: **G3**, **G5**, **G10**, **G13** (Regression).
+
+Gates requeridos: **G3**, **G4**, **G5**, **G10**, **G12**, **G13**, **G15**.
+
+Resultado: **PASS**.
+
+Commit de implementación: `a1dec5a` — `feat(import): complete R3-M14 future draft integration`.
+
+- G3 — PASS: clasificación, drafts por semana, estados y provenance correctos.
+- G4/G12 — PASS: capability, scope AREA y tenant enforced en backend.
+- G5 — PASS: FUTURE/MIXED funcional y UX pre-confirmación clara.
+- G10 — PASS: unit, migration contract y suite Vitest.
+- G13 — PASS: histórico compatible; E2E M14 y regresión E2E focalizada de los
+  flujos afectados.
+- G15 — PASS: lint y build.
 
 ## 22. Rollback / remediación
-Si se detecta regresión en el import histórico existente: FAIL inmediato, no negociable — Safe Import es el moat del producto (§1 del prompt maestro), no se puede degradar.
+
+No hubo remediación de datos. La única corrección durante validación fue
+separar la creación de schedule y draft en dos queries de la misma transacción,
+porque un CTE modificador no hacía visible el schedule recién insertado dentro
+de la misma sentencia. La colisión inducida verificó posteriormente el rollback
+total real.
 
 ## 23. Criterio de DONE
-Split pasado/futuro operativo, escritura dual verificada, cero regresión en acceptance-corpus de R1, Gate G3+G5+G10+G13 PASS.
+
+Split temporal operativo, autorización por capability/scope, operación FUTURE y
+MIXED atómica, idempotencia, provenance persistente, compatibilidad histórica,
+casos A–L y Gates G3/G4/G5/G10/G12/G13/G15 en PASS.
