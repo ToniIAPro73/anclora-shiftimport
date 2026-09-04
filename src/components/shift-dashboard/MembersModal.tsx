@@ -24,6 +24,7 @@ import { ApiError } from '../../lib/session';
 import type { PlanId } from '../../lib/plans';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { PasswordInput } from '../ui/PasswordInput';
+import { buildCredentialsTxt, credentialsFileName, downloadTextFile, GeneratedCredential } from '../../lib/credentials-export';
 
 const fieldLabelStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem', color: 'var(--text-muted)', minWidth: 0 };
 
@@ -40,6 +41,9 @@ interface MembersModalProps {
   currentPlan?: PlanId | null;
   switchTarget?: { id: string; name: string } | null;
   onSwitchOrg?: (organizationId: string) => void;
+  /** Active organization's display name — used only for the client-side
+   * credentials TXT export (Phase 8), never sent anywhere. */
+  organizationName?: string;
 }
 
 const ROLES: RemoteMember['role'][] = ['ADMIN', 'EMPLOYEE'];
@@ -173,8 +177,8 @@ function classifyUserRow(
  * returns it once — shown here for the ADMIN to hand over out-of-band.
  * Never logged, never persisted in plaintext, never re-fetchable.
  */
-export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUserId, onChanged, currentPlan = null, switchTarget = null, onSwitchOrg }: MembersModalProps) => {
-  const { t } = useI18n();
+export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUserId, onChanged, currentPlan = null, switchTarget = null, onSwitchOrg, organizationName = '' }: MembersModalProps) => {
+  const { t, locale } = useI18n();
   const [tab, setTab] = useState<Tab>('users');
   const [members, setMembers] = useState<RemoteMember[]>([]);
   const [error, setError] = useState('');
@@ -212,11 +216,30 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const [usersImporting, setUsersImporting] = useState(false);
   const [usersResult, setUsersResult] = useState<{
     created: { email: string; password: string }[];
+    /** Full generated-credentials records (email/name/role/password) for the
+     * TXT export — only users ACTUALLY created in this import ever land
+     * here, never existing/linked/failed rows. Cleared whenever the modal
+     * closes or a new import starts (see the isOpen effect below) — this is
+     * the only place the plaintext passwords live once the API response
+     * has been received. */
+    generatedCredentials: GeneratedCredential[];
+    existing: number;
     linked: number;
     failed: number;
+    processed: number;
     rows: BulkMemberResult[];
   } | null>(null);
   const [usersCsvError, setUsersCsvError] = useState('');
+  const [credentialsDownloaded, setCredentialsDownloaded] = useState(false);
+  const usersResultHeadingRef = useRef<HTMLElement>(null);
+
+  // WCAG 2.2 AA: focus moves to the result heading once the import finishes
+  // so screen-reader users land on the summary instead of a stale form.
+  useEffect(() => {
+    if (usersResult) {
+      usersResultHeadingRef.current?.focus();
+    }
+  }, [usersResult]);
 
   // Bulk Employees CSV.
   const employeesFileRef = useRef<HTMLInputElement>(null);
@@ -279,6 +302,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setLastTemporaryPassword(null);
       setUsersPreview(null);
       setUsersResult(null);
+      setCredentialsDownloaded(false);
       setEmployeesPreview(null);
       setEmployeesResult(null);
       setOpenMenuId(null);
@@ -799,6 +823,8 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       return;
     }
     setUsersImporting(true);
+    setUsersCsvError('');
+    setCredentialsDownloaded(false);
     try {
       const items = usersPreview.map((entry, index) => ({
         key: String(index),
@@ -808,10 +834,32 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
         externalEmployeeId: entry.row.externalEmployeeId,
       }));
       const { results, summary } = await bulkAddRemoteMembers(items);
+      // Only rows that actually created a NEW user carry a temporaryPassword
+      // (see bulkAddMembers in api/_lib/data.js) — existing/linked/error rows
+      // never do, so this filter alone keeps the TXT export scoped to users
+      // genuinely created in this import (Phase 16 requirement).
       const created = results
         .filter((r) => r.temporaryPassword)
         .map((r) => ({ email: r.email ?? '', password: r.temporaryPassword ?? '' }));
-      setUsersResult({ created, linked: summary.linked, failed: summary.failed, rows: results });
+      const nameByEmail = new Map(usersPreview.map((entry) => [entry.row.email, entry.row.name]));
+      const roleByEmail = new Map(usersPreview.map((entry) => [entry.row.email, entry.row.role]));
+      const generatedCredentials: GeneratedCredential[] = results
+        .filter((r): r is BulkMemberResult & { email: string; temporaryPassword: string } => Boolean(r.email && r.temporaryPassword))
+        .map((r) => ({
+          email: r.email,
+          displayName: nameByEmail.get(r.email) || '',
+          role: roleByEmail.get(r.email) || 'EMPLOYEE',
+          temporaryPassword: r.temporaryPassword,
+        }));
+      setUsersResult({
+        created,
+        generatedCredentials,
+        existing: summary.existing,
+        linked: summary.linked,
+        failed: summary.failed,
+        processed: results.length,
+        rows: results,
+      });
     } catch (err) {
       if (err instanceof ApiError && err.code === 'PLAN_LIMIT') {
         setShowUpgrade(true);
@@ -894,10 +942,32 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
             {usersResult && (
               <>
-                <strong style={{ fontSize: '0.9rem', flexShrink: 0 }}>{t('members.usersResultTitle')}</strong>
-                <p style={{ margin: 0, fontSize: '0.85rem', flexShrink: 0 }}>
-                  {t('members.usersResultCreated')}: {usersResult.created.length} · {t('members.usersResultLinked')}: {usersResult.linked} · {t('members.usersResultFailed')}: {usersResult.failed}
-                </p>
+                <strong ref={usersResultHeadingRef} id="members-users-result-heading" tabIndex={-1} style={{ fontSize: '0.9rem', flexShrink: 0, outline: 'none' }}>{t('members.usersResultTitle')}</strong>
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
+                    gap: '8px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {[
+                    { key: 'usersResultProcessed', value: usersResult.processed },
+                    { key: 'usersResultCreated', value: usersResult.created.length },
+                    { key: 'usersResultExisting', value: usersResult.existing },
+                    { key: 'usersResultLinked', value: usersResult.linked },
+                    { key: 'usersResultFailed', value: usersResult.failed, danger: usersResult.failed > 0 },
+                    { key: 'usersResultCredentialsGenerated', value: usersResult.generatedCredentials.length },
+                  ].map((metric) => (
+                    <div key={metric.key} style={{ padding: '8px 10px', borderRadius: '10px', background: 'var(--panel-muted-bg)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.15rem', fontWeight: 800, color: metric.danger ? 'var(--danger)' : 'inherit' }}>{metric.value}</div>
+                      <div style={{ fontSize: '0.68rem', color: 'var(--text-subtle)' }}>{t(`members.${metric.key}`)}</div>
+                    </div>
+                  ))}
+                </div>
+                {usersCsvError && <p role="alert" style={{ margin: 0, color: 'var(--danger)', fontSize: '0.85rem', flexShrink: 0 }}>{usersCsvError}</p>}
                 <div className="members-submode-scroll">
                   {usersResult.failed > 0 && (
                     <div style={{ display: 'grid', gap: '4px', marginBottom: '10px' }}>
@@ -909,22 +979,54 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                       ))}
                     </div>
                   )}
-                  {usersResult.created.length > 0 && (
-                    <div style={{ display: 'grid', gap: '6px' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-gold)' }}>{t('members.temporaryPasswordNote')}</span>
-                      {usersResult.created.map((entry) => (
-                        <div key={entry.email} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', flexWrap: 'wrap' }}>
-                          <code>{entry.email}: {entry.password}</code>
-                          <button type="button" className="btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => void copyToClipboard(entry.email, entry.password)}>
-                            {copiedKey === entry.email ? t('members.copied') : t('members.copyAction')}
-                          </button>
-                        </div>
-                      ))}
+                  {usersResult.generatedCredentials.length > 0 && (
+                    <div
+                      role="status"
+                      style={{
+                        display: 'grid', gap: '8px', padding: '10px 12px', marginBottom: '10px',
+                        borderRadius: '12px', border: '1px solid var(--color-gold)', background: 'var(--gold-tint-bg)',
+                      }}
+                    >
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{t('members.credentialsWarning')}</span>
+                      <div style={{ display: 'grid', gap: '6px' }}>
+                        {usersResult.created.map((entry) => (
+                          <div key={entry.email} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', flexWrap: 'wrap' }}>
+                            <code>{entry.email}: {entry.password}</code>
+                            <button type="button" className="btn-outline" style={{ padding: '4px 8px', fontSize: '0.75rem' }} onClick={() => void copyToClipboard(entry.email, entry.password)}>
+                              {copiedKey === entry.email ? t('members.copied') : t('members.copyAction')}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
-                <div className="members-submode-footer">
-                  <button type="button" className="btn-outline" style={{ padding: '8px 14px', fontWeight: 700 }} onClick={() => { setUsersResult(null); setUsersPreview(null); }}>
+                <div className="members-submode-footer" style={{ justifyContent: usersResult.generatedCredentials.length > 0 ? 'space-between' : 'flex-end' }}>
+                  {usersResult.generatedCredentials.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-gold"
+                      style={{ padding: '8px 14px', fontWeight: 800 }}
+                      onClick={() => {
+                        try {
+                          const content = buildCredentialsTxt(
+                            locale,
+                            organizationName,
+                            usersResult.generatedCredentials,
+                            (role) => t(`role.${role.toLowerCase()}`),
+                          );
+                          downloadTextFile(credentialsFileName(locale), content);
+                          setCredentialsDownloaded(true);
+                        } catch (err) {
+                          console.error('Credentials TXT generation failed', err);
+                          setUsersCsvError(t('members.downloadCredentialsFailed'));
+                        }
+                      }}
+                    >
+                      {credentialsDownloaded ? t('members.downloadCredentialsDownloaded') : t('members.downloadCredentialsAction')}
+                    </button>
+                  )}
+                  <button type="button" className="btn-outline" style={{ padding: '8px 14px', fontWeight: 700 }} onClick={() => { setUsersResult(null); setUsersPreview(null); setCredentialsDownloaded(false); }}>
                     {t('members.csvClose')}
                   </button>
                 </div>

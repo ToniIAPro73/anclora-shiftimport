@@ -1579,6 +1579,7 @@ function App() {
         employees={employees}
         areas={activeAreas}
         currentUserId={session?.user.id ?? ''}
+        organizationName={session?.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
         onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         onChanged={() => {
           if (session) {

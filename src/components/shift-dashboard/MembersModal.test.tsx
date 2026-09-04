@@ -288,9 +288,35 @@ describe('MembersModal — bulk users CSV import + automatic linking', () => {
       { key: '0', email: 'persona1@example.com', name: 'Adriana Molina', role: 'EMPLOYEE', externalEmployeeId: 'SI1' },
       { key: '1', email: 'admin@example.com', name: 'Laura Riera', role: 'ADMIN', externalEmployeeId: '' },
     ]);
-    expect(screen.getByText(/Empleados vinculados.*1/)).toBeTruthy();
+    expect(screen.getByText('Empleados vinculados')).toBeTruthy();
     expect(screen.getByText(/temp-1/)).toBeTruthy();
     expect(screen.getByText(/temp-2/)).toBeTruthy();
+    // Both created rows carried a temporaryPassword -> the download button
+    // must be visible (Phase 7: hidden only when generatedCredentials is empty).
+    expect(screen.getByText('Descargar credenciales (.txt)')).toBeTruthy();
+    expect(screen.getByText('Credenciales generadas')).toBeTruthy();
+  });
+
+  it('hides the download-credentials button when the import created zero new credentials (all existing/failed)', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    mockedBulkAddRemoteMembers.mockResolvedValue({
+      results: [
+        { row: 1, key: '0', email: 'persona1@example.com', status: 'existing' },
+        { row: 2, key: '1', email: 'admin@example.com', status: 'error', code: 'INVALID_ROLE', error: 'A valid role is required' },
+      ],
+      summary: { created: 0, linked: 0, existing: 1, failed: 1 },
+    });
+    renderMembersModal([remoteEmployee({ id: 'e1', name: 'Adriana Molina', externalEmployeeId: 'SI1' })]);
+
+    fireEvent.click(screen.getByText('Importar CSV'));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [usersCsv()] } });
+
+    await waitFor(() => expect(screen.getByText('Confirmar importación')).toBeTruthy());
+    fireEvent.click(screen.getByText('Confirmar importación'));
+
+    await waitFor(() => expect(screen.getByText('Importación de usuarios completada')).toBeTruthy());
+    expect(screen.queryByText('Descargar credenciales (.txt)')).toBeNull();
   });
 
   it('a plan-limit rejection from the bulk endpoint shows the Team upgrade prompt', async () => {
