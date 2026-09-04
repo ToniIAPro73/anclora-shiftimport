@@ -82,11 +82,34 @@ test('planner can create, edit, and delete a draft assignment', async ({ page })
   const assignment = await created.json();
   const assignmentItemUrl = `${assignmentUrl}/${assignment.assignment.id}`;
 
+  const overlap = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-09-29', startTime: '10:00', endTime: '12:00' },
+  });
+  expect(overlap.status()).toBe(422);
+  expect(await overlap.json()).toMatchObject({ code: 'OVERLAP', conflictingAssignmentId: assignment.assignment.id });
+
+  const adjacent = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empA1, date: '2026-09-29', startTime: '17:00', endTime: '18:00' },
+  });
+  expect(adjacent.status()).toBe(201);
+  const adjacentAssignment = await adjacent.json();
+  const adjacentItemUrl = `${assignmentUrl}/${adjacentAssignment.assignment.id}`;
+
   const updated = await page.request.patch(assignmentItemUrl, { headers, data: { location: 'Lobby' } });
   expect(updated.status()).toBe(200);
   expect((await updated.json()).assignment.location).toBe('Lobby');
 
+  const overlapOnUpdate = await page.request.patch(adjacentItemUrl, {
+    headers, data: { startTime: '16:00', endTime: '20:00' },
+  });
+  expect(overlapOnUpdate.status()).toBe(422);
+  expect(await overlapOnUpdate.json()).toMatchObject({ code: 'OVERLAP', conflictingAssignmentId: assignment.assignment.id });
+
   const deleted = await page.request.delete(assignmentItemUrl, { headers });
   expect(deleted.status()).toBe(204);
+  const deletedAdjacent = await page.request.delete(adjacentItemUrl, { headers });
+  expect(deletedAdjacent.status()).toBe(204);
   await page.getByRole('button', { name: 'Salir' }).click();
 });

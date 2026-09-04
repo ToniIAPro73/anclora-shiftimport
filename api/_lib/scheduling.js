@@ -61,6 +61,17 @@ function normalizeTime(value, field) {
   return time;
 }
 
+function timeToMinutes(value) {
+  const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+/** Half-open interval rule: touching assignments are valid, overlap is not. */
+export function rangesOverlap(startTime, endTime, existingStartTime, existingEndTime) {
+  return timeToMinutes(startTime) < timeToMinutes(existingEndTime)
+    && timeToMinutes(endTime) > timeToMinutes(existingStartTime);
+}
+
 function scheduleScopeError() {
   const error = new HttpError(403, 'Schedule is outside your assigned area');
   error.code = 'SCOPE_FORBIDDEN';
@@ -111,6 +122,38 @@ async function assertEmployeeForSchedule(sql, ctx, schedule, employeeId) {
   if (schedule.area_id && rows[0].area_id !== schedule.area_id) throw scheduleScopeError();
 }
 
+async function assertNoAssignmentOverlap(sql, { scheduleVersionId, employeeId, date, startTime, endTime, excludeId = null }) {
+  const rows = excludeId
+    ? await sql`
+      SELECT id, start_time, end_time
+      FROM shift_assignments
+      WHERE schedule_version_id = ${scheduleVersionId}
+        AND employee_id = ${employeeId}
+        AND date = ${date}
+        AND id <> ${excludeId}
+        AND start_time < ${endTime}::time
+        AND end_time > ${startTime}::time
+      ORDER BY start_time, id
+    `
+    : await sql`
+      SELECT id, start_time, end_time
+      FROM shift_assignments
+      WHERE schedule_version_id = ${scheduleVersionId}
+        AND employee_id = ${employeeId}
+        AND date = ${date}
+        AND start_time < ${endTime}::time
+        AND end_time > ${startTime}::time
+      ORDER BY start_time, id
+    `;
+  const conflict = rows.find((row) => rangesOverlap(startTime, endTime, row.start_time, row.end_time));
+  if (conflict) {
+    const error = new HttpError(422, 'Assignment overlaps an existing assignment');
+    error.code = 'OVERLAP';
+    error.conflictingAssignmentId = conflict.id;
+    throw error;
+  }
+}
+
 function mapAssignment(row) {
   return {
     id: row.id,
@@ -134,6 +177,9 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   const endTime = normalizeTime(input.endTime, 'endTime');
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
+  await assertNoAssignmentOverlap(sql, {
+    scheduleVersionId: versionId, employeeId, date, startTime, endTime,
+  });
   const location = input.location === undefined || input.location === null ? null : String(input.location).trim() || null;
   const rows = await sql`
     INSERT INTO shift_assignments
@@ -166,6 +212,9 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   const endTime = input.endTime === undefined ? String(assignment.end_time).slice(0, 5) : normalizeTime(input.endTime, 'endTime');
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
+  await assertNoAssignmentOverlap(sql, {
+    scheduleVersionId: versionId, employeeId, date, startTime, endTime, excludeId: assignmentId,
+  });
   const location = input.location === undefined ? assignment.location : (input.location === null ? null : String(input.location).trim() || null);
   const rows = await sql`
     UPDATE shift_assignments

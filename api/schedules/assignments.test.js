@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAssignment, deleteAssignment, updateAssignment } from '../_lib/scheduling.js';
+import { createAssignment, deleteAssignment, rangesOverlap, updateAssignment } from '../_lib/scheduling.js';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const AREA = '22222222-2222-4222-8222-222222222222';
@@ -42,6 +42,13 @@ function makeSql({ status = 'DRAFT' } = {}) {
 }
 
 describe('ShiftAssignment draft CRUD', () => {
+  it('uses half-open ranges: containment and partial overlap conflict, contiguity does not', () => {
+    expect(rangesOverlap('09:00', '12:00', '12:00', '17:00')).toBe(false);
+    expect(rangesOverlap('09:00', '13:00', '12:00', '17:00')).toBe(true);
+    expect(rangesOverlap('12:00', '17:00', '09:00', '13:00')).toBe(true);
+    expect(rangesOverlap('10:00', '11:00', '09:00', '17:00')).toBe(true);
+  });
+
   it('creates an assignment inside the schedule period', async () => {
     const assignment = await createAssignment(makeSql(), planner, SCHEDULE, VERSION, {
       employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk',

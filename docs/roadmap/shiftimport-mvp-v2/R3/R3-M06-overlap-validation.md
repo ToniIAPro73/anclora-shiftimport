@@ -1,5 +1,7 @@
 # R3-M06 — Overlap Validation
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 Impedir que un mismo empleado tenga dos `ShiftAssignment` con horario solapado el mismo día dentro de una `ScheduleVersion`.
 
@@ -35,7 +37,7 @@ N/A en esta microfase — el planner UI (R3-M08) consumirá este error para resa
 N/A adicional — hereda el guard de R3-M05.
 
 ## 12. i18n
-Mensaje de error de solapamiento con clave i18n ES/EN.
+Código estable `OVERLAP` y `conflictingAssignmentId` para traducción posterior en UI; esta microfase no introduce UI.
 
 ## 13. Accesibilidad
 N/A — sin UI en esta microfase.
@@ -60,9 +62,9 @@ Archivos / módulos probables: mismo módulo de datos usado en R3-M05.
 Cambios: query de solapamiento antes de insert/update + respuesta 422 estructurada.
 No hacer: no implementar como motor de reglas genérico; es una función fija.
 Criterios de aceptación:
-- [ ] Crear assignment solapado con uno existente es rechazado con 422 y referencia al conflicto.
-- [ ] Editar un assignment para que solape con otro también es rechazado.
-- [ ] Assignments no solapados (incluso contiguos, end==start) se aceptan.
+- [x] Crear assignment solapado con uno existente es rechazado con 422 y referencia al conflicto.
+- [x] Editar un assignment para que solape con otro también es rechazado.
+- [x] Assignments no solapados (incluso contiguos, end==start) se aceptan.
 Tests: unit test de la función de solapamiento (casos límite: contiguo, contenido, parcial) + integración sobre los endpoints.
 Evidencia esperada: resultados de test adjuntos.
 
@@ -70,13 +72,21 @@ Evidencia esperada: resultados de test adjuntos.
 `unit`, `API`, `integration`.
 
 ## 20. Evidencias
-Función de validación commiteada, tests en PASS.
+- `npx vitest run api/schedules/assignments.test.js`: **1 file passed, 5 tests passed** (contiguo, parcial, contenido y CRUD/guards).
+- `npx playwright test --config playwright.local.config.ts specs-local/scheduling-draft.spec.ts` desde `qa/e2e-acceptance`: **3 passed (38.5s)** contra `vercel dev` + Neon dev.
+- E2E real: POST y PATCH solapados devuelven 422 con `code: OVERLAP` e ID del assignment conflictivo; intervalos contiguos se aceptan.
+- Cleanup E2E: no se dejaron assignments/versiones/schedules de fixture.
 
 ## 21. Gate
 Gates requeridos: **G3** (Domain invariants), **G10** (Unit/integration tests).
+
+Resultado ejecutado: **PASS**.
+
+- G3 Domain invariants: PASS — regla fija `[start,end)`, sin falso positivo en contigüidad y excluyendo el propio assignment al editar.
+- G10 Unit/integration: PASS — validación pura, CRUD dirigido y E2E real en verde.
 
 ## 22. Rollback / remediación
 Si el Gate falla por falso positivo/negativo en casos límite: corregir la función de solapamiento antes de exponerla — un falso negativo permitiría datos físicamente imposibles en producción.
 
 ## 23. Criterio de DONE
-Validación operativa, casos límite cubiertos por test, Gate G3+G10 PASS.
+Validación operativa, casos límite cubiertos por test, Gate G3+G10 PASS. Implementación: `pending`.
