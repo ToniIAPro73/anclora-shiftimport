@@ -83,8 +83,8 @@ Archivos / módulos probables: `api/areas/index.js`, `api/_lib/data.js`.
 Cambios: Ninguno salvo gap encontrado.
 No hacer: No añadir jerarquía adicional.
 Criterios de aceptación:
-- [ ] Create/list/update/deactivate de área funcionan y están scoped por organización.
-- [ ] Organización sin áreas opera sin error en import/empleado.
+- [x] Create/list/update/deactivate de área funcionan y están scoped por organización.
+- [x] Organización sin áreas opera sin error en import/empleado.
 Tests: suite existente de `api/areas`.
 Evidencia esperada: resultado de tests.
 
@@ -94,11 +94,17 @@ unit/integration sobre `api/areas`.
 
 ## 20. Evidencias
 
-Resultado de tests T01.
+Resultado de tests T01:
+
+- `npx vitest run api/areas/index.test.js api/_lib/data.areas.test.js src/lib/areas.test.ts src/App.areas.test.tsx` → **4 archivos, 56 tests PASS**.
+- Neon dev (read-only): **3 organizaciones**, **1 sin áreas activas** (caso permitido), **121 áreas**, **0 áreas huérfanas**, **0 referencias `employees.area_id` inválidas**.
+- La consulta se ejecutó tras revisar `docs/db-environments.md`; no se imprimió ninguna connection string.
 
 ## 21. Gate
 
 Gates requeridos: G2 (Database/migrations), G10 (Unit/integration tests).
+
+Resultado: **PASS**. CRUD, aislamiento por organización y opcionalidad 0..N confirmados; no se detectaron gaps que requieran cambios de código.
 
 ## 22. Rollback / remediación
 
