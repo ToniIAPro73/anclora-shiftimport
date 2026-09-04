@@ -7,7 +7,28 @@ Documentar y verificar las diferencias de contrato entre importación individual
 Ambos flujos comparten motor de ingestión pero difieren en UX y en resolución de empleados (uno vs varios); es necesario un contrato claro de qué es común y qué diverge.
 
 ## 3. Estado actual del repositorio
-STATUS: DONE. `ImportModal.tsx` (individual) y `TeamImportModal.tsx` (equipo) comparten pipeline de diagnóstico (desde fb471bd) pero difieren en detección de roster (`team-roster.ts` solo aplica a team).
+STATUS: DONE.
+
+### T01 — Tabla de diferencias
+
+| Aspecto | Individual (`ImportModal.tsx`) | Team (`TeamImportModal.tsx`) |
+|---|---|---|
+| Entrada al motor | `analyzeDocumentFile` (R1-M03) | `analyzeDocumentFile` — mismo motor |
+| Diagnóstico de estado | `buildImportDiagnosis`/`diagnosisFromError` (`diagnostics.ts`) | Mismas funciones, mismo módulo (confirmado R1-M12) |
+| Detección de roster | No aplica — un único empleado, seleccionado antes de importar | `team-roster.ts` (CSV/tabular) / `pdf-roster.ts` (PDF posicional) — enumera cada empleado distinto del documento |
+| Resolución de empleado | Un empleado (nombre/id introducido manualmente o preseleccionado) | `bulkCreateEmployees` (R1-M02): matching por `external_employee_id` o nombre, para N filas de roster |
+| Etapa REVIEW | Tabla editable de turnos de un empleado (R1-M04) | Selección de filas reconocidas/nuevas/ambiguas por empleado (paso `select`), antes de construir el preview |
+| Etapa COMPARE | `importDiff` (`classifyImportChanges`) sobre un empleado, mostrado inline (R1-M05) | `totals` agregado sobre todos los empleados seleccionados, 6 tarjetas de estadística (R1-M05, ya corregido en esta sesión) |
+| Etapa CONFIRM | `handleConfirm` → callback `onConfirmImport` (App.tsx) | `handleConfirmImport` (dentro del propio modal) — ambos solo escriben tras el clic explícito (R1-M06) |
+| `imports.import_mode` | `'individual'` | `'team'` |
+| `imports.employee_count` | Siempre 1 | N (uno por empleado con turnos nuevos) |
+| Filas de `imports` creadas | Una por confirmación | Una por empleado con `newShifts.length > 0` (no una por archivo — cada empleado del roster genera su propio registro de historial) |
+| Fingerprint de idempotencia | `file_fingerprint` + `context_fingerprint` a nivel de la importación completa | Mismo mecanismo, pero evaluado por-empleado dentro del bucle de confirmación |
+| Detección de multiempleado | No aplica | `team-roster.ts`/`pdf-roster.ts`, cubierto por acceptance-corpus GS-01..10 |
+
+### Cuándo el sistema decide "team" vs "individual"
+
+La decisión no la toma el motor de ingestión (`analyzeDocumentFile` es el mismo para ambos) — la toma el **usuario**, al elegir qué modal abrir (botón "Importar" individual vs "Importar equipo"). `import-dispatcher.ts` enruta hacia el adaptador de roster correcto (`team-roster.ts`, `pdf-roster.ts`, o adaptadores tabulares) **dentro** del flujo de equipo una vez elegido — no decide entre individual/equipo, solo entre formatos dentro de equipo. No hay detección automática "este archivo parece de varios empleados, cambia de modal" — es una elección explícita previa del usuario.
 
 ## 4. Alcance IN
 Documentar tabla de diferencias: qué usa cada modal, qué comparten, cuándo el sistema decide que un archivo es "team" vs "individual".
@@ -59,9 +80,9 @@ Archivos / módulos probables: `ImportModal.tsx`, `TeamImportModal.tsx`, `team-r
 Cambios: Añadir tabla a este documento.
 No hacer: No modificar código.
 Criterios de aceptación:
-- [ ] Tabla de diferencias completa y verificada contra código.
+- [x] Tabla de diferencias completa y verificada contra código (ver sección 3).
 Tests: Ninguno.
-Evidencia esperada: Tabla en este documento.
+Evidencia esperada: Tabla en este documento (sección 3).
 
 ## 19. Tests obligatorios
 N/A — motivo: microfase puramente documental, sin cambios de código.
