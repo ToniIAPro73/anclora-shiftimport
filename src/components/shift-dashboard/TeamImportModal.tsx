@@ -25,7 +25,7 @@ import {
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { Shift } from '../../lib/types';
-import { ApiError, Role } from '../../lib/session';
+import { ApiError, isAdminRole, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { detectImportFlow } from '../../ingestion/import-dispatcher';
@@ -1021,7 +1021,7 @@ export const TeamImportModal = ({
                       {t('teamImport.create')}
                     </button>
                   )}
-                  {row.status === 'recognized_inactive' && sessionRole === 'ADMIN' && (
+                  {row.status === 'recognized_inactive' && isAdminRole(sessionRole) && (
                     <button
                       type="button"
                       className="btn-outline"

@@ -353,7 +353,7 @@ export interface RemoteMember {
   userId: string;
   email: string;
   displayName: string;
-  role: 'ADMIN' | 'EMPLOYEE';
+  role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE';
 }
 
 export async function listRemoteMembers(): Promise<RemoteMember[]> {

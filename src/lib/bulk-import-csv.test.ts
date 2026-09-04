@@ -149,4 +149,12 @@ describe('parseUsersCsv', () => {
   it('returns null when email/role columns are missing', () => {
     expect(parseUsersCsv('name\nAna')).toBeNull();
   });
+
+  it('accepts OWNER and PLANNER roles for explicit provisioning', () => {
+    const rows = parseUsersCsv('email,role\nowner@example.com,OWNER\nplanner@example.com,PLANNER');
+    expect(rows).toEqual([
+      { email: 'owner@example.com', name: '', role: 'OWNER', externalEmployeeId: '', rowError: undefined },
+      { email: 'planner@example.com', name: '', role: 'PLANNER', externalEmployeeId: '', rowError: undefined },
+    ]);
+  });
 });

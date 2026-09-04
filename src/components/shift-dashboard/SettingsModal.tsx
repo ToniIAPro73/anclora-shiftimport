@@ -15,7 +15,7 @@ import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
-import { SessionInfo } from '../../lib/session';
+import { isAdminRole, SessionInfo } from '../../lib/session';
 import { RemoteEmployee } from '../../lib/remote';
 import { resetOrganization, updateUserDisplayName, updateOwnEmployeeName, updateRemoteOrganizationName } from '../../lib/remote';
 
@@ -60,7 +60,7 @@ function getAvailableTabs(session: SettingsModalProps['session']): Tab[] {
   
   const { role } = session;
   
-  if (role === 'EMPLOYEE') {
+  if (role === 'EMPLOYEE' || role === 'PLANNER') {
     return ['profile'];
   }
   
@@ -407,7 +407,7 @@ function TeamSection({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
         <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.organizationInfo')}</h3>
         <div style={{ display: 'grid', gap: 'var(--space-sm)', fontSize: '0.85rem' }}>
-          {session?.role === 'ADMIN' ? (
+          {isAdminRole(session?.role) ? (
             <div>
               <label style={labelStyle} htmlFor="settings-org-name">{t('settings.orgName')}</label>
               <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -482,7 +482,7 @@ function TeamSection({
           </div>
         )}
 
-        {session?.role === 'ADMIN' && (
+        {isAdminRole(session?.role) && (
           <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
             <h3 style={{ margin: '0 0 var(--space-sm)', fontSize: '0.9rem', fontWeight: 700, color: 'var(--danger)' }}>{t('settings.dangerZoneTitle')}</h3>
             <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>

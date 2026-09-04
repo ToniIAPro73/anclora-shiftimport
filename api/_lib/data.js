@@ -458,8 +458,8 @@ async function assertEmployeeNotLastAdmin(sql, ctx, employee) {
     SELECT role FROM memberships
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${employee.userId}
   `;
-  if (rows[0]?.role === 'ADMIN' && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
-    const error = new HttpError(400, 'The organization must keep at least one ADMIN');
+  if (['OWNER', 'ADMIN'].includes(rows[0]?.role) && (await countOrgManagers(sql, ctx.organizationId)) <= 1) {
+    const error = new HttpError(400, 'The organization must keep at least one OWNER or ADMIN');
     error.code = 'LAST_ADMIN';
     throw error;
   }
@@ -642,7 +642,7 @@ export async function deleteEmployee(sql, ctx, input) {
 
 // -------------------------------------------------------------- memberships
 
-const VALID_ROLES = ['ADMIN', 'EMPLOYEE'];
+const VALID_ROLES = ['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'];
 
 function mapMemberRow(row) {
   return {
@@ -671,6 +671,22 @@ async function countOrgAdmins(sql, organizationId) {
   const rows = await sql`
     SELECT count(*)::int AS n FROM memberships
     WHERE organization_id = ${organizationId} AND role = 'ADMIN'
+  `;
+  return rows[0].n;
+}
+
+async function countOrgOwners(sql, organizationId) {
+  const rows = await sql`
+    SELECT count(*)::int AS n FROM memberships
+    WHERE organization_id = ${organizationId} AND role = 'OWNER'
+  `;
+  return rows[0].n;
+}
+
+async function countOrgManagers(sql, organizationId) {
+  const rows = await sql`
+    SELECT count(*)::int AS n FROM memberships
+    WHERE organization_id = ${organizationId} AND role IN ('OWNER', 'ADMIN')
   `;
   return rows[0].n;
 }
@@ -960,7 +976,7 @@ export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
   return { results, summary };
 }
 
-/** ADMIN only: change a member's role. The last ADMIN cannot be demoted. */
+/** ADMIN/OWNER only: change a member's role. The sole OWNER cannot be demoted. */
 export async function updateMemberRole(sql, ctx, input) {
   requireRole(ctx, 'ADMIN');
   const userId = String(input?.userId ?? '').trim();
@@ -975,7 +991,22 @@ export async function updateMemberRole(sql, ctx, input) {
   if (rows.length === 0) {
     throw new HttpError(404, 'Membership not found');
   }
+  if (rows[0].role === 'OWNER' && role !== 'OWNER'
+    && (await countOrgOwners(sql, ctx.organizationId)) <= 1) {
+    const error = new HttpError(400, 'The organization must keep at least one OWNER');
+    error.code = 'LAST_OWNER';
+    throw error;
+  }
+  if (rows[0].role !== 'OWNER' && role === 'OWNER'
+    && (await countOrgOwners(sql, ctx.organizationId)) >= 1) {
+    const error = new HttpError(400, 'The organization already has an OWNER');
+    error.code = 'OWNER_EXISTS';
+    throw error;
+  }
+  // Compatibility guard for any pre-R2-M06 data encountered before the
+  // migration has completed: do not remove the last high-privilege member.
   if (rows[0].role === 'ADMIN' && role !== 'ADMIN'
+    && (await countOrgOwners(sql, ctx.organizationId)) === 0
     && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
     throw new HttpError(400, 'The organization must keep at least one ADMIN');
   }
@@ -986,8 +1017,8 @@ export async function updateMemberRole(sql, ctx, input) {
   return { userId, role };
 }
 
-/** ADMIN only: remove a membership. Self-removal and orphaning the org
- * without an ADMIN are blocked. Linked employees keep existing (user_id
+/** ADMIN/OWNER only: remove a membership. Self-removal and orphaning the org
+ * without an OWNER are blocked. Linked employees keep existing (user_id
  * set to NULL). */
 export async function removeMember(sql, ctx, input) {
   requireRole(ctx, 'ADMIN');
@@ -1005,7 +1036,14 @@ export async function removeMember(sql, ctx, input) {
   if (rows.length === 0) {
     throw new HttpError(404, 'Membership not found');
   }
-  if (rows[0].role === 'ADMIN' && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
+  if (rows[0].role === 'OWNER' && (await countOrgOwners(sql, ctx.organizationId)) <= 1) {
+    const error = new HttpError(400, 'The organization must keep at least one OWNER');
+    error.code = 'LAST_OWNER';
+    throw error;
+  }
+  if (rows[0].role === 'ADMIN'
+    && (await countOrgOwners(sql, ctx.organizationId)) === 0
+    && (await countOrgAdmins(sql, ctx.organizationId)) <= 1) {
     throw new HttpError(400, 'The organization must keep at least one ADMIN');
   }
   await sql`

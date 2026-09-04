@@ -18,6 +18,7 @@ import {
   setUnauthorizedHandler,
   switchOrganization,
   completeOnboarding,
+  isAdminRole,
   SessionInfo,
 } from './lib/session';
 import {
@@ -1308,7 +1309,7 @@ function App() {
                 />
               </div>
             )}
-            {session.role === 'ADMIN' && (
+            {isAdminRole(session.role) && (
               <button
                 type="button"
                 className="btn-outline"
@@ -1318,7 +1319,7 @@ function App() {
                 {t('members.title')}
               </button>
             )}
-            {session.role === 'ADMIN' && (
+            {isAdminRole(session.role) && (
               <button
                 type="button"
                 className="btn-outline"
@@ -1506,11 +1507,11 @@ function App() {
           isAuthenticated={Boolean(session)}
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
-          allowAreaChoice={session?.role === 'ADMIN'}
+          allowAreaChoice={isAdminRole(session?.role)}
         />
       )}
 
-      {session && session.role === 'ADMIN' && !adminIndividualImport && (
+      {session && isAdminRole(session.role) && !adminIndividualImport && (
         <TeamImportModal
           isOpen={isImportOpen}
           onClose={() => { if (!isImporting) setIsImportOpen(false); }}
@@ -1523,7 +1524,7 @@ function App() {
           onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
-          allowAreaChoice={session.role === 'ADMIN'}
+          allowAreaChoice={isAdminRole(session.role)}
           onSingleEmployeeDetected={(file, employee) => {
             const matching = employees.filter((candidate) => (
               employee.externalEmployeeId
@@ -1627,7 +1628,7 @@ function App() {
         isOpen={isFormatProfilesOpen && !isImporting}
         onClose={() => setIsFormatProfilesOpen(false)}
         store={getFormatProfileStore(session?.organizationId ?? null)}
-        canManage={session?.role === 'ADMIN'}
+        canManage={isAdminRole(session?.role)}
       />
 
       {importConflictState && (

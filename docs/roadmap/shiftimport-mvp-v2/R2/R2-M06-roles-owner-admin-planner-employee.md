@@ -1,6 +1,6 @@
 # R2-M06 — Roles: OWNER / ADMIN / PLANNER / EMPLOYEE
 
-STATUS: MISSING — depende de la decisión R0-M03
+STATUS: DONE — PASS
 
 ## 1. Objetivo
 
@@ -16,8 +16,8 @@ El modelo actual de 2 roles no distingue entre "propietario de la organización"
 
 ## 4. Alcance IN
 
-- Migración de esquema: ampliar el CHECK constraint a `('OWNER','ADMIN','PLANNER','EMPLOYEE')`.
-- Backfill: aplicar la regla OWNER decidida en R0-M03 (por defecto propuesto: la membership con `created_at` más antigua por organización pasa a `OWNER`; requiere confirmación de producto antes de ejecutar en datos reales).
+- Migración de esquema: ampliar el CHECK constraint a `('OWNER','ADMIN','PLANNER','EMPLOYEE')` y preservar el invariante de un único OWNER por organización.
+- Backfill: aplicar la regla OWNER aprobada por producto (la membership `ADMIN` con `created_at` más antigua por organización pasa a `OWNER`; empates por `user_id` ascendente porque `memberships` usa una clave primaria compuesta y no tiene columna `id`).
 - Actualizar guard de rol en `api/_lib/auth.js` para reconocer los 4 roles y su jerarquía (`OWNER > ADMIN > PLANNER > EMPLOYEE` a efectos de permisos generales; los scopes de R2-M07 refinan esto).
 - Actualizar cualquier UI que muestre/seleccione rol (selector de rol en `MembersModal.tsx` u otro punto).
 
@@ -32,11 +32,11 @@ R0-M03 (decisión formal del modelo de roles y regla de backfill OWNER).
 
 ## 7. Decisiones arquitectónicas
 
-Regla de backfill OWNER (a confirmar en R0-M03, ejecutada aquí): la membership más antigua (`MIN(created_at)`) de cada organización se promueve a `OWNER`. Si existe empate, se resuelve por `id` ascendente (determinista). Toda membership `ADMIN` restante permanece `ADMIN`. `PLANNER` no se asigna por backfill — es un rol de asignación explícita futura, ninguna membership existente lo recibe automáticamente.
+Regla de backfill OWNER (aprobada por producto y ejecutada aquí): la membership más antigua (`MIN(created_at)`) de cada organización se promueve a `OWNER`. Si existe empate, se resuelve por `user_id` ascendente (determinista; la tabla no tiene `id` simple). Toda membership `ADMIN` restante permanece `ADMIN`. `PLANNER` no se asigna por backfill — es un rol de asignación explícita futura, ninguna membership existente lo recibe automáticamente.
 
 ## 8. Modelo de datos afectado
 
-`memberships.role` — ampliar CHECK constraint. Migración forward-safe: `ALTER TABLE memberships DROP CONSTRAINT ...; ALTER TABLE memberships ADD CONSTRAINT ... CHECK (role IN ('OWNER','ADMIN','PLANNER','EMPLOYEE'));` seguido de `UPDATE` de backfill dentro de la misma migración, con índice si se filtra por rol frecuentemente.
+`memberships.role` — ampliar CHECK constraint. Migración forward-safe: `ALTER TABLE memberships DROP CONSTRAINT ...; ALTER TABLE memberships ADD CONSTRAINT ... CHECK (role IN ('OWNER','ADMIN','PLANNER','EMPLOYEE'));` seguido de `UPDATE` de backfill dentro de la misma migración. `0014_single_owner_per_organization.sql` añade un índice único parcial para impedir un segundo OWNER.
 
 ## 9. API / Backend
 
@@ -84,8 +84,8 @@ Archivos / módulos probables: `db/migrations/00XX_expand_membership_roles.sql`.
 Cambios: DROP/ADD CONSTRAINT.
 No hacer: No eliminar el constraint sin reemplazo (dejaría el campo sin validación).
 Criterios de aceptación:
-- [ ] Migración aplica limpiamente sobre Neon de desarrollo.
-- [ ] Constraint rechaza valores fuera de los 4 permitidos.
+- [x] Migración aplica limpiamente sobre Neon de desarrollo.
+- [x] Constraint rechaza valores fuera de los 4 permitidos.
 Tests: test de migración (`db/**/*.test.mjs`) que intente insertar rol inválido y espere error.
 Evidencia esperada: resultado de migración + test.
 
@@ -93,11 +93,11 @@ Evidencia esperada: resultado de migración + test.
 
 Objetivo: Asignar `OWNER` a la membership más antigua por organización.
 Archivos / módulos probables: misma migración o script separado dentro de la migración.
-Cambios: `UPDATE memberships SET role='OWNER' WHERE id IN (SELECT ... MIN(created_at) ... GROUP BY organization_id)`.
+Cambios: `UPDATE memberships` sobre la membership `ADMIN` mínima por `(created_at, user_id)` dentro de cada organización sin OWNER.
 No hacer: No ejecutar contra producción sin aprobación explícita del usuario — solo Neon de desarrollo en esta microfase.
 Criterios de aceptación:
-- [ ] Cada organización tiene exactamente un `OWNER` tras el backfill.
-- [ ] Ninguna membership `ADMIN` existente pierde acceso.
+- [x] Cada organización tiene exactamente un `OWNER` tras el backfill.
+- [x] Ninguna membership `ADMIN` existente pierde acceso.
 Tests: query de verificación post-migración.
 Evidencia esperada: resultado de la query de verificación (conteo de OWNER por organización = 1 en todos los casos).
 
@@ -108,8 +108,8 @@ Archivos / módulos probables: `api/_lib/auth.js:163-165`.
 Cambios: Añadir `OWNER` y `PLANNER` a la lógica de comparación; `OWNER` hereda permisos de `ADMIN` por defecto.
 No hacer: No implementar lógica de scope aquí (R2-M07).
 Criterios de aceptación:
-- [ ] Endpoints que aceptaban `ADMIN` ahora también aceptan `OWNER`.
-- [ ] `PLANNER`/`EMPLOYEE` no obtienen acceso indebido a endpoints de administración.
+- [x] Endpoints que aceptaban `ADMIN` ahora también aceptan `OWNER`.
+- [x] `PLANNER`/`EMPLOYEE` no obtienen acceso indebido a endpoints de administración.
 Tests: test de autorización por rol para cada endpoint afectado.
 Evidencia esperada: resultado de tests.
 
@@ -120,7 +120,7 @@ Archivos / módulos probables: query de verificación dedicada.
 Cambios: Ninguno de código; solo verificación.
 No hacer: No declarar PASS sin esta verificación ejecutada.
 Criterios de aceptación:
-- [ ] Query confirma invariante sobre datos de Neon de desarrollo.
+- [x] Query confirma invariante sobre datos de Neon de desarrollo.
 Tests: N/A — verificación de datos.
 Evidencia esperada: resultado de query adjunto como evidencia del Gate.
 
@@ -131,8 +131,8 @@ Archivos / módulos probables: `MembersModal.tsx`.
 Cambios: Ampliar selector, mostrar rol actual.
 No hacer: No introducir editor de permisos personalizado.
 Criterios de aceptación:
-- [ ] Los 4 roles son seleccionables donde corresponde.
-- [ ] Rol `OWNER` no puede autodegradarse a través de la UI si es el único OWNER de la organización (evitar organización sin OWNER).
+- [x] Los 4 roles son seleccionables donde corresponde.
+- [x] Rol `OWNER` no puede autodegradarse a través de la UI si es el único OWNER de la organización (evitar organización sin OWNER).
 Tests: test de componente.
 Evidencia esperada: resultado de test.
 
@@ -143,7 +143,7 @@ Archivos / módulos probables: `src/lib/i18n.ts`.
 Cambios: Nuevas claves.
 No hacer: No dejar claves huérfanas.
 Criterios de aceptación:
-- [ ] `i18n-coverage.test.ts` pasa.
+- [x] `i18n-coverage.test.ts` pasa.
 Tests: `i18n-coverage.test.ts`.
 Evidencia esperada: resultado de test.
 
@@ -153,13 +153,25 @@ migration test, unit (auth guard), integration (endpoints por rol), component (s
 
 ## 20. Evidencias
 
-Resultado de migración, query de verificación T04, resultados de tests T01/T03/T05/T06.
+Resultado de migración, query de verificación T04, resultados de tests T01/T03/T05/T06:
+
+- Remediación previa aprobada y auditada: organización `Cadena Aurora Hoteles`, UUID `8535b597-58ff-4ed9-9e65-bac7603e9fb6`; antes del DELETE tenía 0 memberships, empleados, imports, shifts, áreas y format_profiles. El DELETE por UUID devolvió exactamente 1 fila; organizaciones 3 → 2; el UUID ya no existe y la cascada dejó 0 filas en las seis tablas tenant-scoped.
+- `node --env-file=.env.development.local db/migrate.mjs` → `apply 0013_membership_roles_owner.sql (5 statements)` y `apply 0014_single_owner_per_organization.sql`, ambos `done`; `migrations up to date`.
+- Constraint verificado en Neon dev: `memberships_role_check` permite exactamente `OWNER`, `ADMIN`, `PLANNER`, `EMPLOYEE`; intento de insertar `NOT_A_ROLE` rechazado y la transacción no persistió cambios.
+- Backfill verificado en las 2 organizaciones restantes: cada una tiene exactamente 1 OWNER; distribución final: Anclora Group (1 OWNER, 1 ADMIN, 14 EMPLOYEE), Cadena Aurora Hoteles (1 OWNER, 0 ADMIN, 4 EMPLOYEE).
+- `npx vitest run api/_lib/auth.test.js api/_lib/data.test.js db/migrations.test.mjs src/lib/bulk-import-csv.test.ts src/components/shift-dashboard/MembersModal.test.tsx` → **5 archivos, 177 tests PASS**.
+- `npm test` → **97 archivos, 1001 tests PASS**.
+- `npm run lint` → PASS.
+- `npm run build` → PASS; warning no bloqueante ya conocido por chunks grandes de PDF/XLSX.
+- `git diff --check` → PASS.
 
 ## 21. Gate
 
 Gates requeridos: G2 (Database/migrations), G3 (Domain invariants), G4 (API/authorization).
 
 G3 es especialmente crítico: el invariante "exactamente un OWNER por organización" debe verificarse explícitamente, no asumirse.
+
+Resultado: **PASS**. La remediación de la organización vacía se ejecutó antes de la migración; constraint, backfill, autorización, UI, i18n y pruebas quedaron verificados.
 
 ## 22. Rollback / remediación
 

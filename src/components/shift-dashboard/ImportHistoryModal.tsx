@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import { deleteRemoteImport, listRemoteImports, RemoteImport } from '../../lib/remote';
-import { SessionInfo } from '../../lib/session';
+import { isAdminRole, SessionInfo } from '../../lib/session';
 import { ModalShell } from '../ui/ModalShell';
 
 interface ImportHistoryModalProps {
@@ -63,7 +63,7 @@ const formatDateTime = (iso: string | undefined, locale: string): string => {
 
 export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: ImportHistoryModalProps) => {
   const { t, locale } = useI18n();
-  const canDelete = session?.role === 'ADMIN';
+  const canDelete = isAdminRole(session?.role);
   const pageSize = useResponsivePageSize();
 
   const [rows, setRows] = useState<RemoteImport[]>([]);

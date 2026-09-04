@@ -46,7 +46,7 @@ interface MembersModalProps {
   organizationName?: string;
 }
 
-const ROLES: RemoteMember['role'][] = ['ADMIN', 'EMPLOYEE'];
+const ROLES: RemoteMember['role'][] = ['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'];
 type Tab = 'users' | 'employees';
 
 interface EmployeePreviewRow {

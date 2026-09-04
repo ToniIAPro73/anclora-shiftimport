@@ -160,10 +160,10 @@ export function requireOrgContext(ctx) {
   return ctx;
 }
 
-/** Role guard: ADMIN > EMPLOYEE. */
+/** Role guard: OWNER > ADMIN > PLANNER > EMPLOYEE. */
 export function requireRole(ctx, minimum) {
-  const rank = { EMPLOYEE: 1, ADMIN: 2 };
-  if (!ctx?.role || rank[ctx.role] < rank[minimum]) {
+  const rank = { EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 };
+  if (!ctx?.role || rank[ctx.role] === undefined || rank[minimum] === undefined || rank[ctx.role] < rank[minimum]) {
     throw new HttpError(403, 'Insufficient role');
   }
 }

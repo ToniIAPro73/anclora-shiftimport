@@ -4,7 +4,11 @@
  * existing localStorage flow is untouched.
  */
 
-export type Role = 'ADMIN' | 'EMPLOYEE';
+export type Role = 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE';
+
+export function isAdminRole(role: Role | null | undefined): boolean {
+  return role === 'OWNER' || role === 'ADMIN';
+}
 
 export interface SessionMembership {
   organizationId: string;

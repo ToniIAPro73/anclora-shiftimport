@@ -1,5 +1,5 @@
 import { RemoteEmployee, updateRemoteEmployee } from './remote';
-import { Role } from './session';
+import { isAdminRole, Role } from './session';
 
 export type InactiveMatchResolution =
   | { kind: 'reactivated'; employee: RemoteEmployee }
@@ -17,7 +17,7 @@ export async function resolveInactiveEmployeeMatch(input: {
   role: Role | null;
   confirmReactivate: () => boolean;
 }): Promise<InactiveMatchResolution> {
-  if (input.role !== 'ADMIN') {
+  if (!isAdminRole(input.role)) {
     return { kind: 'not_admin' };
   }
   if (!input.confirmReactivate()) {

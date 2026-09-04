@@ -192,7 +192,9 @@ const translations: Record<Locale, TranslationTree> = {
       actionFailed: 'No se pudo completar la acción.',
     },
     role: {
+      owner: 'Propietario',
       admin: 'Administrador',
+      planner: 'Planificador',
       employee: 'Empleado',
     },
     onboardingChoice: {
@@ -320,7 +322,7 @@ const translations: Record<Locale, TranslationTree> = {
       previewStatusNew: 'Nueva',
       previewStatusError: 'Error',
       rowErrorMissingEmail: 'Falta el email',
-      rowErrorInvalidRole: 'Rol no válido (usa ADMIN o EMPLOYEE)',
+      rowErrorInvalidRole: 'Rol no válido (usa OWNER, ADMIN, PLANNER o EMPLOYEE)',
       rowErrorMissingId: 'Falta el ID externo',
       rowErrorUnknownArea: 'Área desconocida: {{area}}',
       csvEmployeesNoAccessHint: 'El alta masiva crea solo empleados, nunca cuentas de usuario: quedan sin acceso a la app aunque el CSV incluya email. El acceso se concede después desde la pestaña Usuarios.',
@@ -1129,7 +1131,9 @@ const translations: Record<Locale, TranslationTree> = {
       actionFailed: 'The action could not be completed.',
     },
     role: {
+      owner: 'Owner',
       admin: 'Admin',
+      planner: 'Planner',
       employee: 'Employee',
     },
     onboardingChoice: {
@@ -1257,7 +1261,7 @@ const translations: Record<Locale, TranslationTree> = {
       previewStatusNew: 'New',
       previewStatusError: 'Error',
       rowErrorMissingEmail: 'Missing email',
-      rowErrorInvalidRole: 'Invalid role (use ADMIN or EMPLOYEE)',
+      rowErrorInvalidRole: 'Invalid role (use OWNER, ADMIN, PLANNER, or EMPLOYEE)',
       rowErrorMissingId: 'Missing external ID',
       rowErrorUnknownArea: 'Unknown area: {{area}}',
       csvEmployeesNoAccessHint: 'Bulk import creates employees only, never user accounts: they have no app access even if the CSV includes an email. Access is granted afterwards from the Users tab.',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { parseSessionToken, requireOrgContext, resolveContext, SESSION_COOKIE } from './auth.js';
+import { parseSessionToken, requireOrgContext, requireRole, resolveContext, SESSION_COOKIE } from './auth.js';
 
 /**
  * Security-context tests (Fase 1.1): multi-org resolution must never pick
@@ -127,5 +127,19 @@ describe('requireOrgContext', () => {
     expect(() => requireOrgContext(null)).toThrowError(expect.objectContaining({ status: 401 }));
     expect(() => requireOrgContext({ organizationId: null })).toThrowError(expect.objectContaining({ status: 400 }));
     expect(requireOrgContext({ organizationId: 'org-1' }).organizationId).toBe('org-1');
+  });
+});
+
+describe('requireRole — MVP role hierarchy', () => {
+  it('orders OWNER > ADMIN > PLANNER > EMPLOYEE', () => {
+    expect(() => requireRole({ role: 'OWNER' }, 'ADMIN')).not.toThrow();
+    expect(() => requireRole({ role: 'ADMIN' }, 'PLANNER')).not.toThrow();
+    expect(() => requireRole({ role: 'PLANNER' }, 'ADMIN')).toThrowError(expect.objectContaining({ status: 403 }));
+    expect(() => requireRole({ role: 'EMPLOYEE' }, 'PLANNER')).toThrowError(expect.objectContaining({ status: 403 }));
+  });
+
+  it('fails closed for unknown roles and thresholds', () => {
+    expect(() => requireRole({ role: 'AUDITOR' }, 'EMPLOYEE')).toThrowError(expect.objectContaining({ status: 403 }));
+    expect(() => requireRole({ role: 'OWNER' }, 'AUDITOR')).toThrowError(expect.objectContaining({ status: 403 }));
   });
 });

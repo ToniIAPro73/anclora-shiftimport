@@ -83,6 +83,19 @@ describe('MembersModal — tabs', () => {
     expect(screen.getByText('Añadir empleado')).toBeTruthy();
     expect(screen.getByText('Ana')).toBeTruthy();
   });
+
+  it('offers all four MVP roles in the add-user selector', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    renderMembersModal();
+
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Rol' }));
+
+    expect(screen.getByRole('option', { name: 'Propietario' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Administrador' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Planificador' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'Empleado' })).toBeTruthy();
+  });
 });
 
 describe('MembersModal — single add-user temporary password', () => {

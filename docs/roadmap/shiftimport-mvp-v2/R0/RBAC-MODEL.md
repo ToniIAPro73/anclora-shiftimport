@@ -1,15 +1,15 @@
 # RBAC Model — Design for R2-M06/M07/M08
 
-Status: **DESIGN ONLY**. Nothing in this document is executed against the database or implemented in code during R0-M03. This is the reference R2-M06 (roles), R2-M07 (scopes) and R2-M08 (API enforcement) implement directly, without re-designing.
+Status: **ROLES IMPLEMENTED (R2-M06)**. Scope columns and scope enforcement remain design-only until R2-M07/R2-M08. This document remains the reference for those microphases.
 
 Vocabulary follows [`DOMAIN-GLOSSARY.md`](./DOMAIN-GLOSSARY.md): Membership, Role, Scope, Organization, Area, Employee. No new terms introduced here.
 
 ## 1. Current state (baseline)
 
-- `memberships.role CHECK IN ('ADMIN','EMPLOYEE')` — migration 0007 (which removed the earlier `MANAGER` role).
-- `api/_lib/data.js:645`: `const VALID_ROLES = ['ADMIN', 'EMPLOYEE'];`
-- `api/_lib/auth.js:163-165`: `requireRole(ctx, minimum)` — binary rank `{ EMPLOYEE: 1, ADMIN: 2 }`, no scope concept at all.
-- No scope column exists anywhere. All authorization today is "ADMIN can act on the whole organization; EMPLOYEE can only act on their own employee record" (enforced ad hoc per call site, not via a scope column).
+- `memberships.role CHECK IN ('OWNER','ADMIN','PLANNER','EMPLOYEE')` — migration 0013 (which extends the 0007 constraint).
+- `api/_lib/data.js`: `VALID_ROLES` includes the four MVP roles.
+- `api/_lib/auth.js`: `requireRole(ctx, minimum)` uses rank `{ EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 }`, no scope concept yet.
+- No scope column exists anywhere. Role authorization is now four-level (`OWNER`/`ADMIN`/`PLANNER`/`EMPLOYEE`); scope authorization remains "ADMIN can act on the whole organization; EMPLOYEE can only act on their own employee record" enforced ad hoc per call site until R2-M07/R2-M08.
 
 ## 2. Target model: 4 roles × 3 scopes
 
@@ -49,14 +49,14 @@ Explicitly out of scope for MVP (per master prompt §13): `TEAM` scope, `WORK_CE
 
 **Edge case — organization with no `ADMIN` membership**: does not happen today per the current invariant (every organization must have at least one ADMIN — enforced by `countOrgAdmins` guards at `api/_lib/data.js:461`, `:1008`, and the demotion guard at `:978`), but if found during R2-M06 execution, that organization is flagged for manual review rather than silently skipped or auto-assigned.
 
-**⚠️ PENDING SIGN-OFF**: this rule requires explicit product sign-off before R2-M06 executes the backfill `UPDATE` against real data. It is documented and ready, not approved. R2-M06's own Gate carries this as its prerequisite — R0-M03's Gate is not blocked by the pending sign-off (PASS_WITH_WARNINGS is explicitly permitted here, see section "Gate" in the R0-M03 spec).
+**✅ PRODUCT SIGN-OFF CONFIRMED**: the rule was approved before R2-M06 execution. One empty organization with no candidate membership was explicitly audited and deleted before the migration.
 
 ## 4. Scope model (schema design)
 
 Modeled as additional columns on `memberships` rather than a separate permissions table — avoids over-engineering for a fixed 4×3 matrix with no custom-capability editor.
 
 ```sql
--- DRAFT — to be executed in R2-M06, not run in R0-M03.
+-- Planned for R2-M07; not part of migration 0013.
 ALTER TABLE memberships
   ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'ORGANIZATION'
     CHECK (scope_type IN ('ORGANIZATION', 'AREA', 'SELF')),
@@ -77,9 +77,9 @@ ALTER TABLE memberships
 ## 5. Draft role constraint migration
 
 ```sql
--- DRAFT — to be executed in R2-M06, not run in R0-M03.
+-- Implemented by migration 0013.
 ALTER TABLE memberships
-  DROP CONSTRAINT memberships_role_check; -- name may differ; confirm exact constraint name in R2-M06 via \d memberships
+  DROP CONSTRAINT memberships_role_check; -- confirmed in Neon dev before R2-M06
 
 ALTER TABLE memberships
   ADD CONSTRAINT memberships_role_check
@@ -111,11 +111,11 @@ Every mutating endpoint must call this (or equivalent) server-side — the UI is
 
 ## 7. Impacted call sites in `api/_lib/data.js`
 
-Functions/lines that read or write `memberships.role` today, to be revisited in R2-M06 (schema) and R2-M08 (enforcement):
+Functions/lines that read or write `memberships.role` today, revisited in R2-M06 (schema/role hierarchy) and remaining for R2-M07/R2-M08 (scope/enforcement):
 
 | Line(s) | What it does |
 |---|---|
-| `645` | `VALID_ROLES = ['ADMIN', 'EMPLOYEE']` — must become `['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE']` |
+| `VALID_ROLES` | `VALID_ROLES` now includes `['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE']` |
 | `108`, `167`, `217` | `ctx.role === 'EMPLOYEE'` checks scoping data access to self — will need `ctx.scope_type === 'SELF'` equivalent once scope exists |
 | `458-461` | Reads `role` before a demotion, blocks demoting the sole remaining ADMIN via `countOrgAdmins` — needs equivalent "sole OWNER" protection |
 | `590` | `ctx.role === 'EMPLOYEE' && employeeId !== ctx.employeeId` — self-scope enforcement, candidate for the new scope-aware guard |
@@ -129,7 +129,7 @@ Functions/lines that read or write `memberships.role` today, to be revisited in 
 | `1166`, `1343-1345` | `ctx.role === 'EMPLOYEE'` gating employee-list/area filtering — scope-aware equivalent needed |
 | `1439-1444` | Plan/role-aware feature gating (`canUseFeature`) — role check to extend for `PLANNER` |
 
-`VALID_ROLES` at line 645 and the `requireRole` rank table in `auth.js:163-165` are the two central points R2-M06/M08 touch first; the rest are call-site-level consumers.
+`VALID_ROLES` and the `requireRole` rank table are the two central points R2-M06 touched first; the remaining entries are call-site-level consumers for R2-M07/M08.
 
 ## 8. Consistency check with DOMAIN-GLOSSARY.md
 
@@ -137,7 +137,7 @@ Reviewed against `DOMAIN-GLOSSARY.md`'s Membership entry: terms Role, Scope, Mem
 
 ## 9. Pending sign-off before R2-M06 execution
 
-- [ ] **Product sign-off required**: OWNER backfill rule (section 3) — "earliest-created ADMIN membership per organization becomes OWNER" — confirmed as the correct default, or an alternative rule supplied.
-- [ ] Confirm exact current constraint name on `memberships.role` (`\d memberships` against dev Neon) before drafting the executable migration file in R2-M06 — the name used in section 5's DRAFT SQL is a placeholder.
+- [x] **Product sign-off**: OWNER backfill rule confirmed; the earliest-created ADMIN membership per organization becomes OWNER.
+- [x] Exact current constraint name confirmed on Neon dev: `memberships_role_check`.
 
 Until both are checked off, R2-M06 cannot execute the backfill migration. R0-M03 itself does not require these to be checked off — see Gate rule (PASS_WITH_WARNINGS permitted here).

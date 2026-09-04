@@ -154,7 +154,14 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve([row]);
     }
     if (text.includes('FROM memberships') && text.includes('count(*)')) {
-      return Promise.resolve([{ n: memberships.filter((m) => m.organization_id === values[0] && m.role === 'ADMIN').length }]);
+      const scoped = memberships.filter((m) => m.organization_id === values[0]);
+      if (text.includes("role = 'OWNER'")) {
+        return Promise.resolve([{ n: scoped.filter((m) => m.role === 'OWNER').length }]);
+      }
+      if (text.includes("role IN ('OWNER', 'ADMIN')")) {
+        return Promise.resolve([{ n: scoped.filter((m) => m.role === 'OWNER' || m.role === 'ADMIN').length }]);
+      }
+      return Promise.resolve([{ n: scoped.filter((m) => m.role === 'ADMIN').length }]);
     }
     if (text.startsWith('INSERT INTO memberships')) {
       memberships.push({ user_id: values[0], organization_id: values[1], role: values[2] });
@@ -367,6 +374,8 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
 // plan: 'team' (unlimited) by default so pre-existing tests are unaffected
 // by Fase 1.2G's plan-limit enforcement; dedicated tests below override it.
 const adminCtx = { user: { id: USER_ADMIN }, organizationId: ORG_A, role: 'ADMIN', employeeId: null, plan: 'team' };
+const ownerCtx = { user: { id: 'user-owner' }, organizationId: ORG_A, role: 'OWNER', employeeId: null, plan: 'team' };
+const plannerCtx = { user: { id: 'user-planner' }, organizationId: ORG_A, role: 'PLANNER', employeeId: null, plan: 'team' };
 const employeeCtx = { user: { id: USER_EMP }, organizationId: ORG_A, role: 'EMPLOYEE', employeeId: EMP_A1, plan: 'team' };
 const orgBCtx = { user: { id: USER_ADMIN }, organizationId: ORG_B, role: 'ADMIN', employeeId: null, plan: 'team' };
 
@@ -1069,6 +1078,8 @@ describe('membership management (B2B minimal)', () => {
     const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
     const members = await listMembers(sql, adminCtx);
     expect(members).toHaveLength(2);
+    await expect(listMembers(sql, ownerCtx)).resolves.toHaveLength(2);
+    await expect(listMembers(sql, plannerCtx)).rejects.toMatchObject({ status: 403 });
     await expect(listMembers(sql, employeeCtx))
       .rejects.toMatchObject({ status: 403 });
   });
@@ -1122,6 +1133,37 @@ describe('membership management (B2B minimal)', () => {
       .rejects.toMatchObject({ status: 403 });
     await expect(updateMemberRole(sql, employeeCtx, { userId: 'user-emp', role: 'ADMIN' }))
       .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('accepts OWNER and PLANNER as explicit membership roles', async () => {
+    const fresh = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    const owner = await addMember(fresh.sql, adminCtx, { email: 'owner@example.com', role: 'OWNER', password: 'temporal-123' }, fakeHash);
+    const planner = await addMember(fresh.sql, adminCtx, { email: 'planner@example.com', role: 'PLANNER', password: 'temporal-123' }, fakeHash);
+    expect(owner.role).toBe('OWNER');
+    expect(planner.role).toBe('PLANNER');
+  });
+
+  it('the sole OWNER cannot be demoted, while ADMIN and EMPLOYEE remain below the owner rank', async () => {
+    const singleOwner = makeFakeSql({
+      memberships: [{ user_id: USER_ADMIN, organization_id: ORG_A, role: 'OWNER' }],
+      users: usersFixture(),
+    });
+    await expect(updateMemberRole(singleOwner.sql, adminCtx, { userId: USER_ADMIN, role: 'ADMIN' }))
+      .rejects.toMatchObject({ status: 400, code: 'LAST_OWNER' });
+    await expect(updateMemberRole(singleOwner.sql, employeeCtx, { userId: USER_ADMIN, role: 'EMPLOYEE' }))
+      .rejects.toMatchObject({ status: 403 });
+  });
+
+  it('does not allow creating a second OWNER through role assignment', async () => {
+    const withOwner = makeFakeSql({
+      memberships: [
+        { user_id: USER_ADMIN, organization_id: ORG_A, role: 'OWNER' },
+        { user_id: 'user-emp', organization_id: ORG_A, role: 'ADMIN' },
+      ],
+      users: usersFixture(),
+    });
+    await expect(updateMemberRole(withOwner.sql, adminCtx, { userId: 'user-emp', role: 'OWNER' }))
+      .rejects.toMatchObject({ status: 400, code: 'OWNER_EXISTS' });
   });
 
   it('the last ADMIN cannot be demoted or removed; self-removal blocked', async () => {
