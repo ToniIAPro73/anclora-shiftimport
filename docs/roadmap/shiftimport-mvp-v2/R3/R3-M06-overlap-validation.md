@@ -89,4 +89,4 @@ Resultado ejecutado: **PASS**.
 Si el Gate falla por falso positivo/negativo en casos límite: corregir la función de solapamiento antes de exponerla — un falso negativo permitiría datos físicamente imposibles en producción.
 
 ## 23. Criterio de DONE
-Validación operativa, casos límite cubiertos por test, Gate G3+G10 PASS. Implementación: `pending`.
+Validación operativa, casos límite cubiertos por test, Gate G3+G10 PASS. Implementación: `e8defdc`.
