@@ -9,6 +9,20 @@ El stage ANALYZE (parseo inicial + detección de formato + diagnóstico) no tien
 ## 3. Estado actual del repositorio
 STATUS: DONE. Implementado en `analyzeDocumentFile` + `diagnostics.ts`, con parsers PDF/XLSX/CSV/XML/JSON.
 
+### Contrato verificado (T01)
+
+`analyzeDocumentFile(file, selector, savedProfilesHint?, contextOverride?, vlm?)` (`src/ingestion/parsers/file.ts:873`):
+- **Entrada**: `File` crudo + `EmployeeSelector` (individual/team) + hints opcionales (perfiles de formato guardados, contexto de calendario, hooks VLM).
+- **Salida**: `Promise<DocumentAnalysisResult>` (turnos parseados, calidad, estructura detectada, preguntas del asistente si aplica) — o lanza `IngestionError('UNSUPPORTED_FORMAT', ...)` para formatos no admitidos (detectado antes de intentar parsear).
+- **Sin escritura en base de datos**: confirmado — todo el trabajo es parseo/análisis en memoria; nada se persiste hasta CONFIRM (R1-M06).
+- **Fallback VLM**: si el resultado determinista es inutilizable (sin ítems, o `UNRECOGNIZED` con cero turnos) y hay sesión activa, rasteriza y llama a `/api/ingestion/vlm`; nunca lanza — el resultado o se reemplaza (capado en `REVIEW`) o se marca con `vlmError`.
+
+### Verificación T02 — i18n y accesibilidad del estado "analizando"
+
+- **i18n**: todos los strings visibles en `ImportModal.tsx`/`TeamImportModal.tsx` usan `t(...)`, incluido el estado VLM "analyzing" (`ImportModal.tsx:1081`).
+- **Accesibilidad**: el diálogo lleva `aria-busy={interactionLocked}` (`ImportModal.tsx:885`); el progreso de import tiene una región `aria-live="polite"` dedicada (`ImportModal.tsx:1378`).
+- **Sin hallazgo que derivar a R1-M14** — ambos criterios ya cumplidos en el código actual.
+
 ## 4. Alcance IN
 Documentar entradas/salidas del stage ANALYZE: archivo crudo entra, sale un `ImportState` + datos parseados o diagnóstico de fallo.
 
