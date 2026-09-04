@@ -1,6 +1,6 @@
 # RBAC Model — Design for R2-M06/M07/M08
 
-Status: **ROLES IMPLEMENTED (R2-M06)**. Scope columns and scope enforcement remain design-only until R2-M07/R2-M08. This document remains the reference for those microphases.
+Status: **ROLES + SCOPES IMPLEMENTED (R2-M06/R2-M07)**. API enforcement remains centralized in `api/_lib/auth.js` and `api/_lib/data.js`; broader endpoint authorization hardening remains R2-M08.
 
 Vocabulary follows [`DOMAIN-GLOSSARY.md`](./DOMAIN-GLOSSARY.md): Membership, Role, Scope, Organization, Area, Employee. No new terms introduced here.
 
@@ -8,8 +8,9 @@ Vocabulary follows [`DOMAIN-GLOSSARY.md`](./DOMAIN-GLOSSARY.md): Membership, Rol
 
 - `memberships.role CHECK IN ('OWNER','ADMIN','PLANNER','EMPLOYEE')` — migration 0013 (which extends the 0007 constraint).
 - `api/_lib/data.js`: `VALID_ROLES` includes the four MVP roles.
-- `api/_lib/auth.js`: `requireRole(ctx, minimum)` uses rank `{ EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 }`, no scope concept yet.
-- No scope column exists anywhere. Role authorization is now four-level (`OWNER`/`ADMIN`/`PLANNER`/`EMPLOYEE`); scope authorization remains "ADMIN can act on the whole organization; EMPLOYEE can only act on their own employee record" enforced ad hoc per call site until R2-M07/R2-M08.
+- `api/_lib/auth.js`: `requireRole(ctx, minimum)` uses rank `{ EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 }`; `resolveAccessScope` returns `ORGANIZATION`, `AREA`, or `SELF`.
+- Migration 0015 adds nullable `memberships.scoped_area_id`; `PLANNER + NULL` resolves to `ORGANIZATION`, `PLANNER + area` to `AREA`, and `EMPLOYEE` resolves to `SELF` through its linked employee.
+- Employee/import/shift reads and writes consume the centralized scope contract; broader authorization/event auditing remains in R2-M08/R2-M09.
 
 ## 2. Target model: 4 roles × 3 scopes
 
@@ -27,7 +28,7 @@ Vocabulary follows [`DOMAIN-GLOSSARY.md`](./DOMAIN-GLOSSARY.md): Membership, Rol
 | Scope | Meaning |
 |---|---|
 | `ORGANIZATION` | Access to all data across the organization, unrestricted by area. |
-| `AREA` | Access restricted to one or more specific areas (`scope_area_id`). |
+| `AREA` | Access restricted to one specific assigned area (`memberships.scoped_area_id`). |
 | `SELF` | Access restricted to the membership's own linked Employee record. |
 
 ### Role × Scope matrix (actions)
@@ -51,28 +52,19 @@ Explicitly out of scope for MVP (per master prompt §13): `TEAM` scope, `WORK_CE
 
 **✅ PRODUCT SIGN-OFF CONFIRMED**: the rule was approved before R2-M06 execution. One empty organization with no candidate membership was explicitly audited and deleted before the migration.
 
-## 4. Scope model (schema design)
+## 4. Scope model (implemented)
 
 Modeled as additional columns on `memberships` rather than a separate permissions table — avoids over-engineering for a fixed 4×3 matrix with no custom-capability editor.
 
 ```sql
--- Planned for R2-M07; not part of migration 0013.
+-- Implemented by migration 0015.
 ALTER TABLE memberships
-  ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'ORGANIZATION'
-    CHECK (scope_type IN ('ORGANIZATION', 'AREA', 'SELF')),
-  ADD COLUMN scope_area_id UUID NULL REFERENCES areas(id);
-
-ALTER TABLE memberships
-  ADD CONSTRAINT scope_area_id_requires_area_scope
-    CHECK (
-      (scope_type = 'AREA' AND scope_area_id IS NOT NULL)
-      OR (scope_type <> 'AREA' AND scope_area_id IS NULL)
-    );
+  ADD COLUMN scoped_area_id UUID NULL REFERENCES areas(id) ON DELETE SET NULL;
 ```
 
-- `scope_type` defaults to `ORGANIZATION` so every existing membership remains valid without a data migration for this column (forward-safe).
-- `scope_area_id` is nullable and only meaningful when `scope_type = 'AREA'`; the CHECK constraint enforces that pairing.
-- `OWNER`/`ADMIN`/`EMPLOYEE` roles constrain `scope_type` at the application level (R2-M08), not via a DB constraint tying role to scope — keeps the schema simple; the app-level guard is the actual authority per master-prompt §25 (never trust schema alone for business rules that may need to evolve).
+- `scoped_area_id` is nullable so existing memberships remain organization-scoped without a data backfill.
+- `memberships_scoped_area_role_check` enforces that only `PLANNER` can retain a non-NULL area assignment; application validation additionally requires the area to be active and in the same organization.
+- `OWNER`/`ADMIN` always resolve to `ORGANIZATION`; `EMPLOYEE` always resolves to `SELF` regardless of stored nullable data.
 
 ## 5. Draft role constraint migration
 
@@ -88,48 +80,42 @@ ALTER TABLE memberships
 
 Forward-safe: `ADMIN` and `EMPLOYEE` are a subset of the new allowed values, so this DDL alone breaks nothing. The risk is entirely in the OWNER backfill data step (section 3), which is a separate, explicit, auditable `UPDATE` — not part of this DDL.
 
-## 6. Future guard contract (for R2-M08)
+## 6. Scope guard contract (implemented in R2-M07)
 
-`api/_lib/auth.js`'s `requireRole` today is a simple rank comparison. R2-M08 must extend it to check scope as well. Contract (pseudocode, not implemented here):
+`api/_lib/auth.js` exposes the pure `resolveAccessScope` contract. Resource-level assertions in `api/_lib/data.js` apply it to employees, imports, and shifts; R2-M08 remains responsible for any endpoint authorization gaps outside those resources.
 
 ```text
 requireRoleAndScope(ctx, { minimumRole, requiredScope, areaId? }):
   1. requireOrgContext(ctx)  // unchanged
-  2. rank = { EMPLOYEE: 1, PLANNER: 2, ADMIN: 3, OWNER: 4 }
-  3. if rank[ctx.role] < rank[minimumRole]: throw 403
-  4. if requiredScope === 'AREA':
-       if ctx.scope_type === 'SELF': throw 403
-       if ctx.scope_type === 'AREA' and ctx.scope_area_id !== areaId: throw 403
-       // ORGANIZATION scope always satisfies an AREA requirement
-  5. if requiredScope === 'SELF':
-       // every role satisfies a SELF requirement for their own record;
-       // callers must additionally verify the target record belongs to ctx
-  6. return ctx
+  2. scope = resolveAccessScope(ctx)
+  3. if scope.type === 'AREA' and resource.area_id !== scope.areaId: throw 403
+  4. if scope.type === 'SELF' and resource.employee_id !== scope.employeeId: throw 403
+  5. return the filtered resource or throw `403 SCOPE_FORBIDDEN`
 ```
 
-Every mutating endpoint must call this (or equivalent) server-side — the UI is never the sole barrier (master prompt §25). This contract is the reference for R2-M08's implementation; it is not implemented in `auth.js` during R0-M03.
+Every mutating endpoint must call this (or equivalent) server-side — the UI is never the sole barrier (master prompt §25).
 
 ## 7. Impacted call sites in `api/_lib/data.js`
 
-Functions/lines that read or write `memberships.role` today, revisited in R2-M06 (schema/role hierarchy) and remaining for R2-M07/R2-M08 (scope/enforcement):
+Functions/lines that read or write `memberships.role`, revisited in R2-M06/R2-M07; remaining authorization gaps are tracked in R2-M08:
 
 | Line(s) | What it does |
 |---|---|
 | `VALID_ROLES` | `VALID_ROLES` now includes `['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE']` |
-| `108`, `167`, `217` | `ctx.role === 'EMPLOYEE'` checks scoping data access to self — will need `ctx.scope_type === 'SELF'` equivalent once scope exists |
+| employee/import/shift reads and writes | Scope resolution now uses `resolveAccessScope`; `SELF` and `AREA` are enforced server-side |
 | `458-461` | Reads `role` before a demotion, blocks demoting the sole remaining ADMIN via `countOrgAdmins` — needs equivalent "sole OWNER" protection |
-| `590` | `ctx.role === 'EMPLOYEE' && employeeId !== ctx.employeeId` — self-scope enforcement, candidate for the new scope-aware guard |
-| `652`, `661`, `673` | Membership listing/lookup returning `role` — will need to also return `scope_type`/`scope_area_id` |
-| `699-701` | Single-member invite validates `role` against `VALID_ROLES` |
-| `732-733` | `INSERT INTO memberships (user_id, organization_id, role)` — will need `scope_type`/`scope_area_id` columns added |
+| employee self-name update | `assertEmployeeInScope` enforces SELF/AREA before the mutation |
+| membership listing/lookup | Returns `scopedAreaId` alongside `role` |
+| single-member invite | Validates `role` and active same-organization `scopedAreaId` for PLANNER |
+| membership insert/update | Persists nullable `scoped_area_id`; non-PLANNER roles are forced to NULL |
 | `799`, `832`, `840-841` | Bulk member import: role parsing/validation per row |
 | `903-906` | Bulk `INSERT INTO memberships (...)` — same as `732-733` |
-| `963-986` | `updateMemberRole` — role change with last-ADMIN protection; needs the OWNER-equivalent protection and scope updates |
+| `963-986` | `updateMemberRole` — OWNER protection plus PLANNER area-scope validation |
 | `1002-1008` | Another `countOrgAdmins`-guarded role read before a mutation (likely membership removal) |
-| `1166`, `1343-1345` | `ctx.role === 'EMPLOYEE'` gating employee-list/area filtering — scope-aware equivalent needed |
+| employee/import/shift list queries | Filter by organization, assigned area, or linked employee according to resolved scope |
 | `1439-1444` | Plan/role-aware feature gating (`canUseFeature`) — role check to extend for `PLANNER` |
 
-`VALID_ROLES` and the `requireRole` rank table are the two central points R2-M06 touched first; the remaining entries are call-site-level consumers for R2-M07/M08.
+`VALID_ROLES`, `requireRole`, and `resolveAccessScope` are the central authorization points; R2-M08 remains for endpoint-wide authorization hardening beyond these resources.
 
 ## 8. Consistency check with DOMAIN-GLOSSARY.md
 

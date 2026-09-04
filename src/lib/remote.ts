@@ -354,6 +354,7 @@ export interface RemoteMember {
   email: string;
   displayName: string;
   role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE';
+  scopedAreaId?: string | null;
 }
 
 export async function listRemoteMembers(): Promise<RemoteMember[]> {
@@ -385,6 +386,7 @@ export async function addRemoteMember(input: {
   password?: string;
   displayName?: string;
   employeeId?: string;
+  scopedAreaId?: string | null;
 }): Promise<AddedMember> {
   const payload = await apiFetch<{ member: AddedMember }>('/api/memberships', {
     method: 'POST',
@@ -427,10 +429,10 @@ export async function bulkAddRemoteMembers(items: {
   });
 }
 
-export async function updateRemoteMemberRole(userId: string, role: RemoteMember['role']): Promise<void> {
+export async function updateRemoteMemberRole(userId: string, role: RemoteMember['role'], scopedAreaId?: string | null): Promise<void> {
   await apiFetch('/api/memberships', {
     method: 'PATCH',
-    body: JSON.stringify({ userId, role }),
+    body: JSON.stringify({ userId, role, ...(role === 'PLANNER' ? { scopedAreaId: scopedAreaId ?? null } : {}) }),
   });
 }
 

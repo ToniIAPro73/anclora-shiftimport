@@ -189,6 +189,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<RemoteMember['role']>('EMPLOYEE');
+  const [scopedAreaId, setScopedAreaId] = useState('');
   const [password, setPassword] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [lastTemporaryPassword, setLastTemporaryPassword] = useState<{ email: string; password: string } | null>(null);
@@ -369,6 +370,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
         displayName: displayName || undefined,
         password: password || undefined,
         employeeId: employeeId || undefined,
+        ...(role === 'PLANNER' ? { scopedAreaId: scopedAreaId || null } : {}),
       });
       if (created.temporaryPassword) {
         setLastTemporaryPassword({ email: created.email, password: created.temporaryPassword });
@@ -378,6 +380,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setPassword('');
       setEmployeeId('');
       setRole('EMPLOYEE');
+      setScopedAreaId('');
     });
   };
 
@@ -1055,7 +1058,11 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                     <SearchableSelect
                       label=""
                       value={member.role}
-                      onChange={(role) => void run(() => updateRemoteMemberRole(member.userId, role as RemoteMember['role']), membersListRef.current)}
+                      onChange={(nextRole) => void run(() => updateRemoteMemberRole(
+                        member.userId,
+                        nextRole as RemoteMember['role'],
+                        nextRole === 'PLANNER' ? member.scopedAreaId : null,
+                      ), membersListRef.current)}
                       searchPlaceholder={t('members.searchPlaceholder')}
                       emptyMessage={t('members.noRoles')}
                       ariaLabel={t('members.roleLabel')}
@@ -1063,6 +1070,19 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                       disabled={busy || member.userId === currentUserId}
                       style={{ width: 'auto', flex: '0 0 auto' }}
                     />
+                    {member.role === 'PLANNER' && (
+                      <SearchableSelect
+                        label={t('members.scopeAreaLabel')}
+                        value={member.scopedAreaId ?? ''}
+                        onChange={(areaId) => void run(() => updateRemoteMemberRole(member.userId, 'PLANNER', areaId || null), membersListRef.current)}
+                        searchPlaceholder={t('members.searchPlaceholder')}
+                        emptyMessage={t('members.noAreas')}
+                        ariaLabel={t('members.scopeAreaLabel')}
+                        options={employeeAreaOptions}
+                        disabled={busy || member.userId === currentUserId}
+                        style={{ width: 'auto', flex: '0 0 auto' }}
+                      />
+                    )}
                     {member.userId !== currentUserId && (
                       <button
                         type="button"
@@ -1149,6 +1169,17 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                     ariaLabel={t('members.roleLabel')}
                     options={ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
                   />
+                  {role === 'PLANNER' && (
+                    <SearchableSelect
+                      label={t('members.scopeAreaLabel')}
+                      value={scopedAreaId}
+                      onChange={setScopedAreaId}
+                      searchPlaceholder={t('members.searchPlaceholder')}
+                      emptyMessage={t('members.noAreas')}
+                      ariaLabel={t('members.scopeAreaLabel')}
+                      options={employeeAreaOptions}
+                    />
+                  )}
                   <label style={fieldLabelStyle}>
                     <span>{t('members.passwordShortLabel')}</span>
                     <PasswordInput

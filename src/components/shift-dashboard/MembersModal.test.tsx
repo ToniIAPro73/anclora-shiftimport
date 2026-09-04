@@ -96,6 +96,26 @@ describe('MembersModal — tabs', () => {
     expect(screen.getByRole('option', { name: 'Planificador' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Empleado' })).toBeTruthy();
   });
+
+  it('shows the optional area scope only for PLANNER and submits it', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    mockedAddRemoteMember.mockResolvedValue({ userId: 'u1', email: 'planner@example.com', role: 'PLANNER' });
+    renderMembersModal([], () => {}, [remoteArea()]);
+
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Rol' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Planificador' }));
+    expect(screen.getByText('Alcance del área')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Alcance del área' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Norte' }));
+    fireEvent.change(screen.getByPlaceholderText('Email del usuario'), { target: { value: 'planner@example.com' } });
+    fireEvent.click(screen.getByText('Añadir'));
+
+    await waitFor(() => expect(mockedAddRemoteMember).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'planner@example.com', role: 'PLANNER', scopedAreaId: 'area-n',
+    })));
+  });
 });
 
 describe('MembersModal — single add-user temporary password', () => {

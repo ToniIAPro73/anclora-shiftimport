@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const migrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0013_membership_roles_owner.sql');
 const ownerInvariantMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0014_single_owner_per_organization.sql');
+const scopedAreaMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0015_membership_scoped_area.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -25,5 +26,19 @@ describe('0013 membership roles migration contract', () => {
     const sql = await readFile(ownerInvariantMigrationPath, 'utf8');
     expect(sql).toContain('memberships_one_owner_per_org_idx');
     expect(sql).toContain("WHERE role = 'OWNER'");
+  });
+});
+
+describe('0015 membership area scope migration contract', () => {
+  it('adds a nullable area foreign key and an index', async () => {
+    const sql = await readFile(scopedAreaMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS scoped_area_id UUID REFERENCES areas (id) ON DELETE SET NULL');
+    expect(sql).toContain('memberships_scoped_area_idx');
+  });
+
+  it('allows area scope only for PLANNER memberships', async () => {
+    const sql = await readFile(scopedAreaMigrationPath, 'utf8');
+    expect(sql).toContain('memberships_scoped_area_role_check');
+    expect(sql).toContain("CHECK (scoped_area_id IS NULL OR role = 'PLANNER')");
   });
 });

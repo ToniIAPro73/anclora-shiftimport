@@ -14,6 +14,7 @@ export interface SessionMembership {
   organizationId: string;
   organizationName: string;
   role: Role;
+  scopedAreaId?: string | null;
 }
 
 export interface SessionInfo {

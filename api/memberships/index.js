@@ -4,13 +4,13 @@ import { hashPassword } from '../_lib/passwords.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * Minimal B2B membership management (ADMIN only, org from session).
+ * Minimal B2B membership management (OWNER/ADMIN only, org from session).
  *
  * GET    /api/memberships                — list org members
  * POST   /api/memberships                — add member {email, role,
  *                                          password? (new users), displayName?,
  *                                          employeeId? (link User↔Employee)}
- * PATCH  /api/memberships                — change role {userId, role}
+ * PATCH  /api/memberships                — change role/scope {userId, role, scopedAreaId?}
  * DELETE /api/memberships                — remove membership {userId}
  *
  * No email invitations: new users get an ADMIN-set initial password handed

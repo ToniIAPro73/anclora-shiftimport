@@ -94,7 +94,8 @@ export async function resolveContext(req, sql) {
   const user = { id: rows[0].id, email: rows[0].email, displayName: rows[0].display_name };
 
   const memberships = await sql`
-    SELECT m.organization_id, m.role, o.name AS organization_name, o.plan AS organization_plan
+    SELECT m.organization_id, m.role, m.scoped_area_id,
+           o.name AS organization_name, o.plan AS organization_plan
     FROM memberships m
     JOIN organizations o ON o.id = m.organization_id
     WHERE m.user_id = ${user.id}
@@ -127,6 +128,7 @@ export async function resolveContext(req, sql) {
     user,
     organizationId: membership?.organization_id ?? null,
     role: membership?.role ?? null,
+    scopedAreaId: membership?.scoped_area_id ?? null,
     // Plan of the ACTIVE organization — the single backend authority for
     // entitlement checks (plans.js); null when no organization is selected.
     plan: membership?.organization_plan ?? null,
@@ -135,6 +137,7 @@ export async function resolveContext(req, sql) {
       organizationId: m.organization_id,
       organizationName: m.organization_name,
       role: m.role,
+      scopedAreaId: m.scoped_area_id ?? null,
     })),
   };
 }
@@ -166,4 +169,32 @@ export function requireRole(ctx, minimum) {
   if (!ctx?.role || rank[ctx.role] === undefined || rank[minimum] === undefined || rank[ctx.role] < rank[minimum]) {
     throw new HttpError(403, 'Insufficient role');
   }
+}
+
+/**
+ * Resolve the single access scope used by employee/import/shift data access.
+ * This is deliberately pure: callers cannot widen the result with a
+ * client-provided organization, area, or employee id.
+ */
+export function resolveAccessScope(membership) {
+  const role = membership?.role;
+  if (role === 'OWNER' || role === 'ADMIN') {
+    return { type: 'ORGANIZATION' };
+  }
+  if (role === 'PLANNER') {
+    const areaId = String(membership?.scopedAreaId ?? '').trim();
+    return areaId ? { type: 'AREA', areaId } : { type: 'ORGANIZATION' };
+  }
+  if (role === 'EMPLOYEE') {
+    const employeeId = String(membership?.employeeId ?? '').trim();
+    if (!employeeId) {
+      const error = new HttpError(403, 'Employee scope is unavailable');
+      error.code = 'SCOPE_UNAVAILABLE';
+      throw error;
+    }
+    return { type: 'SELF', employeeId };
+  }
+  const error = new HttpError(403, 'Access scope is unavailable');
+  error.code = 'SCOPE_UNAVAILABLE';
+  throw error;
 }

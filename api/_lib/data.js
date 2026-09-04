@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { HttpError, requireRole } from './auth.js';
+import { HttpError, requireRole, resolveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, requireFeature, requireWithinLimit } from './plans.js';
 
 /**
@@ -114,6 +114,21 @@ function effectiveEmployeeId(ctx, requestedEmployeeId) {
   return requestedEmployeeId || null;
 }
 
+function scopeForbidden(message = 'Resource is outside your access scope') {
+  const error = new HttpError(403, message);
+  error.code = 'SCOPE_FORBIDDEN';
+  return error;
+}
+
+function assertScopedResource(scope, { employeeId = null, areaId = null } = {}) {
+  if (scope.type === 'AREA' && areaId !== scope.areaId) {
+    throw scopeForbidden('Resource is outside your assigned area');
+  }
+  if (scope.type === 'SELF' && employeeId !== scope.employeeId) {
+    throw scopeForbidden('Resource belongs to another employee');
+  }
+}
+
 async function assertEmployeeInOrg(sql, ctx, employeeId) {
   const rows = await sql`
     SELECT id, status FROM employees
@@ -123,6 +138,21 @@ async function assertEmployeeInOrg(sql, ctx, employeeId) {
     throw new HttpError(403, 'Employee does not belong to the organization');
   }
   return rows[0];
+}
+
+async function assertEmployeeInScope(sql, ctx, employeeId) {
+  const employee = await assertEmployeeInOrg(sql, ctx, employeeId);
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'AREA') {
+    const areaRows = await sql`
+      SELECT area_id FROM employees
+      WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
+    `;
+    assertScopedResource(scope, { employeeId, areaId: areaRows[0]?.area_id ?? null });
+  } else {
+    assertScopedResource(scope, { employeeId });
+  }
+  return employee;
 }
 
 /**
@@ -164,11 +194,23 @@ async function resolveAreaIdByName(sql, ctx, areaName) {
 // ---------------------------------------------------------------- employees
 
 export async function listEmployees(sql, ctx, { areaId = null } = {}) {
-  if (ctx.role === 'EMPLOYEE') {
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'SELF') {
+    const rows = await sql`
+      SELECT * FROM employees
+      WHERE organization_id = ${ctx.organizationId} AND id = ${scope.employeeId}
+      ORDER BY name ASC
+    `;
+    return rows.map(mapEmployeeRow);
+  }
+  if (scope.type === 'AREA') {
+    if (areaId && areaId !== scope.areaId) {
+      throw scopeForbidden('Requested area is outside your assigned area');
+    }
     const rows = await sql`
       SELECT * FROM employees
       WHERE organization_id = ${ctx.organizationId}
-        AND user_id = ${ctx.user.id}
+        AND area_id = ${scope.areaId}
       ORDER BY name ASC
     `;
     return rows.map(mapEmployeeRow);
@@ -214,12 +256,10 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
   const normalizedName = String(name ?? '').trim().toLowerCase();
   const externalId = String(externalEmployeeId ?? '').trim();
 
-  if (ctx.role === 'EMPLOYEE') {
-    if (!ctx.employeeId) {
-      return { kind: 'new', employees: [] };
-    }
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'SELF') {
     const rows = await sql`
-      SELECT * FROM employees WHERE id = ${ctx.employeeId} AND organization_id = ${ctx.organizationId}
+      SELECT * FROM employees WHERE id = ${scope.employeeId} AND organization_id = ${ctx.organizationId}
     `;
     const self = rows[0] ? mapEmployeeRow(rows[0]) : null;
     if (!self) {
@@ -231,11 +271,18 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
   }
 
   if (externalId) {
-    const rows = await sql`
-      SELECT * FROM employees
-      WHERE organization_id = ${ctx.organizationId}
-        AND external_employee_id = ${externalId}
-    `;
+    const rows = scope.type === 'AREA'
+      ? await sql`
+          SELECT * FROM employees
+          WHERE organization_id = ${ctx.organizationId}
+            AND area_id = ${scope.areaId}
+            AND external_employee_id = ${externalId}
+        `
+      : await sql`
+          SELECT * FROM employees
+          WHERE organization_id = ${ctx.organizationId}
+            AND external_employee_id = ${externalId}
+        `;
     if (rows.length > 0) {
       const employees = rows.map(mapEmployeeRow);
       return { kind: employees.length === 1 ? matchKindForStatus(employees[0].status) : 'recognized', employees };
@@ -243,11 +290,18 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
   }
 
   if (normalizedName) {
-    const rows = await sql`
-      SELECT * FROM employees
-      WHERE organization_id = ${ctx.organizationId}
-        AND lower(trim(name)) = ${normalizedName}
-    `;
+    const rows = scope.type === 'AREA'
+      ? await sql`
+          SELECT * FROM employees
+          WHERE organization_id = ${ctx.organizationId}
+            AND area_id = ${scope.areaId}
+            AND lower(trim(name)) = ${normalizedName}
+        `
+      : await sql`
+          SELECT * FROM employees
+          WHERE organization_id = ${ctx.organizationId}
+            AND lower(trim(name)) = ${normalizedName}
+        `;
     if (rows.length === 1) {
       const employees = rows.map(mapEmployeeRow);
       return { kind: matchKindForStatus(employees[0].status), employees };
@@ -585,11 +639,7 @@ export async function updateEmployee(sql, ctx, input) {
  * Only allows updating the name field, not status/externalId/userId.
  */
 export async function updateEmployeeName(sql, ctx, employeeId, name) {
-  await assertEmployeeInOrg(sql, ctx, employeeId);
-  // EMPLOYEE can only update their own employee
-  if (ctx.role === 'EMPLOYEE' && employeeId !== ctx.employeeId) {
-    throw new HttpError(403, 'Cannot update another employee');
-  }
+  await assertEmployeeInScope(sql, ctx, employeeId);
   const rows = await sql`
     UPDATE employees
     SET name = ${name}, updated_at = NOW()
@@ -650,6 +700,7 @@ function mapMemberRow(row) {
     email: row.email,
     displayName: row.display_name,
     role: row.role,
+    scopedAreaId: row.scoped_area_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -658,7 +709,7 @@ function mapMemberRow(row) {
 export async function listMembers(sql, ctx) {
   requireRole(ctx, 'ADMIN');
   const rows = await sql`
-    SELECT m.user_id, m.role, m.created_at, u.email, u.display_name
+    SELECT m.user_id, m.role, m.scoped_area_id, m.created_at, u.email, u.display_name
     FROM memberships m
     JOIN users u ON u.id = m.user_id
     WHERE m.organization_id = ${ctx.organizationId}
@@ -716,6 +767,14 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
   if (!email || !VALID_ROLES.includes(role)) {
     throw new HttpError(400, 'Valid email and role are required');
   }
+  const rawScopedAreaId = String(input?.scopedAreaId ?? '').trim();
+  if (rawScopedAreaId && role !== 'PLANNER') {
+    throw new HttpError(400, 'Only PLANNER members can have an area scope');
+  }
+  if (rawScopedAreaId) {
+    await assertAreaInOrg(sql, ctx, rawScopedAreaId);
+  }
+  const scopedAreaId = role === 'PLANNER' ? rawScopedAreaId || null : null;
 
   let userRows = await sql`SELECT id FROM users WHERE lower(email) = ${email}`;
   let temporaryPassword;
@@ -745,8 +804,8 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
   }
 
   await sql`
-    INSERT INTO memberships (user_id, organization_id, role)
-    VALUES (${userId}, ${ctx.organizationId}, ${role})
+    INSERT INTO memberships (user_id, organization_id, role, scoped_area_id)
+    VALUES (${userId}, ${ctx.organizationId}, ${role}, ${scopedAreaId})
   `;
 
   // Optional User ↔ Employee link at creation time. The relation is 1:1 and
@@ -779,7 +838,9 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
     `;
   }
 
-  return temporaryPassword ? { userId, email, role, temporaryPassword } : { userId, email, role };
+  return temporaryPassword
+    ? { userId, email, role, scopedAreaId, temporaryPassword }
+    : { userId, email, role, scopedAreaId };
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -985,12 +1046,22 @@ export async function updateMemberRole(sql, ctx, input) {
     throw new HttpError(400, 'Valid userId and role are required');
   }
   const rows = await sql`
-    SELECT role FROM memberships
+    SELECT role, scoped_area_id FROM memberships
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
   `;
   if (rows.length === 0) {
     throw new HttpError(404, 'Membership not found');
   }
+  const rawScopedAreaId = input?.scopedAreaId === undefined
+    ? String(rows[0].scoped_area_id ?? '').trim()
+    : String(input.scopedAreaId ?? '').trim();
+  if (rawScopedAreaId && role !== 'PLANNER') {
+    throw new HttpError(400, 'Only PLANNER members can have an area scope');
+  }
+  if (rawScopedAreaId) {
+    await assertAreaInOrg(sql, ctx, rawScopedAreaId);
+  }
+  const scopedAreaId = role === 'PLANNER' ? rawScopedAreaId || null : null;
   if (rows[0].role === 'OWNER' && role !== 'OWNER'
     && (await countOrgOwners(sql, ctx.organizationId)) <= 1) {
     const error = new HttpError(400, 'The organization must keep at least one OWNER');
@@ -1011,10 +1082,10 @@ export async function updateMemberRole(sql, ctx, input) {
     throw new HttpError(400, 'The organization must keep at least one ADMIN');
   }
   await sql`
-    UPDATE memberships SET role = ${role}
+    UPDATE memberships SET role = ${role}, scoped_area_id = ${scopedAreaId}
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
   `;
-  return { userId, role };
+  return { userId, role, scopedAreaId };
 }
 
 /** ADMIN/OWNER only: remove a membership. Self-removal and orphaning the org
@@ -1152,8 +1223,31 @@ export async function listImports(sql, ctx, {
   sourceFormat = null,
   status = null,
 } = {}) {
-  const rows = areaId
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'AREA' && areaId && areaId !== scope.areaId) {
+    throw scopeForbidden('Requested area is outside your assigned area');
+  }
+
+  const rows = scope.type === 'SELF'
     ? await sql`
+        SELECT i.*, u.display_name AS imported_by_user_name
+        FROM imports i
+        LEFT JOIN users u ON u.id = i.imported_by_user_id
+        WHERE i.organization_id = ${ctx.organizationId}
+          AND i.employee_id = ${scope.employeeId}
+        ORDER BY i.created_at DESC
+      `
+    : scope.type === 'AREA'
+      ? await sql`
+        SELECT i.*, u.display_name AS imported_by_user_name
+        FROM imports i
+        LEFT JOIN users u ON u.id = i.imported_by_user_id
+        WHERE i.organization_id = ${ctx.organizationId}
+          AND i.area_id = ${scope.areaId}
+        ORDER BY i.created_at DESC
+      `
+      : areaId
+        ? await sql`
         SELECT i.*, u.display_name AS imported_by_user_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
@@ -1161,7 +1255,7 @@ export async function listImports(sql, ctx, {
           AND i.area_id = ${areaId}
         ORDER BY i.created_at DESC
       `
-    : await sql`
+        : await sql`
         SELECT i.*, u.display_name AS imported_by_user_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
@@ -1191,6 +1285,7 @@ export async function listImports(sql, ctx, {
 }
 
 export async function createImport(sql, ctx, input) {
+  const scope = resolveAccessScope(ctx);
   // areaId NULL = organization-scoped (global) import; set = area-scoped
   // import. The area must belong to the session org (403 otherwise, no
   // existence leak) — same assertAreaInOrg convention used everywhere else.
@@ -1225,7 +1320,15 @@ export async function createImport(sql, ctx, input) {
     ? effectiveEmployeeId(ctx, requestedEmployeeId)
     : (ctx.role === 'EMPLOYEE' ? effectiveEmployeeId(ctx, null) : null);
   if (employeeId) {
-    await assertEmployeeInOrg(sql, ctx, employeeId);
+    await assertEmployeeInScope(sql, ctx, employeeId);
+  } else if (scope.type === 'SELF') {
+    throw scopeForbidden('Employee scope is unavailable');
+  }
+  if (scope.type === 'AREA') {
+    assertScopedResource(scope, { employeeId, areaId });
+  }
+  if (scope.type === 'SELF') {
+    assertScopedResource(scope, { employeeId });
   }
   const fileFingerprint = String(input?.fileFingerprint ?? '').trim().toLowerCase();
   const hasIdempotencyKey = Boolean(employeeId && /^[0-9a-f]{64}$/.test(fileFingerprint));
@@ -1397,19 +1500,24 @@ export async function deleteImport(sql, ctx, rawImportId) {
 // ------------------------------------------------------------------- shifts
 
 export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null } = {}) {
-  const employeeId = effectiveEmployeeId(ctx, requestedEmployeeId);
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'AREA' && areaId && areaId !== scope.areaId) {
+    throw scopeForbidden('Requested area is outside your assigned area');
+  }
+  const employeeId = scope.type === 'SELF'
+    ? scope.employeeId
+    : effectiveEmployeeId(ctx, requestedEmployeeId);
+  const effectiveAreaId = scope.type === 'AREA' ? scope.areaId : areaId;
   if (employeeId) {
-    await assertEmployeeInOrg(sql, ctx, employeeId);
-    // EMPLOYEE role is always forced to self above; the area filter only
-    // applies to ADMIN/Manager browsing an area context.
-    const rows = areaId && ctx.role !== 'EMPLOYEE'
+    await assertEmployeeInScope(sql, ctx, employeeId);
+    const rows = effectiveAreaId && scope.type !== 'SELF'
       ? await sql`
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
                  start_time, end_time, location, origin
           FROM shifts
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-            AND area_id = ${areaId}
+            AND area_id = ${effectiveAreaId}
           ORDER BY date ASC, start_time ASC, id ASC
         `
       : await sql`
@@ -1423,16 +1531,15 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
     return rows.map(mapShiftRow);
   }
 
-  // Manager/Admin without employee filter: whole organization, optionally
-  // narrowed to one area (dashboard area context).
-  const rows = areaId
+  // Organization-scope or area-scope planner without employee filter.
+  const rows = effectiveAreaId
     ? await sql`
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
                start_time, end_time, location, origin
         FROM shifts
         WHERE organization_id = ${ctx.organizationId}
-          AND area_id = ${areaId}
+          AND area_id = ${effectiveAreaId}
         ORDER BY date ASC, start_time ASC, id ASC
       `
     : await sql`
@@ -1453,6 +1560,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
  */
 export async function upsertShifts(sql, ctx, rawShifts) {
   const shifts = rawShifts.map(normalizeShiftInput);
+  const scope = resolveAccessScope(ctx);
   // R1-M08 atomicity: every shift is validated (and its write parameters
   // computed) in this first pass, with NO write issued yet. Only once every
   // shift in the batch has passed validation does the second pass run the
@@ -1468,7 +1576,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
       throw new HttpError(400, 'Shift requires date and employeeId');
     }
     const employeeId = effectiveEmployeeId(ctx, shift.employeeId);
-    const employee = await assertEmployeeInOrg(sql, ctx, employeeId);
+    const employee = await assertEmployeeInScope(sql, ctx, employeeId);
 
     // Imported shifts (origin IMP) may only land on an ACTIVE employee — a
     // pending_access row (detected in a file but not yet linked to a real
@@ -1502,6 +1610,9 @@ export async function upsertShifts(sql, ctx, rawShifts) {
         WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
       `;
       shiftAreaId = employeeRows[0]?.area_id ?? null;
+    }
+    if (scope.type === 'AREA') {
+      assertScopedResource(scope, { areaId: shiftAreaId });
     }
 
     // Plan/role separation (Fase: role-aware import unification) — ROLE
@@ -1578,13 +1689,26 @@ export async function upsertShifts(sql, ctx, rawShifts) {
 }
 
 export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId) {
-  const employeeId = effectiveEmployeeId(ctx, requestedEmployeeId);
+  const scope = resolveAccessScope(ctx);
+  const employeeId = scope.type === 'SELF'
+    ? scope.employeeId
+    : effectiveEmployeeId(ctx, requestedEmployeeId);
   if (employeeId) {
-    await assertEmployeeInOrg(sql, ctx, employeeId);
+    await assertEmployeeInScope(sql, ctx, employeeId);
   }
   const ids = [...new Set(rawIds.map((value) => String(value ?? '').trim()).filter((id) => UUID_RE.test(id)))];
   let deleted = 0;
   for (const id of ids) {
+    const existing = await sql`
+      SELECT employee_id, area_id FROM shifts
+      WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+    `;
+    if (existing.length > 0) {
+      assertScopedResource(scope, {
+        employeeId: existing[0].employee_id,
+        areaId: existing[0].area_id,
+      });
+    }
     const rows = employeeId
       ? await sql`
           DELETE FROM shifts
@@ -1593,7 +1717,15 @@ export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId) {
             AND employee_id = ${employeeId}
           RETURNING id
         `
-      : await sql`
+      : scope.type === 'AREA'
+        ? await sql`
+          DELETE FROM shifts
+          WHERE id = ${id}
+            AND organization_id = ${ctx.organizationId}
+            AND area_id = ${scope.areaId}
+          RETURNING id
+        `
+        : await sql`
           DELETE FROM shifts
           WHERE id = ${id} AND organization_id = ${ctx.organizationId}
           RETURNING id

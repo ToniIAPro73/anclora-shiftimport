@@ -1,6 +1,6 @@
 # R2-M07 — Scopes: ORGANIZATION / AREA / SELF
 
-STATUS: MISSING
+STATUS: DONE — PASS
 
 ## 1. Objetivo
 
@@ -80,12 +80,12 @@ Memberships existentes (`ADMIN`/`EMPLOYEE` previas al backfill de R2-M06) no tie
 ### T01 — Migración: columna scoped_area_id
 
 Objetivo: Soportar scope AREA para PLANNER.
-Archivos / módulos probables: `db/migrations/00XX_add_scoped_area_id.sql`.
+Archivos / módulos probables: `db/migrations/0015_membership_scoped_area.sql`.
 Cambios: `ALTER TABLE memberships ADD COLUMN scoped_area_id ...`.
 No hacer: No hacer la columna NOT NULL.
 Criterios de aceptación:
-- [ ] Migración aplica limpiamente.
-- [ ] FK a `areas.id` válida, nullable.
+- [x] Migración aplica limpiamente.
+- [x] FK a `areas.id` válida, nullable.
 Tests: migration test.
 Evidencia esperada: resultado de migración.
 
@@ -96,7 +96,7 @@ Archivos / módulos probables: `api/_lib/auth.js`.
 Cambios: Nueva función pura, sin efectos secundarios, testeable de forma aislada.
 No hacer: No duplicar lógica de scope en cada endpoint.
 Criterios de aceptación:
-- [ ] Devuelve el filtro correcto para cada combinación rol/scoped_area_id.
+- [x] Devuelve el filtro correcto para cada combinación rol/scoped_area_id.
 Tests: unit test exhaustivo de la función (todas las combinaciones rol × scope).
 Evidencia esperada: resultado de tests.
 
@@ -107,8 +107,8 @@ Archivos / módulos probables: `api/employees/*`, `api/imports/*`, `api/_lib/dat
 Cambios: Cada query relevante incorpora el filtro de `resolveAccessScope`.
 No hacer: No confiar en filtrado solo en frontend.
 Criterios de aceptación:
-- [ ] PLANNER con scope AREA no puede leer ni escribir datos de otra área.
-- [ ] EMPLOYEE con scope SELF no puede leer ni escribir datos de otro empleado.
+- [x] PLANNER con scope AREA no puede leer ni escribir datos de otra área.
+- [x] EMPLOYEE con scope SELF no puede leer ni escribir datos de otro empleado.
 Tests: integration test por endpoint y por combinación de scope.
 Evidencia esperada: resultado de tests.
 
@@ -119,8 +119,8 @@ Archivos / módulos probables: `MembersModal.tsx`.
 Cambios: Selector opcional de área al asignar rol PLANNER.
 No hacer: No mostrar el selector para roles distintos de PLANNER.
 Criterios de aceptación:
-- [ ] Selector visible solo para PLANNER.
-- [ ] Guardar sin selección deja scope ORGANIZATION.
+- [x] Selector visible solo para PLANNER.
+- [x] Guardar sin selección deja scope ORGANIZATION.
 Tests: test de componente.
 Evidencia esperada: resultado de test.
 
@@ -130,11 +130,22 @@ unit (resolveAccessScope), integration (endpoints por scope), component (UI sele
 
 ## 20. Evidencias
 
-Resultados de tests T01-T04.
+Resultados de tests T01-T04 y validación de datos de Neon dev:
+
+- `node --env-file=.env.development.local db/migrate.mjs` → `apply 0015_membership_scoped_area.sql (6 statements)`, `done`, `migrations up to date`.
+- Neon dev confirma `memberships.scoped_area_id` como `UUID NULL`, el constraint `memberships_scoped_area_role_check`, el índice `memberships_scoped_area_idx` y cero scopes huérfanos o asignados a roles distintos de `PLANNER`.
+- `resolveAccessScope` cubre OWNER/ADMIN, PLANNER organization/area y EMPLOYEE self; los casos inválidos fallan cerrado con `403 SCOPE_UNAVAILABLE`.
+- `npx vitest run api/_lib/auth.test.js api/_lib/data.test.js api/_lib/scope.test.js db/migrations.test.mjs src/components/shift-dashboard/MembersModal.test.tsx` → **5 archivos, 167 tests PASS**.
+- `npm test` → **98 archivos, 1011 tests PASS**.
+- `npm run lint` → PASS.
+- `npm run build` → PASS; warning no bloqueante ya conocido por chunks grandes de PDF/XLSX.
+- `git diff --check` → PASS.
 
 ## 21. Gate
 
 Gates requeridos: G3 (Domain invariants), G4 (API/authorization).
+
+Resultado: **PASS**. No se observaron fugas de área ni de empleado en los recursos cubiertos; los errores de scope son explícitos y no dependen de la UI.
 
 ## 22. Rollback / remediación
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { parseSessionToken, requireOrgContext, requireRole, resolveContext, SESSION_COOKIE } from './auth.js';
+import { parseSessionToken, requireOrgContext, requireRole, resolveAccessScope, resolveContext, SESSION_COOKIE } from './auth.js';
 
 /**
  * Security-context tests (Fase 1.1): multi-org resolution must never pick
@@ -141,5 +141,30 @@ describe('requireRole — MVP role hierarchy', () => {
   it('fails closed for unknown roles and thresholds', () => {
     expect(() => requireRole({ role: 'AUDITOR' }, 'EMPLOYEE')).toThrowError(expect.objectContaining({ status: 403 }));
     expect(() => requireRole({ role: 'OWNER' }, 'AUDITOR')).toThrowError(expect.objectContaining({ status: 403 }));
+  });
+});
+
+describe('resolveAccessScope — MVP scopes', () => {
+  it('resolves organization scope for OWNER, ADMIN, and unassigned PLANNER', () => {
+    expect(resolveAccessScope({ role: 'OWNER' })).toEqual({ type: 'ORGANIZATION' });
+    expect(resolveAccessScope({ role: 'ADMIN' })).toEqual({ type: 'ORGANIZATION' });
+    expect(resolveAccessScope({ role: 'PLANNER', scopedAreaId: null })).toEqual({ type: 'ORGANIZATION' });
+  });
+
+  it('resolves an area-scoped PLANNER', () => {
+    expect(resolveAccessScope({ role: 'PLANNER', scopedAreaId: 'area-1' }))
+      .toEqual({ type: 'AREA', areaId: 'area-1' });
+  });
+
+  it('resolves SELF only through the linked employee', () => {
+    expect(resolveAccessScope({ role: 'EMPLOYEE', employeeId: 'employee-1' }))
+      .toEqual({ type: 'SELF', employeeId: 'employee-1' });
+  });
+
+  it('fails closed when an employee has no link or the role is unknown', () => {
+    expect(() => resolveAccessScope({ role: 'EMPLOYEE', employeeId: null }))
+      .toThrowError(expect.objectContaining({ status: 403, code: 'SCOPE_UNAVAILABLE' }));
+    expect(() => resolveAccessScope({ role: 'AUDITOR' }))
+      .toThrowError(expect.objectContaining({ status: 403, code: 'SCOPE_UNAVAILABLE' }));
   });
 });
