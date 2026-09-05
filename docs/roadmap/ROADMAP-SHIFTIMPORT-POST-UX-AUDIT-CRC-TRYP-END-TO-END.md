@@ -282,6 +282,10 @@ funcional completo de 16 pasos exigido por este Gate.
 **DO_NOT_BREAK**: nunca ejecutar el script contra producción.
 **DEPENDENCIES**: P0-M07. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
 
+**VERIFICADOR EJECUTABLE**: `scripts/verify-mvp-invariants.mjs` realiza únicamente consultas de
+lectura, comprueba el prefijo de host de Neon development antes de conectarse y devuelve código de
+salida distinto de cero ante cualquier violación.
+
 ---
 **ID**: P0-M10
 **TITLE**: Ejecutar R5-M12 T06 y emitir el veredicto `MVP_READY` / `MVP_NOT_READY`
