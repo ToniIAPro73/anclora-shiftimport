@@ -33,11 +33,11 @@ El flujo objetivo del producto es:
 
 ```text
 importar → revisar → comparar → confirmar
-  → (roadmap) planificar → publicar → consultar → confirmar
-  → (roadmap) solicitar cambios → aprobar → auditar
+  → planificar → publicar → consultar → confirmar
+  → solicitar cambios → aprobar → auditar
 ```
 
-Hoy están implementadas las cuatro primeras etapas (**importar → revisar → comparar → confirmar**), sobre una capa organizativa multi-tenant ya operativa. Las etapas de planificación futura, portal de empleado y aprobaciones están en roadmap (ver [`docs/roadmap/shiftimport-mvp-v2/`](./docs/roadmap/shiftimport-mvp-v2/)) y **no están implementadas todavía**.
+Las etapas de importación segura, planificación futura, portal de empleado y aprobaciones están implementadas sobre una capa organizativa multi-tenant operativa. La importación sigue requiriendo revisión y confirmación antes de escribir; la planificación futura se publica explícitamente y el portal de empleado permite consultar, confirmar y solicitar cambios.
 
 ## Qué no es (todavía)
 
@@ -66,7 +66,7 @@ ShiftImport no pretende ser, en su MVP actual, un ERP, un HRIS completo, una sui
 - **Organizaciones multi-tenant**: cada organización aísla sus propios datos, empleados y turnos.
 - **Áreas opcionales**: una organización puede subdividirse en áreas, sin ser obligatorio.
 - **Ciclo de vida de empleado**: estados `pending_access` / `active` / `inactive`, con vinculación opcional a un usuario con acceso.
-- **Roles**: `ADMIN` / `EMPLOYEE` hoy (ver roadmap `R0-M03` / `R2-M06` para el modelo de 4 roles con scopes por organización/área/usuario).
+- **Roles y scopes**: `OWNER` / `ADMIN` / `PLANNER` / `EMPLOYEE`, con scopes `ORGANIZATION` / `AREA` / `SELF` según el rol y la configuración de la membership.
 - **Provisioning masivo**: alta de usuarios en lote vía CSV, con credenciales de un solo uso descargables (no persistidas en servidor).
 - **Interfaz en español e inglés**, con tema claro y oscuro.
 
@@ -104,7 +104,7 @@ El producto opera en español e inglés, con selector de idioma y paridad de cla
 
 ## Roadmap
 
-El roadmap detallado por microfases (R0 a R5, más backlog post-MVP R6-R9) vive en [`docs/roadmap/shiftimport-mvp-v2/`](./docs/roadmap/shiftimport-mvp-v2/), empezando por [`00-BASELINE.md`](./docs/roadmap/shiftimport-mvp-v2/00-BASELINE.md) y [`00-ROADMAP-MASTER.md`](./docs/roadmap/shiftimport-mvp-v2/00-ROADMAP-MASTER.md).
+R0–R5 del MVP v2 están implementados. El programa de verificación y mejoras posterior a la auditoría UX se ejecuta en [`docs/roadmap/ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md`](./docs/roadmap/ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md), con la spec normativa en [`docs/specs/SPEC-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md`](./docs/specs/SPEC-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md). El backlog post-MVP R6–R9 sigue en [`docs/roadmap/shiftimport-mvp-v2/POST-MVP/`](./docs/roadmap/shiftimport-mvp-v2/POST-MVP/).
 
 ## Documentación y gobernanza
 
