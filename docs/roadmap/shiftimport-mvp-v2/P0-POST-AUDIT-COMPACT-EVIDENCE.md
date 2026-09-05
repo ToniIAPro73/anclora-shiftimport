@@ -13,7 +13,7 @@ Comando ejecutado desde `qa/e2e-acceptance/`:
 npx playwright test --config playwright.p0-gate.config.ts
 ```
 
-Resultado: **4/4 PASS en 43,8 s**.
+Resultado: **4/4 PASS en 43,3 s**.
 
 Los cuatro escenarios son:
 
@@ -25,6 +25,23 @@ Los cuatro escenarios son:
 El perfil evita logins de interfaz, logouts, navegación repetida y esperas de hidratación que no
 aportan cobertura nueva a estos casos. El perfil exhaustivo histórico sigue disponible en
 `qa/e2e-acceptance/playwright.local.config.ts`.
+
+## Smoke API dirigido
+
+Comando:
+
+```text
+node --env-file=.env.development.local scripts/smoke-api.mjs
+```
+
+Resultado: **72/72 PASS en 16,3 s**. El harness se actualizó al contrato actual de onboarding
+(`OWNER` + `ownerIsEmployee`) e imports (`employeeId` + fingerprint SHA-256), y ahora rechaza
+ejecutarse contra un host que no sea Neon development. La limpieza final confirmó **0
+organizaciones smoke** residuales.
+
+Esta es la ruta rápida recomendada para cambios de API: cubre cada caso de forma dirigida sin
+repetir los journeys completos del navegador. Los E2E de navegador se reservan para cambios de
+UI, navegación, accesibilidad o flujos cuya evidencia dependa del browser.
 
 ## Invariantes de datos
 

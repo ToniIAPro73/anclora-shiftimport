@@ -2,6 +2,7 @@
 // Creates two organizations (two users), exercises isolation invariants,
 // then removes every row it created. Usage:
 //   node --env-file=.env.development.local scripts/smoke-api.mjs
+import { createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import registerHandler from '../api/auth/register.js';
 import loginHandler from '../api/auth/login.js';
@@ -37,8 +38,45 @@ async function callCapturingToken(handler, request) {
   }
 }
 
-const sql = neon(process.env.DATABASE_URL);
+const DEVELOPMENT_HOST_PREFIX = 'ep-winter-bird-';
+
+function databaseUrl() {
+  const value = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  if (!value) throw new Error('DATABASE_URL/POSTGRES_URL is not configured');
+  const url = new URL(value);
+  if (!url.hostname.startsWith(DEVELOPMENT_HOST_PREFIX)) {
+    throw new Error('Refusing to run: database host is not the documented Neon development host');
+  }
+  return value;
+}
+
+console.log('Database target: Neon development (host prefix verified)');
+
+const sql = neon(databaseUrl());
 const suffix = Date.now().toString(36);
+const fingerprint = (label) => createHash('sha256').update(`${label}:${suffix}`).digest('hex');
+const createdOrgIds = new Set();
+const createdUserIds = new Set();
+
+function trackRegistration(response) {
+  const userId = response.body?.user?.id;
+  if (userId) createdUserIds.add(userId);
+}
+
+function trackOnboarding(response) {
+  const organizationId = response.body?.organizationId;
+  if (organizationId) createdOrgIds.add(organizationId);
+}
+
+async function cleanupCreatedData() {
+  for (const organizationId of createdOrgIds) {
+    await sql`DELETE FROM organizations WHERE id = ${organizationId}`;
+  }
+  for (const userId of createdUserIds) {
+    await sql`DELETE FROM users WHERE id = ${userId}`;
+  }
+  await sql`DELETE FROM login_attempts WHERE id_key LIKE ${`email:%-${suffix}@example.com`}`;
+}
 
 function mockRes() {
   const res = {
@@ -80,37 +118,40 @@ const run = async () => {
   const regA = await call(registerHandler, req('POST', {
     body: { email: `smoke-a-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke A' },
   }));
+  trackRegistration(regA);
   check('register A', regA.statusCode === 201);
   const cookieA = String(regA.headers['set-cookie']).split(';')[0];
 
   // Unified onboarding (api/onboarding/onboarding.js): register no longer
-  // auto-creates an org — the explicit onboarding step does. Personal flow =
-  // organizationName + employeeName (creates org + ADMIN membership + self
-  // employee); company flow = organizationName only (no self employee).
+  // auto-creates an org — the explicit onboarding step does. A self Employee
+  // is created only by the explicit ownerIsEmployee opt-in.
   const onboardA = await call(onboardingHandler, req('POST', {
     cookie: cookieA,
-    body: { organizationName: 'Smoke Org A', employeeName: 'Smoke A' },
+    body: { organizationName: 'Smoke Org A', ownerName: 'Smoke A', employeeName: 'Smoke A', ownerIsEmployee: true },
   }));
+  trackOnboarding(onboardA);
   check('personal onboarding creates org+employee', onboardA.statusCode === 201);
 
   // Tenant B
   const regB = await call(registerHandler, req('POST', {
     body: { email: `smoke-b-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke B' },
   }));
+  trackRegistration(regB);
   const cookieB = String(regB.headers['set-cookie']).split(';')[0];
   const onboardB = await call(onboardingHandler, req('POST', {
     cookie: cookieB,
-    body: { organizationName: 'Smoke Org B', employeeName: 'Smoke B' },
+    body: { organizationName: 'Smoke Org B', ownerName: 'Smoke B', employeeName: 'Smoke B', ownerIsEmployee: true },
   }));
+  trackOnboarding(onboardB);
   check('personal onboarding is idempotency-guarded per user', onboardB.statusCode === 201);
   const onboardBAgain = await call(onboardingHandler, req('POST', {
     cookie: cookieB,
-    body: { organizationName: 'Smoke Org B bis', employeeName: 'Smoke B' },
+    body: { organizationName: 'Smoke Org B bis', ownerName: 'Smoke B', employeeName: 'Smoke B', ownerIsEmployee: true },
   }));
   check('repeating onboarding after completion is rejected (409)', onboardBAgain.statusCode === 409);
 
   const meA = await call(meHandler, req('GET', { cookie: cookieA }));
-  check('session A resolves org+role+employee', meA.body.role === 'ADMIN' && Boolean(meA.body.organizationId) && Boolean(meA.body.employeeId));
+  check('session A resolves org+OWNER+employee', meA.body.role === 'OWNER' && Boolean(meA.body.organizationId) && Boolean(meA.body.employeeId));
   check('personal onboarding defaults plan to free', meA.body.plan === 'free');
   const orgA = meA.body.organizationId;
   const selfA = meA.body.employeeId;
@@ -129,12 +170,18 @@ const run = async () => {
   await sql`UPDATE organizations SET plan = 'team' WHERE id = ${orgA}`;
 
   // A creates second employee (inline alta)
-  const created = await call(employeesHandler, req('POST', { cookie: cookieA, body: { name: 'Empleada Dos', externalEmployeeId: `E${suffix}` } }));
+  const created = await call(employeesHandler, req('POST', { cookie: cookieA, body: { name: 'Empleada Dos', externalEmployeeId: `E${suffix}`, status: 'active' } }));
   check('ADMIN creates employee without user', created.statusCode === 201 && created.body.employee.userId === null);
   const emp2 = created.body.employee.id;
 
   // Import record + shifts: two employees, same date, no conflict
-  const imp = await call(importsHandler, req('POST', { cookie: cookieA, body: { fileName: 'smoke.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8 } }));
+  const imp = await call(importsHandler, req('POST', {
+    cookie: cookieA,
+    body: {
+      fileName: 'smoke.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8,
+      employeeId: selfA, fileFingerprint: fingerprint('initial-import'),
+    },
+  }));
   check('import registered', imp.statusCode === 201);
   const importId = imp.body.import.id;
 
@@ -223,7 +270,10 @@ const run = async () => {
   // Area-scoped import + area-filtered history.
   const areaImport = await call(importsHandler, req('POST', {
     cookie: cookieA,
-    body: { fileName: 'smoke-ops.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 9, areaId: areaOpsId },
+    body: {
+      fileName: 'smoke-ops.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 9,
+      areaId: areaOpsId, employeeId: empArea.body.employee.id, fileFingerprint: fingerprint('area-import'),
+    },
   }));
   check('area-scoped import registered', areaImport.statusCode === 201 && areaImport.body.import.areaId === areaOpsId);
   const importsOps = await call(importsHandler, req('GET', { cookie: cookieA, query: { areaId: areaOpsId } }));
@@ -239,7 +289,10 @@ const run = async () => {
   );
 
   // Tenant isolation: org B session wielding org A's area id.
-  const crossImport = await call(importsHandler, req('POST', { cookie: cookieB, body: { fileName: 'evil.pdf', sourceFormat: 'pdf', areaId: areaOpsId } }));
+  const crossImport = await call(importsHandler, req('POST', {
+    cookie: cookieB,
+    body: { fileName: 'evil.pdf', sourceFormat: 'pdf', areaId: areaOpsId, employeeId: selfA, fileFingerprint: fingerprint('cross-import') },
+  }));
   check('foreign areaId on import blocked (403)', crossImport.statusCode === 403);
   const crossPatch = await call(areasHandler, req('PATCH', { cookie: cookieB, body: { id: areaOpsId, name: 'Hackeada' } }));
   check('PATCH area of another org is 404 (no leak)', crossPatch.statusCode === 404);
@@ -313,13 +366,14 @@ const run = async () => {
   check('revoked membership no longer activates org', meBafter.statusCode === 200 && meBafter.body.organizationId === null);
 
   // ---- Company-style onboarding ("Para mi empresa") -----------------------
-  // Unified endpoint: organizationName only → org + ADMIN membership, no
+  // Unified endpoint: organizationName only → org + OWNER membership, no
   // self-linked employee. (The legacy company.js granted plan team / org type
   // company; the unified endpoint sets neither — org starts on the DB
   // default 'free' plan.)
   const regC = await call(registerHandler, req('POST', {
     body: { email: `smoke-c-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: '' },
   }));
+  trackRegistration(regC);
   const cookieC = String(regC.headers['set-cookie']).split(';')[0];
 
   const companyMissingName = await call(onboardingHandler, req('POST', {
@@ -332,13 +386,14 @@ const run = async () => {
     cookie: cookieC,
     body: { organizationName: 'Smoke Co' },
   }));
+  trackOnboarding(companyOk);
   check('company onboarding creates org (no self employee)', companyOk.statusCode === 201);
   const orgC = companyOk.body.organizationId;
 
   const meC = await call(meHandler, req('GET', { cookie: cookieC }));
   check(
-    'company onboarding: ADMIN role, no self employee, default free plan',
-    meC.body.role === 'ADMIN' && meC.body.employeeId === null && meC.body.plan === 'free',
+    'company onboarding: OWNER role, no self employee, default free plan',
+    meC.body.role === 'OWNER' && meC.body.employeeId === null && meC.body.plan === 'free',
   );
   const [orgCRow] = await sql`SELECT type FROM organizations WHERE id = ${orgC}`;
   check('company onboarding sets org type company', orgCRow?.type === 'company');
@@ -368,11 +423,13 @@ const run = async () => {
   const regD = await call(registerHandler, req('POST', {
     body: { email: `smoke-d-${suffix}@example.com`, password: 'smoke-pass-1234', displayName: 'Smoke D' },
   }));
+  trackRegistration(regD);
   const cookieD = String(regD.headers['set-cookie']).split(';')[0];
   const onboardD = await call(onboardingHandler, req('POST', {
     cookie: cookieD,
     body: { organizationName: 'Smoke Org D', employeeName: 'Smoke D', plan: 'team' },
   }));
+  trackOnboarding(onboardD);
   const meD = await call(meHandler, req('GET', { cookie: cookieD }));
   check('onboarding never grants team even if the client requests it', onboardD.statusCode === 201 && meD.body.plan === 'free');
   const orgD = meD.body.organizationId;
@@ -413,11 +470,13 @@ const run = async () => {
   const otherEmail = `smoke-rl-other-${suffix}@example.com`;
 
   const regRL = await call(registerHandler, req('POST', { body: { email: rlEmail, password: 'rl-correct-pass1', displayName: 'RL' } }));
+  trackRegistration(regRL);
   const cookieRL = String(regRL.headers['set-cookie']).split(';')[0];
   const onboardRL = await call(onboardingHandler, req('POST', {
     cookie: cookieRL,
-    body: { organizationName: 'Smoke Org RL', employeeName: 'RL' },
+    body: { organizationName: 'Smoke Org RL', ownerName: 'RL', employeeName: 'RL', ownerIsEmployee: true },
   }));
+  trackOnboarding(onboardRL);
   const orgRL = onboardRL.body.organizationId;
 
   // Allowed: attempts under the per-email threshold (10) all get a normal
@@ -464,9 +523,7 @@ const run = async () => {
   check('rate limit: a successful login clears the counters (next failure is not instantly blocked)', freshAfterSuccess.statusCode === 401);
 
   // Cleanup: deleting organizations cascades employees/imports/shifts/memberships.
-  const emailPattern = `smoke-%-${suffix}@example.com`;
-  await sql`DELETE FROM organizations WHERE id = ${orgA} OR id = ${orgB} OR id = ${orgC} OR id = ${orgD} OR id = ${orgRL}`;
-  await sql`DELETE FROM users WHERE email LIKE ${emailPattern}`;
+  await cleanupCreatedData();
   await sql`DELETE FROM login_attempts WHERE id_key IN (${`ip:${RL_IP}`}, ${`ip:203.0.113.5`}, ${`email:${rlEmail}`}, ${`email:${otherEmail}`}, ${'ip:unknown'})`;
 
   const failed = results.filter(([, ok]) => !ok);
@@ -476,5 +533,11 @@ const run = async () => {
 
 run().catch(async (error) => {
   console.error('smoke error:', error instanceof Error ? error.message : error);
+  try {
+    await cleanupCreatedData();
+    console.error('smoke cleanup complete');
+  } catch (cleanupError) {
+    console.error('smoke cleanup failed:', cleanupError instanceof Error ? cleanupError.message : cleanupError);
+  }
   process.exit(1);
 });
