@@ -69,6 +69,15 @@ const translations: Record<Locale, TranslationTree> = {
       importHistory: 'Historial de importaciones',
       add: 'Añadir',
     },
+    employeePortal: {
+      eyebrow: 'MI ESPACIO',
+      emptyLabel: 'Portal del empleado',
+      emptyTitle: 'Tu espacio de turnos está listo',
+      emptyDescription: 'Aquí aparecerán tus turnos, avisos y solicitudes.',
+      navigationLabel: 'Navegación del portal',
+      navigationPlaceholder: 'La navegación del portal estará disponible próximamente.',
+      logout: 'Cerrar sesión',
+    },
     stats: {
       own: 'Propios',
       company: 'Empresa',
@@ -1112,6 +1121,15 @@ const translations: Record<Locale, TranslationTree> = {
       import: 'Import',
       importHistory: 'Import history',
       add: 'Add',
+    },
+    employeePortal: {
+      eyebrow: 'MY SPACE',
+      emptyLabel: 'Employee portal',
+      emptyTitle: 'Your shift space is ready',
+      emptyDescription: 'Your shifts, updates and requests will appear here.',
+      navigationLabel: 'Portal navigation',
+      navigationPlaceholder: 'Portal navigation will be available soon.',
+      logout: 'Sign out',
     },
     stats: {
       own: 'Own',

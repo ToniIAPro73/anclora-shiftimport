@@ -53,6 +53,7 @@ import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryMo
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
+import { PortalShell } from './components/employee-portal/PortalShell';
 import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
 import { AuthScreen } from './components/AuthScreen';
 import { ForgotPasswordScreen } from './components/ForgotPasswordScreen';
@@ -1219,6 +1220,19 @@ function App() {
         />
         <CookieConsent />
       </>
+    );
+  }
+
+  // R4-M00: EMPLOYEE has a dedicated portal entry point. The role split lives
+  // here, once, so the existing ADMIN dashboard remains untouched while all
+  // future employee screens can grow inside PortalShell.
+  if (route === '/app' && authResolved && session?.role === 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete) {
+    return (
+      <PortalShell
+        session={session}
+        employeeName={selfEmployee?.name}
+        onLogout={() => void handleLogout()}
+      />
     );
   }
 

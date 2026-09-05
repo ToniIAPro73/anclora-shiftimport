@@ -134,7 +134,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     mockedLoadRemoteShifts.mockImplementation(shiftsFor);
 
     renderApp();
-    await waitFor(() => expect(screen.getByText('Mis turnos')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('employee-portal')).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Empleado:' })).toBeNull();
   });
 

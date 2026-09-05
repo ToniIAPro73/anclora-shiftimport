@@ -11,6 +11,8 @@ import { translate, translateList } from './i18n';
 const T_KEYS = [
   'header.themeDark', 'header.themeLight', 'header.themeSystem',
   'header.settingsAria', 'header.import', 'header.add',
+  'employeePortal.eyebrow', 'employeePortal.emptyLabel', 'employeePortal.emptyTitle',
+  'employeePortal.emptyDescription', 'employeePortal.navigationLabel', 'employeePortal.logout',
   'stats.own', 'stats.company', 'stats.totalMonth', 'stats.totalYear', 'stats.month', 'stats.year',
   'calendar.addShiftTitle', 'calendar.addShiftBlockedTitle',
   'shiftModal.titleNew', 'shiftModal.titleEdit', 'shiftModal.dateLabel', 'shiftModal.startLabel',

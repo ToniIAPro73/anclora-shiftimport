@@ -1,5 +1,7 @@
 # R4-M00 — Employee IA / Navigation
 
+STATUS: DONE — PASS
+
 ## 1. Objetivo
 
 Definir e implementar la información de arquitectura (IA) del Portal del Empleado: layout base, shell de navegación y punto de entrada mobile-first para el rol EMPLOYEE, sin construir todavía ninguna pantalla de contenido (Today/My Week/etc. son R4-M01+).
@@ -10,14 +12,14 @@ Hoy no existe ninguna superficie dedicada al rol EMPLOYEE. `src/App.tsx` aloja t
 
 ## 3. Estado actual del repositorio
 
-- `src/App.tsx`: shell único post-login, sin router.
-- `src/pages/`: solo `LandingPage.tsx`, `PricingPage.tsx` (páginas públicas, no autenticadas).
-- No existe ningún componente, ruta, ni test bajo términos "portal", "employee-portal", "my-week", "acknowledge" (0 resultados de grep, confirmado en baseline).
-- RBAC actual: `ADMIN`/`EMPLOYEE` (migration 0007). El guard de rol existe en `api/_lib/auth.js:163-165` pero no hay bifurcación de UI por rol en frontend.
+- `src/App.tsx` mantiene el dashboard operativo existente para ADMIN/OWNER/PLANNER y ahora bifurca EMPLOYEE en un único punto post-auth.
+- `src/components/employee-portal/PortalShell.tsx` contiene el shell aislado del portal, sin pantallas de contenido todavía.
+- `src/lib/route.ts` conserva la estrategia de ruta física `/app` acordada en R0-M05; el rol determina la superficie renderizada.
+- La resolución de sesión ya tenía una barrera de carga y redirección a `/login` ante errores; R4-M00 la reutiliza sin duplicar lógica.
 
 ## 4. Alcance IN
 
-- Decisión y aplicación de la estrategia de routing definida en R0-M05 (introducir router vs. defer) — R4-M00 es el primer consumidor real de esa decisión.
+- Aplicar la estrategia de routing definida en R0-M05: ruta física `/app` con segmentación de superficie por rol.
 - Shell de layout del portal (header mínimo, área de contenido, área de navegación inferior vacía — el contenido de la navegación lo define R4-M09).
 - Redirección post-login: si `role === 'EMPLOYEE'`, entrar al shell del portal; si `role === 'ADMIN'`, mantener el dashboard actual sin cambios.
 - Guard de ruta cliente (UX only) + reconfirmación de que el guard real vive en el backend (no se introduce autorización nueva aquí, se reutiliza la existente).
@@ -52,7 +54,7 @@ N/A — motivo: no se añade ni modifica ningún endpoint; se reutiliza el guard
 - Shell con header (nombre org, nombre usuario, toggle tema/idioma reutilizando componentes existentes: `ThemeToggle.tsx`, i18n hooks).
 - Área de contenido vacía (placeholder) hasta R4-M01.
 - Contenedor de navegación inferior vacío, reservado para R4-M09.
-- Estado de carga durante la resolución de rol/redirección (evitar parpadeo de contenido incorrecto).
+- Estado de carga durante la resolución de rol/redirección reutilizando el gate `authResolved` existente de `App.tsx` (evita parpadeo del dashboard ADMIN).
 
 ## 11. Seguridad y autorización
 
@@ -103,8 +105,8 @@ No hacer:
 No reescribir el dashboard ADMIN existente.
 
 Criterios de aceptación:
-- [ ] Login como EMPLOYEE renderiza el nuevo shell.
-- [ ] Login como ADMIN renderiza el dashboard sin cambios visibles.
+- [x] Login como EMPLOYEE renderiza el nuevo shell.
+- [x] Login como ADMIN renderiza el dashboard sin cambios visibles.
 
 Tests:
 - Test de render condicional por rol.
@@ -127,8 +129,8 @@ No hacer:
 No implementar contenido de Today/My Week aquí.
 
 Criterios de aceptación:
-- [ ] Shell renderiza en mobile y desktop sin overflow horizontal.
-- [ ] Landmarks semánticos presentes.
+- [x] Shell renderiza en mobile y desktop sin overflow horizontal.
+- [x] Landmarks semánticos presentes.
 
 Tests:
 - Test de accesibilidad básico (landmarks, foco).
@@ -151,8 +153,8 @@ No hacer:
 No introducir lógica de reintento compleja; reutilizar manejo de sesión existente.
 
 Criterios de aceptación:
-- [ ] Sin parpadeo de contenido ADMIN durante carga para un EMPLOYEE.
-- [ ] Sesión inválida redirige a login sin error no controlado en consola.
+- [x] Sin parpadeo de contenido ADMIN durante carga para un EMPLOYEE.
+- [x] Sesión inválida redirige a login mediante el flujo de sesión existente, sin fallback anónimo.
 
 Tests:
 - Test de estado de carga y de sesión inválida.
@@ -162,20 +164,28 @@ Evidencia esperada:
 
 ## 19. Tests obligatorios
 
-- Unit: render condicional por rol, landmarks de accesibilidad.
+- Unit: render condicional por rol, landmarks de accesibilidad y foco de acciones.
 - Integration: N/A — motivo: sin API nueva en esta microfase.
 
 ## 20. Evidencias
 
-- Capturas del shell (mobile/desktop, claro/oscuro, ES/EN).
-- Resultado de `npm test` para los nuevos archivos.
+- `src/App.employee-portal.test.tsx`: EMPLOYEE → portal y ADMIN → dashboard existente.
+- `src/components/employee-portal/PortalShell.test.tsx`: landmarks, identidad, fallback de usuario y logout con foco.
+- `src/App.employee-selector.test.tsx` y `src/App.areas.test.tsx`: expectativas heredadas reconciliadas con el nuevo contrato EMPLOYEE.
+- `npm test -- --run`: PASS — 111 archivos / 1088 tests.
+- `npm run lint`: PASS.
+- `npm run build`: PASS — 1734 módulos transformados; warning conocido de chunks mayores de 500 kB.
+- `git diff --check`: PASS.
+- La resolución de sesión inválida queda cubierta por `App.logout.test.tsx`; no se añadió fetch ni autorización nueva en R4-M00.
 
 ## 21. Gate
 
 Gates obligatorios: G1 (Architecture), G6 (UX/UI).
 
-- G1 PASS si: la bifurcación por rol vive en un único punto de entrada y el shell está aislado en su propio módulo.
-- G6 PASS si: shell responsive, sin layout shift, estados de carga/error cubiertos.
+- G1 PASS: la bifurcación por rol vive en un único punto de entrada de `App.tsx` y el shell está aislado en `components/employee-portal`.
+- G6 PASS: shell mobile-first, responsive, sin overflow horizontal, con loading gate heredado, landmarks y controles de tema/idioma.
+
+Resultado ejecutado: PASS.
 
 Resultado posible: PASS / PASS_WITH_WARNINGS / FAIL / BLOCKED (regla general del prompt maestro §9).
 
@@ -186,3 +196,5 @@ Revert del commit de esta microfase restaura el comportamiento actual (todo usua
 ## 23. Criterio de DONE
 
 Un usuario con rol EMPLOYEE aterriza en el shell del portal tras login; un usuario ADMIN no ve cambio alguno; Gate G1+G6 en PASS.
+
+Commit de cierre: pendiente de registrar tras el commit de esta microfase.

@@ -153,7 +153,7 @@ describe('App — area context (dashboard)', () => {
     expect(options).toEqual(['Employee A', 'Employee B', 'Employee C']);
   });
 
-  it('EMPLOYEE role: no area selector; own area shown as context when the employee has one', async () => {
+  it('EMPLOYEE role: enters the portal without an area selector or team context', async () => {
     mockedFetchResolvedSession.mockResolvedValue({
       session: { ...adminSession, role: 'EMPLOYEE', employeeId: 'emp-a', memberships: [{ ...adminSession.memberships[0], role: 'EMPLOYEE' }] },
       needsOrgChoice: false,
@@ -164,8 +164,8 @@ describe('App — area context (dashboard)', () => {
 
     renderApp();
 
-    await waitFor(() => expect(screen.getByText('Mis turnos')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('employee-portal')).toBeTruthy());
     expect(screen.queryByRole('button', { name: 'Área' })).toBeNull();
-    expect(screen.getByText('Norte')).toBeTruthy();
+    expect(screen.queryByText('Norte')).toBeNull();
   });
 });

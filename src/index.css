@@ -394,6 +394,192 @@ select:disabled {
   flex-shrink: 0;
 }
 
+/* R4-M00 — employee portal shell. The shell is intentionally independent
+   from the admin dashboard so R4 content can grow without widening App.tsx's
+   existing operational surface. */
+.employee-portal {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  color: var(--text-primary);
+}
+
+.employee-portal__header,
+.employee-portal__main,
+.employee-portal__navigation {
+  width: min(100%, 1120px);
+  margin-inline: auto;
+}
+
+.employee-portal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.employee-portal__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.employee-portal__identity .brand-mark {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+}
+
+.employee-portal__identity-copy {
+  min-width: 0;
+}
+
+.employee-portal__eyebrow,
+.employee-portal__empty-label {
+  color: var(--color-accent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.employee-portal__organization {
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: clamp(1.15rem, 2.2vw, 1.55rem);
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-portal__person {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.employee-portal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.employee-portal__logout {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--panel-muted-bg);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.employee-portal__logout:hover {
+  border-color: color-mix(in srgb, var(--color-gold) 55%, var(--glass-border));
+  color: var(--color-gold);
+  transform: translateY(-2px);
+}
+
+.employee-portal__logout:focus-visible,
+.employee-portal__actions .theme-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.employee-portal__main {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 44px 0;
+}
+
+.employee-portal__empty-state {
+  width: min(100%, 560px);
+  padding: 30px 28px 32px;
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: 4px 20px 20px 4px;
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.employee-portal__empty-state h2 {
+  margin-top: 9px;
+  font-size: clamp(1.65rem, 4vw, 2.45rem);
+  line-height: 1.05;
+}
+
+.employee-portal__empty-state > p:last-child {
+  max-width: 40ch;
+  margin-top: 14px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.employee-portal__navigation {
+  min-height: 72px;
+  border-top: 1px solid var(--glass-border);
+}
+
+@media (max-width: 640px) {
+  .employee-portal {
+    min-height: 100vh;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .employee-portal__header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .employee-portal__actions {
+    justify-content: flex-start;
+  }
+
+  .employee-portal__actions .theme-toggle {
+    width: 40px;
+    height: 40px;
+  }
+
+  .employee-portal__logout {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .employee-portal__main {
+    padding: 30px 0;
+  }
+
+  .employee-portal__empty-state {
+    padding: 24px 20px 26px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .employee-portal__logout {
+    transition: none;
+  }
+
+  .employee-portal__logout:hover {
+    transform: none;
+  }
+}
+
 .dashboard-action-button {
   display: flex;
   align-items: center;
