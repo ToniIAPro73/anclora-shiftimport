@@ -8,6 +8,7 @@ import { ThemeToggle } from '../ui/ThemeToggle';
 import { MyWeek } from './MyWeek';
 import { ShiftDetail } from './ShiftDetail';
 import { Today } from './Today';
+import { RequestStatus } from './RequestStatus';
 import { getWeekStartMonday, toISODate } from '../../lib/week';
 
 interface PortalShellProps {
@@ -29,13 +30,13 @@ function resolveIdentity(session: SessionInfo, employeeName?: string): string {
 
 export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProps) => {
   const { t } = useI18n();
-  const [activeView, setActiveView] = useState<'today' | 'week' | 'detail'>('today');
+  const [activeView, setActiveView] = useState<'today' | 'week' | 'requests' | 'detail'>('today');
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
-  const [detailReturnView, setDetailReturnView] = useState<'today' | 'week'>('today');
+  const [detailReturnView, setDetailReturnView] = useState<'today' | 'week' | 'requests'>('today');
   const [weekStart, setWeekStart] = useState(() => toISODate(getWeekStartMonday(new Date())));
   const organizationName = resolveOrganizationName(session);
   const identity = resolveIdentity(session, employeeName);
-  const openDetail = (shiftId: string, returnView: 'today' | 'week') => {
+  const openDetail = (shiftId: string, returnView: 'today' | 'week' | 'requests') => {
     setSelectedShiftId(shiftId);
     setDetailReturnView(returnView);
     setActiveView('detail');
@@ -52,6 +53,8 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
     ? 'employee-today-title'
     : activeView === 'week'
       ? 'employee-week-title'
+      : activeView === 'requests'
+        ? 'employee-request-status-title'
       : 'employee-shift-detail-title';
 
   return (
@@ -84,6 +87,7 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
       <main className="employee-portal__main" aria-labelledby={mainHeadingId}>
         {activeView === 'today' && <Today onSelectShift={(shiftId) => openDetail(shiftId, 'today')} />}
         {activeView === 'week' && <MyWeek weekStart={weekStart} onWeekStartChange={setWeekStart} onSelectShift={(shiftId) => openDetail(shiftId, 'week')} />}
+        {activeView === 'requests' && <RequestStatus onSelectShift={(shiftId) => openDetail(shiftId, 'requests')} />}
         {activeView === 'detail' && selectedShiftId && <ShiftDetail shiftId={selectedShiftId} onBack={closeDetail} />}
       </main>
 
@@ -93,6 +97,9 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
         </button>
         <button type="button" className={`employee-portal__nav-button${(activeView === 'week' || (activeView === 'detail' && detailReturnView === 'week')) ? ' is-active' : ''}`} aria-current={activeView === 'week' ? 'page' : undefined} onClick={() => setActiveView('week')}>
           {t('employeePortal.week')}
+        </button>
+        <button type="button" className={`employee-portal__nav-button${(activeView === 'requests' || (activeView === 'detail' && detailReturnView === 'requests')) ? ' is-active' : ''}`} aria-current={activeView === 'requests' ? 'page' : undefined} onClick={() => setActiveView('requests')}>
+          {t('employeePortal.requests')}
         </button>
       </nav>
     </div>

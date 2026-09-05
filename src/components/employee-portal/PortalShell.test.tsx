@@ -12,6 +12,7 @@ vi.mock('../../lib/remote', () => ({
     id: '11111111-1111-4111-8111-111111111111', date: '2026-09-05', startTime: '09:00', endTime: '17:00', location: 'Recepción', origin: 'IMP',
   }]),
   loadRemoteWeekShifts: vi.fn().mockResolvedValue({ weekStart: '2026-09-07', shifts: [] }),
+  loadRemoteChangeRequests: vi.fn().mockResolvedValue([]),
   loadRemoteShiftDetail: vi.fn().mockResolvedValue({
     shift: { id: '11111111-1111-4111-8111-111111111111', date: '2026-09-05', startTime: '09:00', endTime: '17:00', location: 'Recepción', origin: 'IMP' },
     areaName: 'Recepción',
@@ -101,5 +102,12 @@ describe('PortalShell', () => {
     await waitFor(() => expect(screen.getByTestId('today-shifts')).toBeTruthy());
     const restoredTrigger = document.querySelector(`[data-shift-id="${trigger.getAttribute('data-shift-id')}"]`);
     expect(document.activeElement).toBe(restoredTrigger);
+  });
+
+  it('exposes request status through the portal shell', async () => {
+    renderPortal();
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitudes' }));
+    await waitFor(() => expect(screen.getByTestId('request-status')).toBeTruthy());
+    expect(screen.getByRole('heading', { name: 'Tus solicitudes' })).toBeTruthy();
   });
 });

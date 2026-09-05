@@ -100,6 +100,10 @@ export interface ChangeRequest {
   createdAt: string;
   resolvedAt: string | null;
   resolvedByUserId: string | null;
+  shiftDate?: string;
+  shiftStartTime?: string;
+  shiftEndTime?: string;
+  shiftLocation?: string;
 }
 
 export interface ScheduleSnapshot {
@@ -283,6 +287,12 @@ export async function cancelRemoteChangeRequest(requestId: string): Promise<Chan
     { method: 'POST' },
   );
   return payload.request;
+}
+
+export async function loadRemoteChangeRequests(status?: ChangeRequestStatus): Promise<ChangeRequest[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  const payload = await apiFetch<{ requests: ChangeRequest[] }>(`/api/me/change-requests${query}`);
+  return payload.requests;
 }
 
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {

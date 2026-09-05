@@ -142,6 +142,7 @@ export function mapShiftRow(row) {
 const MAX_SHIFT_COMMENT_LENGTH = 2000;
 const MAX_CHANGE_REQUEST_REASON_LENGTH = 2000;
 const CHANGE_REQUEST_TYPES = new Set(['TIME_CHANGE', 'OTHER']);
+const CHANGE_REQUEST_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']);
 
 export function mapShiftCommentRow(row) {
   return {
@@ -2011,6 +2012,45 @@ export async function cancelEmployeeChangeRequest(sql, ctx, rawRequestId) {
     throw new HttpError(409, 'Only pending change requests can be cancelled');
   }
   throw new HttpError(404, 'Change request not found');
+}
+
+/** Lists every change request owned by the authenticated employee. The
+ * optional status is validated here so callers cannot turn the read model
+ * into an arbitrary SQL predicate. The shift projection lets the portal link
+ * a request back to its existing SELF-scoped detail screen without issuing a
+ * second request for display data. */
+export async function listEmployeeChangeRequests(sql, ctx, rawStatus = null) {
+  assertEmployeePortalContext(ctx);
+  const normalizedStatus = String(rawStatus ?? '').trim().toUpperCase() || null;
+  if (normalizedStatus && !CHANGE_REQUEST_STATUSES.has(normalizedStatus)) {
+    throw new HttpError(400, 'Invalid change request status');
+  }
+
+  const rows = await sql`
+    SELECT cr.id, cr.shift_id, cr.employee_id, cr.organization_id,
+           cr.request_type, cr.reason, cr.status, cr.created_at,
+           cr.resolved_at, cr.resolved_by_user_id,
+           TO_CHAR(s.date, 'YYYY-MM-DD') AS shift_date,
+           TO_CHAR(s.start_time, 'HH24:MI') AS shift_start_time,
+           TO_CHAR(s.end_time, 'HH24:MI') AS shift_end_time,
+           s.location AS shift_location
+    FROM change_requests cr
+    JOIN shifts s
+      ON s.id = cr.shift_id
+     AND s.employee_id = cr.employee_id
+     AND s.organization_id = cr.organization_id
+    WHERE cr.organization_id = ${ctx.organizationId}
+      AND cr.employee_id = ${ctx.employeeId}
+      AND (${normalizedStatus}::text IS NULL OR cr.status = ${normalizedStatus})
+    ORDER BY cr.created_at DESC, cr.id DESC
+  `;
+  return rows.map((row) => ({
+    ...mapChangeRequestRow(row),
+    shiftDate: row.shift_date,
+    shiftStartTime: row.shift_start_time,
+    shiftEndTime: row.shift_end_time,
+    shiftLocation: row.shift_location ?? '',
+  }));
 }
 
 /**

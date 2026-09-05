@@ -10,7 +10,9 @@ R4-M06 crea solicitudes pero no hay ningún lugar centralizado donde el empleado
 
 ## 3. Estado actual del repositorio
 
-No existe. Depende de `change_requests` (R4-M06).
+Implementado en `development` y cerrado con Gate PASS el 2026-09-05. Antes de
+esta microfase existía la creación/cancelación SELF de R4-M06, pero no había
+listado centralizado ni endpoint de consulta.
 
 ## 4. Alcance IN
 
@@ -78,7 +80,9 @@ Archivos: `api/me/change-requests/index.js`.
 Cambios: lectura filtrable, orden por fecha descendente.
 No hacer: no exponer solicitudes ajenas.
 Criterios de aceptación:
-- [ ] Filtro por estado funciona correctamente.
+- [x] Filtro por estado funciona correctamente y rechaza valores inválidos.
+- [x] La consulta deriva organización y empleado del contexto de sesión y
+  ordena por fecha descendente.
 Tests: integration.
 Evidencia esperada: respuesta filtrada de ejemplo.
 
@@ -88,7 +92,8 @@ Archivos: `src/components/employee-portal/RequestStatus.tsx`.
 Cambios: render de lista, filtro UI, estado vacío.
 No hacer: no mezclar con lógica de creación (eso vive en Shift Detail/R4-M06).
 Criterios de aceptación:
-- [ ] Estado comunicado por texto además de color.
+- [x] Estado comunicado por texto además de color.
+- [x] Incluye estados loading, error, vacío y filtro local sin mutar datos.
 Tests: unit de render y accesibilidad de color/texto.
 Evidencia esperada: captura con los 4 estados representados.
 
@@ -98,7 +103,8 @@ Archivos: `src/components/employee-portal/RequestStatus.tsx`.
 Cambios: enlace/navegación a `ShiftDetail` por `shift_id`.
 No hacer: no duplicar lógica de detalle aquí.
 Criterios de aceptación:
-- [ ] Click en solicitud navega al turno correcto.
+- [x] Click en solicitud navega al turno correcto mediante el flujo existente
+  de `ShiftDetail`.
 Tests: integration de navegación.
 Evidencia esperada: captura de flujo.
 
@@ -106,13 +112,40 @@ Evidencia esperada: captura de flujo.
 
 Unit, Integration (aislamiento, filtro), Accessibility (color+texto de estado).
 
+Validación ejecutada:
+
+- tests dirigidos de endpoint, componente, shell e i18n: PASS;
+- suite completa: 125 archivos, 1.160 tests PASS;
+- `npm run lint`: PASS;
+- `npm run build`: PASS;
+- `git diff --check`: PASS.
+
 ## 20. Evidencias
 
-Respuestas de API filtradas, capturas de los 4 estados, resultado de tests.
+- Endpoint verificado con listado SELF, filtro `PENDING`, valor inválido,
+  sesión anónima y rol no EMPLOYEE; la consulta contiene los predicados de
+  organización y empleado de sesión.
+- Componente verificado con los cuatro estados visibles como texto, filtro,
+  estados vacío/error y navegación al `shift_id` asociado.
+- La navegación de PortalShell monta Solicitudes sin abandonar el shell ni
+  alterar Today/My Week/Shift Detail.
+- No se añadieron tablas ni migraciones.
 
 ## 21. Gate
 
 Gates obligatorios: G5 (Functional), G6 (UX/UI).
+
+G5: PASS — listado SELF/tenant, filtro validado, orden descendente, estados y
+enlace al detalle cubiertos por tests.
+
+G6: PASS — lista responsive, dark/light heredados, labels asociados, estado
+expresado con texto y estados loading/error/vacío implementados.
+
+**Resultado del Gate:** PASS.
+
+**Estado:** DONE.
+
+**Commit de cierre:** `d245e81` — `feat(employee-portal): add request status`.
 
 ## 22. Rollback / remediación
 
@@ -120,4 +153,5 @@ Revert retira ruta/componente; no hay dato persistido nuevo (solo lectura).
 
 ## 23. Criterio de DONE
 
-Empleado ve todas sus solicitudes con estado correcto y aislado; Gate G5+G6 PASS.
+Empleado ve todas sus solicitudes con estado correcto y aislado; Gate G5+G6
+PASS. Microfase completada el 2026-09-05.
