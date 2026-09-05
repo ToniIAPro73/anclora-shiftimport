@@ -16,7 +16,7 @@ listado centralizado ni endpoint de consulta.
 
 ## 4. Alcance IN
 
-- Endpoint de listado de change requests del empleado autenticado (todas, no solo pendientes).
+- Endpoint de listado de change requests del empleado autenticado (todas, no solo pendientes), incluyendo horas solicitadas y motivo de rechazo cuando exista.
 - Componente de lista con filtro simple por estado.
 - Enlace desde cada ítem al turno asociado (Shift Detail).
 
@@ -30,7 +30,8 @@ R4-M06.
 
 ## 7. Decisiones arquitectónicas
 
-Vista puramente de lectura, SELF-scoped, sin lógica de negocio nueva — reutiliza el modelo de `change_requests` tal cual lo dejó R4-M06.
+Vista puramente de lectura, SELF-scoped, sin lógica de negocio nueva — reutiliza
+`change_requests` y proyecta metadatos de Approval Lite de forma tenant-scoped.
 
 ## 8. Modelo de datos afectado
 

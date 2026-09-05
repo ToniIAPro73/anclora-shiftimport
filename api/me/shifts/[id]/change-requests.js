@@ -25,6 +25,8 @@ export default async function handler(req, res) {
       shiftId,
       req.body?.requestType,
       req.body?.reason,
+      req.body?.requestedStartTime,
+      req.body?.requestedEndTime,
     );
     return sendJson(res, 201, { request });
   } catch (error) {

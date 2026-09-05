@@ -1585,6 +1585,29 @@ select:disabled {
   padding: 0 12px;
 }
 
+.employee-change-request__time-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.employee-change-request__time-fields > div {
+  display: grid;
+  gap: 7px;
+}
+
+.employee-change-request__time-fields input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--panel-muted-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.86rem;
+}
+
 .employee-change-request__form textarea {
   min-height: 108px;
   padding: 12px 13px;
@@ -1645,6 +1668,7 @@ select:disabled {
 
 .employee-change-request__cancel:focus-visible,
 .employee-change-request__form select:focus-visible,
+.employee-change-request__time-fields input:focus-visible,
 .employee-change-request__form textarea:focus-visible,
 .employee-change-request__form-footer button:focus-visible {
   outline: 2px solid var(--color-accent);

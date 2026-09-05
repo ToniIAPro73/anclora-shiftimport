@@ -40,7 +40,7 @@ function renderForm() {
   return render(
     <ThemeProvider>
       <I18nProvider>
-        <ChangeRequestForm shiftId={shiftId} />
+        <ChangeRequestForm shiftId={shiftId} shiftStartTime="09:00" shiftEndTime="17:00" />
       </I18nProvider>
     </ThemeProvider>,
   );
@@ -71,7 +71,7 @@ describe('ChangeRequestForm', () => {
     fireEvent.change(screen.getByLabelText('Tipo de solicitud'), { target: { value: 'TIME_CHANGE' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }));
     await waitFor(() => expect(screen.getByText('Solicitud enviada. Queda pendiente de revisión.')).toBeTruthy());
-    expect(mockedCreate).toHaveBeenCalledWith(shiftId, 'TIME_CHANGE', 'Necesito cambiar la hora de entrada.');
+    expect(mockedCreate).toHaveBeenCalledWith(shiftId, 'TIME_CHANGE', 'Necesito cambiar la hora de entrada.', '09:00', '17:00');
     expect(screen.getByLabelText('Motivo')).toHaveProperty('value', '');
     expect(screen.getByRole('button', { name: 'Cancelar solicitud' })).toBeTruthy();
 

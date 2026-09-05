@@ -13,14 +13,18 @@ type ActionState = 'idle' | 'submitting' | 'cancelling' | 'error';
 
 interface ChangeRequestFormProps {
   shiftId: string;
+  shiftStartTime: string;
+  shiftEndTime: string;
 }
 
 const MAX_REASON_LENGTH = 2000;
 
-export function ChangeRequestForm({ shiftId }: ChangeRequestFormProps) {
+export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime }: ChangeRequestFormProps) {
   const { t } = useI18n();
   const [requestType, setRequestType] = useState<ChangeRequestType>('TIME_CHANGE');
   const [reason, setReason] = useState('');
+  const [requestedStartTime, setRequestedStartTime] = useState(shiftStartTime);
+  const [requestedEndTime, setRequestedEndTime] = useState(shiftEndTime);
   const [request, setRequest] = useState<ChangeRequest | null>(null);
   const [actionState, setActionState] = useState<ActionState>('idle');
   const [feedback, setFeedback] = useState('');
@@ -56,7 +60,13 @@ export function ChangeRequestForm({ shiftId }: ChangeRequestFormProps) {
     setActionState('submitting');
     setFeedback('');
     try {
-      const created = await createRemoteChangeRequest(shiftId, requestType, trimmedReason);
+      const created = await createRemoteChangeRequest(
+        shiftId,
+        requestType,
+        trimmedReason,
+        requestType === 'TIME_CHANGE' ? requestedStartTime : undefined,
+        requestType === 'TIME_CHANGE' ? requestedEndTime : undefined,
+      );
       setRequest(created);
       setReason('');
       setActionState('idle');
@@ -99,7 +109,13 @@ export function ChangeRequestForm({ shiftId }: ChangeRequestFormProps) {
               ? t('employeeChangeRequest.timeChange')
               : t('employeeChangeRequest.other')}</strong>
             <span className={`employee-change-request__status employee-change-request__status--${request.status.toLowerCase()}`}>
-              {request.status === 'PENDING' ? t('employeeChangeRequest.pending') : t('employeeChangeRequest.cancelledStatus')}
+              {request.status === 'PENDING'
+                ? t('employeeChangeRequest.pending')
+                : request.status === 'APPROVED'
+                  ? t('employeeChangeRequest.approved')
+                  : request.status === 'REJECTED'
+                    ? t('employeeChangeRequest.rejected')
+                    : t('employeeChangeRequest.cancelledStatus')}
             </span>
           </div>
           <p className="employee-change-request__reason-label">{t('employeeChangeRequest.reasonLabel')}</p>
@@ -129,6 +145,33 @@ export function ChangeRequestForm({ shiftId }: ChangeRequestFormProps) {
           <option value="TIME_CHANGE">{t('employeeChangeRequest.timeChange')}</option>
           <option value="OTHER">{t('employeeChangeRequest.other')}</option>
         </select>
+
+        {requestType === 'TIME_CHANGE' && (
+          <div className="employee-change-request__time-fields">
+            <div>
+              <label htmlFor="employee-change-request-start-time">{t('employeeChangeRequest.requestedStartTime')}</label>
+              <input
+                id="employee-change-request-start-time"
+                type="time"
+                value={requestedStartTime}
+                onChange={(event) => setRequestedStartTime(event.target.value)}
+                disabled={actionState === 'submitting'}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="employee-change-request-end-time">{t('employeeChangeRequest.requestedEndTime')}</label>
+              <input
+                id="employee-change-request-end-time"
+                type="time"
+                value={requestedEndTime}
+                onChange={(event) => setRequestedEndTime(event.target.value)}
+                disabled={actionState === 'submitting'}
+                required
+              />
+            </div>
+          </div>
+        )}
 
         <label htmlFor="employee-change-request-reason">{t('employeeChangeRequest.reasonLabel')}</label>
         <textarea

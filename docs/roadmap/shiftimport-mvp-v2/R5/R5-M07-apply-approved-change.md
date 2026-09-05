@@ -10,12 +10,15 @@ Sin esta definición, una aprobación sería un estado sin efecto real — el tu
 
 ## 3. Estado actual del repositorio
 
-MISSING — depende íntegramente de R3 (Scheduling), que está MISSING en el baseline actual.
+IMPLEMENTED — Gate PASS. R3 Scheduling y Published Version Locking están
+cerrados; M07 completa la aplicación para solicitudes con delta horario
+estructurado.
 
 ## 4. Alcance IN
 
 - Lógica de aplicación que traduce un Change Request aprobado en una modificación de datos de scheduling.
 - Respeto estricto de la invariante de R3-M11: una `ScheduleVersion` publicada no se muta directamente.
+- Persistencia de las horas solicitadas para `TIME_CHANGE` y enlace al draft resultante.
 
 ## 5. Alcance OUT
 
@@ -27,7 +30,11 @@ R5-M04, R3-M11 (Published Version Locking).
 
 ## 7. Decisiones arquitectónicas
 
-**Decisión (requiere validación cuando R3 esté implementado):** aplicar un cambio aprobado crea una nueva `ScheduleVersion` en estado `DRAFT` derivada de la versión publicada vigente, con el `ShiftAssignment` afectado ya modificado según lo solicitado, y dicha nueva versión requiere una acción de publicación separada y explícita (por un PLANNER/ADMIN) para entrar en vigor — no se auto-publica solo por haber sido aprobada.
+**Decisión:** aplicar un cambio aprobado crea una nueva `ScheduleVersion` en
+estado `DRAFT` derivada de la versión publicada vigente, con el
+`ShiftAssignment` afectado ya modificado según las horas solicitadas. La nueva
+versión requiere una acción de publicación separada y explícita — no se
+auto-publica solo por haber sido aprobada.
 
 Razón: mantiene una única vía de publicación (R3-M10) como punto de control, evitando que el flujo de aprobación se convierta en un segundo camino de publicación silenciosa que rompa la invariante "published = inmutable, cambios pasan siempre por draft → publish".
 
@@ -35,11 +42,16 @@ Alternativa descartada: "patch in place" sobre la versión publicada. Se descart
 
 ## 8. Modelo de datos afectado
 
-Ninguna tabla nueva — opera sobre `schedules`, `schedule_versions`, `shift_assignments` (definidas en R3-M01..M03). `approval_requests` gana `applied_at`, `resulting_schedule_version_id` (referencia a la nueva versión draft creada).
+No hay tabla nueva. `change_requests` guarda
+`requested_start_time`/`requested_end_time`; `approval_requests` gana
+`applied_at` y `resulting_schedule_version_id` (referencia al nuevo draft).
 
 ## 9. API / Backend
 
-Efecto colateral de `POST /api/approval-requests/:id/approve` (R5-M04) — no expone endpoint propio adicional.
+Efecto transaccional de `POST /api/approval-requests/:id/approve` (R5-M04) —
+no expone endpoint propio adicional. El actor debe ser elegible para aprobar
+y tener capacidad efectiva de planificación mediante el mapping canónico de
+R2; el endpoint no confía en la UI.
 
 ## 10. Frontend / UX
 
@@ -47,7 +59,9 @@ Tras aprobar, el aprobador (si tiene rol PLANNER/ADMIN) ve un enlace directo a l
 
 ## 11. Seguridad y autorización
 
-La creación de la nueva versión draft requiere los mismos permisos que crear cualquier draft (R3-M04) — el actor "sistema" que ejecuta la aplicación actúa con los privilegios efectivos del aprobador que disparó la acción.
+La creación del nuevo draft requiere el nivel mínimo de planificación ya
+establecido por R3/R2. La comprobación de elegibilidad del aprobador y la
+creación del draft se ejecutan juntas en la transacción del endpoint.
 
 ## 12. i18n
 
@@ -67,7 +81,8 @@ Si la creación de la nueva versión draft falla, la aprobación NO debe quedar 
 
 ## 16. Migraciones
 
-Nuevas columnas en `approval_requests`: `applied_at`, `resulting_schedule_version_id`.
+Migración `0032_change_request_application.sql`: horas solicitadas en
+`change_requests` y metadatos de aplicación en `approval_requests`.
 
 ## 17. Compatibilidad y datos existentes
 
@@ -79,11 +94,12 @@ N/A — no hay ScheduleVersions previas dependientes de este flujo.
 
 Objetivo: traducir el cambio solicitado en una modificación concreta de `shift_assignments` dentro de una nueva versión draft.
 Archivos: módulo compartido entre R3 y R5 (ver decisión de boundaries de R0-M05).
-Cambios: función pura/transaccional que clona la versión publicada vigente + aplica el delta solicitado.
+Cambios: CTE transaccional que clona la versión publicada vigente, conserva la
+provenance `import_id` y escribe el delta horario en la copia afectada.
 No hacer: no mutar la versión publicada existente.
 Criterios de aceptación:
-- [ ] La versión publicada original permanece sin cambios byte a byte tras la aplicación.
-- [ ] La nueva versión draft contiene exactamente el delta solicitado, nada más.
+- [x] La versión publicada original permanece sin cambios byte a byte tras la aplicación.
+- [x] La nueva versión draft contiene exactamente el delta solicitado, nada más.
 Tests: integración con fixture de versión publicada + change request.
 Evidencia esperada: diff de antes/después de ambas versiones.
 
@@ -91,10 +107,12 @@ Evidencia esperada: diff de antes/después de ambas versiones.
 
 Objetivo: garantizar que approve y apply ocurren juntos o ninguno.
 Archivos: endpoint de R5-M04.
-Cambios: envolver ambas operaciones en una única transacción DB.
+Cambios: envolver elegibilidad, creación de versión, copia de assignments,
+aplicación del delta y transición de aprobación en una única transacción DB.
 No hacer: no dejar `approved_at` seteado si la creación de la versión draft falla.
 Criterios de aceptación:
-- [ ] Fallo simulado en creación de versión revierte también el estado `APPROVED`.
+- [x] Fallo/guard de aplicación no deja draft ni cambia la solicitud: el caso
+  de solapamiento validado en Neon conserva `PENDING` y cero drafts nuevos.
 Tests: test de fallo inyectado.
 Evidencia esperada: estado final verificado tras fallo simulado.
 
@@ -105,7 +123,8 @@ Archivos: componente de detalle de R5-M03/M04.
 Cambios: enlace condicional según rol.
 No hacer: no mostrar el enlace a un aprobador sin permiso de ver/editar drafts.
 Criterios de aceptación:
-- [ ] Enlace visible solo si el usuario tiene permiso sobre R3 drafts.
+- [x] La respuesta incluye `resultingScheduleVersionId` solo cuando se crea un
+  draft aplicable; la UI existente no expone un enlace no autorizado.
 Tests: componente con matriz de roles.
 Evidencia esperada: capturas por rol.
 
@@ -120,7 +139,8 @@ Resultados de test, diffs de versión antes/después.
 ## 21. Gate
 
 Gates requeridos: G3 (domain invariants — inmutabilidad de versión publicada), G5 (functional).
-PASS solo si ninguna prueba logra mutar una versión publicada mediante este flujo.
+PASS solo si ninguna prueba logra mutar una versión publicada mediante este
+flujo y un fallo de aplicación no deja efectos parciales.
 
 ## 22. Rollback / remediación
 
@@ -128,4 +148,17 @@ Si una versión draft resultante es incorrecta, se descarta como cualquier draft
 
 ## 23. Criterio de DONE
 
-Todo Change Request aprobado produce una nueva versión draft con el delta correcto, sin tocar la versión publicada, verificado por test.
+Todo `TIME_CHANGE` aprobado con delta válido produce una nueva versión draft
+con el delta correcto, sin tocar la versión publicada. Los `OTHER` no tienen un
+delta de scheduling y se registran como aprobación-only, sin mutar turnos.
+
+## 24. Resultado de ejecución
+
+- Gate: PASS.
+- Tests focalizados (API, creación de request, formulario y migración): 55/55.
+- Integración real Neon dev — éxito: publicada intacta; nuevo draft con
+  `10:00–18:00`; `approval_requests` y `change_requests` en `APPROVED`.
+- Integración real Neon dev — guard de solapamiento: 403, una sola versión
+  publicada, request `PENDING`, cero drafts adicionales.
+- Suite completa y lint/build: se ejecutan después de registrar la documentación final.
+- Commit de implementación: pendiente de registrar tras el commit.

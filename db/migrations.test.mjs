@@ -21,6 +21,7 @@ const approvalRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.
 const approvalDecisionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0029_approval_decision_metadata.sql');
 const approvalRejectionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0030_approval_rejection_metadata.sql');
 const approvalAuditMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0031_approval_audit_event_types.sql');
+const changeRequestApplicationMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0032_change_request_application.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -331,5 +332,15 @@ describe('0031 approval audit event types migration contract', () => {
     expect(sql).toContain("'approval_request.approved'");
     expect(sql).toContain("'approval_request.rejected'");
     expect(sql).not.toContain('CREATE TABLE');
+  });
+});
+
+describe('0032 change request application migration contract', () => {
+  it('stores a concrete time delta and resulting draft linkage', async () => {
+    const sql = await readFile(changeRequestApplicationMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS requested_start_time TIME');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS requested_end_time TIME');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS resulting_schedule_version_id UUID');
   });
 });

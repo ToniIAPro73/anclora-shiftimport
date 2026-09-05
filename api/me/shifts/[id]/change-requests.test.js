@@ -92,7 +92,7 @@ beforeEach(() => {
 
 describe('POST /api/me/shifts/:id/change-requests', () => {
   it('creates an own request as PENDING without changing the shift lifecycle', async () => {
-    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: '  Necesito cambiar la hora de entrada.  ' } });
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: '  Necesito cambiar la hora de entrada.  ', requestedStartTime: '10:00', requestedEndTime: '18:00' } });
     expect(res.statusCode).toBe(201);
     expect(res.body.request).toMatchObject({
       id: REQUEST_ID,
@@ -106,6 +106,7 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
     expect(insert.text).toContain("'PENDING'");
     expect(insert.text).not.toContain('REJECTED');
     expect(insert.text).not.toContain('UPDATE shifts');
+    expect(insert.text).toContain('requested_start_time');
     const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
     expect(audit.values[2]).toBe('approval_request.created');
     expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: REQUEST_ID, policySnapshot: 'ORGANIZATION_ADMIN' });
@@ -113,7 +114,7 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
 
   it('auto-approves without creating an approval envelope when policy is NO_APPROVAL', async () => {
     state.policy = 'NO_APPROVAL';
-    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'No approval needed.' } });
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'No approval needed.', requestedStartTime: '10:00', requestedEndTime: '18:00' } });
     expect(res.statusCode).toBe(201);
     expect(res.body.request.status).toBe('APPROVED');
     const routeQuery = state.sql.calls.find((entry) => entry.text.includes('WITH owned_shift'));
@@ -123,7 +124,7 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
 
   it('keeps a pending request behind an approval envelope for AREA_RESPONSIBLE', async () => {
     state.policy = 'AREA_RESPONSIBLE';
-    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'Necesito revisión.' } });
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'Necesito revisión.', requestedStartTime: '10:00', requestedEndTime: '18:00' } });
     expect(res.statusCode).toBe(201);
     expect(res.body.request.status).toBe('PENDING');
     const routeQuery = state.sql.calls.find((entry) => entry.text.includes('WITH owned_shift'));
@@ -134,7 +135,7 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
     state.policy = 'AREA_RESPONSIBLE';
     state.approverCount = 0;
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'Revisión manual.' } });
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'Revisión manual.', requestedStartTime: '10:00', requestedEndTime: '18:00' } });
     expect(res.statusCode).toBe(201);
     expect(res.body.request.status).toBe('PENDING');
     expect(warning).toHaveBeenCalledWith('[approval] change request has no eligible approver', expect.objectContaining({
@@ -151,7 +152,7 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
   });
 
   it('fails closed for another employee or tenant and rejects non-EMPLOYEE roles', async () => {
-    const validBody = { requestType: 'TIME_CHANGE', reason: 'Need a different time.' };
+    const validBody = { requestType: 'TIME_CHANGE', reason: 'Need a different time.', requestedStartTime: '10:00', requestedEndTime: '18:00' };
     expect((await call({ id: FOREIGN_SHIFT_ID, body: validBody })).statusCode).toBe(404);
     state.role = 'ADMIN';
     expect((await call()).statusCode).toBe(403);

@@ -16,7 +16,7 @@ capacidad no existía antes de esta microfase.
 ## 4. Alcance IN
 
 - Nueva tabla `change_requests` con estado propio, independiente del estado del turno (mismo principio de aislamiento que Acknowledgement, master-prompt §17).
-- Endpoint para crear una solicitud sobre un turno propio (tipo de cambio + motivo en texto).
+- Endpoint para crear una solicitud sobre un turno propio (tipo de cambio + motivo en texto); `TIME_CHANGE` incluye horas solicitadas estructuradas para R5-M07.
 - Cancelación de la propia solicitud por el empleado mientras esté `PENDING`.
 - UI de creación desde Shift Detail.
 
@@ -51,9 +51,11 @@ Nueva tabla `change_requests`: `id`, `shift_id` FK, `employee_id` FK,
 `organization_id`, `request_type` CHECK IN (`TIME_CHANGE`, `OTHER`), `reason`
 TEXT no vacío de máximo 2000 caracteres, `status` CHECK IN
 (`PENDING`,`APPROVED`,`REJECTED`,`CANCELLED`), `created_at`, `resolved_at`
-(nullable, escrito por cancelación/R5) y `resolved_by_user_id` (nullable,
-reservado para R5). La FK compuesta `(shift_id, employee_id)` impide asociar
-la solicitud a un turno de otro empleado.
+(nullable, escrito por cancelación/R5), `resolved_by_user_id` (nullable,
+reservado para R5), y `requested_start_time`/`requested_end_time` (nullable
+para `OTHER`, obligatorias para nuevos `TIME_CHANGE`). La FK compuesta
+`(shift_id, employee_id)` impide asociar la solicitud a un turno de otro
+empleado.
 
 ## 9. API / Backend
 
@@ -65,7 +67,8 @@ endpoint de aprobación se crea en esta microfase.
 
 ## 10. Frontend / UX
 
-Formulario de solicitud desde Shift Detail (tipo + motivo obligatorio); botón
+Formulario de solicitud desde Shift Detail (tipo + horas solicitadas para
+`TIME_CHANGE` + motivo obligatorio); botón
 cancelar visible solo tras crear una solicitud propia en estado `PENDING`.
 Tras cancelar, la tarjeta conserva el estado `CANCELLED` y oculta la acción.
 

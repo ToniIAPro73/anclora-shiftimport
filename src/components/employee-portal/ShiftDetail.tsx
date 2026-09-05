@@ -167,7 +167,12 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
             )}
           </div>
           <ShiftComments shiftId={state.shift.id} />
-          <ChangeRequestForm key={state.shift.id} shiftId={state.shift.id} />
+          <ChangeRequestForm
+            key={state.shift.id}
+            shiftId={state.shift.id}
+            shiftStartTime={state.shift.startTime}
+            shiftEndTime={state.shift.endTime}
+          />
         </>
       )}
     </section>

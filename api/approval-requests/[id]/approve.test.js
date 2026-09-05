@@ -46,7 +46,7 @@ function makeSql() {
         approved_at: '2026-09-05T12:00:00.000Z',
       }] : []);
     }
-    if (text.startsWith('SELECT status')) {
+    if (text.startsWith('SELECT ar.status')) {
       return Promise.resolve([{ status: state.status }]);
     }
     return Promise.resolve([]);
@@ -81,7 +81,11 @@ describe('POST /api/approval-requests/:id/approve', () => {
     const res = await call();
     expect(res.statusCode).toBe(200);
     expect(res.body.approvalRequest).toMatchObject({ id: REQUEST, status: 'APPROVED', approvedByUserId: 'admin-1' });
-    expect(state.sql.calls.find((entry) => entry.text.includes('WITH eligible')).text).toContain("target.status = 'PENDING'");
+    const approvalQuery = state.sql.calls.find((entry) => entry.text.includes('WITH eligible'));
+    expect(approvalQuery.text).toContain("target.status = 'PENDING'");
+    expect(approvalQuery.text).toContain('schedule_versions');
+    expect(approvalQuery.text).toContain('shift_assignments');
+    expect(approvalQuery.text).not.toContain("SET status = 'PUBLISHED'");
     const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
     expect(audit.values[2]).toBe('approval_request.approved');
     expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: 'change-1', policySnapshot: 'ORGANIZATION_ADMIN' });

@@ -17,8 +17,8 @@ IMPLEMENTED — Gate PASS.
 - Endpoint y UI de aprobación desde la bandeja (R5-M03).
 - Transición `PENDING` → `APPROVED` con verificación de elegibilidad server-side.
 - Persistencia auditable de la decisión (`approved_by_user_id`, `approved_at`).
-- La aplicación material del delta queda en R5-M07 porque R4-M06 todavía no
-  persiste horas solicitadas; no se inventa una mutación de turno en M04.
+- La aplicación material del delta se implementa en R5-M07; este endpoint la
+  ejecuta en la misma transacción para `TIME_CHANGE` con delta estructurado.
 
 ## 5. Alcance OUT
 
@@ -26,19 +26,18 @@ IMPLEMENTED — Gate PASS.
 
 ## 6. Dependencias
 
-R5-M03. R5-M07 consumirá la aprobación para aplicar el cambio cuando exista un
-delta solicitado persistido.
+R5-M03, R5-M07 para la aplicación del delta.
 
 ## 7. Decisiones arquitectónicas
 
-La aprobación y sus metadatos se escriben en una única transacción con una
-actualización compare-and-set sobre `PENDING`. La aplicación material queda
-separada hasta R5-M07, que deberá introducir/consumir el delta solicitado de
-forma atómica.
+La elegibilidad, aplicación a un nuevo draft y actualización compare-and-set
+de `PENDING` se ejecutan en una única transacción. La versión publicada nunca
+se muta.
 
 ## 8. Modelo de datos afectado
 
-`approval_requests.status` → `APPROVED`, `approved_by_user_id`, `approved_at`.
+`approval_requests.status` → `APPROVED`, `approved_by_user_id`, `approved_at`,
+`applied_at`, `resulting_schedule_version_id`.
 Migración aplicada: `0029_approval_decision_metadata.sql`.
 
 ## 9. API / Backend

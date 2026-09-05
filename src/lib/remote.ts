@@ -101,6 +101,8 @@ export interface ChangeRequest {
   resolvedAt: string | null;
   resolvedByUserId: string | null;
   rejectionReason?: string | null;
+  requestedStartTime?: string | null;
+  requestedEndTime?: string | null;
   shiftDate?: string;
   shiftStartTime?: string;
   shiftEndTime?: string;
@@ -326,10 +328,12 @@ export async function createRemoteChangeRequest(
   shiftId: string,
   requestType: ChangeRequestType,
   reason: string,
+  requestedStartTime?: string,
+  requestedEndTime?: string,
 ): Promise<ChangeRequest> {
   const payload = await apiFetch<{ request: ChangeRequest }>(
     `/api/me/shifts/${encodeURIComponent(shiftId)}/change-requests`,
-    { method: 'POST', body: JSON.stringify({ requestType, reason }) },
+    { method: 'POST', body: JSON.stringify({ requestType, reason, requestedStartTime, requestedEndTime }) },
   );
   return payload.request;
 }

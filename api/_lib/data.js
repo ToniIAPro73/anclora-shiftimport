@@ -1935,6 +1935,8 @@ export function mapChangeRequestRow(row) {
     resolvedAt: row.resolved_at ?? null,
     resolvedByUserId: row.resolved_by_user_id ?? null,
     rejectionReason: row.rejection_reason ?? null,
+    requestedStartTime: row.requested_start_time ? String(row.requested_start_time).slice(0, 5) : null,
+    requestedEndTime: row.requested_end_time ? String(row.requested_end_time).slice(0, 5) : null,
   };
 }
 
@@ -1960,7 +1962,7 @@ function assertEmployeePortalContext(ctx) {
   }
 }
 
-export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawRequestType, rawReason) {
+export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawRequestType, rawReason, rawRequestedStartTime, rawRequestedEndTime) {
   assertEmployeePortalContext(ctx);
   const requestType = String(rawRequestType ?? '').trim().toUpperCase();
   if (!CHANGE_REQUEST_TYPES.has(requestType)) {
@@ -1972,6 +1974,14 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
   }
   if (reason.length > MAX_CHANGE_REQUEST_REASON_LENGTH) {
     throw new HttpError(400, `Change request reason cannot exceed ${MAX_CHANGE_REQUEST_REASON_LENGTH} characters`);
+  }
+  const requestedStartTime = String(rawRequestedStartTime ?? '').trim();
+  const requestedEndTime = String(rawRequestedEndTime ?? '').trim();
+  if (requestType === 'TIME_CHANGE') {
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(requestedStartTime)
+      || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(requestedEndTime)) {
+      throw new HttpError(400, 'Time change requests require valid requested start and end times');
+    }
   }
 
   // Neon transactions are non-interactive: they accept a batch of queries,
@@ -1993,13 +2003,17 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
         AND s.employee_id = ${ctx.employeeId}
     ), created AS (
       INSERT INTO change_requests
-        (shift_id, employee_id, organization_id, request_type, reason, status, resolved_at)
+        (shift_id, employee_id, organization_id, request_type, reason,
+         requested_start_time, requested_end_time, status, resolved_at)
       SELECT id, employee_id, organization_id, ${requestType}, ${reason},
+             NULLIF(${requestedStartTime}, '')::time,
+             NULLIF(${requestedEndTime}, '')::time,
              CASE WHEN approval_policy = 'NO_APPROVAL' THEN 'APPROVED' ELSE 'PENDING' END,
              CASE WHEN approval_policy = 'NO_APPROVAL' THEN NOW() ELSE NULL END
       FROM owned_shift
       RETURNING id, shift_id, employee_id, organization_id, request_type, reason,
-                status, created_at, resolved_at, resolved_by_user_id
+                status, created_at, resolved_at, resolved_by_user_id,
+                requested_start_time, requested_end_time
     ), routing AS (
       SELECT c.*, o.approval_policy, e.area_id
       FROM created c
@@ -2064,6 +2078,7 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
     )
     SELECT r.id, r.shift_id, r.employee_id, r.organization_id, r.request_type,
            r.reason, r.status, r.created_at, r.resolved_at, r.resolved_by_user_id,
+           r.requested_start_time, r.requested_end_time,
            r.approval_policy, ai.id AS approval_request_id,
            (SELECT COUNT(*)::integer FROM eligible_approvers ea
             WHERE ea.change_request_id = r.id) AS approver_count,
@@ -2142,6 +2157,7 @@ export async function listEmployeeChangeRequests(sql, ctx, rawStatus = null) {
     SELECT cr.id, cr.shift_id, cr.employee_id, cr.organization_id,
            cr.request_type, cr.reason, cr.status, cr.created_at,
            cr.resolved_at, cr.resolved_by_user_id,
+           cr.requested_start_time, cr.requested_end_time,
            ar.rejection_reason,
            TO_CHAR(s.date, 'YYYY-MM-DD') AS shift_date,
            s.start_time AS shift_start_time,
