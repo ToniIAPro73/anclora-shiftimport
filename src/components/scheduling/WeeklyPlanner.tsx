@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Plus, Table2 } from 'lucide-react';
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
@@ -530,8 +530,30 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
               </div>
             )}
             <div className="weekly-planner__view-switcher" role="group" aria-label={t('planner.viewModeLabel')}>
-              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'grid'} onClick={() => setView('grid')}>{t('planner.gridView')}</button>
-              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'table'} onClick={() => setView('table')}>{t('planner.tableView')}</button>
+              <button
+                type="button"
+                className="weekly-planner__view-button"
+                aria-label={t('planner.gridView')}
+                aria-pressed={view === 'grid'}
+                data-tooltip={t('planner.gridView')}
+                title={t('planner.gridView')}
+                onClick={() => setView('grid')}
+              >
+                <LayoutGrid size={17} aria-hidden="true" />
+                <span className="sr-only">{t('planner.gridView')}</span>
+              </button>
+              <button
+                type="button"
+                className="weekly-planner__view-button"
+                aria-label={t('planner.tableView')}
+                aria-pressed={view === 'table'}
+                data-tooltip={t('planner.tableView')}
+                title={t('planner.tableView')}
+                onClick={() => setView('table')}
+              >
+                <Table2 size={17} aria-hidden="true" />
+                <span className="sr-only">{t('planner.tableView')}</span>
+              </button>
             </div>
             {editable && !mobileEditorOpen && (
               <button

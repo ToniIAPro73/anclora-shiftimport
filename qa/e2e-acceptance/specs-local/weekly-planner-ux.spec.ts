@@ -9,8 +9,6 @@ const fixture = JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'loca
   emails: Record<string, string>;
 };
 
-test.setTimeout(180_000);
-
 function plannerMonday(): string {
   const date = new Date();
   const day = date.getUTCDay();
@@ -38,6 +36,7 @@ async function loginAs(page: Page, email: string) {
 }
 
 test('weekly planner is a bounded, filterable workspace', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   const consoleErrors: string[] = [];
   page.on('pageerror', (error) => consoleErrors.push(error.message));
   page.on('console', (message) => {
@@ -129,6 +128,20 @@ test('weekly planner is a bounded, filterable workspace', async ({ page }, testI
   await grid.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   await expect(grid.getByText('UX Employee 24')).toBeVisible();
   await expect(page.locator('.weekly-planner__grid thead th').first()).toHaveCSS('position', 'sticky');
+  const gridViewButton = page.getByRole('button', { name: 'Cuadrícula' });
+  const tableViewButton = page.getByRole('button', { name: 'Tabla accesible' });
+  await expect(gridViewButton).toHaveAttribute('title', 'Cuadrícula');
+  await expect(tableViewButton).toHaveAttribute('title', 'Tabla accesible');
+  await tableViewButton.hover();
+  await expect.poll(async () => tableViewButton.evaluate((element) => getComputedStyle(element, '::after').opacity)).toBe('1');
+  await tableViewButton.click();
+  const accessibleTable = page.locator('.weekly-planner__table-wrap');
+  await expect(accessibleTable).toBeVisible();
+  await accessibleTable.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect(accessibleTable.locator('thead th').first()).toHaveCSS('position', 'sticky');
+  expect(await accessibleTable.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('planner-accessible-table-bottom-dark.png'), fullPage: false });
+  await gridViewButton.click();
   await page.screenshot({ path: testInfo.outputPath('planner-bottom-dark.png'), fullPage: false });
 
   const filter = page.getByRole('button', { name: 'Empleado' });

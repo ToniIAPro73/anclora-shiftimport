@@ -142,6 +142,8 @@ describe('WeeklyPlanner', () => {
     renderPlanner();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Tabla accesible' })).toHaveAttribute('aria-pressed', 'false'));
+    expect(screen.getByRole('button', { name: 'Cuadrícula' })).toHaveAttribute('title', 'Cuadrícula');
+    expect(screen.getByRole('button', { name: 'Tabla accesible' })).toHaveAttribute('title', 'Tabla accesible');
     fireEvent.click(screen.getByRole('button', { name: 'Tabla accesible' }));
 
     await waitFor(() => expect(screen.getByRole('table')).toHaveClass('weekly-planner__table'));

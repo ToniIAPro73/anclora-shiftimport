@@ -2598,6 +2598,7 @@ button[aria-busy='true'] {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex-shrink: 0;
   padding: 3px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -2605,15 +2606,18 @@ button[aria-busy='true'] {
 }
 
 .weekly-planner__view-button {
+  position: relative;
+  display: grid;
+  width: 34px;
+  min-width: 34px;
   min-height: 34px;
-  padding: 6px 10px;
+  place-items: center;
+  padding: 6px;
   color: var(--text-muted);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 8px;
-  font-size: 0.72rem;
   font-weight: 800;
-  white-space: nowrap;
 }
 
 .weekly-planner__view-button:hover {
@@ -2627,6 +2631,39 @@ button[aria-busy='true'] {
   background: var(--panel-muted-bg);
   border-color: var(--glass-border);
   box-shadow: 0 2px 8px rgba(4, 10, 34, 0.12);
+}
+
+.weekly-planner__view-button::after {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  left: 50%;
+  padding: 5px 8px;
+  color: var(--text-primary);
+  content: attr(data-tooltip);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--glass-border);
+  border-radius: 7px;
+  box-shadow: var(--shadow-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+
+.weekly-planner__view-button:hover::after,
+.weekly-planner__view-button:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .weekly-planner__view-button::after {
+    transition: none;
+  }
 }
 
 .weekly-planner__notice,
@@ -2812,6 +2849,7 @@ button[aria-busy='true'] {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  position: relative;
   overflow: auto;
   max-width: 100%;
   background: var(--glass-bg);
@@ -2820,6 +2858,7 @@ button[aria-busy='true'] {
   box-shadow: inset 0 1px 0 var(--inner-highlight);
   scrollbar-color: var(--glass-border) transparent;
   scrollbar-width: thin;
+  isolation: isolate;
 }
 
 .weekly-planner__grid-wrap:focus-visible {
@@ -2831,6 +2870,7 @@ button[aria-busy='true'] {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  position: relative;
   overflow-x: auto;
   overflow-y: auto;
   max-width: 100%;
@@ -2840,6 +2880,7 @@ button[aria-busy='true'] {
   box-shadow: inset 0 1px 0 var(--inner-highlight);
   scrollbar-color: var(--glass-border) transparent;
   scrollbar-width: thin;
+  isolation: isolate;
 }
 
 .weekly-planner__table-wrap:focus-visible {
@@ -2858,6 +2899,7 @@ button[aria-busy='true'] {
 .weekly-planner__table caption {
   padding: 14px 16px;
   color: var(--text-primary);
+  background: var(--color-bg-elevated);
   font-size: 0.88rem;
   font-weight: 800;
   text-align: left;
@@ -2875,9 +2917,10 @@ button[aria-busy='true'] {
 .weekly-planner__table thead th {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 20;
   color: var(--text-subtle);
-  background: var(--panel-muted-bg);
+  background: var(--color-bg-elevated);
+  box-shadow: inset 0 -1px 0 var(--glass-border);
   font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -2887,7 +2930,7 @@ button[aria-busy='true'] {
 .weekly-planner__table tbody th {
   min-width: 150px;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--panel-muted-bg) 70%, var(--glass-bg));
+  background: var(--color-bg-elevated);
   font-weight: 800;
 }
 
@@ -2958,11 +3001,12 @@ button[aria-busy='true'] {
 .weekly-planner__grid thead th {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: 20;
   min-width: 116px;
   padding: 13px 10px;
   color: var(--text-subtle);
-  background: var(--panel-muted-bg);
+  background: var(--color-bg-elevated);
+  box-shadow: inset 0 -1px 0 var(--glass-border);
   font-size: 0.72rem;
   font-weight: 900;
   text-align: center;
@@ -2976,7 +3020,7 @@ button[aria-busy='true'] {
 
 .weekly-planner__grid thead th:first-child {
   left: 0;
-  z-index: 6;
+  z-index: 30;
   width: 190px;
   min-width: 190px;
   color: var(--text-primary);
@@ -2986,12 +3030,12 @@ button[aria-busy='true'] {
 .weekly-planner__grid tbody th {
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 10;
   width: 190px;
   min-width: 190px;
   padding: 12px 14px;
   color: var(--text-primary);
-  background: var(--panel-muted-bg);
+  background: var(--color-bg-elevated);
   font-size: 0.83rem;
   text-align: left;
 }
@@ -3387,6 +3431,7 @@ button[aria-busy='true'] {
   .weekly-planner__toolbar {
     align-items: flex-start;
     flex-direction: column;
+    justify-content: flex-start;
   }
 
   .weekly-planner__toolbar-summary,
@@ -3396,10 +3441,12 @@ button[aria-busy='true'] {
   }
 
   .weekly-planner__employee-filter {
+    flex: 0 1 auto;
     min-width: 0;
   }
 
   .weekly-planner__week-start {
+    flex: 0 1 auto;
     min-width: 0;
   }
 
