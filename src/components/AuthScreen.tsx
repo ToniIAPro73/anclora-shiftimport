@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { login, register, SessionInfo } from '../lib/session';
 import { useI18n } from '../lib/use-i18n';
@@ -15,11 +15,11 @@ interface AuthScreenProps {
 }
 
 /**
- * Contractual login screen (ANCLORA_AUTH_LOGIN_SCREEN_CONTRACT v1.3.0).
+ * Contractual login screen (ANCLORA_AUTH_LOGIN_SCREEN_CONTRACT v1.4.0).
  * Full-screen card: logo → divider → app name → email → password → primary
- * CTA → forgot → no-account box → disabled social → legal. Register mode is
- * a toggle of the same card. No OAuth: social buttons render disabled
- * (documented absence, never simulated).
+ * CTA → forgot → no-account box → social → legal. Register mode is a toggle
+ * of the same card. Social buttons are plain links to the OAuth start
+ * routes (full-page navigation, PKCE handled server-side).
  */
 export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initialMode = 'login' }: AuthScreenProps) => {
   const { t } = useI18n();
@@ -31,6 +31,15 @@ export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initia
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const oauthResult = new URLSearchParams(window.location.search).get('oauth');
+    if (oauthResult && /_(cancelled|invalid_state|error)$/.test(oauthResult)) {
+      setError(t('auth.failed'));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -175,8 +184,8 @@ export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initia
           <span>{t('auth.socialAccess')}</span>
         </div>
         <div className="auth-social-row">
-          <button type="button" className="auth-social" disabled title={t('auth.comingSoon')}>Google</button>
-          <button type="button" className="auth-social" disabled title={t('auth.comingSoon')}>GitHub</button>
+          <a className="auth-social" href="/api/auth/oauth/google/start">Google</a>
+          <a className="auth-social" href="/api/auth/oauth/github/start">GitHub</a>
         </div>
 
         <p className="auth-legal">
