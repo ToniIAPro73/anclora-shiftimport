@@ -1749,6 +1749,35 @@ export async function listTodayShifts(sql, ctx) {
 }
 
 /**
+ * Employee portal read model for one Monday-to-Sunday range. `weekStart` is
+ * validated by the handler and remains a bound SQL value; identity and
+ * tenancy still come exclusively from the resolved session context.
+ */
+export async function listWeekShifts(sql, ctx, weekStart) {
+  if (ctx.role !== 'EMPLOYEE') {
+    throw new HttpError(403, 'Employee portal access required');
+  }
+  if (!ctx.employeeId) {
+    throw new HttpError(403, 'No employee linked to this user');
+  }
+
+  const rows = await sql`
+    SELECT id, organization_id, employee_id, import_id, area_id,
+           TO_CHAR(date, 'YYYY-MM-DD') AS date,
+           TO_CHAR(start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(end_time, 'HH24:MI') AS end_time,
+           location, origin
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId}
+      AND employee_id = ${ctx.employeeId}
+      AND date >= ${weekStart}::date
+      AND date < (${weekStart}::date + INTERVAL '7 days')
+    ORDER BY date ASC, start_time ASC, end_time ASC, id ASC
+  `;
+  return rows.map(mapShiftRow);
+}
+
+/**
  * Upserts shifts. The client performs reconciliation for conflict UX, while
  * imported shifts also carry a server-computed semantic key. This protects
  * retries and concurrent requests even when the client has no prior copy.

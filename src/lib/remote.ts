@@ -187,6 +187,13 @@ export async function loadRemoteTodayShifts(): Promise<Shift[]> {
   return payload.shifts.map(toShift);
 }
 
+export async function loadRemoteWeekShifts(weekStart: string): Promise<{ weekStart: string; shifts: Shift[] }> {
+  const payload = await apiFetch<{ weekStart: string; days: Array<{ date: string; shifts: RemoteShiftRow[] }> }>(
+    `/api/me/shifts/week?week_start=${encodeURIComponent(weekStart)}`,
+  );
+  return { weekStart: payload.weekStart, shifts: payload.days.flatMap((day) => day.shifts.map(toShift)) };
+}
+
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {
   const query = areaId ? `?areaId=${encodeURIComponent(areaId)}` : '';
   const payload = await apiFetch<{ schedules: ScheduleVersion[] }>(`/api/schedules${query}`);
