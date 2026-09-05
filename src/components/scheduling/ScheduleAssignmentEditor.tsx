@@ -15,10 +15,13 @@ export interface AssignmentEditorState {
 interface ScheduleAssignmentEditorProps {
   snapshot: ScheduleSnapshot;
   editor: AssignmentEditorState;
+  focusKey?: number;
+  mobileOpen?: boolean;
   isSaving: boolean;
   operationError: string | null;
   onChange: (next: AssignmentEditorState) => void;
   onClose: () => void;
+  onOpen?: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onDelete: () => void;
 }
@@ -26,10 +29,13 @@ interface ScheduleAssignmentEditorProps {
 export function ScheduleAssignmentEditor({
   snapshot,
   editor,
+  focusKey,
+  mobileOpen = true,
   isSaving,
   operationError,
   onChange,
   onClose,
+  onOpen,
   onSave,
   onDelete,
 }: ScheduleAssignmentEditorProps) {
@@ -38,11 +44,11 @@ export function ScheduleAssignmentEditor({
 
   useEffect(() => {
     employeeRef.current?.focus();
-  }, [editor.id]);
+  }, [editor.date, editor.employeeId, editor.id, focusKey]);
 
   return (
     <form
-      className="weekly-planner__editor"
+      className={`weekly-planner__editor${mobileOpen ? ' weekly-planner__editor--mobile-open' : ' weekly-planner__editor--mobile-collapsed'}`}
       onSubmit={onSave}
       aria-label={editor.id ? t('planner.editTitle') : t('planner.addTitle')}
       aria-describedby={operationError ? 'planner-editor-error' : undefined}
@@ -52,6 +58,11 @@ export function ScheduleAssignmentEditor({
           <p className="weekly-planner__eyebrow">{editor.id ? t('planner.editEyebrow') : t('planner.addEyebrow')}</p>
           <h2>{editor.id ? t('planner.editTitle') : t('planner.addTitle')}</h2>
         </div>
+        {!mobileOpen && onOpen && (
+          <button type="button" className="btn-outline weekly-planner__mobile-editor-open" onClick={onOpen} disabled={isSaving}>
+            {t('planner.openEditor')}
+          </button>
+        )}
         <button type="button" className="theme-toggle" onClick={onClose} aria-label={t('common.close')} disabled={isSaving}>
           <span aria-hidden="true">×</span>
         </button>

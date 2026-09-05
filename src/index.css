@@ -2480,6 +2480,9 @@ button[aria-busy='true'] {
  * gets a calmer, denser planning canvas. */
 .weekly-planner {
   width: min(100%, 1440px);
+  height: calc(100dvh - 24px);
+  max-height: calc(100dvh - 24px);
+  min-height: 0;
   margin: 0 auto;
   padding: clamp(18px, 3vw, 34px);
   color: var(--text-primary);
@@ -2487,6 +2490,9 @@ button[aria-busy='true'] {
   border: 1px solid var(--glass-border);
   border-radius: 24px;
   box-shadow: 0 22px 54px rgba(4, 10, 34, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .weekly-planner__header {
@@ -2495,6 +2501,7 @@ button[aria-busy='true'] {
   align-items: flex-end;
   gap: 24px;
   margin-bottom: 24px;
+  flex-shrink: 0;
 }
 
 .weekly-planner__back {
@@ -2673,6 +2680,7 @@ button[aria-busy='true'] {
   border: 1px solid var(--glass-border);
   border-radius: 14px;
   font-size: 0.82rem;
+  flex-shrink: 0;
 }
 
 .weekly-planner__toolbar > div {
@@ -2684,6 +2692,20 @@ button[aria-busy='true'] {
 
 .weekly-planner__toolbar-actions {
   justify-content: flex-end;
+}
+
+.weekly-planner__toolbar-summary {
+  min-width: max-content;
+}
+
+.weekly-planner__employee-filter {
+  flex: 1 1 220px;
+  min-width: 220px;
+  max-width: 340px;
+}
+
+.weekly-planner__employee-filter > div {
+  min-width: 0;
 }
 
 .weekly-planner__toolbar-actions .btn-gold {
@@ -2727,12 +2749,17 @@ button[aria-busy='true'] {
 }
 
 .weekly-planner__grid-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow: auto;
   max-width: 100%;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   box-shadow: inset 0 1px 0 var(--inner-highlight);
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-width: thin;
 }
 
 .weekly-planner__grid-wrap:focus-visible {
@@ -2741,12 +2768,18 @@ button[aria-busy='true'] {
 }
 
 .weekly-planner__table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: auto;
   max-width: 100%;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   box-shadow: inset 0 1px 0 var(--inner-highlight);
+  scrollbar-color: var(--glass-border) transparent;
+  scrollbar-width: thin;
 }
 
 .weekly-planner__table-wrap:focus-visible {
@@ -2780,6 +2813,9 @@ button[aria-busy='true'] {
 }
 
 .weekly-planner__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   color: var(--text-subtle);
   background: var(--panel-muted-bg);
   font-size: 0.7rem;
@@ -2860,6 +2896,9 @@ button[aria-busy='true'] {
 }
 
 .weekly-planner__grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   min-width: 116px;
   padding: 13px 10px;
   color: var(--text-subtle);
@@ -2871,9 +2910,8 @@ button[aria-busy='true'] {
 }
 
 .weekly-planner__grid thead th:first-child {
-  position: sticky;
   left: 0;
-  z-index: 3;
+  z-index: 6;
   width: 190px;
   min-width: 190px;
   color: var(--text-primary);
@@ -2983,12 +3021,57 @@ button[aria-busy='true'] {
   transform: none;
 }
 
+.weekly-planner__grid td[data-selected='true'] {
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--glass-bg));
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.weekly-planner__grid td[data-selected='true'] .weekly-planner__add-cell {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.weekly-planner__workspace {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.weekly-planner__grid-region {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.weekly-planner__grid-region > .weekly-planner__grid-wrap,
+.weekly-planner__grid-region > .weekly-planner__table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .weekly-planner__editor {
   margin-top: 18px;
   padding: 18px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: 16px;
+}
+
+.weekly-planner__workspace > .weekly-planner__editor {
+  flex: 0 0 218px;
+  max-height: clamp(180px, 29vh, 250px);
+  min-height: 0;
+  margin-top: 0;
+  overflow: auto;
+}
+
+.weekly-planner__mobile-editor-open {
+  display: none;
 }
 
 .weekly-planner__editor-heading,
@@ -3178,10 +3261,26 @@ button[aria-busy='true'] {
   .weekly-planner__editor-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .weekly-planner__toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .weekly-planner__employee-filter {
+    max-width: none;
+  }
+
+  .weekly-planner__toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 560px) {
   .weekly-planner {
+    height: calc(100dvh - 20px);
+    max-height: calc(100dvh - 20px);
     padding: 16px 12px;
     border-radius: 18px;
   }
@@ -3213,6 +3312,59 @@ button[aria-busy='true'] {
   .weekly-planner__toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .weekly-planner__toolbar-summary,
+  .weekly-planner__employee-filter {
+    width: 100%;
+  }
+
+  .weekly-planner__employee-filter {
+    min-width: 0;
+  }
+
+  .weekly-planner__grid-region {
+    min-height: 140px;
+  }
+
+  .weekly-planner__workspace > .weekly-planner__editor {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    z-index: 20;
+    flex-basis: 260px;
+    max-height: min(300px, 50dvh);
+    box-shadow: 0 18px 42px rgba(4, 10, 34, 0.24);
+  }
+
+  .weekly-planner__workspace > .weekly-planner__editor--mobile-collapsed {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    flex-basis: 58px;
+    max-height: 58px;
+    padding: 10px 12px;
+    pointer-events: none;
+  }
+
+  .weekly-planner__editor--mobile-collapsed .weekly-planner__editor-fields,
+  .weekly-planner__editor--mobile-collapsed .weekly-planner__editor-actions,
+  .weekly-planner__editor--mobile-collapsed .theme-toggle {
+    display: none;
+  }
+
+  .weekly-planner__editor--mobile-collapsed .weekly-planner__editor-heading {
+    margin-bottom: 0;
+  }
+
+  .weekly-planner__editor--mobile-collapsed .weekly-planner__mobile-editor-open {
+    display: inline-flex;
+    pointer-events: auto;
+    min-height: 36px;
+    margin-left: auto;
+    padding: 6px 10px;
+    white-space: nowrap;
   }
 
   .weekly-planner__editor-fields {

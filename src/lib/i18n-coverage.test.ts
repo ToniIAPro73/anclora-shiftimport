@@ -83,6 +83,9 @@ const T_KEYS = [
   'importModal.vlmAnalyzing', 'importModal.visualAnalysisBadge',
   'importModal.authRequired',
   'assistant.vacationOption', 'assistant.otherOption', 'assistant.otherTypeLabel', 'assistant.timesRequired',
+  'planner.employeeFilter', 'planner.allEmployees', 'planner.employeeSearchPlaceholder',
+  'planner.employeeSearchEmpty', 'planner.employeeFilterEmptyTitle', 'planner.employeeFilterEmptyDescription',
+  'planner.openEditor',
 ];
 
 // A subset of T_KEYS that are full words/sentences and must read differently
