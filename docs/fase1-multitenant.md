@@ -4,8 +4,8 @@
 
 ShiftImport pasa de localStorage-only a aplicación persistente multi-tenant sobre Neon PostgreSQL, manteniendo el modo invitado local-first intacto.
 
-- **B2C** = organización de tipo `personal` (creada en el registro, con un Employee auto-vinculado al usuario).
-- **B2B** = organización de tipo `company` con varios empleados y usuarios. Misma arquitectura, mismas tablas.
+- **Personal** = organización de tipo `personal`, con la misma arquitectura multi-tenant.
+- **Empresa** = organización de tipo `company` con varios empleados y usuarios. Misma arquitectura, mismas tablas.
 
 ## Modelo de datos
 
@@ -13,7 +13,7 @@ ShiftImport pasa de localStorage-only a aplicación persistente multi-tenant sob
 |---|---|---|
 | `organizations` | Tenant. `type`: `personal` \| `company` | — |
 | `users` | Identidad de acceso (email + scrypt hash) | email único (lower) |
-| `memberships` | User ↔ Organization + `role` (ADMIN/MANAGER/EMPLOYEE) | PK (user_id, organization_id) |
+| `memberships` | User ↔ Organization + `role` (OWNER/ADMIN/PLANNER/EMPLOYEE) + scope opcional | PK (user_id, organization_id) |
 | `employees` | Persona de un cuadrante. `user_id` opcional, `external_employee_id` = nº nómina | organization_id |
 | `imports` | Documento fuente (no estado global del calendario) | organization_id |
 | `shifts` | Turno. NUNCA sin `organization_id` + `employee_id` | organization_id + employee_id |
@@ -50,7 +50,7 @@ En Vercel (Production/Preview/Development) las variables ya están inyectadas po
 
 Solución propia mínima (sin dependencias externas):
 
-- Registro (`POST /api/auth/register`): crea user + organización `personal` + membership ADMIN + Employee auto-vinculado.
+- Registro (`POST /api/auth/register`): crea la cuenta; el onboarding posterior crea la organización y membership OWNER. El Employee del propietario sólo se crea con la opción explícita correspondiente.
 - Login/logout (`/api/auth/login`, `/api/auth/logout`): cookie `anclora_session` httpOnly, SameSite=Lax, Secure en HTTPS, 30 días. Solo se persiste el hash SHA-256 del token (128 bytes de entropía, `crypto.randomBytes(32)`). Login crea token nuevo (no session fixation) y limpia sesiones expiradas del usuario.
 - Rate limit de login: ventana fija en memoria (10 intentos / 5 min por email, por instancia serverless — limitación documentada, no distribuido).
 - Login con mensaje genérico (sin enumeración de usuarios). El registro devuelve 409 si el email existe (mismo criterio que anclora-impulso; gap low documentado).
@@ -59,17 +59,19 @@ Solución propia mínima (sin dependencias externas):
 
 Ciclo de estado auth (frontend): UNAUTHENTICATED → AUTHENTICATING (pantalla login, `aria-busy`) → sesión creada → resolución memberships → org activa (única o selección explícita persistida por usuario en `anclora_shiftimport_active_org_v1`) → role → vínculo User↔Employee → AUTHORIZED. Casos explícitos: sesión expirada/inválida (401 → invitado), multi-org sin selección (modal bloqueante), EMPLOYEE sin empleado vinculado (estado bloqueado "Cuenta no vinculada", sin datos), logout (limpia contexto cliente + token servidor).
 
-Permisos mínimos:
+Permisos mínimos (el diseño canónico completo está en [`RBAC-MODEL.md`](./roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md)):
 
-| Capacidad | EMPLOYEE | MANAGER | ADMIN |
-|---|---|---|---|
-| Ver/importar/gestionar **sus** turnos | ✔ | ✔ | ✔ |
-| Ver empleados y calendarios de la org | — | ✔ | ✔ |
-| Crear empleados (alta inline en importación) | — | ✔ | ✔ |
-| Editar/desactivar empleados, vincular User↔Employee | — | — | ✔ |
-| Listar/añadir/cambiar rol/eliminar memberships | — | — | ✔ |
+| Capacidad | OWNER | ADMIN | PLANNER | EMPLOYEE | Scope efectivo |
+|---|---|---|---|---|---|
+| Ver datos y calendarios de la organización | ✔ | ✔ | ✔ | — | ORGANIZATION / AREA / SELF |
+| Crear/revisar/confirmar imports | ✔ | ✔ | ✔ | ✔ (solo propios) | ORGANIZATION / AREA / SELF |
+| Crear y editar borradores de planificación | ✔ | ✔ | ✔ | — | ORGANIZATION / AREA |
+| Publicar una planificación | ✔ | ✔ | ✔ | — | ORGANIZATION / AREA |
+| Gestionar empleados, áreas y tipos de turno | ✔ | ✔ | — | — | ORGANIZATION |
+| Listar/añadir/cambiar rol/eliminar memberships | ✔ | ✔ | — | — | ORGANIZATION |
+| Acciones reservadas de propietario | ✔ | — | — | — | ORGANIZATION |
 
-Gestión B2B mínima (`api/memberships`, solo ADMIN): añadir usuario existente por email o crear uno nuevo con contraseña inicial entregada fuera de banda (sin infra de email — limitación documentada), asignar/cambiar rol (whitelist ADMIN/MANAGER/EMPLOYEE), vincular User↔Employee al alta, eliminar membership. Protecciones: último ADMIN no se degrada ni se elimina; prohibido auto-eliminarse; el empleado vinculado queda con `user_id NULL` al remover. MANAGER no puede tocar roles ni usuarios (403).
+Scopes efectivos: `OWNER` y `ADMIN` operan a nivel `ORGANIZATION`; `PLANNER` opera a nivel `AREA` cuando tiene `scoped_area_id` y a nivel `ORGANIZATION` si no lo tiene; `EMPLOYEE` opera únicamente a nivel `SELF` mediante su Employee vinculado. Gestión B2B mínima (`api/memberships`, OWNER/ADMIN): añadir usuario existente por email o crear uno nuevo con contraseña inicial entregada fuera de banda (sin infra de email — limitación documentada), asignar/cambiar roles de la whitelist `OWNER`/`ADMIN`/`PLANNER`/`EMPLOYEE`, vincular User↔Employee al alta y eliminar membership. Protecciones: único OWNER, último ADMIN protegido, prohibido auto-eliminarse; el empleado vinculado queda con `user_id NULL` al remover. PLANNER y EMPLOYEE no gestionan roles ni usuarios (403).
 
 ## Contratos Anclora aplicados (Fase 1.1)
 
@@ -88,7 +90,7 @@ Fuente canónica: `anclora-vault/00-governance/contracts/` (dossier `20-products
 - `GET /api/session/me`
 - `GET /api/employees` — lista org-scoped (EMPLOYEE solo se ve a sí mismo)
 - `GET /api/employees?match=1&externalEmployeeId=&name=` — matching del importador: `recognized` | `ambiguous` | `new`
-- `POST /api/employees` (MANAGER+) · `PATCH /api/employees` (ADMIN: editar/desactivar/vincular user)
+- `POST /api/employees` (ADMIN/OWNER) · `PATCH /api/employees` (ADMIN/OWNER: editar/desactivar/vincular user)
 - `GET|POST|PATCH|DELETE /api/memberships` (ADMIN: gestión B2B mínima de usuarios/roles)
 - `GET|POST /api/imports`
 - `GET /api/shifts?employeeId=` · `PATCH /api/shifts {employeeId, upserts[], deleteIds[]}`
@@ -107,7 +109,7 @@ Implementado en `api/_lib/data.js`, nunca en frontend:
 
 1. Parser sin cambios: sigue extrayendo la fila del empleado indicado por el selector (nombre/ID).
 2. Autenticado, el selector se resuelve contra el directorio de la org (`matchRemoteEmployee`): ID externo primero, nombre normalizado después.
-3. Clasificación: `recognized` → importar bajo ese empleado; `ambiguous` → abortar con mensaje (nunca matching silencioso); `new` → alta inline (MANAGER+) sin abandonar el flujo, y continuar.
+3. Clasificación: `recognized` → importar bajo ese empleado; `ambiguous` → abortar con mensaje (nunca matching silencioso); `new` → alta inline (ADMIN/OWNER) sin abandonar el flujo, y continuar.
 4. Se registra un `Import` (documento) y los turnos se persisten con `employee_id` + `import_id`.
 5. Conflictos de re-importación: fingerprint semántico sobre los turnos **del mismo empleado**; otros empleados el mismo día no colisionan.
 6. Varios empleados coexisten: el calendario visible es por empleado (selector "Equipo" para MANAGER/ADMIN, "Mis turnos" para EMPLOYEE).
@@ -132,7 +134,7 @@ Implementado en `api/_lib/data.js`, nunca en frontend:
 - Aislamiento tenant: lectura/escritura cross-org → 403.
 - Aislamiento empleado: EMPLOYEE no lee/escribe turnos ajenos.
 - Multi-org: sin selección explícita no hay organización activa (400 en datos); header con org ajena no se honra; revocación efectiva inmediata.
-- Escalación de privilegios bloqueada (EMPLOYEE/MANAGER no gestionan memberships; último ADMIN protegido).
+- Escalación de privilegios bloqueada (EMPLOYEE/PLANNER no gestionan memberships; único OWNER y último ADMIN protegidos).
 - Coexistencia multi-empleado: mismo día, dos empleados, sin conflicto.
 - Re-import idempotente y confinado al empleado.
 - Employee sin User: permitido; EMPLOYEE sin vínculo: estado bloqueado seguro.
