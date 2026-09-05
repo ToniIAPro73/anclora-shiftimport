@@ -67,7 +67,14 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
   - P0-M03: PASS — `a765bcd` + `fcfd783`.
   - P0-M04: PASS — `809efbd`.
   - P0-M05: este snapshot documental.
-  - P0-M06..M10: pendientes de ejecución y evidencia.
+  - P0-M06: PASS — `ceacb23`.
+  - P0-M07: PARCIAL — smoke compacto 4/4 PASS; falta el recorrido continuo de 16 pasos y sus
+    capturas/axe/responsive ES/EN.
+  - P0-M08: PARCIAL — matriz compacta de roles/tenant PASS; falta completar la tabla
+    rol×scope×endpoint exigida por el Gate.
+  - P0-M09: PARCIAL — idempotencia en smoke compacto e invariantes 11/11 PASS mediante
+    `scripts/verify-mvp-invariants.mjs`; falta cerrar la evidencia agregada del Gate.
+  - P0-M10: pendiente — no se emite todavía `MVP_READY`.
 - P1–P7: pendientes; se ejecutan secuencialmente tras el Gate P0.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
@@ -83,6 +90,9 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - R1-M09: persistencia de intentos bloqueados/fallidos pendiente de P1.
 - R3: la batería E2E exhaustiva quedó sustituida por una matriz compacta determinista; el gate
   documenta los timeouts del harness como warning no funcional.
+- La evidencia de esta reducción está archivada en
+  `P0-POST-AUDIT-COMPACT-EVIDENCE.md`; el perfil compacto reduce esperas sin rebajar los criterios
+  de aceptación del programa.
 - Gaps de auditoría aún abiertos para el programa: validación browser de roles ADMIN/PLANNER/
   EMPLOYEE, formatos no CSV, import de equipo, modo invitado, OAuth y recuperación de contraseña.
 - Se conservan como fuera de alcance: billing, verificación de email, infraestructura de correo,
