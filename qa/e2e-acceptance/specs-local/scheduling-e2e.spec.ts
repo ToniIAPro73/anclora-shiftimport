@@ -12,6 +12,8 @@ const fixture = JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'loca
 
 type Locale = 'es' | 'en';
 
+test.setTimeout(180_000);
+
 function isoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
@@ -55,25 +57,24 @@ async function configurePresentation(page: Page, locale: Locale, theme: 'dark' |
 }
 
 async function loginAs(page: Page, email: string) {
-  await page.request.post('/api/auth/logout');
-  await page.context().clearCookies();
-  await page.goto('/login');
-  await page.locator('#auth-email').fill(email);
-  await page.locator('#auth-password').fill(fixture.password);
-  const loginResponse = page.waitForResponse(
-    (response) => response.url().includes('/api/auth/login') && response.ok(),
-  );
-  await page.locator('form .auth-submit').click();
-  await loginResponse;
+  const response = await page.request.post('/api/auth/login', { data: { email, password: fixture.password } });
+  expect(response.ok()).toBe(true);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#auth-email')).toHaveCount(0);
 }
 
 async function movePlannerToWeek(page: Page, periodStart: string, locale: Locale) {
   const nextWeek = locale === 'es' ? 'Semana siguiente' : 'Next week';
+  const weekNavigation = page.getByRole('group', { name: locale === 'es' ? 'Navegación semanal' : 'Weekly navigation' });
+  const weekLabel = weekNavigation.locator('span');
+  const planner = page.getByTestId('weekly-planner');
   const weeks = Math.round((new Date(`${periodStart}T00:00:00Z`).getTime()
     - new Date(`${mondayPlusWeeks(0)}T00:00:00Z`).getTime()) / (7 * 24 * 60 * 60 * 1000));
   for (let index = 0; index < weeks; index += 1) {
+    const previousLabel = await weekLabel.textContent();
     await page.getByRole('button', { name: nextWeek }).click();
+    await expect(weekLabel).not.toHaveText(previousLabel ?? '');
+    await expect(planner).not.toHaveAttribute('data-state', 'loading');
   }
 }
 

@@ -26,11 +26,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function loginAsAdmin(page: Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Iniciar sesión' }).first().click();
-  await page.locator('#auth-email').fill(fixture.emails.admin);
-  await page.locator('#auth-password').fill(fixture.password);
-  await page.locator('form .auth-submit').click();
+  const response = await page.request.post('/api/auth/login', { data: { email: fixture.emails.admin, password: fixture.password } });
+  expect(response.ok()).toBe(true);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: 'Usuarios de la organización' })).toBeVisible();
 }
 

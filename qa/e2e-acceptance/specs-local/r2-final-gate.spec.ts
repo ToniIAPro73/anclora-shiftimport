@@ -18,16 +18,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function loginAs(page: Page, email: string) {
-  await page.request.post('/api/auth/logout');
-  await page.context().clearCookies();
-  await page.goto('/login');
-  await page.locator('#auth-email').fill(email);
-  await page.locator('#auth-password').fill(fixture.password);
-  const loginResponse = page.waitForResponse(
-    (response) => response.url().includes('/api/auth/login') && response.ok(),
-  );
-  await page.locator('form .auth-submit').click();
-  await loginResponse;
+  const response = await page.request.post('/api/auth/login', { data: { email, password: fixture.password } });
+  expect(response.ok()).toBe(true);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#auth-email')).toHaveCount(0);
 }
 

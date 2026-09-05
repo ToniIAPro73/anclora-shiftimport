@@ -97,13 +97,9 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function loginAs(page: Page, email: string) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Iniciar sesión' }).first().click();
-  await page.locator('#auth-email').fill(email);
-  await page.locator('#auth-password').fill(PASSWORD);
-  const loginResponse = page.waitForResponse((r) => r.url().includes('/api/auth/login') && r.ok());
-  await page.locator('form .auth-submit').click();
-  await loginResponse;
+  const response = await page.request.post('/api/auth/login', { data: { email, password: PASSWORD } });
+  expect(response.ok()).toBe(true);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#auth-email')).toHaveCount(0);
 }
 
@@ -334,4 +330,3 @@ test.describe('Format Memory v1 — additional coverage', () => {
   });
 });
 });
-

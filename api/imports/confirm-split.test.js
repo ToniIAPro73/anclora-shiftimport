@@ -5,6 +5,7 @@ const ORG = '11111111-1111-4111-8111-111111111111';
 const EMPLOYEE = '22222222-2222-4222-8222-222222222222';
 const AREA = '33333333-3333-4333-8333-333333333333';
 const USER = '44444444-4444-4444-8444-444444444444';
+const FUTURE_DATE = '2099-09-05';
 const base = { employeeId: EMPLOYEE, startTime: '09:00', endTime: '17:00', location: 'Regular', origin: 'IMP' };
 
 function request(date) {
@@ -31,7 +32,7 @@ describe('R3-M14 future import contract', () => {
     sql.transaction = transaction;
     const ctx = { user: { id: USER }, organizationId: ORG, role: 'EMPLOYEE', employeeId: EMPLOYEE, plan: 'team' };
 
-    await expect(confirmFutureImport(sql, ctx, request('2026-09-05'))).rejects.toMatchObject({
+    await expect(confirmFutureImport(sql, ctx, request(FUTURE_DATE))).rejects.toMatchObject({
       status: 403,
       code: 'FUTURE_IMPORT_REQUIRES_PLANNING',
     });
@@ -54,7 +55,7 @@ describe('R3-M14 future import contract', () => {
     sql.transaction = transaction;
     const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', scopedAreaId: AREA, employeeId: null, plan: 'team' };
 
-    await expect(confirmFutureImport(sql, ctx, { ...request('2026-09-05'), areaId: AREA })).rejects.toThrow('induced intermediate failure');
+    await expect(confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), areaId: AREA })).rejects.toThrow('induced intermediate failure');
     expect(transaction).toHaveBeenCalledTimes(1);
   });
 });
