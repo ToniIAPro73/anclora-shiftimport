@@ -1,4 +1,5 @@
 import { getSql, requireOrgContext, resolveContext } from '../../_lib/auth.js';
+import { logApprovalAuthorizationDenied } from '../../_lib/approval.js';
 import { recordAuditEvent } from '../../_lib/data.js';
 import { handleError, sendJson } from '../../_lib/http.js';
 
@@ -146,6 +147,7 @@ export default async function handler(req, res) {
         },
       });
     }
+    logApprovalAuthorizationDenied({ endpoint: 'POST /api/approval-requests/:id/reject', ctx, reason: 'request_not_eligible' });
     return sendJson(res, 403, { error: 'You are not eligible to reject this request' });
   } catch (error) {
     return handleError(res, error);

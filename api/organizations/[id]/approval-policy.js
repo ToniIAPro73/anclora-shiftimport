@@ -1,5 +1,5 @@
-import { getSql, requireOrgContext, requireRole, resolveContext } from '../../_lib/auth.js';
-import { APPROVAL_POLICIES } from '../../_lib/approval.js';
+import { getSql, requireOrgContext, resolveContext } from '../../_lib/auth.js';
+import { APPROVAL_POLICIES, requireApprovalAdmin } from '../../_lib/approval.js';
 import { handleError, sendJson } from '../../_lib/http.js';
 
 /** Organization-scoped Approval Lite policy. OWNER/ADMIN only. */
@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   try {
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
-    requireRole(ctx, 'ADMIN');
+    requireApprovalAdmin(ctx, 'GET/PUT /api/organizations/:id/approval-policy');
 
     const organizationId = String(req.query?.id ?? '').trim();
     if (!organizationId || organizationId !== ctx.organizationId) {

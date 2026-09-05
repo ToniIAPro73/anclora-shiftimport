@@ -1,4 +1,5 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
+import { logApprovalAuthorizationDenied } from '../_lib/approval.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 const APPROVAL_REQUEST_STATUSES = new Set(['PENDING']);
@@ -44,6 +45,7 @@ export default async function handler(req, res) {
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
     if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') {
+      logApprovalAuthorizationDenied({ endpoint: 'GET /api/approval-requests', ctx, reason: 'role_insufficient' });
       return sendJson(res, 403, { error: 'Approver access required' });
     }
 

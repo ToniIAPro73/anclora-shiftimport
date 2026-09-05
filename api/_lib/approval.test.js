@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { resolveApprovers } from './approval.js';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { requireApprovalAdmin, resolveApprovers } from './approval.js';
+
+const context = (role) => ({
+  organizationId: 'org-1',
+  role,
+  user: { id: 'user-1' },
+});
 
 describe('resolveApprovers', () => {
   it('returns no approvers for NO_APPROVAL', () => {
@@ -21,5 +27,22 @@ describe('resolveApprovers', () => {
       areaResponsibleUserIds: [], organizationAdminUserIds: ['org-admin'],
     })).toEqual(['org-admin']);
     expect(resolveApprovers({}, 'AREA_RESPONSIBLE', candidates)).toEqual(['org-admin']);
+  });
+});
+
+describe('requireApprovalAdmin', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it.each(['OWNER', 'ADMIN'])('allows %s at organization scope', (role) => {
+    expect(() => requireApprovalAdmin(context(role), 'test-endpoint')).not.toThrow();
+  });
+
+  it.each(['PLANNER', 'EMPLOYEE'])('rejects %s and records the denial', (role) => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    expect(() => requireApprovalAdmin(context(role), 'test-endpoint')).toThrow('Insufficient role');
+    expect(info).toHaveBeenCalledWith('[approval] authorization denied', expect.objectContaining({
+      role,
+      reason: 'role_insufficient',
+    }));
   });
 });

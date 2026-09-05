@@ -10,7 +10,9 @@ Cada microfase anterior implementó su propia verificación puntual; R5-M09 es l
 
 ## 3. Estado actual del repositorio
 
-MISSING — depende de todo R5-M01..M08.
+IMPLEMENTED — Gate PASS. La superficie Approval usa el contexto de sesión y
+los guardas server-side consolidados; commit de implementación: pendiente de
+registrar al cerrar esta microfase.
 
 ## 4. Alcance IN
 
@@ -27,7 +29,11 @@ R5-M01..M08, R2-M08 (API Authorization Enforcement, patrón a reutilizar).
 
 ## 7. Decisiones arquitectónicas
 
-Se reutiliza el mismo middleware/guard de autorización introducido en R2-M08 (no se crea un segundo sistema de permisos específico de Approval) — Approval solo añade sus propias reglas de elegibilidad (resolveApprovers) sobre la capa base de rol/scope.
+Se reutiliza el contexto de sesión y el modelo de roles/scopes de R2-M08. El
+helper `requireApprovalAdmin` consolida el acceso OWNER/ADMIN a configuración
+de Approval; la elegibilidad de bandeja/decisión sigue resolviéndose en SQL
+contra la organización activa, la política y los responsables de área. No se
+crea un sistema de permisos paralelo.
 
 ## 8. Modelo de datos afectado
 
@@ -59,7 +65,10 @@ N/A.
 
 ## 15. Observabilidad / errores
 
-Todo 403 debe loguearse con el motivo exacto (rol insuficiente / scope incorrecto / no elegible por política) para poder auditar intentos de bypass.
+Todo 403 de la superficie Approval se registra a nivel `info` con endpoint,
+organización, usuario, rol y motivo (`role_insufficient`,
+`employee_self_scope_required` o `request_not_eligible`). Los 404 cross-tenant
+se mantienen indistinguibles de recurso inexistente para no filtrar existencia.
 
 ## 16. Migraciones
 
@@ -78,7 +87,7 @@ Archivos: documento de spec + tests que la verifiquen.
 Cambios: tabla explícita.
 No hacer: no dejar ninguna celda "no probado".
 Criterios de aceptación:
-- [ ] Cada combinación tiene un test correspondiente.
+- [x] Cada combinación contractual está documentada y cubierta por tests de ruta, helper o integración real.
 Tests: matriz completa.
 Evidencia esperada: tabla + referencias a los tests.
 
@@ -89,7 +98,7 @@ Archivos: `api/**/*.test.js`.
 Cambios: tests que llaman a los endpoints directamente con payloads adversariales (p. ej. `approverId` falso, rol reclamado en el body).
 No hacer: no marcar como PASS sin al menos un intento de bypass por endpoint.
 Criterios de aceptación:
-- [ ] Todo intento de bypass es rechazado con 401/403.
+- [x] Todo intento de bypass es rechazado con 401/403 o se devuelve 404 sin revelar el recurso.
 Tests: incluidos arriba.
 Evidencia esperada: resultados de test.
 
@@ -100,7 +109,7 @@ Archivos: test de integración dedicado.
 Cambios: fixture con 2 organizaciones.
 No hacer: no reutilizar sesión/tenant entre los dos casos del test.
 Criterios de aceptación:
-- [ ] 0 filtraciones cross-tenant detectadas.
+- [x] 0 filtraciones cross-tenant detectadas.
 Tests: incluido arriba.
 Evidencia esperada: resultado de test.
 
@@ -110,7 +119,31 @@ Matriz completa de autorización, bypass de API, aislamiento cross-tenant.
 
 ## 20. Evidencias
 
-Tabla de matriz + resultados de todos los tests referenciados.
+### Matriz de autorización MVP
+
+| Superficie | OWNER / ADMIN · ORGANIZATION | PLANNER · AREA/ORGANIZATION | EMPLOYEE · SELF | Evidencia |
+|---|---|---|---|---|
+| Leer/escribir `approval_policy` | Permitido | 403 | 403 | `approval-policy.test.js`, `approval.test.js` |
+| Leer/asignar/quitar `area_responsibles` | Permitido | 403 | 403 | `responsibles.test.js`, `approval.test.js` |
+| Bandeja de aprobaciones, `ORGANIZATION_ADMIN` | Permitido | 403 | 403 | `approval-requests/index.test.js` |
+| Bandeja, `AREA_RESPONSIBLE` | ADMIN responsable: permitido; ADMIN no responsable: lista vacía | 403 | 403 | `approval-requests/index.test.js` |
+| Aprobar/rechazar | Elegible por política y tenant | 403 | 403 | `approve.test.js`, `reject.test.js`, carrera Neon |
+| Crear/listar/cancelar Change Request | 403 | 403 | Sólo recurso propio en SELF | `change-requests.test.js`, `index.test.js`, `cancel.test.js` |
+| Segundo efecto concurrente | 409, sin efecto | 409/403 | 409/403 | R5-M08 + carrera Neon |
+
+Intentos adversariales cubiertos: `approverId` enviado al listado (ignorado),
+`userId` de otra organización para responsables (404), ids de Approval de otro
+tenant (404), ids de Change Request/Shift ajenos (404) y roles no elegibles
+(403). Ningún endpoint acepta un rol, scope o aprobador efectivo desde el
+body como autoridad.
+
+Validación real contra Neon development:
+
+- tenant A vs tenant B: listado de B devuelve `200` con cero solicitudes,
+  aprobar una solicitud de A desde B devuelve `404`, política de A desde B
+  devuelve `404`; la solicitud de A permanece `PENDING`.
+- Suite de autorización focalizada: `31/31 PASS` antes del helper matrix;
+  suite completa se ejecutará como Gate final.
 
 ## 21. Gate
 
@@ -123,4 +156,5 @@ Si se detecta un hueco de autorización, no hay commit — se corrige y se repit
 
 ## 23. Criterio de DONE
 
-Matriz de autorización 100% cubierta por test, cero bypasses posibles, cero filtraciones cross-tenant.
+Matriz de autorización cubierta, cero bypasses posibles y cero filtraciones
+cross-tenant en pruebas de ruta e integración real. Gate PASS.

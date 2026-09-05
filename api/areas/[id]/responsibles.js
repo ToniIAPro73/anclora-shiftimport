@@ -1,4 +1,5 @@
-import { getSql, requireOrgContext, requireRole, resolveContext } from '../../_lib/auth.js';
+import { getSql, requireOrgContext, resolveContext } from '../../_lib/auth.js';
+import { requireApprovalAdmin } from '../../_lib/approval.js';
 import { handleError, sendJson } from '../../_lib/http.js';
 
 function mapResponsible(row) {
@@ -23,7 +24,7 @@ export default async function handler(req, res) {
   try {
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
-    requireRole(ctx, 'ADMIN');
+    requireApprovalAdmin(ctx, 'GET/POST/DELETE /api/areas/:id/responsibles');
     const areaId = String(req.query?.id ?? '').trim();
     if (!areaId || !(await assertArea(sql, ctx, areaId))) {
       return sendJson(res, 404, { error: 'Area not found' });
