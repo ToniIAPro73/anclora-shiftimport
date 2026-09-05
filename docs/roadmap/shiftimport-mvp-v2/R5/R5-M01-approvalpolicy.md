@@ -172,4 +172,4 @@ Rollback lógico: revertir organizaciones a `NO_APPROVAL` (ya es el default); ta
 
 ## 23. Criterio de DONE
 
-CUMPLIDO. Las 3 políticas están implementadas, la resolución de aprobador está probada en todos los casos de fallback, y ninguna organización existente cambia de comportamiento tras el despliegue (todas quedan en `NO_APPROVAL`). Commit: pendiente de cierre documental.
+CUMPLIDO. Las 3 políticas están implementadas, la resolución de aprobador está probada en todos los casos de fallback, y ninguna organización existente cambia de comportamiento tras el despliegue (todas quedan en `NO_APPROVAL`). Commit de implementación: `b1a6803`.
