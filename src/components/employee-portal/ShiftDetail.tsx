@@ -1,8 +1,9 @@
-import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Layers3, MapPin, MessageSquare, RotateCcw, Send } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Layers3, MapPin, RotateCcw, Send } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { acknowledgeRemoteShift, loadRemoteShiftDetail } from '../../lib/remote';
 import { Shift } from '../../lib/types';
 import { useI18n } from '../../lib/use-i18n';
+import { ShiftComments } from './ShiftComments';
 
 type DetailState =
   | { status: 'loading' }
@@ -153,10 +154,6 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
                     : t('employeeDetail.acknowledge')}
               </button>
               <button type="button" disabled title={t('employeeDetail.comingSoon')}>
-                <MessageSquare size={16} aria-hidden="true" />
-                {t('employeeDetail.comment')}
-              </button>
-              <button type="button" disabled title={t('employeeDetail.comingSoon')}>
                 <Send size={16} aria-hidden="true" />
                 {t('employeeDetail.changeRequest')}
               </button>
@@ -168,6 +165,7 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
             )}
             <p className="employee-shift-detail__coming-soon">{t('employeeDetail.comingSoon')}</p>
           </div>
+          <ShiftComments shiftId={state.shift.id} />
         </>
       )}
     </section>

@@ -78,6 +78,14 @@ export interface RemoteShiftDetail {
   acknowledgedAt: string | null;
 }
 
+export interface ShiftComment {
+  id: string;
+  shiftId: string;
+  employeeId: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface ScheduleSnapshot {
   version: ScheduleVersion;
   employees: SchedulingEmployee[];
@@ -224,6 +232,21 @@ export async function acknowledgeRemoteShift(shiftId: string): Promise<{
     { method: 'POST' },
   );
   return payload.acknowledgement;
+}
+
+export async function loadRemoteShiftComments(shiftId: string): Promise<ShiftComment[]> {
+  const payload = await apiFetch<{ comments: ShiftComment[] }>(
+    `/api/me/shifts/${encodeURIComponent(shiftId)}/comments`,
+  );
+  return payload.comments;
+}
+
+export async function createRemoteShiftComment(shiftId: string, body: string): Promise<ShiftComment> {
+  const payload = await apiFetch<{ comment: ShiftComment }>(
+    `/api/me/shifts/${encodeURIComponent(shiftId)}/comments`,
+    { method: 'POST', body: JSON.stringify({ body }) },
+  );
+  return payload.comment;
 }
 
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {

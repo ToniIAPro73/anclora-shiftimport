@@ -139,6 +139,18 @@ export function mapShiftRow(row) {
   };
 }
 
+const MAX_SHIFT_COMMENT_LENGTH = 2000;
+
+export function mapShiftCommentRow(row) {
+  return {
+    id: row.id,
+    shiftId: row.shift_id,
+    employeeId: row.employee_id,
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
 /** Effective employee filter for read/write of shifts. */
 function effectiveEmployeeId(ctx, requestedEmployeeId) {
   if (ctx.role === 'EMPLOYEE') {
@@ -1842,6 +1854,72 @@ export async function acknowledgeEmployeeShift(sql, ctx, rawShiftId) {
     status: rows[0].status,
     acknowledgedAt: rows[0].acknowledged_at,
   };
+}
+
+async function assertEmployeeShiftForComment(sql, ctx, rawShiftId) {
+  if (ctx.role !== 'EMPLOYEE') {
+    throw new HttpError(403, 'Employee portal access required');
+  }
+  if (!ctx.employeeId) {
+    throw new HttpError(403, 'No employee linked to this user');
+  }
+
+  const rows = await sql`
+    SELECT id
+    FROM shifts
+    WHERE id = ${rawShiftId}
+      AND organization_id = ${ctx.organizationId}
+      AND employee_id = ${ctx.employeeId}
+  `;
+  if (!rows[0]) {
+    throw new HttpError(404, 'Shift not found');
+  }
+}
+
+export async function listEmployeeShiftComments(sql, ctx, rawShiftId) {
+  await assertEmployeeShiftForComment(sql, ctx, rawShiftId);
+  const rows = await sql`
+    SELECT id, shift_id, employee_id, body, created_at
+    FROM shift_comments
+    WHERE shift_id = ${rawShiftId}
+      AND employee_id = ${ctx.employeeId}
+    ORDER BY created_at ASC, id ASC
+  `;
+  return rows.map(mapShiftCommentRow);
+}
+
+export async function createEmployeeShiftComment(sql, ctx, rawShiftId, rawBody) {
+  if (ctx.role !== 'EMPLOYEE') {
+    throw new HttpError(403, 'Employee portal access required');
+  }
+  if (!ctx.employeeId) {
+    throw new HttpError(403, 'No employee linked to this user');
+  }
+  const body = String(rawBody ?? '').trim();
+  if (!body) {
+    throw new HttpError(400, 'Comment cannot be empty');
+  }
+  if (body.length > MAX_SHIFT_COMMENT_LENGTH) {
+    throw new HttpError(400, `Comment cannot exceed ${MAX_SHIFT_COMMENT_LENGTH} characters`);
+  }
+
+  const rows = await sql`
+    WITH owned_shift AS (
+      SELECT id, employee_id
+      FROM shifts
+      WHERE id = ${rawShiftId}
+        AND organization_id = ${ctx.organizationId}
+        AND employee_id = ${ctx.employeeId}
+    )
+    INSERT INTO shift_comments (shift_id, employee_id, body)
+    SELECT id, employee_id, ${body}
+    FROM owned_shift
+    RETURNING id, shift_id, employee_id, body, created_at
+  `;
+  if (!rows[0]) {
+    throw new HttpError(404, 'Shift not found');
+  }
+  return mapShiftCommentRow(rows[0]);
 }
 
 /**

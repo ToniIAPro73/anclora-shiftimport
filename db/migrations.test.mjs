@@ -13,6 +13,7 @@ const shiftAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.
 const shiftScheduleVersionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0020_shifts_schedule_version.sql');
 const shiftAssignmentImportMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0021_shift_assignments_import_id.sql');
 const shiftAcknowledgementsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0022_shift_acknowledgements.sql');
+const shiftCommentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0023_shift_comments.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -185,5 +186,28 @@ describe('0022 shift acknowledgements migration contract', () => {
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_acknowledgements_employee_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_acknowledgements_status_idx');
     expect(sql).not.toContain('ALTER TABLE shifts\n  ADD COLUMN');
+  });
+});
+
+describe('0023 shift comments migration contract', () => {
+  it('creates append-only comments with bounded non-empty body text', async () => {
+    const sql = await readFile(shiftCommentsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS shift_comments');
+    expect(sql).toContain('body TEXT NOT NULL');
+    expect(sql).toContain('char_length(btrim(body)) BETWEEN 1 AND 2000');
+    expect(sql).not.toContain('UPDATE shift_comments');
+    expect(sql).not.toContain('DELETE FROM shift_comments');
+  });
+
+  it('enforces that a comment employee owns the referenced shift', async () => {
+    const sql = await readFile(shiftCommentsMigrationPath, 'utf8');
+    expect(sql).toContain('FOREIGN KEY (shift_id, employee_id)');
+    expect(sql).toContain('REFERENCES shifts (id, employee_id) ON DELETE CASCADE');
+  });
+
+  it('adds chronological shift and employee lookup indexes', async () => {
+    const sql = await readFile(shiftCommentsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_comments_shift_created_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_comments_employee_idx');
   });
 });

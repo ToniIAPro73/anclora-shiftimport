@@ -16,6 +16,8 @@ vi.mock('../../lib/remote', () => ({
     shift: { id: '11111111-1111-4111-8111-111111111111', date: '2026-09-05', startTime: '09:00', endTime: '17:00', location: 'Recepción', origin: 'IMP' },
     areaName: 'Recepción',
   }),
+  loadRemoteShiftComments: vi.fn().mockResolvedValue([]),
+  createRemoteShiftComment: vi.fn(),
 }));
 
 setupLocalStorageMock();
