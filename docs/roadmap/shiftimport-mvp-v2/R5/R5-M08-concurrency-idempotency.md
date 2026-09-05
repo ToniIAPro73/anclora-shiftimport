@@ -10,7 +10,7 @@ Dos aprobadores elegibles (p. ej. dos ADMIN bajo política `ORGANIZATION_ADMIN`)
 
 ## 3. Estado actual del repositorio
 
-IMPLEMENTED — depende de R5-M04/M05/M07. Gate PASS.
+IMPLEMENTED — depende de R5-M04/M05/M07. Gate PASS. Commit: `ec5ec8a`.
 
 ## 4. Alcance IN
 
