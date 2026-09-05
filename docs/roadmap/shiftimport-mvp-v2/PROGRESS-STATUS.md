@@ -1,68 +1,96 @@
 # Progress Status — MVP v2 Roadmap Execution
 
-Última actualización: 2026-09-04, HEAD `2a64852` en `development`.
+Última actualización: 2026-09-05, cierre documental P0 en `development`.
 
-Estado de ejecución del prompt maestro (`docs/roadmap/shiftimport-mvp-v2/00-ROADMAP-MASTER.md`). Este documento es un snapshot de progreso, no un documento de spec — para retomar el trabajo, léase junto con `00-BASELINE.md` y `00-ROADMAP-MASTER.md`.
+Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
+auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
+[`00-ROADMAP-MASTER.md`](./00-ROADMAP-MASTER.md) y el [roadmap P0–P8](../ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md).
+
+## Baseline verificado
+
+- Rama canónica: `development` (excepción AOS `EX-SI-001` vigente).
+- HEAD de referencia al iniciar el programa: `36e78573c01f968a71cef6066249d0ce2f008576`.
+- `origin/development` coincidía con ese HEAD; worktree limpio antes de añadir el programa.
+- R0–R5 estaban cerrados; el único gate histórico pendiente era R5-M12.
 
 ## Hecho
 
-### Fase de specs (completa)
-- `00-BASELINE.md`, `00-ROADMAP-MASTER.md` — auditoría del repo y tabla de dependencias.
-- 86 specs de microfase (R0-R5 + POST-MVP) generadas en `docs/roadmap/shiftimport-mvp-v2/{R0..R5,POST-MVP}/`.
+### Fase de specs histórica
 
-### R0 — Product & Architecture Rebaseline: **COMPLETO (PASS)**
-Las 8 microfases (R0-M00..M07) cerradas. Entregables clave:
-- README.md/README.en.md reescritos: B2B/B2B2E real, no B2C/"Phase 0".
-- `DOMAIN-GLOSSARY.md`, `RBAC-MODEL.md` (diseño OWNER/ADMIN/PLANNER/EMPLOYEE + scopes, regla de backfill de OWNER — **pendiente de sign-off de producto**), `STATE-MODEL.md` (Shift lifecycle/Acknowledgement/Change Request como máquinas separadas), `MODULE-BOUNDARIES.md`.
-- Corrección real durante ejecución: el roadmap asumía que no existía router — se encontró `src/lib/route.ts` ya funcionando; decisión revisada a "extender, no reemplazar".
-- Gate agregado: PASS. `R0-FINAL-GATE-REPORT.md`.
+- `00-BASELINE.md`, `00-ROADMAP-MASTER.md` y 86 specs R0–R5 + POST-MVP generadas.
 
-### R1 — Safe Import Completion: **COMPLETO (PASS)**
-Las 17 microfases (R1-M00..M16) cerradas. Tres bugs reales encontrados y corregidos (no solo documentados):
-- **R1-M05**: el resumen de comparación en import de equipo solo mostraba 3 de las 5 categorías exigidas (nuevos/conflictos, faltaban duplicados/ignorados/errores) — corregido.
-- **R1-M08**: `upsertShifts` escribía turno a turno sin transacción — un fallo a mitad de lote dejaba escritura parcial — corregido con `sql.transaction`.
-- **R1-M14**: el spinner de import no respetaba `prefers-reduced-motion` — corregido.
-- Hallazgo documentado, no corregido (requiere decisión de producto): imports totalmente fallidos nunca se persisten en el historial (`status='failed'` no tiene ningún path de código) — R1-M09.
-- Gate agregado: PASS. `R1-FINAL-GATE-REPORT.md`.
+### R0 — Product & Architecture Rebaseline: COMPLETO (PASS)
 
-### R2 — Organization Foundation: **EN PROGRESO (3 de 13 microfases)**
-- **R2-M00** (Existing Multi-Tenant Audit): PASS. Las 6 tablas de negocio confirmadas `organization_id NOT NULL` + scoped en cada query.
-- **R2-M01** (Organization Settings): PASS. Brecha real cerrada — no existía forma de renombrar una organización. Añadido: `updateOrganizationName` (data.js), `api/organizations/current.js` (GET/PATCH), UI en `SettingsModal.tsx` (pestaña Equipo).
-- **R2-M02** (Employee Lifecycle): PASS. Brecha de test cerrada (paridad individual vs bulk-link). **Brecha de datos real encontrada y corregida en el Neon de desarrollo** (con aprobación explícita del usuario): 16 empleados vinculados a un usuario pero atascados en `pending_access` (leftover del bug pre-`3d866e0`) — reconciliados con un UPDATE acotado e idempotente.
+- Gate agregado: PASS, commit `3b6b54e` (`R0-FINAL-GATE-REPORT.md`).
+- Contratos, glosario, límites de módulos y modelo OWNER/ADMIN/PLANNER/EMPLOYEE con scopes
+  documentados. La decisión de routing se corrigió contra el `route.ts` existente.
+- El backfill de OWNER quedó inicialmente como warning absorbido por R2-M06 y después fue
+  ejecutado con sign-off de producto.
 
-Todo commiteado en `development`, ningún push realizado.
+### R1 — Safe Import Completion: COMPLETO (PASS)
 
-## Por hacer
+- Gate agregado: PASS, commit `46968a3` (`R1-FINAL-GATE-REPORT.md`).
+- Hallazgos reales corregidos: resumen Compare con las cinco categorías (R1-M05), atomicidad de
+  `upsertShifts` (R1-M08) y `prefers-reduced-motion` del spinner (R1-M14).
+- Hallazgo abierto heredado: los imports bloqueados/fallidos no se persistían en histórico
+  (R1-M09). Se absorbe en P1 del programa post-auditoría; no se considera resuelto por este
+  snapshot.
 
-### R2 — Organization Foundation (10 microfases restantes)
-- R2-M03 Areas (verificación, ya DONE por diseño)
-- R2-M04 User↔Employee Linking (verificación, ya DONE por diseño)
-- R2-M05 Bulk Provisioning (verificación, ya DONE por diseño)
-- **R2-M06 Roles (OWNER/ADMIN/PLANNER/EMPLOYEE)** — implementación real: ejecuta la migración diseñada en `RBAC-MODEL.md`, incluyendo el backfill de OWNER (requiere el sign-off de producto pendiente desde R0-M03)
-- **R2-M07 Scopes (ORGANIZATION/AREA/SELF)** — implementación real
-- **R2-M08 API Authorization Enforcement** — implementación real, extiende `requireRole`/`auth.js`
-- R2-M09 Organization Audit Events — implementación real (tabla/mecanismo nuevo)
-- R2-M10 Onboarding Reconciliation — verificación
-- R2-M11 Cross-Tenant Isolation E2E — nuevos tests E2E
-- R2-M12 R2 Final Gate
+### R2 — Organization Foundation: COMPLETO (PASS)
 
-### R3 — Future Scheduling (17 microfases, todo greenfield)
-Schedule/ScheduleVersion/ShiftAssignment — modelo de datos nuevo, API nueva, UI de planificador semanal nueva. Depende de R2-M06/M07 (roles/scopes) y de la decisión de routing de R0-M05 (ya resuelta: extender `route.ts`).
+- Gate agregado: PASS, commit `974fe68` (`R2-M12-r2-final-gate.md`).
+- Incluye áreas, linking User↔Employee, provisioning, OWNER/ADMIN/PLANNER/EMPLOYEE, scopes,
+  autorización server-side, auditoría, onboarding y aislamiento cross-tenant.
+- Hallazgo de datos histórico: 16 empleados vinculados atascados en `pending_access` fueron
+  reconciliados en Neon development con aprobación explícita, antes del cierre de R2.
 
-### R4 — Employee Portal (14 microfases, todo greenfield)
-Portal móvil-first (Hoy/Semana/Solicitudes/Más), Acknowledgement, Change Request. Depende de R3-M10 (Publication).
+### R3 — Future Scheduling: COMPLETO (PASS)
 
-### R5 — Approval Lite (13 microfases, todo greenfield)
-ApprovalPolicy, inbox de aprobador, aprobar/rechazar, aplicar cambio aprobado. Depende de R4-M06. Termina en R5-M12 (MVP Release Gate) — el gate global que valida todo el flujo end-to-end.
+- Gate agregado: PASS, commit `6a50266` (`R3-M16-r3-final-gate.md`).
+- Scheduling futuro, drafts, publicación, scopes, multiweek, idempotencia y rollback validados.
 
-### POST-MVP (documentado, no se implementa salvo instrucción explícita)
-R6 Workflow Engine, R7 Attendance, R8 Reconciliation & Reporting, R9 Advanced Organizational Model.
+### R4 — Employee Portal: COMPLETO (PASS)
 
-## Siguiente paso
+- Gate agregado: PASS, commit `f75d302` (`R4-M13-r4-final-gate.md`).
+- Portal Hoy/Semana/Solicitudes/Más, acknowledgements y change requests validados.
 
-**R2-M03 — Areas.** Es una microfase de verificación (Areas ya está DONE por diseño desde antes de este roadmap — migración 0008, `api/areas/index.js`). Después de M03/M04/M05 (verificación rápida, ya construidas), el siguiente hito real de implementación es **R2-M06 (Roles)**, que:
+### R5 — Approval Lite: COMPLETO (PASS)
 
-1. requiere confirmar antes de ejecutar el backfill de OWNER — la regla propuesta en `RBAC-MODEL.md` ("membership ADMIN con `created_at` más antiguo por organización → OWNER") sigue pendiente de aprobación explícita de producto;
-2. ejecuta la migración SQL ya diseñada (constraint `role IN ('OWNER','ADMIN','PLANNER','EMPLOYEE')` + columnas de scope) contra Neon — una migración de esquema real sobre datos reales, con el mismo nivel de cuidado aplicado en R2-M02.
+- Gate agregado: PASS, commit `4b4a346` (`R5-M11-r5-final-gate.md`).
+- ApprovalPolicy, routing, decisiones, aplicación, auditoría y concurrencia validados.
 
-Comando para retomar: continuar la ejecución microfase por microfase desde R2-M03, siguiendo el mismo patrón (leer spec → task → test/build/lint → Gate → commit) usado en R0-R2.
+## Programa post-auditoría
+
+- **P0 — Baseline Truth & MVP Release Gate: EN EJECUCIÓN.**
+  - P0-M01: PASS — `13ab171`.
+  - P0-M02: PASS — `313a7a2`.
+  - P0-M03: PASS — `a765bcd` + `fcfd783`.
+  - P0-M04: PASS — `809efbd`.
+  - P0-M05: este snapshot documental.
+  - P0-M06..M10: pendientes de ejecución y evidencia.
+- P1–P7: pendientes; se ejecutan secuencialmente tras el Gate P0.
+- P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
+  existe una exportación accesible. No se inventará contenido de esa fuente.
+
+## Por hacer en el roadmap MVP v2 histórico
+
+- **R5-M12 — MVP Release Gate**: pendiente de ejecución agregada; P0-M07..M10 lo absorben.
+- **POST-MVP R6–R9**: Workflow Engine, Attendance, Reconciliation & Reporting y Advanced Org Model;
+  no se implementan antes de validar el MVP.
+
+## Hallazgos y gaps conservados
+
+- R1-M09: persistencia de intentos bloqueados/fallidos pendiente de P1.
+- R3: la batería E2E exhaustiva quedó sustituida por una matriz compacta determinista; el gate
+  documenta los timeouts del harness como warning no funcional.
+- Gaps de auditoría aún abiertos para el programa: validación browser de roles ADMIN/PLANNER/
+  EMPLOYEE, formatos no CSV, import de equipo, modo invitado, OAuth y recuperación de contraseña.
+- Se conservan como fuera de alcance: billing, verificación de email, infraestructura de correo,
+  rate limit distribuido, integración del design system y refactor global de `src/App.tsx`.
+
+## Decisiones que mantienen bloqueos
+
+- **D-04**: el comportamiento exacto del self-import de EMPLOYEE cuando el fichero contiene otras
+  personas y su alcance temporal no está decidido. P5 quedará BLOCKED hasta recibir esa decisión.
+- **D-07 / P8**: la fuente CRC Tryp sigue inaccesible; se requiere exportación, fuentes originales,
+  acceso autenticado autorizado o cancelación explícita de P8.
