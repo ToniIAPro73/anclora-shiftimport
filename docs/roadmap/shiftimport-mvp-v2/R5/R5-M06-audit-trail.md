@@ -136,4 +136,4 @@ auditoría único de la organización, sin sistema paralelo.
 - Build: PASS (warning no bloqueante de chunks grandes preexistente).
 - Migración Neon dev: aplicada; constraint existente verificada con los tres
   eventos Approval Lite.
-- Commit de implementación: pendiente de registrar tras el commit.
+- Commit de implementación: `c16fd76`.
