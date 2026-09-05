@@ -1,13 +1,21 @@
 import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Layers3, MapPin, MessageSquare, RotateCcw, Send } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadRemoteShiftDetail } from '../../lib/remote';
+import { acknowledgeRemoteShift, loadRemoteShiftDetail } from '../../lib/remote';
 import { Shift } from '../../lib/types';
 import { useI18n } from '../../lib/use-i18n';
 
 type DetailState =
   | { status: 'loading' }
-  | { status: 'ready'; shift: Shift; areaName: string | null }
+  | {
+    status: 'ready';
+    shift: Shift;
+    areaName: string | null;
+    acknowledgementStatus: 'PENDING' | 'ACKNOWLEDGED';
+    acknowledgedAt: string | null;
+  }
   | { status: 'error' };
+
+type AcknowledgementActionState = 'idle' | 'saving' | 'error';
 
 interface ShiftDetailProps {
   shiftId: string;
@@ -17,10 +25,12 @@ interface ShiftDetailProps {
 export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
   const { t } = useI18n();
   const [state, setState] = useState<DetailState>({ status: 'loading' });
+  const [acknowledgementAction, setAcknowledgementAction] = useState<AcknowledgementActionState>('idle');
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
+    setAcknowledgementAction('idle');
     try {
       const result = await loadRemoteShiftDetail(shiftId);
       setState({ status: 'ready', ...result });
@@ -32,6 +42,23 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const acknowledgementStatus = state.status === 'ready' ? state.acknowledgementStatus : null;
+  const acknowledge = useCallback(async () => {
+    if (acknowledgementStatus !== 'PENDING') {
+      return;
+    }
+    setAcknowledgementAction('saving');
+    try {
+      const result = await acknowledgeRemoteShift(shiftId);
+      setState((current) => current.status === 'ready'
+        ? { ...current, acknowledgementStatus: result.status, acknowledgedAt: result.acknowledgedAt }
+        : current);
+      setAcknowledgementAction('idle');
+    } catch {
+      setAcknowledgementAction('error');
+    }
+  }, [acknowledgementStatus, shiftId]);
 
   useEffect(() => {
     if (state.status === 'ready') {
@@ -75,6 +102,12 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
                 <CheckCircle2 size={14} aria-hidden="true" />
                 {t('employeeDetail.published')}
               </span>
+              <span className={`employee-shift-detail__ack-pill${state.acknowledgementStatus === 'ACKNOWLEDGED' ? ' is-acknowledged' : ''}`}>
+                <CheckCircle2 size={14} aria-hidden="true" />
+                {state.acknowledgementStatus === 'ACKNOWLEDGED'
+                  ? t('employeeDetail.acknowledged')
+                  : t('employeeDetail.acknowledgementPending')}
+              </span>
             </div>
           </div>
 
@@ -104,9 +137,20 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
           <div className="employee-shift-detail__actions" aria-labelledby="employee-shift-detail-actions-title">
             <p id="employee-shift-detail-actions-title" className="employee-shift-detail__actions-heading">{t('employeeDetail.actions')}</p>
             <div className="employee-shift-detail__action-list">
-              <button type="button" disabled title={t('employeeDetail.comingSoon')}>
+              <button
+                type="button"
+                disabled={state.acknowledgementStatus === 'ACKNOWLEDGED' || acknowledgementAction === 'saving'}
+                aria-label={state.acknowledgementStatus === 'ACKNOWLEDGED'
+                  ? t('employeeDetail.acknowledged')
+                  : t('employeeDetail.acknowledgeAria', { date: state.shift.date })}
+                onClick={() => void acknowledge()}
+              >
                 <CheckCircle2 size={16} aria-hidden="true" />
-                {t('employeeDetail.acknowledge')}
+                {state.acknowledgementStatus === 'ACKNOWLEDGED'
+                  ? t('employeeDetail.acknowledged')
+                  : acknowledgementAction === 'saving'
+                    ? t('employeeDetail.acknowledging')
+                    : t('employeeDetail.acknowledge')}
               </button>
               <button type="button" disabled title={t('employeeDetail.comingSoon')}>
                 <MessageSquare size={16} aria-hidden="true" />
@@ -117,6 +161,11 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
                 {t('employeeDetail.changeRequest')}
               </button>
             </div>
+            {acknowledgementAction === 'error' && (
+              <p className="employee-shift-detail__acknowledgement-error" role="alert">
+                {t('employeeDetail.acknowledgementError')}
+              </p>
+            )}
             <p className="employee-shift-detail__coming-soon">{t('employeeDetail.comingSoon')}</p>
           </div>
         </>

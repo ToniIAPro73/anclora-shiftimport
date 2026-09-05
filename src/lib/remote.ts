@@ -74,6 +74,8 @@ export interface ShiftAssignment {
 export interface RemoteShiftDetail {
   shift: Shift;
   areaName: string | null;
+  acknowledgementStatus: 'PENDING' | 'ACKNOWLEDGED';
+  acknowledgedAt: string | null;
 }
 
 export interface ScheduleSnapshot {
@@ -168,6 +170,8 @@ interface RemoteShiftRow {
   endTime: string;
   location: string;
   origin: 'MAN' | 'IMP';
+  acknowledgementStatus?: 'PENDING' | 'ACKNOWLEDGED';
+  acknowledgedAt?: string | null;
 }
 
 const toShift = (row: RemoteShiftRow): Shift => ({
@@ -203,7 +207,23 @@ export async function loadRemoteShiftDetail(shiftId: string): Promise<RemoteShif
   const payload = await apiFetch<{ shift: RemoteShiftRow & { areaName?: string | null } }>(
     `/api/me/shifts/${encodeURIComponent(shiftId)}`,
   );
-  return { shift: toShift(payload.shift), areaName: payload.shift.areaName ?? null };
+  return {
+    shift: toShift(payload.shift),
+    areaName: payload.shift.areaName ?? null,
+    acknowledgementStatus: payload.shift.acknowledgementStatus ?? 'PENDING',
+    acknowledgedAt: payload.shift.acknowledgedAt ?? null,
+  };
+}
+
+export async function acknowledgeRemoteShift(shiftId: string): Promise<{
+  status: 'ACKNOWLEDGED';
+  acknowledgedAt: string | null;
+}> {
+  const payload = await apiFetch<{ acknowledgement: { status: 'ACKNOWLEDGED'; acknowledgedAt: string | null } }>(
+    `/api/me/shifts/${encodeURIComponent(shiftId)}/acknowledge`,
+    { method: 'POST' },
+  );
+  return payload.acknowledgement;
 }
 
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {

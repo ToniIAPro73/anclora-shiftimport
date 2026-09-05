@@ -12,6 +12,7 @@ const scheduleVersionsMigrationPath = resolve(dirname(fileURLToPath(import.meta.
 const shiftAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0019_shift_assignments.sql');
 const shiftScheduleVersionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0020_shifts_schedule_version.sql');
 const shiftAssignmentImportMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0021_shift_assignments_import_id.sql');
+const shiftAcknowledgementsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0022_shift_acknowledgements.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -160,5 +161,29 @@ describe('0021 shift assignment import provenance migration contract', () => {
   it('adds an idempotent provenance lookup index', async () => {
     const sql = await readFile(shiftAssignmentImportMigrationPath, 'utf8');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_import_idx');
+  });
+});
+
+describe('0022 shift acknowledgements migration contract', () => {
+  it('creates an independent acknowledgement state with a bounded status', async () => {
+    const sql = await readFile(shiftAcknowledgementsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS shift_acknowledgements');
+    expect(sql).toContain("CHECK (status IN ('PENDING', 'ACKNOWLEDGED'))");
+    expect(sql).toContain('acknowledged_at TIMESTAMPTZ');
+    expect(sql).toContain('shift_acknowledgements_shift_unique UNIQUE (shift_id)');
+  });
+
+  it('enforces that the acknowledgement employee owns the referenced shift', async () => {
+    const sql = await readFile(shiftAcknowledgementsMigrationPath, 'utf8');
+    expect(sql).toContain('FOREIGN KEY (shift_id, employee_id)');
+    expect(sql).toContain('REFERENCES shifts (id, employee_id) ON DELETE CASCADE');
+    expect(sql).toContain('shifts_id_employee_unique_idx');
+  });
+
+  it('is additive and indexed for employee/status reads', async () => {
+    const sql = await readFile(shiftAcknowledgementsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_acknowledgements_employee_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_acknowledgements_status_idx');
+    expect(sql).not.toContain('ALTER TABLE shifts\n  ADD COLUMN');
   });
 });

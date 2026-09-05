@@ -977,6 +977,7 @@ select:disabled {
 
 .employee-shift-detail__title-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -996,6 +997,36 @@ select:disabled {
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.employee-shift-detail__ack-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.employee-shift-detail__ack-pill svg {
+  color: var(--text-muted);
+}
+
+.employee-shift-detail__ack-pill.is-acknowledged {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, var(--glass-border));
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+}
+
+.employee-shift-detail__ack-pill.is-acknowledged svg {
+  color: var(--color-accent);
 }
 
 .employee-shift-detail__facts {
@@ -1070,11 +1101,16 @@ select:disabled {
 }
 
 .employee-shift-detail__coming-soon,
+.employee-shift-detail__acknowledgement-error,
 .employee-shift-detail__status > p:not(.employee-shift-detail__eyebrow) {
   margin-top: 12px;
   color: var(--text-muted);
   font-size: 0.86rem;
   line-height: 1.55;
+}
+
+.employee-shift-detail__acknowledgement-error {
+  color: var(--text-primary);
 }
 
 .employee-shift-detail__retry {
