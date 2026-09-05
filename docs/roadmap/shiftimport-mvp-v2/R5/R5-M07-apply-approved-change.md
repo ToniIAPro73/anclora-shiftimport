@@ -161,4 +161,4 @@ delta de scheduling y se registran como aprobación-only, sin mutar turnos.
 - Integración real Neon dev — guard de solapamiento: 403, una sola versión
   publicada, request `PENDING`, cero drafts adicionales.
 - Suite completa y lint/build: se ejecutan después de registrar la documentación final.
-- Commit de implementación: pendiente de registrar tras el commit.
+- Commit de implementación: `fb13a18`.
