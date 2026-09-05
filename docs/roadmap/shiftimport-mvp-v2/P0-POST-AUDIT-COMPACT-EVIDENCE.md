@@ -43,6 +43,20 @@ Esta es la ruta rápida recomendada para cambios de API: cubre cada caso de form
 repetir los journeys completos del navegador. Los E2E de navegador se reservan para cambios de
 UI, navegación, accesibilidad o flujos cuya evidencia dependa del browser.
 
+## Regresión dirigida de scheduling
+
+Comando:
+
+```text
+npx playwright test --config playwright.r3-gate.config.ts --grep "happy path"
+```
+
+Resultado: **2/2 PASS en 1m45,2 s** (ES desktop: 44,9 s; EN mobile: 53,5 s).
+El journey conserva creación, validación, publicación, historial y comprobación persistente;
+solo deja de navegar 13/14 semanas artificiales antes de empezar. Las fixtures se reinician en
+cada ejecución, por lo que las semanas cercanas vacías son equivalentes para este caso y evitan
+round-trips de UI que no aportan cobertura.
+
 ## Invariantes de datos
 
 Comando:

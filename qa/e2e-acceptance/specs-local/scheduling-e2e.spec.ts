@@ -212,9 +212,12 @@ async function runHappyFlow(page: Page, locale: Locale, theme: 'dark' | 'light',
 }
 
 test('happy path ES desktop dark: scheduling is real browser to DB', async ({ page }) => {
-  await runHappyFlow(page, 'es', 'dark', mondayPlusWeeks(13));
+  // The fixture is reset by global setup/teardown for every run, so a nearby
+  // empty week is sufficient. Keeping this at +1 avoids thirteen redundant
+  // UI navigation round-trips while preserving the complete scheduling flow.
+  await runHappyFlow(page, 'es', 'dark', mondayPlusWeeks(1));
 });
 
 test('happy path EN mobile light: scheduling is real browser to DB', async ({ page }) => {
-  await runHappyFlow(page, 'en', 'light', mondayPlusWeeks(14));
+  await runHappyFlow(page, 'en', 'light', mondayPlusWeeks(2));
 });
