@@ -72,6 +72,7 @@ describe('ShiftDetail', () => {
     mockedAcknowledge.mockResolvedValue({ status: 'ACKNOWLEDGED', acknowledgedAt: '2026-09-05T10:00:00.000Z' });
     fireEvent.click(acknowledgeButton);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Turno reconocido' })).toHaveProperty('disabled', true));
+    expect(screen.getByRole('status').textContent).toContain('Turno reconocido');
     expect(mockedAcknowledge).toHaveBeenCalledWith(shift.id);
   });
 

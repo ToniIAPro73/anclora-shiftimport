@@ -1253,6 +1253,7 @@ select:disabled {
 }
 
 .employee-shift-detail__coming-soon,
+.employee-shift-detail__acknowledgement-feedback,
 .employee-shift-detail__acknowledgement-error,
 .employee-shift-detail__status > p:not(.employee-shift-detail__eyebrow) {
   margin-top: 12px;
@@ -1263,6 +1264,10 @@ select:disabled {
 
 .employee-shift-detail__acknowledgement-error {
   color: var(--text-primary);
+}
+
+.employee-shift-detail__acknowledgement-feedback {
+  color: var(--color-accent);
 }
 
 .employee-shift-comments {

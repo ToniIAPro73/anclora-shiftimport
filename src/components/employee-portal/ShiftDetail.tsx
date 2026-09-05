@@ -17,7 +17,7 @@ type DetailState =
   }
   | { status: 'error' };
 
-type AcknowledgementActionState = 'idle' | 'saving' | 'error';
+type AcknowledgementActionState = 'idle' | 'saving' | 'success' | 'error';
 
 interface ShiftDetailProps {
   shiftId: string;
@@ -56,7 +56,7 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
       setState((current) => current.status === 'ready'
         ? { ...current, acknowledgementStatus: result.status, acknowledgedAt: result.acknowledgedAt }
         : current);
-      setAcknowledgementAction('idle');
+      setAcknowledgementAction('success');
     } catch {
       setAcknowledgementAction('error');
     }
@@ -155,6 +155,11 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
                     : t('employeeDetail.acknowledge')}
               </button>
             </div>
+            {acknowledgementAction === 'success' && (
+              <p className="employee-shift-detail__acknowledgement-feedback" role="status" aria-live="polite">
+                {t('employeeDetail.acknowledged')}
+              </p>
+            )}
             {acknowledgementAction === 'error' && (
               <p className="employee-shift-detail__acknowledgement-error" role="alert">
                 {t('employeeDetail.acknowledgementError')}
