@@ -10,7 +10,7 @@ Evita avanzar a R5 con una base de Change Request/Acknowledgement incompleta o c
 
 ## 3. Estado actual del repositorio
 
-R4-M00 a R4-M12 deben estar todas en Gate PASS (o PASS_WITH_WARNINGS explícitamente permitido por su propia spec) antes de ejecutar esta microfase.
+R4-M00 a R4-M12 están en Gate PASS antes de ejecutar esta microfase.
 
 ## 4. Alcance IN
 
@@ -79,7 +79,7 @@ Archivos: N/A (proceso de verificación).
 Cambios: N/A.
 No hacer: no declarar PASS si algún Gate individual está en FAIL o BLOCKED.
 Criterios de aceptación:
-- [ ] Los 13 Gates individuales de R4 están en PASS o PASS_WITH_WARNINGS documentado.
+- [x] Los 13 Gates individuales de R4 están en PASS.
 Tests: revisión de cada spec.
 Evidencia esperada: tabla de estado de las 13 microfases.
 
@@ -89,7 +89,7 @@ Archivos: N/A.
 Cambios: N/A.
 No hacer: N/A.
 Criterios de aceptación:
-- [ ] `npm test` y suite E2E de R4 pasan en verde.
+- [x] `npm test` y suite E2E de R4 pasan en verde.
 Tests: ejecución completa.
 Evidencia esperada: log de ejecución completo.
 
@@ -99,7 +99,7 @@ Archivos: grep sobre `api/me/change-requests/` y afines.
 Cambios: N/A.
 No hacer: N/A.
 Criterios de aceptación:
-- [ ] Cero ocurrencias de escritura a esos valores fuera del alcance reservado a R5.
+- [x] Cero ocurrencias de escritura a esos valores fuera del alcance reservado a R5; las únicas referencias son el conjunto de estados de lectura/validación y assertions negativas de tests.
 Tests: grep + test dedicado de T05 en R4-M06.
 Evidencia esperada: resultado de grep documentado.
 
@@ -109,13 +109,18 @@ Full regression (unit+integration+E2E), Security (invariante de aprobación), Ac
 
 ## 20. Evidencias
 
-Tabla de estado de las 13 microfases, log de ejecución completa, resultado de grep de seguridad.
+- Tabla de estado: R4-M00..M12 = DONE — PASS; R0-M05 y R3-M10 continúan DONE — PASS.
+- E2E final R4-M12: 3/3 tests PASS (ES/mobile, EN/desktop, aislamiento intra-/cross-tenant), sin errores de consola capturados.
+- Regresión agregada: 129 archivos, 1.175 tests PASS; `npm run lint` PASS; `npm run build` PASS; `git diff --check` PASS.
+- Verificación Neon dev: host `ep-winter-bird-...` (proyecto development), migraciones 0022–0025 presentes en `_migrations`; turnos inválidos 0, acknowledgements huérfanos 0, comments huérfanos 0, change requests huérfanos 0 y notifications inválidas 0.
+- Seguridad: `rg` sobre rutas R4 y `api/_lib/data.js` no muestra escrituras a `APPROVED`/`REJECTED`; solo aparecen el conjunto de estados permitido y assertions negativas de tests.
+- i18n/accessibility dirigida: 5 archivos, 19 tests PASS; incluye cobertura de paridad ES/EN y portal.
 
 ## 21. Gate
 
 Gates obligatorios: agregación de G0-G15 según lo que cada microfase individual haya requerido (ver tabla en 00-ROADMAP-MASTER.md).
 
-Resultado: PASS solo si todas las microfases R4-M00..M12 están en PASS/PASS_WITH_WARNINGS documentado y las tres tasks de esta microfase se completan sin hallazgos. Cualquier FAIL bloquea el inicio de R5.
+Resultado: **PASS**. Las tres tasks se completan sin hallazgos bloqueantes y todas las microfases R4-M00..M12 están en PASS. Los avisos de `esbuild/oxc`, canvas no implementado en jsdom y chunks >500 kB son preexistentes del entorno y no afectan funcionalidad, seguridad ni build.
 
 ## 22. Rollback / remediación
 
@@ -123,4 +128,4 @@ Si el Gate falla, no se hace commit de esta microfase; se identifica cuál de la
 
 ## 23. Criterio de DONE
 
-R4 completo, verificado de forma agregada, sin invariantes rotos; Gate PASS; R5 puede iniciar apoyándose en `change_requests`.
+R4 completo, verificado de forma agregada, sin invariantes rotos; Gate PASS; R5 puede iniciar apoyándose en `change_requests`. Cierre verificado el 2026-09-05.

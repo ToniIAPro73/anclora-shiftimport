@@ -140,7 +140,7 @@ Gates obligatorios: G11 (E2E), G13 (Regression).
 
 Resultado: **PASS**.
 
-Commit de cierre: `0bbbfbc` — `test(employee-portal): cover employee portal end to end`.
+Commit de cierre: `a57f674` — `test(employee-portal): cover employee portal end to end`.
 
 ## 22. Rollback / remediación
 
