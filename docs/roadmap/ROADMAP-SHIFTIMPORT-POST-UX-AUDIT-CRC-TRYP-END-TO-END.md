@@ -244,6 +244,15 @@ exige, que son de solo lectura contra Neon **development**.
 **DO_NOT_BREAK**: no se corrige nada "de paso"; los fallos se documentan como bloqueadores y se remedian en su release de origen.
 **DEPENDENCIES**: P0-M01..M06 no son bloqueantes técnicos, pero el Gate P0 los exige. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: L.
 
+**PERFIL DE EJECUCIÓN E2E ADOPTADO**: para reducir el tiempo de espera sin reducir los contratos
+verificados, el smoke de P0 se ejecuta con
+`qa/e2e-acceptance/playwright.p0-gate.config.ts`. Agrupa comprobaciones compatibles en cuatro
+escenarios deterministas (planner UI, matriz de roles/tenant, import futuro + idempotencia y
+portal/aprobación), reutiliza las fixtures de Neon development y evita navegaciones, logouts y
+esperas de hidratación repetidas. El perfil histórico completo (`playwright.local.config.ts`)
+permanece disponible para regresión amplia; no se sustituye ni se declara equivalente al flujo
+funcional completo de 16 pasos exigido por este Gate.
+
 ---
 **ID**: P0-M08
 **TITLE**: Ejecutar R5-M12 T02/T03 — tenant isolation y matriz de permisos completa
