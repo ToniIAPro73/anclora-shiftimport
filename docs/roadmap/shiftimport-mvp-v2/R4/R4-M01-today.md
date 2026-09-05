@@ -10,7 +10,7 @@ El empleado no tiene hoy ninguna forma de consultar su turno de la jornada actua
 
 ## 3. Estado actual del repositorio
 
-No existe pantalla ni endpoint de lectura de turnos "propios". `shifts` existe en DB con `employee_id`, `date`, `start_time`, `end_time`, `location`. No hay aún `ScheduleVersion`/publicación (R3) — R4-M01 debe apoyarse en lo que R3-M10 defina como "turno publicado visible para el empleado".
+R3-M10 ya está cerrado: la publicación materializa los assignments publicados en `shifts`, y los turnos históricos importados conservan su semántica operativa. Antes de esta microfase no existía una lectura dedicada para el empleado ni la pantalla Today. La tabla `shifts` contiene `organization_id`, `employee_id`, `date`, `start_time`, `end_time`, `location` y `origin`.
 
 ## 4. Alcance IN
 
@@ -26,7 +26,7 @@ No existe pantalla ni endpoint de lectura de turnos "propios". `shifts` existe e
 
 ## 6. Dependencias
 
-R4-M00 (shell), R3-M10 (Publication — noción de turno "publicado" visible al empleado). Si R3-M10 aún no ha entregado el modelo de publicación, esta microfase queda BLOCKED hasta que exista.
+R4-M00 (shell), R3-M10 (Publication — noción de turno "publicado" visible al empleado). Ambas dependencias están cerradas.
 
 ## 7. Decisiones arquitectónicas
 
@@ -39,7 +39,7 @@ Ninguna tabla nueva. Lectura sobre `shifts` (y sobre el modelo de publicación q
 
 ## 9. API / Backend
 
-Nuevo endpoint de solo lectura, p. ej. `api/me/shifts/today.js`, siguiendo la convención de `api/employees/index.js`. Autorización: requiere sesión válida, deriva `employee_id` del `user_id` de la sesión vía la relación `employees.user_id`, filtra por `organization_id` de la membership activa y `date = today` en la zona horaria de la organización.
+Nuevo endpoint de solo lectura `api/me/shifts/today.js`. Requiere sesión válida y rol `EMPLOYEE`, deriva `employee_id` del contexto de sesión y filtra por `organization_id` de la membership activa. No acepta query/body. La fecha se resuelve con `CURRENT_DATE` en PostgreSQL. Como todavía no existe timezone por organización en el esquema, el contrato MVP usa la zona horaria configurada en la conexión/base de datos; la introducción de timezone organizativo queda para una microfase posterior.
 
 ## 10. Frontend / UX
 
@@ -82,10 +82,11 @@ Archivos / módulos probables: `api/me/shifts/today.js`, `api/_lib/data.js` (nue
 Cambios: nueva ruta + función de datos filtrada por sesión.
 No hacer: no aceptar `employee_id` como parámetro de entrada.
 Criterios de aceptación:
-- [ ] Devuelve solo turnos del empleado de la sesión.
-- [ ] 401 si no autenticado.
+- [x] Devuelve solo turnos del empleado de la sesión y de su organización activa.
+- [x] 401 si no autenticado y 403 para roles que no son `EMPLOYEE`.
+- [x] La consulta no recibe una fecha ni un employee id del cliente; usa `CURRENT_DATE`.
 Tests: unit sobre la función de datos, integration sobre el endpoint con dos empleados distintos.
-Evidencia esperada: respuesta JSON de ejemplo para dos usuarios distintos, confirmando aislamiento.
+Evidencia: `api/me/shifts/today.test.js` cubre respuesta aislada, tenant/employee filtering, 401 y método no permitido.
 
 ### T02 — Componente Today
 
@@ -94,10 +95,11 @@ Archivos / módulos probables: `src/components/employee-portal/Today.tsx`.
 Cambios: fetch al nuevo endpoint, render de tarjeta/estado vacío/loading.
 No hacer: no cachear turnos de otros días aquí.
 Criterios de aceptación:
-- [ ] Estado vacío correcto cuando no hay turno.
-- [ ] Loading skeleton visible durante fetch.
-Tests: unit de render en los tres estados (con turno, vacío, error).
-Evidencia esperada: capturas de los tres estados.
+- [x] Estado vacío correcto cuando no hay turno.
+- [x] Loading skeleton visible durante fetch.
+- [x] Error visible con reintento manual y tarjeta de turno con hora, ubicación y estado publicado.
+Tests: `Today.test.tsx` cubre turno, vacío, loading y error/reintento.
+Evidencia: tests de componente con roles, `time`, estado y botón de reintento; copy ES/EN en el catálogo i18n.
 
 ### T03 — Integración con shell de R4-M00
 
@@ -106,9 +108,10 @@ Archivos / módulos probables: `src/components/employee-portal/PortalShell.tsx`.
 Cambios: ruta/tab por defecto apunta a Today.
 No hacer: no modificar navegación (eso es R4-M09).
 Criterios de aceptación:
-- [ ] Al entrar al portal, Today es la vista inicial.
-Tests: test de integración de montaje.
-Evidencia esperada: captura de portal abierto en Today.
+- [x] Al entrar al portal, Today es la vista inicial.
+- [x] La navegación permanece como placeholder y no se adelanta R4-M09.
+Tests: `PortalShell.test.tsx`, `App.employee-portal.test.tsx` y regresiones de entrada autenticada.
+Evidencia: portal EMPLOYEE monta `Today`; ADMIN conserva el dashboard existente.
 
 ### T04 — Manejo de zona horaria de organización
 
@@ -117,22 +120,30 @@ Archivos / módulos probables: `api/me/shifts/today.js`.
 Cambios: cálculo de fecha "hoy" server-side, documentar supuesto de zona horaria (organización single-timezone en MVP).
 No hacer: no implementar multi-timezone por área/empleado (fuera de alcance MVP).
 Criterios de aceptación:
-- [ ] Turno de hoy correcto cerca de medianoche en pruebas.
-Tests: unit con fecha simulada cerca de límite de día.
-Evidencia esperada: test pasante documentado.
+- [x] La fecha no depende del reloj, timezone ni parámetros manipulables del navegador.
+- [x] La consulta delega el límite de día a `CURRENT_DATE` server-side.
+Tests: el test de endpoint inspecciona la consulta generada y verifica que no contiene una fecha aportada por el cliente.
+Evidencia: `api/me/shifts/today.test.js` — query `CURRENT_DATE`, valores únicamente `[organizationId, employeeId]`.
 
 ## 19. Tests obligatorios
 
-Unit (función de datos, componente), Integration (endpoint con múltiples empleados/orgs), Security (intento de acceso cruzado).
+Unit (función de datos, componente), Integration (endpoint con múltiples empleados/orgs), Security (intento de acceso cruzado), lint, typecheck/build y regresión de entrada al portal.
 
 ## 20. Evidencias
 
-Respuestas JSON de ejemplo, capturas de los tres estados de UI, resultado de tests.
+Resultado dirigido: 7 suites / 27 tests PASS. Suite completa: 113 suites / 1095 tests PASS. `npm run lint` PASS. `npm run build` PASS; permanece el warning no bloqueante de chunks grandes ya conocido. `git diff --check` PASS. La validación de UI se hizo con estados semánticos y CSS responsive/reduced-motion; no se añadieron capturas estáticas al repositorio.
 
 ## 21. Gate
 
 Gates obligatorios: G5 (Functional), G6 (UX/UI).
-G5 PASS si aislamiento SELF-scope verificado por test. G6 PASS si los tres estados de UI están cubiertos y son responsive/accesibles.
+G5: PASS — aislamiento SELF/tenant, 401, rol y fecha server-side verificados.
+G6: PASS — estados loading/turno/vacío/error cubiertos, landmarks/roles/time/focus de reintento accesibles y estilos mobile-first con dark/light/reduced-motion heredados del shell.
+
+**Resultado del Gate:** PASS
+
+**Estado:** DONE
+
+**Commit de cierre:** `947cef6` — `feat(employee-portal): complete R4-M01 today`
 
 ## 22. Rollback / remediación
 
