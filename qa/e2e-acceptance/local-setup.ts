@@ -95,13 +95,36 @@ export default async function globalSetup() {
   const shiftA2 = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA2}, ${day(10)}, '14:00', '22:00', 'Regular', 'IMP') RETURNING id`)[0].id;
   const shiftB = (await sql`INSERT INTO shifts (organization_id, employee_id, import_id, area_id, date, start_time, end_time, location, origin) VALUES (${orgB}, ${empB1}, ${importB}, ${areaB}, ${day(14)}, '09:00', '17:00', 'Org B only', 'IMP') RETURNING id`)[0].id;
 
+  // Published source shift used by R5 Approval Lite E2E scenarios. Change
+  // requests against this row can materialize a new DRAFT without mutating
+  // the published version.
+  const approvalSchedule = (await sql`
+    INSERT INTO schedules (organization_id, area_id, period_start, period_end, created_by_user_id)
+    VALUES (${orgA}, ${areaA}, '2027-02-01', '2027-02-07', ${adminId})
+    RETURNING id
+  `)[0].id;
+  const approvalVersion = (await sql`
+    INSERT INTO schedule_versions (schedule_id, version_number, status, created_by_user_id, published_at, published_by_user_id)
+    VALUES (${approvalSchedule}, 1, 'PUBLISHED', ${adminId}, NOW(), ${adminId})
+    RETURNING id
+  `)[0].id;
+  await sql`
+    INSERT INTO shift_assignments (schedule_version_id, employee_id, date, start_time, end_time, location)
+    VALUES (${approvalVersion}, ${empA1}, '2027-02-03', '09:00', '17:00', 'Approval E2E')
+  `;
+  const approvalShift = (await sql`
+    INSERT INTO shifts (organization_id, employee_id, area_id, date, start_time, end_time, location, origin, schedule_version_id)
+    VALUES (${orgA}, ${empA1}, ${areaA}, '2027-02-03', '09:00', '17:00', 'Approval E2E', 'schedule', ${approvalVersion})
+    RETURNING id
+  `)[0].id;
+
   // One foreign audit row makes the audit endpoint's tenant filter observable.
   await sql`INSERT INTO organization_audit_events (organization_id, actor_user_id, event_type, target_type, target_id, metadata) VALUES (${orgB}, ${ownerBId}, 'AREA_CREATED', 'AREA', ${areaB}, ${JSON.stringify({ marker: 'org-b-only' })}::jsonb)`;
 
   mkdirSync(dirname(FIXTURE_PATH), { recursive: true });
   writeFileSync(FIXTURE_PATH, JSON.stringify({
     password: PASSWORD,
-    orgA, orgB, orgFresh,
+    orgA, orgB, orgFresh, approvalShift,
     adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, plannerId, ownerBId, plannerBId, employeeBId,
     empA1, empA2, empFresh, empB1, areaA, areaB, importB, shiftB, shiftToday, shiftEnglish, shiftA2,
     orgAName: 'E2E Org A',

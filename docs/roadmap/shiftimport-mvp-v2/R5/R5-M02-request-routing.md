@@ -30,7 +30,7 @@ R5-M01, R4-M06.
 
 El ruteo ocurre síncronamente en la misma transacción que crea el Change Request (evita estados intermedios "creado sin decisión de ruteo"). Neon usa transacciones HTTP no interactivas, por lo que se implementa como un único CTE de escritura: Change Request, ApprovalRequest y notificaciones se confirman o revierten juntos.
 
-`NO_APPROVAL` marca el Change Request como `APPROVED` y no crea `ApprovalRequest`. R4-M06 no transporta todavía un delta material de horario (solo tipo y motivo), por lo que la aplicación sobre `ScheduleVersion` queda reservada a R5-M07; no se inventa una mutación de turno en esta microfase.
+`NO_APPROVAL` marca el Change Request como `APPROVED` y no crea `ApprovalRequest`. Cuando la request es `TIME_CHANGE` y el turno procede de una versión publicada, la aplicación se materializa de forma transaccional en un draft: se crea uno nuevo o se actualiza el assignment equivalente de un draft ya existente. Esto mantiene el ruteo y la aplicación sin estados intermedios; el flujo manual de aprobación se valida en R5-M07/M10.
 
 ## 8. Modelo de datos afectado
 

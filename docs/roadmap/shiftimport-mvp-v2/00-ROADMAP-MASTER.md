@@ -120,7 +120,7 @@ All MISSING.
 | R5-M07 | Apply Approved Change | DONE — PASS | R5-M04, R3-M11 | 4 | G3, G5 |
 | R5-M08 | Concurrency / Idempotency | DONE — PASS | R5-M07 | 3 | G3, G10 |
 | R5-M09 | Authorization | DONE — PASS | R5-M01, R2-M08 | 3 | G4, G12 |
-| R5-M10 | E2E | MISSING | R5-M00..M09 | 4 | G11, G13 |
+| R5-M10 | E2E | DONE — PASS; 4 escenarios Playwright contra Neon dev, con UI real para bandeja y verificación API/DB del solicitante | R5-M00..M09 | 4 | G11, G13 |
 | R5-M11 | R5 Final Gate | — | R5-M00..M10 | 1 | G0-G15 (subset per spec) |
 | R5-M12 | MVP Release Gate | — | R0-M07, R1-M16, R2-M12, R3-M16, R4-M13, R5-M11 | 1 | full matrix per §20 of master prompt |
 
