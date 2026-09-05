@@ -53,7 +53,7 @@
 - El registro efectivo es `DEFAULT_SHIFT_TYPES` (neutro: Regular, Libre, Vacaciones, Extras) + overrides del usuario en localStorage (`anclora_shiftimport_shift_types_v1`).
 - API en `src/lib/shift-types.ts`: `getShiftTypes()` (registro efectivo), `loadShiftTypeOverrides`/`saveShiftTypeOverrides`, `mergeShiftTypeOverrides`, `upsertShiftType`, `setShiftTypeAlias`, `resolveShiftTypeId` (alias personalizados → alias por defecto → match por id/label).
 - Los tipos/alias específicos de empresa heredados de GroundSync (JT, `dl`, `aj`, `td`) NO son defaults del producto: viven en `SHIFT_TYPE_PRESET_EXAMPLE`. Para restaurar el comportamiento heredado: `mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE)`.
-- No hay UI de gestión de tipos todavía (no existe lugar natural en los modales actuales); la capacidad está disponible vía API + persistencia. Además, el asistente de importación (Phase 1B) aprende alias/tipos al clasificar códigos desconocidos: `codeTimes` en el `UserFormatProfile` + `applyTokenAliasesToShiftTypes`.
+- Existe UI de gestión en `SettingsModal`, pestaña **Tipos de turno**, con alta, edición de color, "cuenta como trabajo" y archivado; la capacidad también está disponible vía API + persistencia. Además, el asistente de importación (Phase 1B) aprende alias/tipos al clasificar códigos desconocidos: `codeTimes` en el `UserFormatProfile` + `applyTokenAliasesToShiftTypes`.
 - Fixtures de tests siempre sintéticos; nunca cuadrantes reales.
 - Evitar dependencias nuevas sin razón clara; el repo es ligero y mayormente frontend.
 - No renombrar ni referenciar GroundSync salvo como provenance histórica.
