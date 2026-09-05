@@ -139,4 +139,4 @@ el momento exacto de la acción, no solo al cargar la bandeja.
 - Build: PASS (warning no bloqueante de chunks grandes preexistente).
 - Migración Neon dev: aplicada correctamente; columnas verificadas y 0
   `approval_requests` existentes.
-- Commit de implementación: pendiente de registrar tras el commit.
+- Commit de implementación: `101af01`.
