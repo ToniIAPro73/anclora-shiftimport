@@ -30,6 +30,7 @@ async function loginAs(page: Page, email: string) {
 test('EMPLOYEE UI does not expose planner and API rejects draft writes', async ({ page }) => {
   await loginAs(page, fixture.emails.emp);
   await page.goto('/app/schedule');
+  await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByTestId('weekly-planner')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Planificar' })).toHaveCount(0);
   await expect(page.locator('body')).not.toContainText('Planificador semanal');
@@ -39,7 +40,8 @@ test('EMPLOYEE UI does not expose planner and API rejects draft writes', async (
     data: { areaId: fixture.areaA, periodStart: '2027-06-07' },
   });
   expect(response.status()).toBe(403);
-  await page.getByRole('button', { name: 'Salir' }).click();
+  await page.getByRole('button', { name: 'Más' }).click();
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
 });
 
 test('planner cannot cross tenant boundary even when another tenant has scheduling data', async ({ page }) => {

@@ -56,7 +56,8 @@ test('employee cannot create a scheduling draft', async ({ page }) => {
     data: { areaId: fixture.areaA, periodStart: '2026-09-21' },
   });
   expect(response.status()).toBe(403);
-  await page.getByRole('button', { name: 'Salir' }).click();
+  await page.getByRole('button', { name: 'Más' }).click();
+  await page.getByRole('button', { name: 'Cerrar sesión' }).click();
 });
 
 test('planner can create, edit, and delete a draft assignment', async ({ page }) => {
