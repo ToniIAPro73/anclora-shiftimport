@@ -95,6 +95,21 @@ Se verificaron columnas tenant `NOT NULL`, coherencia organization↔employee en
 coherencia de assignments y change requests, OWNER único, unicidad de `structureHash`, unicidad
 de approval request y presencia de las defensas únicas correspondientes.
 
+## Aislamiento cross-tenant por rol
+
+Comando ejecutado desde `qa/e2e-acceptance/`:
+
+```text
+npx playwright test --config playwright.r3-gate.config.ts --grep "API isolation"
+```
+
+Resultado: **4/4 PASS en 37,9 s** (OWNER, ADMIN, PLANNER y EMPLOYEE).
+
+Cada caso cubre lectura y mutación de empleados, áreas, imports, shifts, memberships y eventos
+de auditoría intentando cruzar Org A → Org B; las denegaciones se verifican sin fuga de datos.
+El perfil usa login HTTP y logout HTTP porque es una prueba de aislamiento API: no navega por el
+shell ni espera controles de logout que no forman parte del contrato de este caso.
+
 ## Calidad transversal
 
 - `npm test -- --run`: **137 ficheros / 1.220 tests PASS**.

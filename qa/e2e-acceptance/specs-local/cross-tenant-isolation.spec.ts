@@ -17,9 +17,13 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-async function loginAs(page: Page, email: string) {
+async function loginApi(page: Page, email: string) {
   const response = await page.request.post('/api/auth/login', { data: { email, password: fixture.password } });
   expect(response.ok()).toBe(true);
+}
+
+async function loginAs(page: Page, email: string) {
+  await loginApi(page, email);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#auth-email')).toHaveCount(0);
 }
@@ -33,7 +37,7 @@ const sourceRoles = [
 
 for (const source of sourceRoles) {
   test(`API isolation — ${source.label} cannot access Org B through Org A`, async ({ page }) => {
-    await loginAs(page, fixture.emails?.[source.label.toLowerCase()] ?? source.email);
+    await loginApi(page, fixture.emails?.[source.label.toLowerCase()] ?? source.email);
     const headers = { 'x-organization-id': fixture.orgA };
 
     const employeeMatch = await page.request.get('/api/employees', {
@@ -114,7 +118,7 @@ for (const source of sourceRoles) {
       expect((await shiftDelete.json()).deleted).toBe(0);
     }
 
-    await page.getByRole('button', { name: 'Salir' }).click();
+    await page.request.post('/api/auth/logout');
   });
 }
 
