@@ -122,4 +122,4 @@ Revertir componente y endpoint; no hay datos mutables en este microfase.
 
 ## 23. Criterio de DONE
 
-CUMPLIDO. Cada aprobador ve exactamente sus solicitudes pendientes, ni más ni menos, verificado con matriz de roles/áreas. Commit de implementación: pendiente de cierre documental.
+CUMPLIDO. Cada aprobador ve exactamente sus solicitudes pendientes, ni más ni menos, verificado con matriz de roles/áreas. Commit de implementación: `72aa454`.
