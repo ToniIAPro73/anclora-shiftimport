@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { publishScheduleVersion } from '../_lib/scheduling.js';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
@@ -14,16 +14,26 @@ const ctx = {
   user: { id: ACTOR },
 };
 
-function makeSql(outcome, { fail = false } = {}) {
-  const sql = () => Promise.resolve([]);
+function makeSql(outcome, { fail = false, failNotification = false } = {}) {
+  const calls = [];
+  const sql = () => {
+    calls.push('notification');
+    return failNotification ? Promise.reject(new Error('simulated notification failure')) : Promise.resolve([]);
+  };
+  const txn = () => Promise.resolve([]);
   sql.transaction = vi.fn(async (build) => {
-    const queries = build(sql);
+    const queries = build(txn);
     expect(queries).toHaveLength(1);
     if (fail) throw new Error('simulated materialization failure');
     return [[outcome]];
   });
+  sql.calls = calls;
   return sql;
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('publishScheduleVersion', () => {
   it('uses one transaction and returns the materialization summary', async () => {
@@ -68,6 +78,27 @@ describe('publishScheduleVersion', () => {
     const sql = makeSql(null, { fail: true });
 
     await expect(publishScheduleVersion(sql, ctx, SCHEDULE, VERSION)).rejects.toThrow('simulated materialization failure');
+  });
+
+  it('keeps publication successful when notification generation fails best-effort', async () => {
+    const sql = makeSql({
+      found: true,
+      current_status: 'DRAFT',
+      error_code: null,
+      published_at: '2026-09-04T10:00:00.000Z',
+      created_shift_count: 1,
+      excluded_count: 0,
+      excluded_assignments: [],
+    }, { failNotification: true });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(publishScheduleVersion(sql, ctx, SCHEDULE, VERSION)).resolves.toMatchObject({
+      status: 'PUBLISHED', createdShiftCount: 1,
+    });
+    expect(sql.calls).toEqual(['notification']);
+    expect(errorSpy).toHaveBeenCalledWith('[notifications] SHIFT_PUBLISHED generation failed', expect.objectContaining({
+      scheduleVersionId: VERSION,
+    }));
   });
 
   it('rejects a non-draft version before reporting publication', async () => {

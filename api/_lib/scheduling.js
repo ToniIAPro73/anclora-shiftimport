@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, requireRole, resolveAccessScope } from './auth.js';
+import { createShiftPublishedNotifications } from './data.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -832,7 +833,7 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
     throw error;
   }
 
-  return {
+  const result = {
     status: 'PUBLISHED',
     publishedAt: outcome.published_at,
     createdShiftCount: Number(outcome.created_shift_count ?? 0),
@@ -841,4 +842,16 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
       : [],
     excludedAssignmentCount: Number(outcome.excluded_count ?? 0),
   };
+
+  try {
+    await createShiftPublishedNotifications(sql, ctx, versionId);
+  } catch (error) {
+    console.error('[notifications] SHIFT_PUBLISHED generation failed', {
+      organizationId: ctx.organizationId,
+      scheduleVersionId: versionId,
+      error: error instanceof Error ? error.message : 'unknown',
+    });
+  }
+
+  return result;
 }

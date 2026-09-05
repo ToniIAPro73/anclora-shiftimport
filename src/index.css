@@ -1720,6 +1720,189 @@ select:disabled {
   color: var(--color-accent);
 }
 
+.employee-notifications {
+  width: min(100%, 680px);
+  padding: clamp(22px, 5vw, 38px);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--color-gold);
+  border-radius: 4px 24px 24px 4px;
+  background: var(--glass-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.employee-notifications__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.employee-notifications__eyebrow {
+  color: var(--color-accent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.employee-notifications h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: clamp(1.55rem, 5vw, 2.2rem);
+  line-height: 1.08;
+}
+
+.employee-notifications h2 svg {
+  color: var(--color-gold);
+}
+
+.employee-notifications__count {
+  min-width: 36px;
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 45%, var(--glass-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  color: var(--color-gold);
+  font-size: 0.82rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.employee-notifications__state {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: var(--panel-muted-bg);
+}
+
+.employee-notifications__state h3 {
+  color: var(--text-primary);
+  font-size: 0.98rem;
+}
+
+.employee-notifications__state p {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.employee-notifications__state button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  padding: 0 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.employee-notifications__state button:hover,
+.employee-notifications__state button:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.employee-notifications__state button:focus-visible,
+.employee-notifications__item-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.employee-notifications__list {
+  display: grid;
+  gap: 8px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.employee-notifications__item {
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: var(--panel-muted-bg);
+}
+
+.employee-notifications__item.is-unread {
+  border-color: color-mix(in srgb, var(--color-gold) 42%, var(--glass-border));
+  background: color-mix(in srgb, var(--color-gold) 6%, var(--panel-muted-bg));
+}
+
+.employee-notifications__item-button {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.employee-notifications__item-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+}
+
+.employee-notifications__item.is-unread .employee-notifications__item-icon {
+  background: color-mix(in srgb, var(--color-gold) 18%, transparent);
+  color: var(--color-gold);
+}
+
+.employee-notifications__item-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  flex: 1;
+}
+
+.employee-notifications__item-copy strong {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.employee-notifications__item-copy time {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.employee-notifications__unread-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--color-gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-gold) 14%, transparent);
+}
+
+.employee-notifications__feedback {
+  min-height: 1.4em;
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
 .employee-shift-detail__retry {
   margin-top: 20px;
 }
@@ -1805,6 +1988,10 @@ select:disabled {
   .employee-request-status__shift button {
     width: 100%;
     justify-content: center;
+  }
+
+  .employee-notifications__heading {
+    gap: 12px;
   }
 }
 

@@ -106,6 +106,19 @@ export interface ChangeRequest {
   shiftLocation?: string;
 }
 
+export type NotificationType = 'SHIFT_PUBLISHED' | 'CHANGE_REQUEST_RESOLVED';
+
+export interface EmployeeNotification {
+  id: string;
+  userId: string;
+  organizationId: string;
+  type: NotificationType;
+  resourceType: 'SHIFT' | 'CHANGE_REQUEST';
+  resourceId: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
 export interface ScheduleSnapshot {
   version: ScheduleVersion;
   employees: SchedulingEmployee[];
@@ -293,6 +306,21 @@ export async function loadRemoteChangeRequests(status?: ChangeRequestStatus): Pr
   const query = status ? `?status=${encodeURIComponent(status)}` : '';
   const payload = await apiFetch<{ requests: ChangeRequest[] }>(`/api/me/change-requests${query}`);
   return payload.requests;
+}
+
+export async function loadRemoteNotifications(): Promise<{
+  notifications: EmployeeNotification[];
+  unreadCount: number;
+}> {
+  return apiFetch<{ notifications: EmployeeNotification[]; unreadCount: number }>('/api/me/notifications');
+}
+
+export async function markRemoteNotificationRead(notificationId: string): Promise<EmployeeNotification> {
+  const payload = await apiFetch<{ notification: EmployeeNotification }>(
+    `/api/me/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: 'POST' },
+  );
+  return payload.notification;
 }
 
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {

@@ -97,7 +97,7 @@ All MISSING. Depends on R0-M05 routing decision and R3 schedule data existing.
 | R4-M05 | Comments | DONE — PASS; comentarios SELF append-only, API C/R y composer integrado | R4-M04 | 3 | G2, G5 |
 | R4-M06 | Change Request | DONE — PASS; solicitudes SELF con lifecycle independiente y cancelación propia | R4-M04 | 5 | G2, G3, G5 |
 | R4-M07 | Request Status | DONE — PASS | R4-M06 | 3 | G5, G6 |
-| R4-M08 | Employee Notifications Baseline | MISSING | R4-M06 | 4 | G5 |
+| R4-M08 | Employee Notifications Baseline | DONE — PASS | R4-M06 | 4 | G5 |
 | R4-M09 | Mobile Bottom Navigation | MISSING | R4-M00 | 2 | G6, G9 |
 | R4-M10 | Responsive / Dark / Light | MISSING (for portal specifically) | R4-M00..M09 | 3 | G9 |
 | R4-M11 | Accessibility | MISSING | R4-M00..M09 | 3 | G7 |

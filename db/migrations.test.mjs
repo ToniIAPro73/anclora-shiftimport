@@ -15,6 +15,7 @@ const shiftAssignmentImportMigrationPath = resolve(dirname(fileURLToPath(import.
 const shiftAcknowledgementsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0022_shift_acknowledgements.sql');
 const shiftCommentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0023_shift_comments.sql');
 const changeRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0024_change_requests.sql');
+const notificationsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0025_notifications.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -236,5 +237,27 @@ describe('0024 change requests migration contract', () => {
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS change_requests_employee_status_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS change_requests_shift_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS change_requests_organization_idx');
+  });
+});
+
+describe('0025 notifications migration contract', () => {
+  it('creates an in-app-only recipient-scoped notification table', async () => {
+    const sql = await readFile(notificationsMigrationPath, 'utf8');
+    const executableSql = sql.replace(/--.*$/gm, '');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS notifications');
+    expect(sql).toContain('user_id UUID NOT NULL REFERENCES users');
+    expect(sql).toContain('organization_id UUID NOT NULL REFERENCES organizations');
+    expect(sql).toContain("'SHIFT_PUBLISHED'");
+    expect(sql).toContain("'CHANGE_REQUEST_RESOLVED'");
+    expect(executableSql).not.toContain('email');
+    expect(executableSql).not.toContain('push');
+    expect(executableSql).not.toContain('sms');
+  });
+
+  it('supports unread queries and idempotent event generation', async () => {
+    const sql = await readFile(notificationsMigrationPath, 'utf8');
+    expect(sql).toContain('read_at TIMESTAMPTZ');
+    expect(sql).toContain('notifications_user_read_created_idx');
+    expect(sql).toContain('notifications_user_type_resource_unique UNIQUE');
   });
 });

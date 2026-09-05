@@ -1940,6 +1940,19 @@ export function mapChangeRequestRow(row) {
   };
 }
 
+export function mapNotificationRow(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    organizationId: row.organization_id,
+    type: row.type,
+    resourceType: row.resource_type,
+    resourceId: row.resource_id,
+    readAt: row.read_at ?? null,
+    createdAt: row.created_at,
+  };
+}
+
 function assertEmployeePortalContext(ctx) {
   if (ctx.role !== 'EMPLOYEE') {
     throw new HttpError(403, 'Employee portal access required');
@@ -2051,6 +2064,60 @@ export async function listEmployeeChangeRequests(sql, ctx, rawStatus = null) {
     shiftEndTime: row.shift_end_time,
     shiftLocation: row.shift_location ?? '',
   }));
+}
+
+/** Creates publication notifications after the source operation committed.
+ * This is intentionally a separate best-effort write: a notification outage
+ * must never roll back schedule publication. The unique constraint in
+ * migration 0025 makes retries idempotent per recipient and published shift. */
+export async function createShiftPublishedNotifications(sql, ctx, scheduleVersionId) {
+  if (!ctx?.organizationId) return 0;
+  const rows = await sql`
+    INSERT INTO notifications
+      (user_id, organization_id, type, resource_type, resource_id)
+    SELECT e.user_id, s.organization_id, 'SHIFT_PUBLISHED', 'SHIFT', s.id
+    FROM shifts s
+    JOIN employees e
+      ON e.id = s.employee_id
+     AND e.organization_id = s.organization_id
+    WHERE s.organization_id = ${ctx.organizationId}
+      AND s.schedule_version_id = ${scheduleVersionId}
+      AND e.user_id IS NOT NULL
+      AND e.status = 'active'
+    ON CONFLICT (user_id, type, resource_id) DO NOTHING
+    RETURNING id
+  `;
+  return rows.length;
+}
+
+export async function listEmployeeNotifications(sql, ctx) {
+  assertEmployeePortalContext(ctx);
+  const rows = await sql`
+    SELECT id, user_id, organization_id, type, resource_type, resource_id,
+           read_at, created_at
+    FROM notifications
+    WHERE user_id = ${ctx.user.id}
+      AND organization_id = ${ctx.organizationId}
+    ORDER BY created_at DESC, id DESC
+  `;
+  return rows.map(mapNotificationRow);
+}
+
+export async function markEmployeeNotificationRead(sql, ctx, rawNotificationId) {
+  assertEmployeePortalContext(ctx);
+  const rows = await sql`
+    UPDATE notifications
+    SET read_at = COALESCE(read_at, NOW())
+    WHERE id = ${rawNotificationId}
+      AND user_id = ${ctx.user.id}
+      AND organization_id = ${ctx.organizationId}
+    RETURNING id, user_id, organization_id, type, resource_type, resource_id,
+              read_at, created_at
+  `;
+  if (!rows[0]) {
+    throw new HttpError(404, 'Notification not found');
+  }
+  return mapNotificationRow(rows[0]);
 }
 
 /**
