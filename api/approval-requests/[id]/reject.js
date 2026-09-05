@@ -74,6 +74,7 @@ export default async function handler(req, res) {
               )
             )
           )
+        FOR UPDATE OF ar
       ), updated AS (
         UPDATE approval_requests target
         SET status = 'REJECTED',
@@ -118,16 +119,32 @@ export default async function handler(req, res) {
     }
 
     const existingRows = await sql`
-      SELECT status
-      FROM approval_requests
-      WHERE id = ${approvalRequestId}
-        AND organization_id = ${ctx.organizationId}
+      SELECT ar.status,
+             COALESCE(approved_actor.display_name, rejected_actor.display_name) AS decision_by_name,
+             COALESCE(ar.approved_at, ar.rejected_at) AS decision_at
+      FROM approval_requests ar
+      LEFT JOIN users approved_actor ON approved_actor.id = ar.approved_by_user_id
+      LEFT JOIN users rejected_actor ON rejected_actor.id = ar.rejected_by_user_id
+      WHERE ar.id = ${approvalRequestId}
+        AND ar.organization_id = ${ctx.organizationId}
     `;
     if (!existingRows[0]) {
       return sendJson(res, 404, { error: 'Approval request not found' });
     }
     if (existingRows[0].status !== 'PENDING') {
-      return sendJson(res, 409, { error: 'Approval request is no longer pending' });
+      console.info('[approval] decision conflict', {
+        approvalRequestId,
+        organizationId: ctx.organizationId,
+        decisionBy: existingRows[0].decision_by_name ?? null,
+        decisionAt: existingRows[0].decision_at ?? null,
+      });
+      return sendJson(res, 409, {
+        error: 'Approval request is no longer pending',
+        decision: {
+          by: existingRows[0].decision_by_name ?? null,
+          at: existingRows[0].decision_at ?? null,
+        },
+      });
     }
     return sendJson(res, 403, { error: 'You are not eligible to reject this request' });
   } catch (error) {

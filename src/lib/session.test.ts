@@ -113,6 +113,19 @@ describe('apiFetch — 401 handling', () => {
 
     await expect(fetchSession()).rejects.toThrow('network down');
   });
+
+  it('preserves decision metadata from a 409 API response', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(409, {
+      error: 'Approval request is no longer pending',
+      decision: { by: 'Carlos Admin', at: '2026-09-05T12:30:00.000Z' },
+    }));
+
+    await expect(apiFetch('/api/approval-requests/request-1', { method: 'POST' }))
+      .rejects.toMatchObject({
+        status: 409,
+        details: { by: 'Carlos Admin', at: '2026-09-05T12:30:00.000Z' },
+      });
+  });
 });
 
 describe('logout', () => {

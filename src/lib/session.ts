@@ -31,11 +31,13 @@ export class ApiError extends Error {
   status: number;
   /** Machine-readable reason (e.g. 'PLAN_LIMIT') — see api/_lib/http.js. */
   code?: string;
+  details?: Record<string, unknown>;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, details?: Record<string, unknown>) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -119,8 +121,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     if (response.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/session/')) {
       unauthorizedHandler?.();
     }
-    const body = payload as { error?: string; code?: string };
-    throw new ApiError(response.status, String(body.error ?? `HTTP ${response.status}`), body.code);
+    const body = payload as { error?: string; code?: string; decision?: Record<string, unknown> };
+    throw new ApiError(response.status, String(body.error ?? `HTTP ${response.status}`), body.code, body.decision);
   }
   return payload as T;
 }

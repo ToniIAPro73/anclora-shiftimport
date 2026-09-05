@@ -10,7 +10,7 @@ Dos aprobadores elegibles (p. ej. dos ADMIN bajo política `ORGANIZATION_ADMIN`)
 
 ## 3. Estado actual del repositorio
 
-MISSING — depende de R5-M04/M05/M07.
+IMPLEMENTED — depende de R5-M04/M05/M07. Gate PASS.
 
 ## 4. Alcance IN
 
@@ -27,7 +27,7 @@ R5-M04, R5-M05, R5-M07.
 
 ## 7. Decisiones arquitectónicas
 
-Se usa CAS a nivel SQL: `UPDATE approval_requests SET status = 'APPROVED', ... WHERE id = $1 AND status = 'PENDING'` y se verifica `rowCount === 1`; si es 0, la request ya cambió de estado y se devuelve 409 sin ejecutar el efecto de aplicación (R5-M07). Se prefiere CAS sobre `SELECT FOR UPDATE` explícito porque es más simple y suficiente para escritura única por fila, sin necesidad de mantener una transacción abierta más tiempo del imprescindible.
+Se usa una transacción SQL con `SELECT ... FOR UPDATE OF approval_requests` sobre la fila candidata y una segunda condición `target.status = 'PENDING'` en la actualización (CAS defensivo). La primera petición elegible serializa la decisión y sus efectos; las siguientes encuentran el estado resuelto y reciben 409 sin aplicar cambios. En aprobaciones `TIME_CHANGE`, el bloqueo cubre también la creación del draft y la copia de assignments, evitando drafts duplicados.
 
 ## 8. Modelo de datos afectado
 
@@ -35,7 +35,7 @@ Ninguna columna nueva — reutiliza `approval_requests.status` con la semántica
 
 ## 9. API / Backend
 
-Los endpoints de R5-M04 (approve) y R5-M05 (reject) deben implementar el patrón CAS descrito arriba en lugar de un `SELECT` seguido de `UPDATE` separados (que tendría condición de carrera).
+Los endpoints de R5-M04 (approve) y R5-M05 (reject) implementan la transacción de bloqueo + CAS descrita arriba. Los 409 incluyen, cuando está disponible, el nombre y la fecha de la decisión anterior; el backend registra el conflicto a nivel `info`.
 
 ## 10. Frontend / UX
 
@@ -71,11 +71,11 @@ N/A.
 
 ## 18. Tasks
 
-### T01 — Reescribir approve/reject con CAS atómico
+### T01 — Reescribir approve/reject con bloqueo y CAS atómico
 
 Objetivo: eliminar condición de carrera SELECT-then-UPDATE.
 Archivos: endpoints de R5-M04 y R5-M05.
-Cambios: `UPDATE ... WHERE status = 'PENDING'` con verificación de `rowCount`.
+Cambios: `SELECT ... FOR UPDATE` de la fila elegible dentro de la transacción, seguido de `UPDATE ... WHERE status = 'PENDING'` y resolución explícita del conflicto.
 No hacer: no dejar ningún camino que haga SELECT y UPDATE en pasos separados sin transacción/lock.
 Criterios de aceptación:
 - [ ] Dos peticiones concurrentes de aprobación sobre la misma request: exactamente una tiene efecto, la otra recibe 409.
@@ -100,7 +100,11 @@ Test de concurrencia real (dos peticiones paralelas contra la misma fila de DB, 
 
 ## 20. Evidencias
 
-Resultado del test de concurrencia mostrando exactamente un ganador.
+- Tests focalizados: `13/13 PASS` (approve, reject, ApprovalInbox) antes de ampliar la aserción de metadatos; tras la ampliación se ejecuta la suite completa.
+- Concurrencia real contra Neon development, dos sesiones de aprobadores:
+  - `approve` + `approve`: `[200, 409]`, una aprobación, un cambio `APPROVED`, un evento de auditoría y un solo draft/efecto para `TIME_CHANGE`.
+  - `approve` + `reject`: `[200, 409]`, estado final único y un evento de auditoría.
+- Los escenarios fueron sintéticos, tenant-scoped y limpiados al finalizar.
 
 ## 21. Gate
 
@@ -113,4 +117,4 @@ N/A — el propio mecanismo CAS previene el estado a corregir; no se requiere ro
 
 ## 23. Criterio de DONE
 
-Test de concurrencia real demuestra de forma reproducible que la doble decisión sobre una misma solicitud es imposible.
+Test de concurrencia real demuestra de forma reproducible que la doble decisión sobre una misma solicitud es imposible. PASS registrado en commit de implementación.

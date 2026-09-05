@@ -91,6 +91,7 @@ export default async function handler(req, res) {
               )
             )
           )
+        FOR UPDATE OF ar
       ), source_assignment AS MATERIALIZED (
         SELECT e.*, sa.id AS source_assignment_id
         FROM eligible e
@@ -199,9 +200,13 @@ export default async function handler(req, res) {
     }
 
     const existingRows = await sql`
-      SELECT ar.status, cr.request_type, cr.requested_start_time, cr.requested_end_time
+      SELECT ar.status, cr.request_type, cr.requested_start_time, cr.requested_end_time,
+             COALESCE(approved_actor.display_name, rejected_actor.display_name) AS decision_by_name,
+             COALESCE(ar.approved_at, ar.rejected_at) AS decision_at
       FROM approval_requests ar
       JOIN change_requests cr ON cr.id = ar.change_request_id
+      LEFT JOIN users approved_actor ON approved_actor.id = ar.approved_by_user_id
+      LEFT JOIN users rejected_actor ON rejected_actor.id = ar.rejected_by_user_id
       WHERE ar.id = ${approvalRequestId}
         AND ar.organization_id = ${ctx.organizationId}
     `;
@@ -209,7 +214,19 @@ export default async function handler(req, res) {
       return sendJson(res, 404, { error: 'Approval request not found' });
     }
     if (existingRows[0].status !== 'PENDING') {
-      return sendJson(res, 409, { error: 'Approval request is no longer pending' });
+      console.info('[approval] decision conflict', {
+        approvalRequestId,
+        organizationId: ctx.organizationId,
+        decisionBy: existingRows[0].decision_by_name ?? null,
+        decisionAt: existingRows[0].decision_at ?? null,
+      });
+      return sendJson(res, 409, {
+        error: 'Approval request is no longer pending',
+        decision: {
+          by: existingRows[0].decision_by_name ?? null,
+          at: existingRows[0].decision_at ?? null,
+        },
+      });
     }
     if (existingRows[0].request_type === 'TIME_CHANGE'
       && (!existingRows[0].requested_start_time || !existingRows[0].requested_end_time)) {

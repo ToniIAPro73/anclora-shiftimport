@@ -79,11 +79,15 @@ describe('ApprovalInbox', () => {
 
   it('refreshes and explains a 409 conflict instead of hiding the request optimistically', async () => {
     mockedList.mockResolvedValue([request]);
-    mockedApprove.mockRejectedValueOnce(Object.assign(new Error('conflict'), { status: 409 }));
+    mockedApprove.mockRejectedValueOnce(Object.assign(new Error('conflict'), {
+      status: 409,
+      details: { by: 'Carlos Admin', at: '2026-09-05T12:30:00.000Z' },
+    }));
     renderInbox();
     await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Aprobar' }));
-    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Esta solicitud ya fue decidida'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Carlos Admin'));
+    expect(screen.getByRole('alert').textContent).toContain('2026-09-05T12:30:00.000Z');
     expect(mockedList).toHaveBeenCalledTimes(2);
   });
 

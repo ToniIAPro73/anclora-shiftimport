@@ -18,6 +18,17 @@ export function ApprovalInbox() {
   const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null);
   const [rejectionError, setRejectionError] = useState('');
 
+  const conflictMessage = (error: unknown): string => {
+    const details = typeof error === 'object' && error !== null && 'details' in error
+      ? error.details
+      : null;
+    const by = typeof details === 'object' && details !== null && 'by' in details ? details.by : null;
+    const at = typeof details === 'object' && details !== null && 'at' in details ? details.at : null;
+    return by && at
+      ? t('approvalInbox.conflictWithDecision', { by: String(by), at: String(at) })
+      : t('approvalInbox.conflict');
+  };
+
   const load = useCallback(async () => {
     setState((current) => ({ status: 'loading', requests: current.requests }));
     try {
@@ -43,7 +54,7 @@ export function ApprovalInbox() {
         ? Number(error.status)
         : 0;
       setApprovalError(status === 409
-        ? t('approvalInbox.conflict')
+        ? conflictMessage(error)
         : t('approvalInbox.approveError'));
       if (status === 409) void load();
     } finally {
@@ -87,7 +98,7 @@ export function ApprovalInbox() {
         ? Number(error.status)
         : 0;
       setRejectionError(status === 409
-        ? t('approvalInbox.conflict')
+        ? conflictMessage(error)
         : status === 400
           ? t('approvalInbox.rejectError')
           : t('approvalInbox.rejectError'));

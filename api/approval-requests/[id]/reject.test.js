@@ -43,7 +43,7 @@ function makeSql() {
         rejection_reason: state.reason,
       }] : []);
     }
-    if (text.startsWith('SELECT status')) return Promise.resolve([{ status: state.status }]);
+    if (text.startsWith('SELECT ar.status')) return Promise.resolve([{ status: state.status }]);
     return Promise.resolve([]);
   };
   sql.calls = calls;
