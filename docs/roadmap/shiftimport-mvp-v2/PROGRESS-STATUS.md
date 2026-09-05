@@ -68,8 +68,8 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
   - P0-M04: PASS — `809efbd`.
   - P0-M05: este snapshot documental.
   - P0-M06: PASS — `ceacb23`.
-  - P0-M07: PARCIAL — smoke compacto 4/4 PASS (43,3 s) + smoke API 72/72 PASS (16,3 s) + recorrido continuo 1/1 PASS (1m37,2 s); faltan
-    capturas/axe/responsive ES/EN completas.
+  - P0-M07: PARCIAL — smoke compacto 4/4 PASS (43,3 s) + smoke API 72/72 PASS (16,3 s) + recorrido continuo 1/1 PASS (1m50,7 s) con 19
+    capturas por hito y pasada visual EN/dark/móvil; faltan axe y la evidencia responsive ES/EN completa.
   - P0-M08: PARCIAL — matriz compacta de roles/tenant PASS; falta completar la tabla
     rol×scope×endpoint exigida por el Gate.
   - P0-M09: PARCIAL — idempotencia en smoke compacto e invariantes 11/11 PASS mediante

@@ -65,13 +65,16 @@ Comando ejecutado desde `qa/e2e-acceptance/`:
 npx playwright test --config playwright.p0-flow.config.ts
 ```
 
-Resultado: **1/1 PASS en 1m37,2 s**.
+Resultado: **1/1 PASS en 1m50,7 s**.
 
 El escenario usa una organización y dos empleados sintéticos, con setup/teardown global únicos,
 y cubre en una sola sesión de navegador: signup, onboarding OWNER, área y empleados, importación
 histórica con revisión/compare/confirmación, creación y edición de borrador, importación futura a
 borrador, publicación, portal EMPLOYEE, acknowledge, solicitud de cambio, aprobación y lectura de
 auditoría. La segunda sesión de navegador sólo se abre para validar el recorrido del EMPLOYEE.
+Se adjuntan 19 capturas por hito, incluyendo signup/onboarding, importación, planificación,
+publicación, acknowledge, solicitud, aprobación y una pasada visual EN/dark/móvil sobre la misma
+sesión autenticada.
 
 La preparación de datos que no constituye evidencia de UI (alta de área/empleados, provisión de
 plan Team y consultas de verificación) se hace por API/SQL contra Neon development protegido por
