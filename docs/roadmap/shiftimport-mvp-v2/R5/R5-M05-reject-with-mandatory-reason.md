@@ -133,4 +133,4 @@ R4-M07.
 - Lint: PASS.
 - Build: PASS (warning no bloqueante de chunks grandes preexistente).
 - Migración Neon dev: aplicada correctamente; columnas y constraint verificadas.
-- Commit de implementación: pendiente de registrar tras el commit.
+- Commit de implementación: `015ff02`.
