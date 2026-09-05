@@ -19,6 +19,8 @@ vi.mock('../../lib/remote', () => ({
   }),
   loadRemoteShiftComments: vi.fn().mockResolvedValue([]),
   createRemoteShiftComment: vi.fn(),
+  loadRemoteNotifications: vi.fn().mockResolvedValue({ notifications: [], unreadCount: 0 }),
+  markRemoteNotificationRead: vi.fn(),
 }));
 
 setupLocalStorageMock();
@@ -61,10 +63,10 @@ describe('PortalShell', () => {
     expect(screen.getByRole('navigation', { name: 'Navegación del portal' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Hotel Aurora' })).toBeTruthy();
     expect(screen.getByText('Ana Demo')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /^(Hoy|Semana|Solicitudes|Más)$/ })).toHaveLength(4);
   });
 
-  it('uses the session identity fallback and exposes a keyboard-visible logout action', () => {
+  it('uses the session identity fallback and exposes a keyboard-visible logout action', async () => {
     const onLogout = vi.fn();
     render(
       <ThemeProvider>
@@ -75,7 +77,8 @@ describe('PortalShell', () => {
     );
 
     expect(screen.getByText('employee@example.com')).toBeTruthy();
-    const logout = screen.getByRole('button', { name: 'Cerrar sesión' });
+    fireEvent.click(screen.getByRole('button', { name: 'Más' }));
+    const logout = await screen.findByRole('button', { name: 'Cerrar sesión' });
     logout.focus();
     expect(document.activeElement).toBe(logout);
     fireEvent.click(logout);
@@ -109,5 +112,18 @@ describe('PortalShell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Solicitudes' }));
     await waitFor(() => expect(screen.getByTestId('request-status')).toBeTruthy());
     expect(screen.getByRole('heading', { name: 'Tus solicitudes' })).toBeTruthy();
+  });
+
+  it('keeps exactly four navigation sections and marks More active', async () => {
+    renderPortal();
+    const navigation = screen.getByTestId('employee-portal-nav');
+    expect(navigation.querySelectorAll('button')).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Más' }));
+    await waitFor(() => expect(screen.getByTestId('employee-more')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'Más' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('heading', { name: 'Más opciones' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Cambiar tema\. Actual:/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cambiar idioma. Actual: ES' })).toBeTruthy();
   });
 });

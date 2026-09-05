@@ -10,13 +10,13 @@ El shell de R4-M00 reservó un contenedor de navegación vacío. Esta microfase 
 
 ## 3. Estado actual del repositorio
 
-No existe. Depende del shell (R4-M00) y de que Today/My Week/Request Status ya existan como pantallas montables.
+El shell de R4-M00 ya montaba Today, My Week y Request Status, pero solo tenía tres botones de navegación y mantenía tema, idioma y logout en la cabecera. R4-M09 completa la IA con cuatro secciones y mueve esos accesos secundarios a Más.
 
 ## 4. Alcance IN
 
 - Barra de navegación inferior fija en mobile con exactamente 4 ítems: Hoy, Semana, Solicitudes, Más.
 - Indicador de sección activa.
-- Badge de notificaciones no leídas sobre el ítem correspondiente (probablemente "Más", donde vive Notifications — a decidir en T01 y documentar).
+- Badge de notificaciones no leídas sobre Más, donde vive Notifications.
 - Sección "Más": acceso a perfil básico, notificaciones (R4-M08), tema/idioma, logout.
 
 ## 5. Alcance OUT
@@ -81,7 +81,7 @@ Archivos: `src/components/employee-portal/BottomNav.tsx`.
 Cambios: 4 ítems fijos, indicador de activo, badge en "Más".
 No hacer: no añadir un quinto ítem bajo ninguna circunstancia.
 Criterios de aceptación:
-- [ ] Exactamente 4 ítems presentes: Hoy, Semana, Solicitudes, Más.
+- [x] Exactamente 4 ítems presentes: Hoy, Semana, Solicitudes, Más.
 Tests: unit de conteo de ítems (test explícito que falla si se añade un quinto).
 Evidencia esperada: captura de la barra con los 4 ítems.
 
@@ -91,7 +91,7 @@ Archivos: `src/components/employee-portal/More.tsx`.
 Cambios: agregación de accesos existentes (ThemeToggle, i18n switch, logout ya existentes en el repo, Notifications de R4-M08).
 No hacer: no duplicar lógica de logout/tema — reutilizar componentes existentes.
 Criterios de aceptación:
-- [ ] Logout desde "Más" funciona igual que el logout actual del dashboard ADMIN.
+- [x] Logout desde "Más" reutiliza el callback de sesión existente y funciona igual que el logout actual del dashboard ADMIN.
 Tests: integration.
 Evidencia esperada: captura de "Más" con todos los accesos.
 
@@ -101,12 +101,20 @@ Unit (conteo fijo de ítems, aria-current), Accessibility (tamaño de objetivo t
 
 ## 20. Evidencias
 
-Capturas de la barra en los 4 estados activos, resultado de tests.
+- `npm test -- --run`: 129 archivos, 1174 tests PASS.
+- `npm run lint`: PASS.
+- `npm run build`: PASS (warning preexistente de tamaño de chunks).
+- `BottomNav.test.tsx`: 4 botones exactos, un estado activo, badge accesible y foco de teclado.
+- `PortalShell.test.tsx`: navegación Today/Week/Requests/More, logout en Más, estado activo y preferencias reutilizadas.
+- CSS revisado: barra fija solo en `max-width: 640px`, safe-area inferior, contenido con padding compensatorio, dark/light mediante variables existentes.
 
 ## 21. Gate
 
 Gates obligatorios: G6 (UX/UI), G9 (Responsive/themes).
-G6 PASS requiere explícitamente el test de conteo fijo de 4 ítems en verde — cualquier item adicional es FAIL inmediato por violar el master prompt.
+
+Resultado: **PASS**.
+
+G6 PASS requiere explícitamente el test de conteo fijo de 4 ítems en verde — validado; cualquier item adicional continúa siendo FAIL por violar el master prompt. G9 queda cubierto por el layout responsive, safe-area y variables de tema existentes; la auditoría transversal ampliada continúa en R4-M10.
 
 ## 22. Rollback / remediación
 
@@ -114,4 +122,6 @@ Revert retira la barra; el shell vuelve a su contenedor vacío de R4-M00.
 
 ## 23. Criterio de DONE
 
-Navegación de 4 ítems fija, accesible, responsive, con badge de notificaciones funcionando; Gate G6+G9 PASS.
+Navegación de 4 ítems fija, accesible, responsive, con badge de notificaciones funcionando, acceso a perfil/preferencias/notificaciones/logout desde Más; Gate G6+G9 PASS.
+
+Commit de cierre: `8c1e3d7 feat(employee-portal): add mobile bottom navigation`.

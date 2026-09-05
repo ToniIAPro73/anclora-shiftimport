@@ -540,8 +540,13 @@ select:disabled {
 }
 
 .employee-portal__nav-button {
+  position: relative;
   min-height: 42px;
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
@@ -558,6 +563,144 @@ select:disabled {
 }
 
 .employee-portal__nav-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.employee-portal__nav-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.employee-portal__nav-badge {
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-gold);
+  color: #241b08;
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.employee-more {
+  width: min(100%, 680px);
+  display: grid;
+  gap: 16px;
+}
+
+.employee-more__heading {
+  padding: 4px 2px 0;
+}
+
+.employee-more__eyebrow {
+  color: var(--color-accent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.employee-more__heading h2 {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: clamp(1.65rem, 5vw, 2.3rem);
+  line-height: 1.08;
+}
+
+.employee-more__profile,
+.employee-more__preferences {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 17px;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: var(--panel-muted-bg);
+}
+
+.employee-more__profile-icon {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+}
+
+.employee-more__profile p,
+.employee-more__preferences > span {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.employee-more__profile strong,
+.employee-more__profile span {
+  display: block;
+}
+
+.employee-more__profile strong {
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.employee-more__profile div > span {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.employee-more__preferences {
+  justify-content: space-between;
+}
+
+.employee-more__preference-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employee-more__preference-controls .theme-toggle {
+  min-width: 40px;
+  min-height: 40px;
+}
+
+.employee-more .employee-notifications {
+  width: 100%;
+  padding: 22px;
+}
+
+.employee-more__logout {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, #d26969 42%, var(--glass-border));
+  border-radius: 12px;
+  background: transparent;
+  color: #b34848;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.employee-more__logout:hover {
+  border-color: #d26969;
+  background: color-mix(in srgb, #d26969 10%, transparent);
+}
+
+.employee-more__logout:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
 }
@@ -1949,7 +2092,7 @@ select:disabled {
   }
 
   .employee-portal__main {
-    padding: 30px 0;
+    padding: 30px 0 104px;
   }
 
   .employee-portal__empty-state {
@@ -1962,11 +2105,30 @@ select:disabled {
   }
 
   .employee-portal__navigation {
-    position: sticky;
+    position: fixed;
+    z-index: 20;
+    left: 0;
+    right: 0;
     bottom: 0;
-    margin-inline: -12px;
-    padding-inline: 12px;
+    width: 100%;
+    min-height: 70px;
+    margin-inline: 0;
+    padding: 8px 12px max(8px, env(safe-area-inset-bottom));
     background: var(--page-bg);
+    box-shadow: 0 -8px 24px color-mix(in srgb, var(--page-bg) 80%, transparent);
+  }
+
+  .employee-portal__nav-button {
+    min-height: 50px;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 0.68rem;
+  }
+
+  .employee-portal__nav-badge {
+    position: absolute;
+    top: 3px;
+    right: calc(50% - 24px);
   }
 
   .employee-week {
@@ -1992,6 +2154,10 @@ select:disabled {
 
   .employee-notifications__heading {
     gap: 12px;
+  }
+
+  .employee-more .employee-notifications {
+    padding: 18px;
   }
 }
 
@@ -4574,14 +4740,18 @@ button[aria-busy='true'] {
 .auth-social {
   flex: 1;
   min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   background: var(--glass-bg);
   color: var(--text-primary);
   font-weight: 700;
-  opacity: 0.5;
-  cursor: not-allowed;
+  text-decoration: none;
+  cursor: pointer;
 }
+.auth-social:hover { background: var(--glass-border); }
 .auth-legal { margin: 0; font-size: 11px; color: var(--text-subtle); text-align: center; }
 .auth-legal a { color: var(--color-accent); }
 .auth-guest { margin-top: 2px; }

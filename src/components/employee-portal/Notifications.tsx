@@ -3,9 +3,14 @@ import { useMemo, useState } from 'react';
 import { EmployeeNotification } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { useNotifications } from './use-notifications';
+import { NotificationsController } from './use-notifications';
 
 interface NotificationsProps {
   onOpenShift?: (shiftId: string) => void;
+}
+
+interface NotificationsPanelProps extends NotificationsProps {
+  controller: NotificationsController;
 }
 
 function relativeTimestamp(iso: string, locale: string): string {
@@ -25,8 +30,11 @@ function relativeTimestamp(iso: string, locale: string): string {
 }
 
 export function Notifications({ onOpenShift }: NotificationsProps) {
+  return <NotificationsPanel controller={useNotifications()} onOpenShift={onOpenShift} />;
+}
+
+export function NotificationsPanel({ controller, onOpenShift }: NotificationsPanelProps) {
   const { locale, t } = useI18n();
-  const controller = useNotifications();
   const [feedback, setFeedback] = useState('');
 
   const notificationText = useMemo(() => ({
