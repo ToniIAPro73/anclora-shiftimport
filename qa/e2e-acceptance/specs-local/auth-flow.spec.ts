@@ -80,16 +80,17 @@ test.describe('Caso 2 — Admin', () => {
 
     // NOTE (deuda preexistente): este caso buscaba un <select> nativo que fue
     // sustituido por SearchableSelect; actualizado mínimamente al combobox real.
-    // Team selector (SearchableSelect) with both employees (alphabetical order).
+    // Team selector (SearchableSelect) with all active employees (alphabetical order).
     const employeeSelect = page.getByRole('button', { name: 'Empleado:' });
     await expect(employeeSelect).toBeVisible();
     await employeeSelect.click();
-    await expect(page.getByRole('option')).toHaveText([/E2E Dos/, /E2E Uno/]);
+    await expect(page.getByRole('option')).toHaveText([/E2E Dos/, /E2E Uno/, /E2E Z Admin Employee/]);
 
-    // Default employee (first): E2E Dos → 1 shift. Switch to E2E Uno → 2 shifts.
+    // Default employee (first): E2E Dos → 1 shift. Switch to E2E Uno → the
+    // four current-month shifts seeded by local-setup (two today + days 10/12).
     await expect(page.locator('.month-shift-badge')).toHaveCount(1);
     await page.getByRole('option', { name: /E2E Uno/ }).click();
-    await expect(page.locator('.month-shift-badge')).toHaveCount(2);
+    await expect(page.locator('.month-shift-badge')).toHaveCount(4);
 
     // Membership management: add + remove a user.
     await page.getByRole('button', { name: 'Usuarios de la organización' }).click();

@@ -27,6 +27,13 @@ async function loginAs(page: Page, email: string) {
   await expect(page.locator('#auth-email')).toHaveCount(0);
 }
 
+function mondayOfCurrentWeek(): string {
+  const date = new Date();
+  const day = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() + (day === 0 ? -6 : 1 - day));
+  return date.toISOString().slice(0, 10);
+}
+
 test('EMPLOYEE UI does not expose planner and API rejects draft writes', async ({ page }) => {
   await loginAs(page, fixture.emails.emp);
   await page.goto('/app/schedule');
@@ -73,4 +80,44 @@ test('planner cannot cross tenant boundary even when another tenant has scheduli
   await expect(page.locator('body')).not.toContainText('E2E Area B');
   await page.getByRole('button', { name: 'Volver al calendario' }).click();
   await page.getByRole('button', { name: 'Salir' }).click();
+});
+
+test('planner surfaces use active Employee records, not administrative memberships', async ({ page }) => {
+  await loginAs(page, fixture.emails.admin);
+  const headers = { 'x-organization-id': fixture.orgA };
+  const created = await page.request.post('/api/schedules', {
+    headers,
+    data: { areaId: fixture.areaA, periodStart: mondayOfCurrentWeek() },
+  });
+  expect(created.status()).toBe(201);
+
+  await page.goto('/app/schedule');
+  const planner = page.getByTestId('weekly-planner');
+  await expect(planner).toHaveAttribute('data-state', 'ready');
+  await expect(planner.locator('.weekly-planner__grid tbody th span').filter({ hasText: /^E2E Uno$/ })).toBeVisible();
+  await expect(planner.locator('.weekly-planner__grid tbody th span').filter({ hasText: /^E2E Z Admin Employee$/ })).toBeVisible();
+  await expect(planner.locator('.weekly-planner__grid tbody th span').filter({ hasText: /^E2E Admin$/ })).toHaveCount(0);
+
+  const employeeFilter = planner.getByRole('button', { name: 'Empleado' });
+  await employeeFilter.click();
+  const filterList = page.locator('[role="listbox"]:visible');
+  await expect(filterList.getByRole('option', { name: 'Todos los empleados', exact: true })).toBeVisible();
+  await expect(filterList.getByRole('option', { name: 'E2E Z Admin Employee', exact: true })).toBeVisible();
+  await expect(filterList.getByRole('option', { name: 'E2E Admin', exact: true })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  const editor = planner.getByRole('form', { name: 'Añadir turno' });
+  await expect(editor.locator('#planner-editor-employee option')).toHaveText([
+    /E2E Dos/, /E2E Uno/, /E2E Z Admin Employee/,
+  ]);
+  await expect(editor.locator('#planner-editor-employee option').filter({ hasText: /^E2E Admin$/ })).toHaveCount(0);
+
+  await page.request.post('/api/auth/logout');
+  await page.context().clearCookies();
+  await loginAs(page, fixture.emails.adminEmployee);
+  await page.goto('/app/schedule');
+  const adminEmployeePlanner = page.getByTestId('weekly-planner');
+  await expect(adminEmployeePlanner).toHaveAttribute('data-state', 'ready');
+  await expect(adminEmployeePlanner.locator('.weekly-planner__grid tbody th span').filter({ hasText: /^E2E Z Admin Employee$/ })).toBeVisible();
+  await expect(adminEmployeePlanner.locator('.weekly-planner__grid tbody th span').filter({ hasText: /^E2E Admin$/ })).toHaveCount(0);
 });

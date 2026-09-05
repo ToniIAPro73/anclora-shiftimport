@@ -110,6 +110,58 @@ test('planner can create, edit, and delete a draft assignment', async ({ page })
   await page.getByRole('button', { name: 'Salir' }).click();
 });
 
+test('planner rejects inactive, nonexistent, and cross-tenant employees for assignments', async ({ page }) => {
+  await loginAs(page, fixture.emails.owner);
+  const ownerHeaders = { 'x-organization-id': fixture.orgA };
+  const createdEmployee = await page.request.post('/api/employees', {
+    headers: ownerHeaders,
+    data: { name: 'E2E Inactive Scheduling Target', areaId: fixture.areaA },
+  });
+  expect(createdEmployee.status()).toBe(201);
+  const inactiveEmployeeId = (await createdEmployee.json()).employee.id as string;
+  const deactivated = await page.request.patch('/api/employees', {
+    headers: ownerHeaders,
+    data: { id: inactiveEmployeeId, status: 'inactive' },
+  });
+  expect(deactivated.status()).toBe(200);
+
+  await loginAs(page, fixture.emails.planner);
+  const headers = { 'x-organization-id': fixture.orgA };
+  const scheduleResponse = await page.request.post('/api/schedules', {
+    headers,
+    data: { areaId: fixture.areaA, periodStart: '2027-01-04' },
+  });
+  expect(scheduleResponse.status()).toBe(201);
+  const schedule = await scheduleResponse.json();
+  const assignmentUrl = `/api/schedules/${schedule.scheduleId}/versions/${schedule.scheduleVersionId}/assignments`;
+
+  const inactive = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: inactiveEmployeeId, date: '2027-01-05', startTime: '09:00', endTime: '17:00' },
+  });
+  expect(inactive.status()).toBe(409);
+
+  const nonexistent = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: '99999999-9999-4999-8999-999999999999', date: '2027-01-05', startTime: '09:00', endTime: '17:00' },
+  });
+  expect(nonexistent.status()).toBe(404);
+
+  const foreign = await page.request.post(assignmentUrl, {
+    headers,
+    data: { employeeId: fixture.empB1, date: '2027-01-05', startTime: '09:00', endTime: '17:00' },
+  });
+  expect(foreign.status()).toBe(404);
+
+  await loginAs(page, fixture.emails.owner);
+  const deleted = await page.request.delete('/api/employees', {
+    headers: ownerHeaders,
+    data: { id: inactiveEmployeeId },
+  });
+  expect(deleted.status()).toBe(200);
+  await page.getByRole('button', { name: 'Salir' }).click();
+});
+
 test('planner enforces 11 hours of rest and accepts the exact boundary', async ({ page }) => {
   await loginAs(page, fixture.emails.planner);
   const headers = { 'x-organization-id': fixture.orgA };
