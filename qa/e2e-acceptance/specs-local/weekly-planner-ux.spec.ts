@@ -137,6 +137,7 @@ test('weekly planner is a bounded, filterable workspace', async ({ page }, testI
   await tableViewButton.click();
   const accessibleTable = page.locator('.weekly-planner__table-wrap');
   await expect(accessibleTable).toBeVisible();
+  await expect(page.getByText('Turnos planificados por empleado y día')).toHaveClass(/sr-only/);
   await accessibleTable.evaluate((element) => { element.scrollTop = element.scrollHeight; });
   await expect(accessibleTable.locator('thead th').first()).toHaveCSS('position', 'sticky');
   expect(await accessibleTable.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);

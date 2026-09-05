@@ -2905,6 +2905,10 @@ button[aria-busy='true'] {
   text-align: left;
 }
 
+.weekly-planner__table caption.sr-only {
+  padding: 0;
+}
+
 .weekly-planner__table th,
 .weekly-planner__table td {
   padding: 12px 14px;

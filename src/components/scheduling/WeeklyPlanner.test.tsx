@@ -148,6 +148,7 @@ describe('WeeklyPlanner', () => {
 
     await waitFor(() => expect(screen.getByRole('table')).toHaveClass('weekly-planner__table'));
     expect(screen.getByRole('columnheader', { name: 'Fecha' })).toBeInTheDocument();
+    expect(screen.getByText('Turnos planificados por empleado y día')).toHaveClass('sr-only');
     expect(screen.getByRole('button', { name: /Editar turno de Ana Planner/ })).toBeInTheDocument();
     expect(window.localStorage.getItem('anclora_shiftimport_planner_view_v1')).toBe('table');
 

@@ -58,7 +58,7 @@ export function AccessibleScheduleTable({
     <>
       <div className="weekly-planner__table-wrap" role="region" aria-label={t('planner.tableLabel')} tabIndex={0}>
         <table className="weekly-planner__table">
-          <caption>{t('planner.tableCaption')}</caption>
+          <caption className="sr-only">{t('planner.tableCaption')}</caption>
           <thead>
             <tr>
               <th scope="col">{t('planner.employeeColumn')}</th>
