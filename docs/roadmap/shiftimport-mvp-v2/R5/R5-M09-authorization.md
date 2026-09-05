@@ -11,8 +11,7 @@ Cada microfase anterior implementó su propia verificación puntual; R5-M09 es l
 ## 3. Estado actual del repositorio
 
 IMPLEMENTED — Gate PASS. La superficie Approval usa el contexto de sesión y
-los guardas server-side consolidados; commit de implementación: pendiente de
-registrar al cerrar esta microfase.
+los guardas server-side consolidados. Commit de implementación: `3d80fce`.
 
 ## 4. Alcance IN
 
