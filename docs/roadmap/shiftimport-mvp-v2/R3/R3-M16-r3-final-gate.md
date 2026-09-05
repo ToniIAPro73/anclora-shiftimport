@@ -158,4 +158,4 @@ Remediaciones aplicadas antes del PASS: aserción de auditoría cross-tenant hec
 ## 23. Criterio de DONE
 Los 16 Gates individuales están en PASS con SHA registrado, la matriz E2E compacta y la suite unitaria están en PASS, documentación actualizada y R4 habilitado para empezar.
 
-Commit de cierre: pendiente de registrar tras el commit de esta microfase.
+Commit de cierre: `ac4faea` (`test(roadmap): close R3 final gate`).
