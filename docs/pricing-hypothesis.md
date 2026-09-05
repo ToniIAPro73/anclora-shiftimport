@@ -10,7 +10,7 @@ placeholder price as a committed one.
 - Three plan ids: `free`, `personal`, `team`. Stored on `organizations.plan`
   (migration `db/migrations/0004_organization_plan.sql`), constrained by a
   DB `CHECK`.
-- Plan is orthogonal to Role. Role (`ADMIN`/`MANAGER`/`EMPLOYEE`, per
+- Plan is orthogonal to Role. Role (`OWNER`/`ADMIN`/`PLANNER`/`EMPLOYEE`, per
   membership) answers "what can you do inside this org"; Plan answers "what
   can this org do at all". Neither module references the other.
 - Single backend enforcement authority: `api/_lib/plans.js` (`PLANS`,
