@@ -42,6 +42,9 @@ function renderAuthenticated(role: 'EMPLOYEE' | 'ADMIN') {
     if (url.includes('/api/areas')) {
       return Promise.resolve(new Response(JSON.stringify({ areas: [] }), { status: 200 }));
     }
+    if (url.includes('/api/me/shifts/today')) {
+      return Promise.resolve(new Response(JSON.stringify({ shifts: [] }), { status: 200 }));
+    }
     if (url.includes('/api/shifts')) {
       return Promise.resolve(new Response(JSON.stringify({ shifts: [] }), { status: 200 }));
     }

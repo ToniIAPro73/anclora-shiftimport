@@ -181,6 +181,12 @@ export async function loadRemoteShifts(employeeId: string): Promise<Shift[]> {
   return payload.shifts.map(toShift);
 }
 
+/** Loads only the authenticated employee's shifts for the server-defined day. */
+export async function loadRemoteTodayShifts(): Promise<Shift[]> {
+  const payload = await apiFetch<{ shifts: RemoteShiftRow[] }>('/api/me/shifts/today');
+  return payload.shifts.map(toShift);
+}
+
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {
   const query = areaId ? `?areaId=${encodeURIComponent(areaId)}` : '';
   const payload = await apiFetch<{ schedules: ScheduleVersion[] }>(`/api/schedules${query}`);

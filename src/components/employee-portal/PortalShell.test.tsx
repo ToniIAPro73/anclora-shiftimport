@@ -7,6 +7,10 @@ import { SessionInfo } from '../../lib/session';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { PortalShell } from './PortalShell';
 
+vi.mock('../../lib/remote', () => ({
+  loadRemoteTodayShifts: vi.fn().mockResolvedValue([]),
+}));
+
 setupLocalStorageMock();
 afterEach(cleanup);
 
@@ -43,7 +47,7 @@ describe('PortalShell', () => {
 
     expect(screen.getByTestId('employee-portal')).toBeTruthy();
     expect(screen.getByRole('banner')).toBeTruthy();
-    expect(screen.getByRole('main', { name: 'Tu espacio de turnos está listo' })).toBeTruthy();
+    expect(screen.getByRole('main')).toBeTruthy();
     expect(screen.getByRole('navigation', { name: 'Navegación del portal' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Hotel Aurora' })).toBeTruthy();
     expect(screen.getByText('Ana Demo')).toBeTruthy();

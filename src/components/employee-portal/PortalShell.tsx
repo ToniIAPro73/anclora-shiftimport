@@ -4,6 +4,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { TurnosLogo } from '../branding/TurnosLogo';
 import { LanguageToggle } from '../ui/LanguageToggle';
 import { ThemeToggle } from '../ui/ThemeToggle';
+import { Today } from './Today';
 
 interface PortalShellProps {
   session: SessionInfo;
@@ -54,12 +55,8 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
         </div>
       </header>
 
-      <main className="employee-portal__main" aria-labelledby="employee-portal-title">
-        <section className="employee-portal__empty-state">
-          <p className="employee-portal__empty-label">{t('employeePortal.emptyLabel')}</p>
-          <h2 id="employee-portal-title">{t('employeePortal.emptyTitle')}</h2>
-          <p>{t('employeePortal.emptyDescription')}</p>
-        </section>
+      <main className="employee-portal__main" aria-labelledby="employee-today-title">
+        <Today />
       </main>
 
       <nav className="employee-portal__navigation" aria-label={t('employeePortal.navigationLabel')} data-testid="employee-portal-nav">

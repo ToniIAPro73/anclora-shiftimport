@@ -1719,6 +1719,36 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
 }
 
 /**
+ * Employee portal read model for the current day. The date is deliberately
+ * resolved by PostgreSQL rather than accepted from the browser, so a client
+ * cannot move the SELF view to another day or bypass the organization scope.
+ * Organization timezone is not modeled yet; until that setting exists,
+ * CURRENT_DATE is the database's canonical organization date.
+ */
+export async function listTodayShifts(sql, ctx) {
+  if (ctx.role !== 'EMPLOYEE') {
+    throw new HttpError(403, 'Employee portal access required');
+  }
+  if (!ctx.employeeId) {
+    throw new HttpError(403, 'No employee linked to this user');
+  }
+
+  const rows = await sql`
+    SELECT id, organization_id, employee_id, import_id, area_id,
+           TO_CHAR(date, 'YYYY-MM-DD') AS date,
+           TO_CHAR(start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(end_time, 'HH24:MI') AS end_time,
+           location, origin
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId}
+      AND employee_id = ${ctx.employeeId}
+      AND date = CURRENT_DATE
+    ORDER BY start_time ASC, end_time ASC, id ASC
+  `;
+  return rows.map(mapShiftRow);
+}
+
+/**
  * Upserts shifts. The client performs reconciliation for conflict UX, while
  * imported shifts also carry a server-computed semantic key. This protects
  * retries and concurrent requests even when the client has no prior copy.

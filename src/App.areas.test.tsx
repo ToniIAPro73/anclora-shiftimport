@@ -17,18 +17,20 @@ vi.mock('./lib/session', async (importOriginal) => {
 
 vi.mock('./lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./lib/remote')>();
-  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), listRemoteAreas: vi.fn() };
+  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn() };
 });
 
 const mockedFetchResolvedSession = vi.mocked(session.fetchResolvedSession);
 const mockedListRemoteEmployees = vi.mocked(remote.listRemoteEmployees);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
+const mockedLoadRemoteTodayShifts = vi.mocked(remote.loadRemoteTodayShifts);
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
 
 setupLocalStorageMock();
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedLoadRemoteTodayShifts.mockResolvedValue([]);
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
