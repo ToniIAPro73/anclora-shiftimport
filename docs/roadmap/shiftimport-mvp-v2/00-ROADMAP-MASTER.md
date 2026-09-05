@@ -99,7 +99,7 @@ All MISSING. Depends on R0-M05 routing decision and R3 schedule data existing.
 | R4-M07 | Request Status | DONE — PASS | R4-M06 | 3 | G5, G6 |
 | R4-M08 | Employee Notifications Baseline | DONE — PASS | R4-M06 | 4 | G5 |
 | R4-M09 | Mobile Bottom Navigation | DONE — PASS | R4-M00 | 2 | G6, G9 |
-| R4-M10 | Responsive / Dark / Light | MISSING (for portal specifically) | R4-M00..M09 | 3 | G9 |
+| R4-M10 | Responsive / Dark / Light | DONE — PASS | R4-M00..M09 | 3 | G9 |
 | R4-M11 | Accessibility | MISSING | R4-M00..M09 | 3 | G7 |
 | R4-M12 | Employee E2E | MISSING | R4-M00..M11 | 4 | G11, G13 |
 | R4-M13 | R4 Final Gate | — | R4-M00..M12 | 1 | G0-G15 (subset per spec) |

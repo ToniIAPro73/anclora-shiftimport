@@ -403,6 +403,7 @@ select:disabled {
   display: flex;
   flex-direction: column;
   padding: 16px;
+  overflow-x: hidden;
   color: var(--text-primary);
 }
 
@@ -414,6 +415,7 @@ select:disabled {
 }
 
 .employee-portal__header {
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -501,6 +503,7 @@ select:disabled {
 
 .employee-portal__main {
   flex: 1;
+  min-width: 0;
   display: grid;
   place-items: center;
   padding: 44px 0;
@@ -649,6 +652,10 @@ select:disabled {
   display: block;
 }
 
+.employee-more__profile > div {
+  min-width: 0;
+}
+
 .employee-more__profile strong {
   margin-top: 3px;
   color: var(--text-primary);
@@ -657,12 +664,14 @@ select:disabled {
 
 .employee-more__profile div > span {
   margin-top: 3px;
+  overflow-wrap: anywhere;
   color: var(--text-muted);
   font-size: 0.75rem;
 }
 
 .employee-more__preferences {
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .employee-more__preference-controls {
@@ -1765,6 +1774,10 @@ select:disabled {
   gap: 14px;
 }
 
+.employee-request-status__item-head > div:first-child {
+  min-width: 0;
+}
+
 .employee-request-status__item-type {
   color: var(--text-primary);
   font-size: 0.86rem;
@@ -2162,11 +2175,12 @@ select:disabled {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .employee-portal__logout {
+  .employee-portal button {
     transition: none;
   }
 
-  .employee-portal__logout:hover {
+  .employee-portal__logout:hover,
+  .employee-more__logout:hover {
     transform: none;
   }
 
