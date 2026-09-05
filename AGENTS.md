@@ -24,7 +24,7 @@
 - `src/components/AuthScreen.tsx`: pantalla de login contractual (ANCLORA_AUTH_LOGIN_SCREEN_CONTRACT v1.3.0). `src/components/ui/ModalShell.tsx`: primitive modal común (ESC, click-outside, focus trap, ARIA, modo blocking) para modales nuevos; variante `workspace` (shell de altura fija sin scroll exterior, usada por `MembersModal`: header/tabs/toolbar fijos y scroll solo en la región interna que lo necesita).
 - E2E local: `qa/e2e-acceptance/playwright.local.config.ts` (contra `vercel dev` + Neon dev, seed/teardown automático en `local-setup.ts`/`local-teardown.ts`).
 - Backend legacy en saneamiento: `server.mjs`, `server-export.mjs`, `proxy-server.mjs`. El antiguo `/api/shifts` global sin auth fue reemplazado por la API autenticada.
-- Modelo multi-tenant: Organization (personal=B2C / company=B2B), User (acceso), Membership (rol ADMIN/MANAGER/EMPLOYEE), Employee (persona del cuadrante, user_id opcional), Import (documento), Shift (siempre con organization_id + employee_id). Ver `docs/fase1-multitenant.md`.
+- Modelo multi-tenant: Organization (personal=B2C / company=B2B), User (acceso), Membership (rol OWNER/ADMIN/PLANNER/EMPLOYEE + scopes ORGANIZATION/AREA/SELF), Employee (persona del cuadrante, user_id opcional), Import (documento), Shift (siempre con organization_id + employee_id). Ver `docs/fase1-multitenant.md` y `docs/roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md`.
 - Modo invitado local-first intacto: sin sesión, todo sigue en `localStorage`. Con sesión, persistencia remota por empleado; migración one-shot local→remoto (sin borrar la copia local).
 
 ## Comandos útiles
