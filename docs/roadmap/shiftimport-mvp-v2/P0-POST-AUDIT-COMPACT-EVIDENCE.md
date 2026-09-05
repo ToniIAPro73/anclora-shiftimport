@@ -57,6 +57,27 @@ solo deja de navegar 13/14 semanas artificiales antes de empezar. Las fixtures s
 cada ejecución, por lo que las semanas cercanas vacías son equivalentes para este caso y evitan
 round-trips de UI que no aportan cobertura.
 
+## Recorrido continuo P0-M07
+
+Comando ejecutado desde `qa/e2e-acceptance/`:
+
+```text
+npx playwright test --config playwright.p0-flow.config.ts
+```
+
+Resultado: **1/1 PASS en 1m37,2 s**.
+
+El escenario usa una organización y dos empleados sintéticos, con setup/teardown global únicos,
+y cubre en una sola sesión de navegador: signup, onboarding OWNER, área y empleados, importación
+histórica con revisión/compare/confirmación, creación y edición de borrador, importación futura a
+borrador, publicación, portal EMPLOYEE, acknowledge, solicitud de cambio, aprobación y lectura de
+auditoría. La segunda sesión de navegador sólo se abre para validar el recorrido del EMPLOYEE.
+
+La preparación de datos que no constituye evidencia de UI (alta de área/empleados, provisión de
+plan Team y consultas de verificación) se hace por API/SQL contra Neon development protegido por
+host. El caso no sustituye la evidencia pendiente de P0-M07: EN, dark, axe y capturas completas
+del recorrido continuo.
+
 ## Invariantes de datos
 
 Comando:
@@ -81,7 +102,7 @@ de approval request y presencia de las defensas únicas correspondientes.
 
 ## Alcance pendiente del Gate P0
 
-Esta evidencia no declara cerrado el Gate P0: aún falta el recorrido funcional continuo de 16
-pasos, la matriz completa rol×scope×endpoint y las capturas/axe/responsive ES/EN exigidas por
-P0-M07..M10. El perfil compacto es un smoke determinista para reducir tiempo de espera, no una
-reducción de los criterios de aceptación.
+Esta evidencia no declara cerrado el Gate P0: aún falta completar la matriz rol×scope×endpoint,
+las capturas/axe/responsive ES/EN exigidas por P0-M07..M10 y la consolidación formal del Gate. Los
+perfiles compactos son smoke deterministas para reducir tiempo de espera, no una reducción de los
+criterios de aceptación.
