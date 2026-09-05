@@ -197,4 +197,4 @@ Revert del commit de esta microfase restaura el comportamiento actual (todo usua
 
 Un usuario con rol EMPLOYEE aterriza en el shell del portal tras login; un usuario ADMIN no ve cambio alguno; Gate G1+G6 en PASS.
 
-Commit de cierre: pendiente de registrar tras el commit de esta microfase.
+Commit de cierre: `be0ccac` (`feat(portal): complete R4-M00 employee shell`).
