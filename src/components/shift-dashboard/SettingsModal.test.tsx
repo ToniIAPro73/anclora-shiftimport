@@ -16,19 +16,24 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     updateOwnEmployeeName: vi.fn(),
     resetOrganization: vi.fn(),
     updateRemoteOrganizationName: vi.fn(),
+    loadRemoteApprovalPolicy: vi.fn(),
+    updateRemoteApprovalPolicy: vi.fn(),
   };
 });
 
 setupLocalStorageMock();
 afterEach(cleanup);
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
 const mockedUpdateUserDisplayName = vi.mocked(remote.updateUserDisplayName);
 const mockedUpdateOwnEmployeeName = vi.mocked(remote.updateOwnEmployeeName);
 const mockedResetOrganization = vi.mocked(remote.resetOrganization);
 const mockedUpdateRemoteOrganizationName = vi.mocked(remote.updateRemoteOrganizationName);
+const mockedLoadRemoteApprovalPolicy = vi.mocked(remote.loadRemoteApprovalPolicy);
+const mockedUpdateRemoteApprovalPolicy = vi.mocked(remote.updateRemoteApprovalPolicy);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockedLoadRemoteApprovalPolicy.mockResolvedValue('NO_APPROVAL');
+});
 
 type SessionProp = NonNullable<ComponentProps<typeof SettingsModal>['session']>;
 
@@ -136,7 +141,7 @@ describe('SettingsModal — profile tab by role/employee linkage', () => {
     renderSettings({ session: makeSession(), onAccountNameChange });
 
     fireEvent.change(screen.getByDisplayValue('Toni Admin'), { target: { value: '  Toni Nuevo  ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Guardar cambios' })[0]);
 
     await waitFor(() => expect(mockedUpdateUserDisplayName).toHaveBeenCalledWith('Toni Nuevo'));
     await waitFor(() => expect(onAccountNameChange).toHaveBeenCalledTimes(1));
@@ -149,7 +154,7 @@ describe('SettingsModal — profile tab by role/employee linkage', () => {
     renderSettings({ session: makeSession(), onAccountNameChange });
 
     fireEvent.change(screen.getByDisplayValue('Toni Admin'), { target: { value: 'Toni Nuevo' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Guardar cambios' })[0]);
 
     await waitFor(() => expect(screen.getByText('No se pudo guardar el nombre de la cuenta')).toBeTruthy());
     expect(screen.queryByText('Guardado ✓')).toBeNull();
@@ -299,7 +304,7 @@ describe('SettingsModal — organization name (R2-M01)', () => {
     expect(input.value).toBe('Acme');
 
     fireEvent.change(input, { target: { value: 'Acme Renamed' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Guardar cambios' })[0]);
 
     await waitFor(() => expect(mockedUpdateRemoteOrganizationName).toHaveBeenCalledWith('Acme Renamed'));
     await waitFor(() => expect(onOrganizationNameChange).toHaveBeenCalledTimes(1));
@@ -319,7 +324,7 @@ describe('SettingsModal — organization name (R2-M01)', () => {
 
     openTeamTab();
     fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Acme Renamed' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Guardar cambios' })[0]);
 
     await waitFor(() => expect(screen.getByText('No se pudo guardar el nombre de la organización')).toBeTruthy());
     expect(onOrganizationNameChange).not.toHaveBeenCalled();
@@ -328,11 +333,26 @@ describe('SettingsModal — organization name (R2-M01)', () => {
   it('save is disabled when the name is unchanged or empty', () => {
     renderSettings({ session: makeSession() });
     openTeamTab();
-    const saveButton = screen.getByRole('button', { name: 'Guardar cambios' }) as HTMLButtonElement;
+    const saveButton = screen.getAllByRole('button', { name: 'Guardar cambios' })[0] as HTMLButtonElement;
     expect(saveButton.disabled).toBe(true); // unchanged
 
     const input = screen.getByLabelText('Nombre');
     fireEvent.change(input, { target: { value: '   ' } });
     expect(saveButton.disabled).toBe(true); // empty/whitespace
+  });
+
+  it('ADMIN can select and save the organization approval policy', async () => {
+    mockedUpdateRemoteApprovalPolicy.mockResolvedValue('AREA_RESPONSIBLE');
+    renderSettings({ session: makeSession() });
+    openTeamTab();
+
+    const policySelect = screen.getByRole('combobox', { name: 'Regla para solicitudes' }) as HTMLSelectElement;
+    await waitFor(() => expect(policySelect.disabled).toBe(false));
+    fireEvent.change(policySelect, { target: { value: 'AREA_RESPONSIBLE' } });
+    const saveButtons = screen.getAllByRole('button', { name: 'Guardar cambios' });
+    fireEvent.click(saveButtons[saveButtons.length - 1]);
+
+    await waitFor(() => expect(mockedUpdateRemoteApprovalPolicy).toHaveBeenCalledWith('org-1', 'AREA_RESPONSIBLE'));
+    await waitFor(() => expect(screen.getByText('Guardado ✓')).toBeTruthy());
   });
 });

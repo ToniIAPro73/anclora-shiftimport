@@ -10,7 +10,7 @@ Sin política, todo Change Request quedaría o bien auto-aplicado (riesgo operat
 
 ## 3. Estado actual del repositorio
 
-MISSING. No existe `AREA_RESPONSIBLE` como concepto formal — no hay columna que designe un responsable de área en `areas` ni en `memberships`.
+IMPLEMENTED — `approval_policy` y `area_responsibles` se han añadido con migración forward-safe; las APIs, el resolver puro y las superficies de Settings/Areas están implementados y cubiertos por tests.
 
 ## 4. Alcance IN
 
@@ -154,7 +154,17 @@ Resultados de migración, resultados de tests, capturas UI ES/EN dark/light.
 ## 21. Gate
 
 Gates requeridos: G2 (DB/migrations), G3 (domain invariants).
-PASS si migración es forward-safe y la función de resolución cubre todos los casos de fallback; FAIL si algún caso de política queda indefinido.
+
+Resultado: **PASS**.
+
+Validado:
+- migración aplicada en Neon development; `organizations.approval_policy` NOT NULL con default `NO_APPROVAL` y CHECK de las tres políticas;
+- `area_responsibles` creada con PK, FKs e índices; las 8 organizaciones existentes permanecen en `NO_APPROVAL`;
+- resolver puro: 3 tests PASS, incluyendo fallback de `AREA_RESPONSIBLE`;
+- APIs de política y responsables: 8 tests PASS, incluyendo autorización y aislamiento tenant;
+- UI/API/DB focalizados: 63 tests PASS;
+- suite completa: 132 archivos / 1185 tests PASS;
+- lint, typecheck y build PASS (build conserva únicamente el warning existente de chunks grandes).
 
 ## 22. Rollback / remediación
 
@@ -162,4 +172,4 @@ Rollback lógico: revertir organizaciones a `NO_APPROVAL` (ya es el default); ta
 
 ## 23. Criterio de DONE
 
-Las 3 políticas están implementadas, la resolución de aprobador está probada en todos los casos de fallback, y ninguna organización existente cambia de comportamiento tras el despliegue (todas quedan en `NO_APPROVAL`).
+CUMPLIDO. Las 3 políticas están implementadas, la resolución de aprobador está probada en todos los casos de fallback, y ninguna organización existente cambia de comportamiento tras el despliegue (todas quedan en `NO_APPROVAL`). Commit: pendiente de cierre documental.

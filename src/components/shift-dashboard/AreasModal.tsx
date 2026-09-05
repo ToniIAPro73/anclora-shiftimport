@@ -1,7 +1,19 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
-import { createRemoteArea, listRemoteAreas, RemoteArea, updateRemoteArea } from '../../lib/remote';
+import {
+  addRemoteAreaResponsible,
+  createRemoteArea,
+  listRemoteAreaResponsibles,
+  listRemoteAreas,
+  listRemoteMembers,
+  RemoteArea,
+  RemoteAreaResponsible,
+  RemoteMember,
+  removeRemoteAreaResponsible,
+  updateRemoteArea,
+} from '../../lib/remote';
 import { ModalShell } from '../ui/ModalShell';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface AreasModalProps {
   isOpen: boolean;
@@ -19,6 +31,8 @@ interface AreasModalProps {
 export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
   const { t } = useI18n();
   const [areas, setAreas] = useState<RemoteArea[]>([]);
+  const [admins, setAdmins] = useState<RemoteMember[]>([]);
+  const [responsibles, setResponsibles] = useState<Record<string, RemoteAreaResponsible[]>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +47,13 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
 
   const reload = useCallback(async () => {
     try {
-      setAreas(await listRemoteAreas());
+      const [nextAreas, members] = await Promise.all([listRemoteAreas(), listRemoteMembers()]);
+      const nextResponsibles = await Promise.all(nextAreas.map(async (area) => (
+        [area.id, await listRemoteAreaResponsibles(area.id)] as const
+      )));
+      setAreas(nextAreas);
+      setAdmins(members.filter((member) => member.role === 'ADMIN'));
+      setResponsibles(Object.fromEntries(nextResponsibles));
     } catch {
       setError(t('areas.loadFailed'));
     }
@@ -93,6 +113,18 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
       return;
     }
     void run(() => updateRemoteArea({ id: area.id, deactivate: true }));
+  };
+
+  const handleAddResponsible = (areaId: string, userId: string) => {
+    if (!userId) return;
+    void run(() => addRemoteAreaResponsible(areaId, userId));
+  };
+
+  const handleRemoveResponsible = (areaId: string, responsible: RemoteAreaResponsible) => {
+    if (!window.confirm(t('areas.removeResponsibleConfirm', { name: responsible.displayName || responsible.email }))) {
+      return;
+    }
+    void run(() => removeRemoteAreaResponsible(areaId, responsible.userId));
   };
 
   return (
@@ -167,6 +199,51 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
                   >
                     {t('areas.deactivateAction')}
                   </button>
+                )}
+                {area.active && (
+                  <div style={{ flexBasis: '100%', borderTop: '1px solid var(--glass-border)', paddingTop: '8px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <span style={{ color: 'var(--text-subtle)', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {t('areas.responsiblesLabel')}
+                      </span>
+                      {(responsibles[area.id] ?? []).length > 0 ? (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {(responsibles[area.id] ?? []).map((responsible) => (
+                            <span key={responsible.userId} style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', border: '1px solid var(--glass-border)', borderRadius: '999px', padding: '4px 8px', background: 'var(--panel-bg)' }}>
+                              <span>{responsible.displayName || responsible.email}</span>
+                              <button
+                                type="button"
+                                className="btn-outline"
+                                disabled={busy}
+                                onClick={() => handleRemoveResponsible(area.id, responsible)}
+                                aria-label={`${t('areas.removeResponsible')}: ${responsible.displayName || responsible.email}`}
+                                style={{ padding: '2px 6px', minHeight: 'auto', fontSize: '0.7rem' }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-subtle)', fontSize: '0.8rem' }}>{t('areas.responsiblesEmpty')}</span>
+                      )}
+                      <SearchableSelect
+                        label={t('areas.addResponsible')}
+                        value=""
+                        onChange={(userId) => handleAddResponsible(area.id, userId)}
+                        options={admins
+                          .filter((admin) => !(responsibles[area.id] ?? []).some((responsible) => responsible.userId === admin.userId))
+                          .map((admin) => ({
+                            value: admin.userId,
+                            label: admin.displayName || admin.email,
+                            searchText: `${admin.displayName} ${admin.email}`.toLowerCase(),
+                          }))}
+                        searchPlaceholder={t('members.emailPlaceholder')}
+                        emptyMessage={t('members.noEligibleAreaResponsibles')}
+                        ariaLabel={t('areas.addResponsible')}
+                      />
+                    </div>
+                  </div>
                 )}
               </>
             )}

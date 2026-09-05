@@ -16,8 +16,8 @@ import { useEscapeClose } from '../../lib/use-escape-close';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
 import { isAdminRole, SessionInfo } from '../../lib/session';
-import { RemoteEmployee } from '../../lib/remote';
-import { resetOrganization, updateUserDisplayName, updateOwnEmployeeName, updateRemoteOrganizationName } from '../../lib/remote';
+import { ApprovalPolicy, RemoteEmployee } from '../../lib/remote';
+import { loadRemoteApprovalPolicy, resetOrganization, updateUserDisplayName, updateOwnEmployeeName, updateRemoteApprovalPolicy, updateRemoteOrganizationName } from '../../lib/remote';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -346,10 +346,49 @@ function TeamSection({
   const [orgNameSaving, setOrgNameSaving] = useState(false);
   const [orgNameSaved, setOrgNameSaved] = useState(false);
   const [orgNameError, setOrgNameError] = useState('');
+  const [approvalPolicy, setApprovalPolicy] = useState<ApprovalPolicy>('NO_APPROVAL');
+  const [approvalPolicyLoading, setApprovalPolicyLoading] = useState(false);
+  const [approvalPolicySaving, setApprovalPolicySaving] = useState(false);
+  const [approvalPolicyError, setApprovalPolicyError] = useState('');
+  const [approvalPolicySaved, setApprovalPolicySaved] = useState(false);
 
   useEffect(() => {
     setOrgName(activeMembership?.organizationName ?? '');
   }, [activeMembership?.organizationName]);
+
+  useEffect(() => {
+    const organizationId = session?.organizationId;
+    if (!organizationId) return undefined;
+    let cancelled = false;
+    setApprovalPolicyLoading(true);
+    setApprovalPolicyError('');
+    void loadRemoteApprovalPolicy(organizationId).then((policy) => {
+      if (!cancelled) setApprovalPolicy(policy);
+    }).catch(() => {
+      if (!cancelled) setApprovalPolicyError(t('settings.approvalPolicyLoadError'));
+    }).finally(() => {
+      if (!cancelled) setApprovalPolicyLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.organizationId, t]);
+
+  const handleSaveApprovalPolicy = async () => {
+    if (!session?.organizationId) return;
+    setApprovalPolicySaving(true);
+    setApprovalPolicyError('');
+    try {
+      const savedPolicy = await updateRemoteApprovalPolicy(session.organizationId, approvalPolicy);
+      setApprovalPolicy(savedPolicy);
+      setApprovalPolicySaved(true);
+      setTimeout(() => setApprovalPolicySaved(false), 2000);
+    } catch {
+      setApprovalPolicyError(t('settings.approvalPolicySaveError'));
+    } finally {
+      setApprovalPolicySaving(false);
+    }
+  };
 
   const handleSaveOrgName = async () => {
     const trimmed = orgName.trim();
@@ -431,7 +470,7 @@ function TeamSection({
               {orgNameError && <p role="alert" style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--danger)' }}>{orgNameError}</p>}
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-md)', flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.orgName')}</span>
               <span style={{ fontWeight: 600 }}>{activeMembership?.organizationName}</span>
             </div>
@@ -440,6 +479,40 @@ function TeamSection({
             <span style={{ color: 'var(--text-subtle)', minWidth: '140px' }}>{t('settings.yourRole')}</span>
             <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{t(`role.${(session?.role ?? '').toLowerCase()}`)}</span>
           </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>
+          <h3 style={{ margin: '0 0 var(--space-xs)', fontSize: '0.9rem', fontWeight: 700 }}>{t('settings.approvalPolicyTitle')}</h3>
+          <p style={{ margin: '0 0 var(--space-sm)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
+            {t('settings.approvalPolicyDescription')}
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--space-sm)', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <label style={{ ...labelStyle, marginBottom: 0, minWidth: '220px' }} htmlFor="settings-approval-policy">
+              {t('settings.approvalPolicyLabel')}
+              <select
+                id="settings-approval-policy"
+                className="modal-input"
+                value={approvalPolicy}
+                disabled={approvalPolicyLoading || approvalPolicySaving}
+                onChange={(event) => setApprovalPolicy(event.target.value as ApprovalPolicy)}
+                style={{ display: 'block', marginTop: '4px', width: '100%', textTransform: 'none' }}
+              >
+                <option value="NO_APPROVAL">{t('settings.approvalPolicyNoApproval')}</option>
+                <option value="AREA_RESPONSIBLE">{t('settings.approvalPolicyAreaResponsible')}</option>
+                <option value="ORGANIZATION_ADMIN">{t('settings.approvalPolicyOrganizationAdmin')}</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="btn-gold"
+              onClick={() => void handleSaveApprovalPolicy()}
+              disabled={approvalPolicyLoading || approvalPolicySaving}
+              style={{ width: 'fit-content' }}
+            >
+              {approvalPolicySaving ? t('auth.working') : approvalPolicySaved ? t('settings.saved') : t('settings.saveChanges')}
+            </button>
+          </div>
+          {approvalPolicyError && <p role="alert" style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--danger)' }}>{approvalPolicyError}</p>}
         </div>
 
         <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 'var(--space-md)' }}>

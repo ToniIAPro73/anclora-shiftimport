@@ -16,6 +16,7 @@ const shiftAcknowledgementsMigrationPath = resolve(dirname(fileURLToPath(import.
 const shiftCommentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0023_shift_comments.sql');
 const changeRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0024_change_requests.sql');
 const notificationsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0025_notifications.sql');
+const approvalPolicyMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0027_approval_policy.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -259,5 +260,24 @@ describe('0025 notifications migration contract', () => {
     expect(sql).toContain('read_at TIMESTAMPTZ');
     expect(sql).toContain('notifications_user_read_created_idx');
     expect(sql).toContain('notifications_user_type_resource_unique UNIQUE');
+  });
+});
+
+describe('0027 approval policy migration contract', () => {
+  it('adds a safe organization default and constrained policy values', async () => {
+    const sql = await readFile(approvalPolicyMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS approval_policy TEXT NOT NULL DEFAULT');
+    expect(sql).toContain("CHECK (approval_policy IN ('NO_APPROVAL', 'AREA_RESPONSIBLE', 'ORGANIZATION_ADMIN'))");
+    expect(sql).toContain('DROP CONSTRAINT IF EXISTS organizations_approval_policy_check');
+  });
+
+  it('creates tenant-scoped N:N area responsibility mappings with indexes', async () => {
+    const sql = await readFile(approvalPolicyMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS area_responsibles');
+    expect(sql).toContain('area_id UUID NOT NULL REFERENCES areas');
+    expect(sql).toContain('user_id UUID NOT NULL REFERENCES users');
+    expect(sql).toContain('organization_id UUID NOT NULL REFERENCES organizations');
+    expect(sql).toContain('PRIMARY KEY (area_id, user_id)');
+    expect(sql).toContain('area_responsibles_organization_idx');
   });
 });

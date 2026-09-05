@@ -11,6 +11,10 @@ vi.mock('../../lib/remote', async (importOriginal) => {
   return {
     ...actual,
     listRemoteAreas: vi.fn(),
+    listRemoteMembers: vi.fn(),
+    listRemoteAreaResponsibles: vi.fn(),
+    addRemoteAreaResponsible: vi.fn(),
+    removeRemoteAreaResponsible: vi.fn(),
     createRemoteArea: vi.fn(),
     updateRemoteArea: vi.fn(),
   };
@@ -19,9 +23,13 @@ vi.mock('../../lib/remote', async (importOriginal) => {
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedListRemoteMembers.mockResolvedValue([]);
+  mockedListRemoteAreaResponsibles.mockResolvedValue([]);
 });
 
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
+const mockedListRemoteMembers = vi.mocked(remote.listRemoteMembers);
+const mockedListRemoteAreaResponsibles = vi.mocked(remote.listRemoteAreaResponsibles);
 const mockedCreateRemoteArea = vi.mocked(remote.createRemoteArea);
 const mockedUpdateRemoteArea = vi.mocked(remote.updateRemoteArea);
 

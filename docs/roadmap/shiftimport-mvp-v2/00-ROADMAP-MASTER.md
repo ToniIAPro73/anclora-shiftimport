@@ -111,7 +111,7 @@ All MISSING.
 | Microfase | Objetivo | Repo status | Dependencias | Nº tasks (est.) | Gates |
 |---|---|---|---|---:|---|
 | R5-M00 | Approval Domain | DONE — PASS | R4-M13 | 3 | G1, G3 |
-| R5-M01 | ApprovalPolicy (NO_APPROVAL / AREA_RESPONSIBLE / ORGANIZATION_ADMIN) | MISSING — no AREA_RESPONSIBLE concept exists yet, needs MVP-scoped definition | R5-M00, R2-M07 | 5 | G2, G3 |
+| R5-M01 | ApprovalPolicy (NO_APPROVAL / AREA_RESPONSIBLE / ORGANIZATION_ADMIN) | DONE — PASS | R5-M00, R2-M07 | 5 | G2, G3 |
 | R5-M02 | Request Routing | MISSING | R5-M01, R4-M06 | 4 | G3, G5 |
 | R5-M03 | Approver Inbox | MISSING | R5-M02 | 4 | G5, G6 |
 | R5-M04 | Approve | MISSING | R5-M03 | 3 | G4, G5 |

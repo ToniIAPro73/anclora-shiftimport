@@ -519,6 +519,14 @@ export interface RemoteOrganization {
   plan: string | null;
 }
 
+export type ApprovalPolicy = 'NO_APPROVAL' | 'AREA_RESPONSIBLE' | 'ORGANIZATION_ADMIN';
+
+export interface RemoteAreaResponsible {
+  userId: string;
+  email: string;
+  displayName: string;
+}
+
 /** ADMIN/OWNER only: rename the active organization. `plan` is read-only (no
  * billing integration exists yet, R2-M01 scope). */
 export async function updateRemoteOrganizationName(name: string): Promise<RemoteOrganization> {
@@ -527,6 +535,19 @@ export async function updateRemoteOrganizationName(name: string): Promise<Remote
     body: JSON.stringify({ name }),
   });
   return payload.organization;
+}
+
+export async function loadRemoteApprovalPolicy(organizationId: string): Promise<ApprovalPolicy> {
+  const payload = await apiFetch<{ policy: ApprovalPolicy }>(`/api/organizations/${encodeURIComponent(organizationId)}/approval-policy`);
+  return payload.policy;
+}
+
+export async function updateRemoteApprovalPolicy(organizationId: string, policy: ApprovalPolicy): Promise<ApprovalPolicy> {
+  const payload = await apiFetch<{ policy: ApprovalPolicy }>(`/api/organizations/${encodeURIComponent(organizationId)}/approval-policy`, {
+    method: 'PUT',
+    body: JSON.stringify({ policy }),
+  });
+  return payload.policy;
 }
 
 /** EMPLOYEE (or ADMIN): update own employee's name via /self endpoint. */
@@ -702,6 +723,26 @@ export async function updateRemoteArea(input: {
     body: JSON.stringify(input),
   });
   return payload.area;
+}
+
+export async function listRemoteAreaResponsibles(areaId: string): Promise<RemoteAreaResponsible[]> {
+  const payload = await apiFetch<{ responsibles: RemoteAreaResponsible[] }>(`/api/areas/${encodeURIComponent(areaId)}/responsibles`);
+  return payload.responsibles;
+}
+
+export async function addRemoteAreaResponsible(areaId: string, userId: string): Promise<RemoteAreaResponsible> {
+  const payload = await apiFetch<{ responsible: RemoteAreaResponsible }>(`/api/areas/${encodeURIComponent(areaId)}/responsibles`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  });
+  return payload.responsible;
+}
+
+export async function removeRemoteAreaResponsible(areaId: string, userId: string): Promise<void> {
+  await apiFetch(`/api/areas/${encodeURIComponent(areaId)}/responsibles`, {
+    method: 'DELETE',
+    body: JSON.stringify({ userId }),
+  });
 }
 
 // ------------------------------------------------------------ memberships
