@@ -72,17 +72,24 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
     capturas por hito, ES/light/desktop y pasada visual EN/dark/móvil.
   - P0-M08: PASS — aislamiento cross-tenant 4/4 PASS (OWNER/ADMIN/PLANNER/EMPLOYEE, 37,9 s) y matriz consolidada rol×scope×capacidad archivada en
     `P0-POST-AUDIT-COMPACT-EVIDENCE.md`.
-  - P0-M09: PASS — idempotencia dirigida 1/1 PASS (12,6 s) e invariantes 11/11 PASS mediante
-    `scripts/verify-mvp-invariants.mjs` contra Neon development.
+  - P0-M09: PASS — idempotencia dirigida 1/1 PASS (12,6 s), invariantes 11/11 PASS mediante
+    `scripts/verify-mvp-invariants.mjs` y migraciones desde cero 32/32 PASS en schema efímero
+    mediante `scripts/verify-migrations-from-scratch.mjs`, todo contra Neon development.
   - P0-M10: PASS — `MVP_NOT_READY` formalizado en `R5-M12-mvp-release-gate.md`; no se emite `MVP_READY`.
-- P1–P7: pendientes; P1 no se inicia hasta cerrar los bloqueadores formales de P0.
+- P4 — remediación UX/a11y en curso: P4-M01..M07 implementadas con evidencia en
+  `P4-POST-AUDIT-EVIDENCE.md`; el runner compacto `test:p4` pasa 1/1 y el inventario axe
+  focalizado del dashboard/planner/portal pasa. El Gate formal de P4 queda pendiente de la
+  evidencia visual comparativa y del checklist transversal.
+- P1–P3 y P5–P7: pendientes; P1 no se inicia hasta cerrar los bloqueadores formales de P0.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
 ## Por hacer en el roadmap MVP v2 histórico
 
 - **R5-M12 — MVP Release Gate**: `MVP_NOT_READY` formalizado en §20.1; bloqueadores trazados a
-  P0 (axe/i18n/responsive/migración desde cero) y P1 (persistencia de intentos no completados).
+  P0 (pasada funcional completa EN/dark/mobile y checklist final) y P1 (persistencia de intentos
+  no completados). Los hallazgos axe `button-name`, `landmark-one-main` y `region` ya están
+  corregidos y cubiertos por el runner focalizado.
 - **POST-MVP R6–R9**: Workflow Engine, Attendance, Reconciliation & Reporting y Advanced Org Model;
   no se implementan antes de validar el MVP.
 

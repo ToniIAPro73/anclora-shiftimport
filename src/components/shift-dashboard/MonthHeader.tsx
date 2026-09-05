@@ -65,7 +65,7 @@ export const MonthHeader = ({
   const monthNames = tl('calendar.months');
 
   return (
-    <div className="dashboard-header">
+    <header className="dashboard-header">
       <div className="dashboard-brand">
         <TurnosLogo />
         <div className="dashboard-brand-copy">
@@ -87,13 +87,13 @@ export const MonthHeader = ({
 
       <div className="month-toolbar">
         <div className="month-navigator">
-          <button className="month-nav-button" onClick={() => onNavigate(-1)}>
+          <button className="month-nav-button" onClick={() => onNavigate(-1)} aria-label={t('header.previousMonth')}>
             <ChevronLeft size={20} />
           </button>
           <div className="month-nav-label">
             {monthNames[month]} {year}
           </div>
-          <button className="month-nav-button" onClick={() => onNavigate(1)}>
+          <button className="month-nav-button" onClick={() => onNavigate(1)} aria-label={t('header.nextMonth')}>
             <ChevronRight size={20} />
           </button>
         </div>
@@ -122,6 +122,6 @@ export const MonthHeader = ({
           <PlusCircle size={18} /> <span>{t('header.add')}</span>
         </button>
       </div>
-    </div>
+    </header>
   );
 };

@@ -91,6 +91,16 @@ describe('SettingsModal', () => {
     expect(utc).toBeTruthy();
   });
 
+  it('names every shift-type color control for assistive technology', () => {
+    renderSettings({ session: makeSession() });
+    fireEvent.click(screen.getByRole('button', { name: 'Tipos de turno' }));
+
+    const colorInputs = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="color"]'));
+    expect(colorInputs.length).toBeGreaterThan(0);
+    expect(colorInputs.every((input) => input.getAttribute('aria-label')?.trim())).toBe(true);
+    expect(new Set(colorInputs.map((input) => input.getAttribute('aria-label'))).size).toBe(colorInputs.length);
+  });
+
   it('closes via the external close button and on Escape', () => {
     const onClose = vi.fn();
     renderSettings({ onClose });

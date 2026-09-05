@@ -1,7 +1,7 @@
 # P0 — Evidencia compacta de ejecución
 
-Fecha: 2026-09-05  
-Rama: `development`  
+Fecha: 2026-09-06
+Rama: `development`
 Commits de la evidencia: `b9082a7` (runner) + `dd99b92` (verificador)
 Entorno: Neon **development** (prefijo de host verificado por el runner)
 
@@ -48,14 +48,16 @@ UI, navegación, accesibilidad o flujos cuya evidencia dependa del browser.
 Comando:
 
 ```text
-npx playwright test --config playwright.r3-gate.config.ts --grep "happy path"
+npx playwright test --config playwright.r3-gate.config.ts --grep "happy path|mobile planner smoke"
 ```
 
-Resultado: **2/2 PASS en 1m45,2 s** (ES desktop: 44,9 s; EN mobile: 53,5 s).
-El journey conserva creación, validación, publicación, historial y comprobación persistente;
-solo deja de navegar 13/14 semanas artificiales antes de empezar. Las fixtures se reinician en
-cada ejecución, por lo que las semanas cercanas vacías son equivalentes para este caso y evitan
-round-trips de UI que no aportan cobertura.
+Resultado histórico: **2/2 PASS en 1m45,2 s** (ES desktop: 44,9 s; EN mobile: 53,5 s).
+Tras la reducción de E2E del 2026-09-06, el caso EN móvil dejó de repetir creación, validación,
+publicación e historial y pasó a ser un smoke específico de presentación, navegación y cambio de
+vista: **2/2 PASS en ~1m18 s** (ES desktop: 43,6 s; EN mobile smoke: 29,5 s). El recorrido
+completo de negocio queda cubierto una sola vez en ES/desktop y el flujo continuo P0-M07 mantiene
+la evidencia adicional de roles, portal y aprobación. Las fixtures se reinician en cada ejecución,
+por lo que no se pierde aislamiento ni determinismo.
 
 ## Recorrido continuo P0-M07
 
@@ -95,6 +97,32 @@ Se verificaron columnas tenant `NOT NULL`, coherencia organization↔employee en
 coherencia de assignments y change requests, OWNER único, unicidad de `structureHash`, unicidad
 de approval request y presencia de las defensas únicas correspondientes.
 
+## Migraciones desde cero
+
+Comando:
+
+```text
+node --env-file=.env.development.local scripts/verify-migrations-from-scratch.mjs
+```
+
+Resultado: **32/32 PASS** en un schema efímero de Neon development; se crearon 23 tablas y el
+schema se eliminó en el `finally` del verificador. El host fue validado contra el prefijo
+documentado de development y no se tocó el schema público.
+
+## Accesibilidad axe focalizada
+
+Comando:
+
+```text
+npm run test:a11y
+```
+
+Resultado del runner focalizado: **1/1 PASS en 38,0 s**, con JSON adjunto para dashboard y planner
+ES/light/desktop y portal EMPLOYEE EN/dark/móvil. El inventario ampliado que inicialmente detectó
+`button-name`, `landmark-one-main` y `region` vuelve a pasar tras nombrar la navegación mensual y
+convertir la cabecera del dashboard en landmark `header`; el runner sigue siendo focalizado y no
+se presenta como sustituto del Gate de accesibilidad completo.
+
 ## Aislamiento cross-tenant por rol
 
 Comando ejecutado desde `qa/e2e-acceptance/`:
@@ -126,7 +154,7 @@ capacidad se verifican además en integración/API. No se añade una quinta iden
 
 ## Calidad transversal
 
-- `npm test -- --run`: **137 ficheros / 1.220 tests PASS**.
+- `npm test -- --run`: **137 ficheros / 1.224 tests PASS**.
 - `npm run lint`: **PASS**.
 - `npm run build`: **PASS**; permanecen únicamente los warnings conocidos de tamaño de chunks y
   deprecación de opciones de Vite/esbuild.
@@ -135,6 +163,6 @@ capacidad se verifican además en integración/API. No se añade una quinta iden
 ## Alcance pendiente del Gate P0
 
 Esta evidencia no declara cerrado el Gate P0: aún falta completar la matriz rol×scope×endpoint,
-las capturas/axe/responsive ES/EN exigidas por P0-M07..M10 y la consolidación formal del Gate. Los
-perfiles compactos son smoke deterministas para reducir tiempo de espera, no una reducción de los
-criterios de aceptación.
+la pasada funcional completa EN/dark/mobile, la corrección del inventario axe ampliado y la
+consolidación formal del Gate. Los perfiles compactos son smoke deterministas para reducir tiempo
+de espera, no una reducción de los criterios de aceptación.

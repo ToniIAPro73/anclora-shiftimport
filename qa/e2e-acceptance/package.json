@@ -3,7 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "description": "Standalone Playwright E2E acceptance battery (test tooling only, not app code).",
+  "scripts": {
+    "test:fast": "playwright test --config playwright.p0-gate.config.ts",
+    "test:a11y": "playwright test --config playwright.p0-a11y.config.ts",
+    "test:p4": "playwright test --config playwright.p4-gate.config.ts",
+    "test:p0-flow": "playwright test --config playwright.p0-flow.config.ts",
+    "test:scheduling": "playwright test --config playwright.r3-gate.config.ts --grep \"happy path|mobile planner smoke\"",
+    "test:scheduling:desktop": "playwright test --config playwright.r3-gate.config.ts --grep \"happy path ES desktop\"",
+    "test:scheduling:mobile": "playwright test --config playwright.r3-gate.config.ts --grep \"mobile planner smoke\"",
+    "test:tenant": "playwright test --config playwright.r3-gate.config.ts --grep \"API isolation\"",
+    "test:future": "playwright test --config playwright.p0-gate.config.ts --grep \"future, idempotency\""
+  },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1"
   }
 }

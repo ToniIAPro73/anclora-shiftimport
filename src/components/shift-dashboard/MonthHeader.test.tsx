@@ -76,6 +76,12 @@ describe('MonthHeader language toggle', () => {
     expect(screen.getByText(/Test Org/)).toBeTruthy();
   });
 
+  it('names the month navigation controls for assistive technology', () => {
+    renderHeader();
+    expect(screen.getByRole('button', { name: 'Mes anterior' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mes siguiente' })).toBeTruthy();
+  });
+
   it('falls back to user displayName when no employee', () => {
     const session: SessionInfo = {
       user: { id: 'user-1', email: 'test@test.com', displayName: 'Fallback User' },

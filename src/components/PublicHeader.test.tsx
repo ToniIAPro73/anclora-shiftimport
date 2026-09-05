@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from '../lib/i18n-react';
 import { ThemeProvider } from '../lib/theme-react';
 import { PublicHeader } from './PublicHeader';
@@ -93,5 +94,21 @@ describe('PublicHeader auth-state flash (ternary isAuthenticated)', () => {
     rerender(headerTree(true));
     fireEvent.click(screen.getByRole('button', { name: 'Ir a ShiftImport' }));
     expect(window.location.pathname).toBe('/app');
+  });
+
+  it('provides a keyboard-accessible collapsible navigation contract for narrow viewports', () => {
+    const { container } = renderHeader(false);
+    const menuButton = screen.getByRole('button', { name: 'Abrir menú' });
+    const navigation = container.querySelector('#public-header-navigation');
+
+    expect(navigation).toBeTruthy();
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    expect(menuButton).toHaveAttribute('aria-controls', 'public-header-navigation');
+
+    fireEvent.click(menuButton);
+    expect(screen.getByRole('button', { name: 'Cerrar menú' })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Abrir menú' }));
   });
 });

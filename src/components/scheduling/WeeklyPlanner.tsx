@@ -126,6 +126,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   });
   const requestId = useRef(0);
   const gridWrapRef = useRef<HTMLDivElement>(null);
+  const focusReturnKey = useRef<string | null>(null);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(periodStart, index)), [periodStart]);
   const activeDayIndex = Math.max(0, days.indexOf(activeDay));
@@ -183,6 +184,15 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     const targetScrollLeft = activeHeader.offsetLeft - ((gridWrap.clientWidth - activeHeader.offsetWidth) / 2);
     gridWrap.scrollLeft = Math.max(0, targetScrollLeft);
   }, [activeDay, view, days.length, visibleEmployees.length]);
+
+  useEffect(() => {
+    if (selectedCell || !focusReturnKey.current) return;
+    const targetKey = focusReturnKey.current;
+    focusReturnKey.current = null;
+    const target = Array.from(document.querySelectorAll<HTMLElement>('[data-editor-target]'))
+      .find((element) => element.dataset.editorTarget === targetKey);
+    target?.focus();
+  }, [selectedCell]);
 
   useEffect(() => {
     if (!editable || isLoading || !defaultEditor) {
@@ -271,6 +281,9 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   };
 
   const resetEditor = () => {
+    if (selectedCell) {
+      focusReturnKey.current = `${selectedCell.employeeId}:${selectedCell.date}`;
+    }
     setSelectedCell(null);
     setMobileEditorOpen(false);
     setEditor(defaultEditor);
@@ -583,7 +596,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
               <p>{t('planner.noEmployeesDescription')}</p>
             </div>
           ) : (
-          <div className="weekly-planner__workspace">
+          <div
+            className="weekly-planner__workspace"
+            data-editor-state={editor ? (mobileEditorOpen ? 'open' : 'collapsed') : 'closed'}
+          >
             <div className="weekly-planner__grid-region">
               {visibleEmployees.length === 0 ? (
                 <div className="weekly-planner__state weekly-planner__state--empty">
@@ -639,6 +655,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                                       key={assignment.id}
                                       onClick={() => { if (editable) handleEdit(employee.id, day, assignment); }}
                                       disabled={!editable}
+                                      data-editor-target={`${employee.id}:${day}`}
                                       title={editable ? t('planner.editAssignment') : t('planner.locked')}
                                     >
                                       <strong>{assignment.startTime.slice(0, 5)}–{assignment.endTime.slice(0, 5)}</strong>
@@ -646,7 +663,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                                     </button>
                                   ))}
                                   {editable && (
-                                    <button type="button" className="weekly-planner__add-cell" onClick={() => handleAdd(employee.id, day)} aria-label={t('planner.addAssignment', { employee: employee.name, date: day })}>
+                                    <button type="button" className="weekly-planner__add-cell" onClick={() => handleAdd(employee.id, day)} aria-label={t('planner.addAssignment', { employee: employee.name, date: day })} data-editor-target={`${employee.id}:${day}`}>
                                       <Plus size={16} aria-hidden="true" />
                                     </button>
                                   )}

@@ -187,18 +187,16 @@ Evidencia ejecutada:
 - aislamiento P0-M08: 4/4 PASS por rol en 37,9 s, con matriz consolidada;
 - idempotencia P0-M09: 1/1 PASS en 12,6 s;
 - invariantes Neon development: 11/11 PASS, 0 violaciones;
-- calidad: 1.220 tests PASS, lint PASS, typecheck/build PASS, migración incremental PASS.
+- calidad: 1.224 tests PASS, lint PASS, typecheck/build PASS, migración incremental PASS.
+- migración desde cero: 32/32 PASS en schema efímero de Neon development, con limpieza confirmada
+  (`scripts/verify-migrations-from-scratch.mjs`).
 
 Bloqueadores que impiden `MVP_READY`:
 
-1. Falta snapshot axe de las pantallas del flujo y su evidencia archivada (PHASE_P0_GATE:
-   `ACCESSIBILITY`).
-2. Falta una pasada funcional completa del flujo en EN/dark/mobile; la evidencia actual EN es
+1. Falta una pasada funcional completa del flujo en EN/dark/mobile; la evidencia actual EN es
    visual y reutiliza el estado autenticado, no repite los 16 pasos (PHASE_P0_GATE: `I18N` y
    `RESPONSIVE`).
-3. Falta validar la aplicación de las 32 migraciones desde cero en un schema efímero de Neon
-   development; sólo se verificó la aplicación incremental (`MIGRATION_VALIDATION`).
-4. La persistencia de intentos de importación `blocked`/`failed` sigue sin implementar, hallazgo
+2. La persistencia de intentos de importación `blocked`/`failed` sigue sin implementar, hallazgo
    R1-M09, asignado a P1-M01..P1-M10.
 
 No se emite `MVP_READY` parcial. Estos bloqueadores quedan trazados en el programa post-auditoría

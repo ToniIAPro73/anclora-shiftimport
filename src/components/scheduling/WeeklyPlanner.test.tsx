@@ -285,6 +285,7 @@ describe('WeeklyPlanner', () => {
 
     fireEvent.click(within(editorForm).getByRole('button', { name: 'Cancelar' }));
     expect(addButton.closest('td')).not.toHaveAttribute('data-selected', 'true');
+    expect(addButton).toHaveFocus();
     scrollTo.mockRestore();
   });
 

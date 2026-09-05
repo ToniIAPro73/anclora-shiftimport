@@ -211,6 +211,48 @@ async function runHappyFlow(page: Page, locale: Locale, theme: 'dark' | 'light',
   expect(consoleErrors).toEqual([]);
 }
 
+async function runMobilePlannerSmoke(page: Page) {
+  await configurePresentation(page, 'en', 'light');
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  const consoleErrors: string[] = [];
+  page.on('pageerror', (error) => consoleErrors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !message.text().includes('401 (Unauthorized)')) {
+      consoleErrors.push(message.text());
+    }
+  });
+
+  // The full business journey is covered once above in ES/desktop and by the
+  // compact P0 flow. This case only proves the mobile presentation contract;
+  // it must not repeat the expensive validation/publication/history path.
+  await loginAs(page, fixture.emails.planner);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.getByRole('button', { name: 'Plan' }).click();
+  await expect(page).toHaveURL(/\/app\/schedule$/);
+  await expect(page.getByRole('heading', { name: 'Weekly planner' })).toBeVisible();
+
+  const planner = page.getByTestId('weekly-planner');
+  await expect(planner).toHaveAttribute('data-state', /ready|empty/);
+  const createDraft = page.getByRole('button', { name: 'Create weekly draft' });
+  if (await createDraft.count()) {
+    await createDraft.click();
+    await expect(page.getByRole('status')).toContainText('Weekly draft created.');
+  }
+  await expect(planner).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('.weekly-planner__day-focus')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Grid' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Accessible table' })).toBeVisible();
+
+  const accessibleTable = page.locator('.weekly-planner__table-wrap');
+  await page.getByRole('button', { name: 'Accessible table' }).click();
+  await expect(accessibleTable).toBeVisible();
+  await page.getByRole('button', { name: 'Grid' }).click();
+  await expect(page.locator('.weekly-planner__grid-wrap')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(consoleErrors).toEqual([]);
+}
+
 test('happy path ES desktop dark: scheduling is real browser to DB', async ({ page }) => {
   // The fixture is reset by global setup/teardown for every run, so a nearby
   // empty week is sufficient. Keeping this at +1 avoids thirteen redundant
@@ -218,6 +260,6 @@ test('happy path ES desktop dark: scheduling is real browser to DB', async ({ pa
   await runHappyFlow(page, 'es', 'dark', mondayPlusWeeks(1));
 });
 
-test('happy path EN mobile light: scheduling is real browser to DB', async ({ page }) => {
-  await runHappyFlow(page, 'en', 'light', mondayPlusWeeks(2));
+test('mobile planner smoke EN light: layout and view switching stay usable', async ({ page }) => {
+  await runMobilePlannerSmoke(page);
 });

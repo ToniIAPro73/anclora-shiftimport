@@ -1273,7 +1273,7 @@ function App() {
         employees={employees}
       />
 
-      <div className="dashboard-body">
+      <main className="dashboard-body">
         {!session && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
             <button
@@ -1495,7 +1495,7 @@ function App() {
         </section>
           </>
         )}
-      </div>
+      </main>
 
       {(isImporting || isSavingShift) && (
         <div className="app-operation-lock" role="presentation" aria-busy="true">

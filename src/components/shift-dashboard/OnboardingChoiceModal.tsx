@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 
@@ -19,21 +19,29 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
   const [ownerIsEmployee, setOwnerIsEmployee] = useState(false);
   const [employeeName, setEmployeeName] = useState('');
   const [error, setError] = useState('');
+  const [errorField, setErrorField] = useState<'organization' | 'employee' | null>(null);
   const [busy, setBusy] = useState(false);
+  const organizationNameRef = useRef<HTMLInputElement>(null);
+  const employeeNameRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    setErrorField(null);
 
     const trimmedOrg = organizationName.trim();
     const trimmedEmp = employeeName.trim();
 
     if (!trimmedOrg) {
       setError(t('onboardingChoice.orgNameRequired'));
+      setErrorField('organization');
+      organizationNameRef.current?.focus();
       return;
     }
     if (ownerIsEmployee && !trimmedEmp) {
       setError(t('onboardingChoice.employeeNameRequired'));
+      setErrorField('employee');
+      employeeNameRef.current?.focus();
       return;
     }
 
@@ -42,6 +50,7 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
       await onConfirm(trimmedOrg, ownerIsEmployee, ownerIsEmployee ? trimmedEmp : undefined);
     } catch {
       setError(t('onboardingChoice.failed'));
+      setErrorField(null);
     } finally {
       setBusy(false);
     }
@@ -62,9 +71,13 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
         <label style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
           <span>{t('onboardingChoice.orgNameLabel')}</span>
           <input
+            id="onboarding-choice-organization"
             className="modal-input"
+            ref={organizationNameRef}
             value={organizationName}
             onChange={(event) => setOrganizationName(event.target.value)}
+            aria-describedby={errorField === 'organization' ? 'onboarding-choice-organization-error' : undefined}
+            aria-invalid={errorField === 'organization' ? 'true' : undefined}
             autoFocus
           />
         </label>
@@ -86,16 +99,25 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
           <label style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
             <span>{t('onboardingChoice.employeeNameLabel')}</span>
             <input
+              id="onboarding-choice-employee"
               className="modal-input"
+              ref={employeeNameRef}
               value={employeeName}
               onChange={(event) => setEmployeeName(event.target.value)}
               placeholder={t('onboardingChoice.employeeNamePlaceholder')}
-              required
+              aria-describedby={errorField === 'employee' ? 'onboarding-choice-employee-error' : undefined}
+              aria-invalid={errorField === 'employee' ? 'true' : undefined}
             />
           </label>
         )}
         {error && (
-          <p style={{ margin: '0 0 14px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
+          <p
+            id={errorField === 'employee' ? 'onboarding-choice-employee-error' : errorField === 'organization' ? 'onboarding-choice-organization-error' : undefined}
+            style={{ margin: '0 0 14px', color: 'var(--danger)', fontSize: '0.85rem' }}
+            role="alert"
+          >
+            {error}
+          </p>
         )}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
           <button

@@ -85,10 +85,10 @@ export function AccessibleScheduleTable({
                   <td>{assignment?.location || <span className="weekly-planner__table-muted">{t('planner.noLocation')}</span>}</td>
                   <td>
                     <div className="weekly-planner__table-actions">
-                      {assignment && <button type="button" className="btn-outline" onClick={() => onEdit(employee.id, day, assignment)} disabled={!editable} aria-label={t('planner.editAssignmentFor', { employee: employee.name, date: formatDay(day, locale) })}>
+                      {assignment && <button type="button" className="btn-outline" onClick={() => onEdit(employee.id, day, assignment)} disabled={!editable} aria-label={t('planner.editAssignmentFor', { employee: employee.name, date: formatDay(day, locale) })} data-editor-target={`${employee.id}:${day}`}>
                         <Pencil size={15} aria-hidden="true" /> <span>{t('planner.editShort')}</span>
                       </button>}
-                      {editable && <button type="button" className="btn-outline weekly-planner__delete" onClick={() => assignment ? onEdit(employee.id, day, assignment) : onAdd(employee.id, day)} aria-label={assignment ? t('planner.deleteAssignmentFor', { employee: employee.name, date: formatDay(day, locale) }) : t('planner.addAssignment', { employee: employee.name, date: formatDay(day, locale) })}>
+                      {editable && <button type="button" className="btn-outline weekly-planner__delete" onClick={() => assignment ? onEdit(employee.id, day, assignment) : onAdd(employee.id, day)} aria-label={assignment ? t('planner.deleteAssignmentFor', { employee: employee.name, date: formatDay(day, locale) }) : t('planner.addAssignment', { employee: employee.name, date: formatDay(day, locale) })} data-editor-target={`${employee.id}:${day}`}>
                         {assignment ? <><Trash2 size={15} aria-hidden="true" /> <span>{t('planner.deleteShort')}</span></> : <><Plus size={15} aria-hidden="true" /> <span>{t('planner.addShort')}</span></>}
                       </button>}
                     </div>
