@@ -112,7 +112,7 @@ Implementado en `api/_lib/data.js`, nunca en frontend:
 3. Clasificación: `recognized` → importar bajo ese empleado; `ambiguous` → abortar con mensaje (nunca matching silencioso); `new` → alta inline (ADMIN/OWNER) sin abandonar el flujo, y continuar.
 4. Se registra un `Import` (documento) y los turnos se persisten con `employee_id` + `import_id`.
 5. Conflictos de re-importación: fingerprint semántico sobre los turnos **del mismo empleado**; otros empleados el mismo día no colisionan.
-6. Varios empleados coexisten: el calendario visible es por empleado (selector "Equipo" para MANAGER/ADMIN, "Mis turnos" para EMPLOYEE).
+6. Varios empleados coexisten: el calendario visible es por empleado (selector "Equipo" para OWNER/ADMIN/PLANNER, "Mis turnos" para EMPLOYEE).
 
 ## Migración de datos locales (PASO 10 / Fase 1.1 PASO 13)
 
