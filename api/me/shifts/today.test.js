@@ -78,6 +78,8 @@ describe('GET /api/me/shifts/today', () => {
     expect(res.body.shifts.map((shift) => shift.id)).toEqual(['shift-today']);
     const query = state.sql.calls.find((call) => call.text.includes('FROM shifts'));
     expect(query.text).toContain('CURRENT_DATE');
+    expect(query.text).not.toContain("TO_CHAR(start_time, 'HH24:MI')");
+    expect(query.text).not.toContain("TO_CHAR(end_time, 'HH24:MI')");
     expect(query.values).toEqual([ORG, EMPLOYEE]);
   });
 

@@ -94,6 +94,8 @@ describe('GET /api/me/change-requests', () => {
     expect(query.text).toContain('cr.organization_id');
     expect(query.text).toContain('cr.employee_id');
     expect(query.text).toContain('ORDER BY cr.created_at DESC');
+    expect(query.text).not.toContain("TO_CHAR(s.start_time, 'HH24:MI')");
+    expect(query.text).not.toContain("TO_CHAR(s.end_time, 'HH24:MI')");
     expect(query.values).toEqual([ORG, EMPLOYEE, null, null]);
   });
 

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { I18nProvider } from '../../lib/i18n-react';
-import { ChangeRequest, cancelRemoteChangeRequest, createRemoteChangeRequest } from '../../lib/remote';
+import { ChangeRequest, cancelRemoteChangeRequest, createRemoteChangeRequest, loadRemoteChangeRequests } from '../../lib/remote';
 import { ThemeProvider } from '../../lib/theme-react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { ChangeRequestForm } from './ChangeRequestForm';
@@ -10,6 +10,7 @@ import { ChangeRequestForm } from './ChangeRequestForm';
 vi.mock('../../lib/remote', () => ({
   cancelRemoteChangeRequest: vi.fn(),
   createRemoteChangeRequest: vi.fn(),
+  loadRemoteChangeRequests: vi.fn(),
 }));
 
 setupLocalStorageMock();
@@ -17,6 +18,7 @@ afterEach(cleanup);
 
 const mockedCancel = vi.mocked(cancelRemoteChangeRequest);
 const mockedCreate = vi.mocked(createRemoteChangeRequest);
+const mockedLoad = vi.mocked(loadRemoteChangeRequests);
 const shiftId = '11111111-1111-4111-8111-111111111111';
 
 function request(status: ChangeRequest['status'] = 'PENDING'): ChangeRequest {
@@ -48,6 +50,8 @@ describe('ChangeRequestForm', () => {
   beforeEach(() => {
     mockedCancel.mockReset();
     mockedCreate.mockReset();
+    mockedLoad.mockReset();
+    mockedLoad.mockResolvedValue([]);
   });
 
   it('validates the reason locally and does not send whitespace', async () => {
@@ -85,5 +89,13 @@ describe('ChangeRequestForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }));
     await waitFor(() => expect(screen.getByText('No se pudo enviar la solicitud. El texto se ha conservado.')).toBeTruthy());
     expect(reason).toHaveProperty('value', 'No puedo cubrir este horario.');
+  });
+
+  it('rehydrates an existing request when opening the associated shift', async () => {
+    mockedLoad.mockResolvedValue([request()]);
+    renderForm();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancelar solicitud' })).toBeTruthy());
+    expect(screen.getByText('Necesito cambiar la hora de entrada.')).toBeTruthy();
   });
 });

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { I18nProvider } from '../../lib/i18n-react';
 import { ThemeProvider } from '../../lib/theme-react';
-import { acknowledgeRemoteShift, cancelRemoteChangeRequest, createRemoteChangeRequest, createRemoteShiftComment, loadRemoteShiftComments, loadRemoteShiftDetail } from '../../lib/remote';
+import { acknowledgeRemoteShift, cancelRemoteChangeRequest, createRemoteChangeRequest, createRemoteShiftComment, loadRemoteChangeRequests, loadRemoteShiftComments, loadRemoteShiftDetail } from '../../lib/remote';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { ShiftDetail } from './ShiftDetail';
 
@@ -14,6 +14,7 @@ vi.mock('../../lib/remote', () => ({
   createRemoteShiftComment: vi.fn(),
   cancelRemoteChangeRequest: vi.fn(),
   createRemoteChangeRequest: vi.fn(),
+  loadRemoteChangeRequests: vi.fn(),
 }));
 
 setupLocalStorageMock();
@@ -25,6 +26,7 @@ const mockedLoadComments = vi.mocked(loadRemoteShiftComments);
 const mockedCreateComment = vi.mocked(createRemoteShiftComment);
 const mockedCancelChangeRequest = vi.mocked(cancelRemoteChangeRequest);
 const mockedCreateChangeRequest = vi.mocked(createRemoteChangeRequest);
+const mockedLoadChangeRequests = vi.mocked(loadRemoteChangeRequests);
 const shift = {
   id: '11111111-1111-4111-8111-111111111111',
   date: '2026-09-05',
@@ -52,6 +54,8 @@ describe('ShiftDetail', () => {
     mockedCreateComment.mockReset();
     mockedCancelChangeRequest.mockReset();
     mockedCreateChangeRequest.mockReset();
+    mockedLoadChangeRequests.mockReset();
+    mockedLoadChangeRequests.mockResolvedValue([]);
   });
 
   it('renders the published shift facts and the employee actions', async () => {

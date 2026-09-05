@@ -78,6 +78,8 @@ describe('GET /api/me/shifts/week', () => {
     expect(res.body.days.find((day) => day.date === '2026-09-09').shifts.map((shift) => shift.id)).toEqual(['shift-week']);
     const query = state.sql.calls.find((call) => call.text.includes('FROM shifts'));
     expect(query.text).toContain("INTERVAL '7 days'");
+    expect(query.text).not.toContain("TO_CHAR(start_time, 'HH24:MI')");
+    expect(query.text).not.toContain("TO_CHAR(end_time, 'HH24:MI')");
     expect(query.values).toEqual([ORG, EMPLOYEE, '2026-09-07', '2026-09-07']);
   });
 

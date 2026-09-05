@@ -84,6 +84,8 @@ describe('GET /api/me/shifts/:id', () => {
     const query = state.sql.calls.find((call) => call.text.includes('FROM shifts s'));
     expect(query.values).toEqual([SHIFT_ID, ORG, EMPLOYEE]);
     expect(query.text).toContain('s.employee_id');
+    expect(query.text).not.toContain("TO_CHAR(s.start_time, 'HH24:MI')");
+    expect(query.text).not.toContain("TO_CHAR(s.end_time, 'HH24:MI')");
   });
 
   it('returns uniform 404 for another employee and another tenant', async () => {

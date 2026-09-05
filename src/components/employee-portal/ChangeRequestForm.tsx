@@ -1,10 +1,11 @@
 import { Ban, Send } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import {
   cancelRemoteChangeRequest,
   ChangeRequest,
   ChangeRequestType,
   createRemoteChangeRequest,
+  loadRemoteChangeRequests,
 } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 
@@ -23,6 +24,22 @@ export function ChangeRequestForm({ shiftId }: ChangeRequestFormProps) {
   const [request, setRequest] = useState<ChangeRequest | null>(null);
   const [actionState, setActionState] = useState<ActionState>('idle');
   const [feedback, setFeedback] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadRemoteChangeRequests().then((requests) => {
+      if (cancelled) return;
+      const existing = requests.find((candidate) => candidate.shiftId === shiftId);
+      if (existing) {
+        setRequest((current) => current ?? existing);
+      }
+    }).catch(() => {
+      // Keep the form usable for a new request if the status read fails.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shiftId]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

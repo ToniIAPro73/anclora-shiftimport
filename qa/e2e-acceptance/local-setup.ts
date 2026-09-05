@@ -87,10 +87,12 @@ export default async function globalSetup() {
   const now = new Date();
   const day = (d: number) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
+  const shiftToday = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(now.getDate())}, '09:00', '17:00', 'Portal E2E', 'MAN') RETURNING id`)[0].id;
+  const shiftEnglish = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(now.getDate())}, '18:00', '22:00', 'Portal E2E EN', 'MAN') RETURNING id`)[0].id;
   // A1: 08:00-16:00; A2 same day 14:00-22:00 (multi-employee coexistence).
   await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(10)}, '08:00', '16:00', 'Regular', 'MAN')`;
   await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(12)}, '08:00', '16:00', 'Regular', 'MAN')`;
-  await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA2}, ${day(10)}, '14:00', '22:00', 'Regular', 'IMP')`;
+  const shiftA2 = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA2}, ${day(10)}, '14:00', '22:00', 'Regular', 'IMP') RETURNING id`)[0].id;
   const shiftB = (await sql`INSERT INTO shifts (organization_id, employee_id, import_id, area_id, date, start_time, end_time, location, origin) VALUES (${orgB}, ${empB1}, ${importB}, ${areaB}, ${day(14)}, '09:00', '17:00', 'Org B only', 'IMP') RETURNING id`)[0].id;
 
   // One foreign audit row makes the audit endpoint's tenant filter observable.
@@ -101,7 +103,7 @@ export default async function globalSetup() {
     password: PASSWORD,
     orgA, orgB, orgFresh,
     adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, plannerId, ownerBId, plannerBId, employeeBId,
-    empA1, empA2, empFresh, empB1, areaA, areaB, importB, shiftB,
+    empA1, empA2, empFresh, empB1, areaA, areaB, importB, shiftB, shiftToday, shiftEnglish, shiftA2,
     orgAName: 'E2E Org A',
     orgBName: 'E2E Org B',
     emails: {

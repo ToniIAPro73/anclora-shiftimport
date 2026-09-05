@@ -1753,8 +1753,7 @@ export async function listTodayShifts(sql, ctx) {
   const rows = await sql`
     SELECT id, organization_id, employee_id, import_id, area_id,
            TO_CHAR(date, 'YYYY-MM-DD') AS date,
-           TO_CHAR(start_time, 'HH24:MI') AS start_time,
-           TO_CHAR(end_time, 'HH24:MI') AS end_time,
+           start_time, end_time,
            location, origin
     FROM shifts
     WHERE organization_id = ${ctx.organizationId}
@@ -1781,8 +1780,7 @@ export async function listWeekShifts(sql, ctx, weekStart) {
   const rows = await sql`
     SELECT id, organization_id, employee_id, import_id, area_id,
            TO_CHAR(date, 'YYYY-MM-DD') AS date,
-           TO_CHAR(start_time, 'HH24:MI') AS start_time,
-           TO_CHAR(end_time, 'HH24:MI') AS end_time,
+           start_time, end_time,
            location, origin
     FROM shifts
     WHERE organization_id = ${ctx.organizationId}
@@ -1806,8 +1804,7 @@ export async function getEmployeeShift(sql, ctx, rawShiftId) {
   const rows = await sql`
     SELECT s.id, s.organization_id, s.employee_id, s.import_id, s.area_id,
            TO_CHAR(s.date, 'YYYY-MM-DD') AS date,
-           TO_CHAR(s.start_time, 'HH24:MI') AS start_time,
-           TO_CHAR(s.end_time, 'HH24:MI') AS end_time,
+           s.start_time, s.end_time,
            s.location, s.origin, a.name AS area_name,
            sa.status AS acknowledgement_status, sa.acknowledged_at
     FROM shifts s
@@ -2044,8 +2041,8 @@ export async function listEmployeeChangeRequests(sql, ctx, rawStatus = null) {
            cr.request_type, cr.reason, cr.status, cr.created_at,
            cr.resolved_at, cr.resolved_by_user_id,
            TO_CHAR(s.date, 'YYYY-MM-DD') AS shift_date,
-           TO_CHAR(s.start_time, 'HH24:MI') AS shift_start_time,
-           TO_CHAR(s.end_time, 'HH24:MI') AS shift_end_time,
+           s.start_time AS shift_start_time,
+           s.end_time AS shift_end_time,
            s.location AS shift_location
     FROM change_requests cr
     JOIN shifts s
