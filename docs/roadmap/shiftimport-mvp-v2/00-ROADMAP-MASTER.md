@@ -95,7 +95,7 @@ All MISSING. Depends on R0-M05 routing decision and R3 schedule data existing.
 | R4-M03 | Shift Detail | DONE — PASS; detalle SELF con 404 uniforme, navegación Hoy/My Week y foco restaurado | R4-M02 | 3 | G5, G6 |
 | R4-M04 | Acknowledgement | DONE — PASS; estado independiente, endpoint SELF idempotente y UI integrada | R4-M03 | 4 | G2, G3, G5 |
 | R4-M05 | Comments | DONE — PASS; comentarios SELF append-only, API C/R y composer integrado | R4-M04 | 3 | G2, G5 |
-| R4-M06 | Change Request | MISSING | R4-M04 | 5 | G2, G3, G5 |
+| R4-M06 | Change Request | DONE — PASS; solicitudes SELF con lifecycle independiente y cancelación propia | R4-M04 | 5 | G2, G3, G5 |
 | R4-M07 | Request Status | MISSING | R4-M06 | 3 | G5, G6 |
 | R4-M08 | Employee Notifications Baseline | MISSING | R4-M06 | 4 | G5 |
 | R4-M09 | Mobile Bottom Navigation | MISSING | R4-M00 | 2 | G6, G9 |

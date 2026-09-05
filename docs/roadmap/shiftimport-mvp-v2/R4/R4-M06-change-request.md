@@ -10,7 +10,8 @@ Hoy no existe ningún mecanismo formal para que un empleado pida un cambio de tu
 
 ## 3. Estado actual del repositorio
 
-No existe. Ninguna tabla `change_requests` en el esquema.
+Implementado en `development` y cerrado con Gate PASS el 2026-09-05. La
+capacidad no existía antes de esta microfase.
 
 ## 4. Alcance IN
 
@@ -31,21 +32,42 @@ R4-M04 (Acknowledgement, como precedente de patrón de recurso de estado indepen
 
 ## 7. Decisiones arquitectónicas
 
-`ChangeRequest` es un recurso independiente con su propio ciclo de vida (`PENDING`/`APPROVED`/`REJECTED`/`CANCELLED`, formalizado en R0-M04). Un turno `PUBLISHED` permanece `PUBLISHED` mientras existan solicitudes `PENDING` sobre él — el turno nunca adopta un estado derivado tipo "cambio solicitado". Esto es explícitamente el anti-patrón que el master prompt (§17) prohíbe.
+`ChangeRequest` es un recurso independiente con su propio ciclo de vida
+(`PENDING`/`APPROVED`/`REJECTED`/`CANCELLED`, formalizado en R0-M04). Un turno
+`PUBLISHED` permanece `PUBLISHED` mientras existan solicitudes `PENDING` sobre
+él — el turno nunca adopta un estado derivado tipo "cambio solicitado". Esto
+es explícitamente el anti-patrón que el master prompt (§17) prohíbe.
 
-En R4, `change_requests.status` solo puede ser creado como `PENDING` o transicionado a `CANCELLED` por el propio solicitante. Las transiciones a `APPROVED`/`REJECTED` quedan reservadas para el código de R5 — R4-M06 no debe implementar ni exponer ningún endpoint capaz de escribir esos valores.
+En R4, `change_requests.status` solo puede ser creado como `PENDING` o
+transicionado a `CANCELLED` por el propio solicitante. Las transiciones a
+`APPROVED`/`REJECTED` quedan reservadas para el código de R5 — R4-M06 no
+implementa ni expone ningún endpoint capaz de escribir esos valores. La UI
+muestra la solicitud recién creada y su cancelación; la consulta histórica de
+solicitudes se reserva a R4-M07.
 
 ## 8. Modelo de datos afectado
 
-Nueva tabla `change_requests`: `id`, `shift_id` FK, `employee_id` FK, `organization_id`, `request_type` (enum simple, p. ej. `TIME_CHANGE`/`OTHER` — mantener mínimo en MVP), `reason` (text), `status` CHECK IN ('PENDING','APPROVED','REJECTED','CANCELLED'), `created_at`, `resolved_at` (nullable, escrito solo por R5), `resolved_by_user_id` (nullable, escrito solo por R5).
+Nueva tabla `change_requests`: `id`, `shift_id` FK, `employee_id` FK,
+`organization_id`, `request_type` CHECK IN (`TIME_CHANGE`, `OTHER`), `reason`
+TEXT no vacío de máximo 2000 caracteres, `status` CHECK IN
+(`PENDING`,`APPROVED`,`REJECTED`,`CANCELLED`), `created_at`, `resolved_at`
+(nullable, escrito por cancelación/R5) y `resolved_by_user_id` (nullable,
+reservado para R5). La FK compuesta `(shift_id, employee_id)` impide asociar
+la solicitud a un turno de otro empleado.
 
 ## 9. API / Backend
 
-`POST /api/me/shifts/:id/change-requests` (crear, SELF-scoped), `POST /api/me/change-requests/:id/cancel` (cancelar propia solicitud si `PENDING`). Ningún endpoint de aprobación se crea en esta microfase.
+`POST /api/me/shifts/:id/change-requests` (crear, SELF-scoped),
+`POST /api/me/change-requests/:id/cancel` (cancelar propia solicitud si
+`PENDING`). Ambos requieren EMPLOYEE con empleado activo vinculado y
+organización activa; turno/solicitud ajenos responden 404 uniforme. Ningún
+endpoint de aprobación se crea en esta microfase.
 
 ## 10. Frontend / UX
 
-Formulario de solicitud desde Shift Detail (tipo + motivo obligatorio); botón cancelar visible solo si `PENDING` y es del propio empleado.
+Formulario de solicitud desde Shift Detail (tipo + motivo obligatorio); botón
+cancelar visible solo tras crear una solicitud propia en estado `PENDING`.
+Tras cancelar, la tarjeta conserva el estado `CANCELLED` y oculta la acción.
 
 ## 11. Seguridad y autorización
 
@@ -69,7 +91,8 @@ Error claro si falla la creación; no perder el texto del motivo ya escrito.
 
 ## 16. Migraciones
 
-Nueva migración aditiva `change_requests`, sin impacto en `shifts` existentes.
+Nueva migración aditiva `0024_change_requests.sql`, sin modificar `shifts` ni
+hacer backfill.
 
 ## 17. Compatibilidad y datos existentes
 
@@ -83,9 +106,12 @@ Archivos: `db/migrations/00XX_change_requests.sql`.
 Cambios: tabla, CHECK constraint de estado, FKs.
 No hacer: no añadir aún ninguna columna o lógica de enrutamiento a aprobador (R5).
 Criterios de aceptación:
-- [ ] Migración aplica limpia.
+- [x] Migración aplica limpia.
+- [x] Segunda ejecución idempotente.
+- [x] Lifecycle, FKs e índices presentes en Neon dev.
 Tests: migration test.
-Evidencia esperada: log de aplicación.
+Evidencia esperada: `apply 0024_change_requests.sql (6 statements)` seguido
+de `skip 0024_change_requests.sql (already applied)`.
 
 ### T02 — Endpoint crear solicitud
 Objetivo: `POST /api/me/shifts/:id/change-requests`.
@@ -93,9 +119,12 @@ Archivos: `api/me/shifts/[id]/change-requests.js`.
 Cambios: validación de motivo no vacío, creación en estado `PENDING`.
 No hacer: no exponer transición a `APPROVED`/`REJECTED`.
 Criterios de aceptación:
-- [ ] Solicitud creada siempre en `PENDING`.
+- [x] Solicitud válida creada siempre en `PENDING`.
+- [x] Motivo vacío, demasiado largo y tipo desconocido rechazados con 400.
+- [x] Turno ajeno/tenant cruzado no es observable y devuelve 404.
+- [x] Rol no EMPLOYEE recibe 403.
 Tests: integration.
-Evidencia esperada: respuesta de creación.
+Evidencia esperada: `api/me/shifts/[id]/change-requests.test.js` PASS.
 
 ### T03 — Endpoint cancelar solicitud propia
 Objetivo: `POST /api/me/change-requests/:id/cancel`.
@@ -103,9 +132,12 @@ Archivos: `api/me/change-requests/[id]/cancel.js`.
 Cambios: transición `PENDING`→`CANCELLED` solo por el creador.
 No hacer: no permitir cancelar solicitud ya resuelta o ajena.
 Criterios de aceptación:
-- [ ] Cancelar solicitud ajena devuelve error de autorización.
+- [x] Cancelación propia `PENDING` → `CANCELLED`.
+- [x] Solicitud ajena devuelve 404 uniforme.
+- [x] Solicitud no pendiente devuelve 409.
+- [x] Rol no EMPLOYEE recibe 403.
 Tests: integration (propia vs ajena, ya resuelta).
-Evidencia esperada: respuestas de error para cada caso.
+Evidencia esperada: `api/me/change-requests/[id]/cancel.test.js` PASS.
 
 ### T04 — UI de creación en Shift Detail
 Objetivo: formulario de solicitud.
@@ -113,9 +145,12 @@ Archivos: `src/components/employee-portal/ChangeRequestForm.tsx`.
 Cambios: formulario con validación cliente + servidor.
 No hacer: no mostrar UI de aprobación (no existe aún).
 Criterios de aceptación:
-- [ ] Formulario no permite envío vacío.
-Tests: unit de validación.
-Evidencia esperada: captura de formulario con error de validación.
+- [x] Formulario no permite envío vacío ni whitespace.
+- [x] Tipo y motivo tienen labels asociados y contador.
+- [x] El motivo se conserva si falla el servidor.
+- [x] La UI muestra la solicitud pendiente y permite cancelarla.
+Tests: unit de validación e interacción.
+Evidencia esperada: `ChangeRequestForm.test.tsx` PASS.
 
 ### T05 — Verificación explícita de que el turno no cambia de estado
 Objetivo: test de regresión análogo a R4-M04-T04, específico para change requests.
@@ -123,27 +158,53 @@ Archivos: test nuevo junto al dominio de shifts/change-requests.
 Cambios: ninguno de producción, solo test.
 No hacer: N/A.
 Criterios de aceptación:
-- [ ] Test falla si un cambio futuro acopla el estado del turno al de la solicitud.
+- [x] Test verifica estado `PENDING` y ausencia de `UPDATE shifts`.
+- [x] Test verifica que las rutas de R4 no escriben `APPROVED`/`REJECTED`.
 Tests: el propio test es la entrega.
 Evidencia esperada: test en verde.
 
 ## 19. Tests obligatorios
 
-Unit, Integration (creación, cancelación, aislamiento), Security (ningún camino de escritura a APPROVED/REJECTED), Regression (invariante de independencia de estados).
+Unit, integration, migration, security y regresión de independencia de estados
+PASS.
+
+Validación ejecutada:
+
+- suite dirigida: 6 archivos, 45 tests PASS;
+- suite completa: 123 archivos, 1.147 tests PASS;
+- `npm run lint`: PASS;
+- `npm run build`: PASS;
+- `git diff --check`: PASS.
 
 ## 20. Evidencias
 
-Log de migración, respuestas de API para cada caso, capturas de UI, resultado de tests.
+Log de migración y reejecución idempotente en Neon dev; consulta de esquema:
+10 columnas, 4 índices operativos, constraints CHECK/FK presentes, migración
+registrada y 0 solicitudes iniciales sobre 14 shifts. Tests de API y UI cubren
+creación, cancelación, aislamiento, estados y borrador. No se añadió captura
+estática como sustituto de tests de interacción.
 
 ## 21. Gate
 
 Gates obligatorios: G2 (Database), G3 (Domain invariants), G5 (Functional).
-G3 PASS explícitamente requiere: (a) el test de T05 en verde, (b) confirmación de que ningún endpoint de esta microfase escribe `APPROVED`/`REJECTED`.
+G3 PASS explícitamente confirma: (a) el test de T05 en verde, (b) ningún
+endpoint de esta microfase escribe `APPROVED`/`REJECTED`, y (c) el turno no es
+actualizado al crear o cancelar una solicitud.
+
+Resultado: **PASS**.
+
+Commit de implementación: `70335f6`
+(`feat(employee-portal): add change requests`).
 
 ## 22. Rollback / remediación
 
-Rollback lógico: tabla puede quedar sin uso sin afectar `shifts`; drop table seguro, sin dependientes fuera de este dominio hasta que R5 la extienda.
+Rollback lógico: detener el consumo de solicitudes sin afectar `shifts`.
+La migración es aditiva; no se ejecuta `DROP TABLE` sobre datos reales como
+parte de la microfase. Cualquier retirada futura deberá ser explícita y
+auditada.
 
 ## 23. Criterio de DONE
 
-Empleado crea y cancela sus propias solicitudes de cambio; ningún camino de aprobación existe aún; estado del turno no se ve afectado; Gate G2+G3+G5 PASS.
+Empleado crea y cancela sus propias solicitudes de cambio; ningún camino de
+aprobación existe aún; el estado del turno no se ve afectado; Gate G2 + G3 +
+G5 PASS. Microfase completada el 2026-09-05.
