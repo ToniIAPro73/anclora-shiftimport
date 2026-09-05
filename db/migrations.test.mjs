@@ -20,6 +20,7 @@ const approvalPolicyMigrationPath = resolve(dirname(fileURLToPath(import.meta.ur
 const approvalRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0028_approval_requests.sql');
 const approvalDecisionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0029_approval_decision_metadata.sql');
 const approvalRejectionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0030_approval_rejection_metadata.sql');
+const approvalAuditMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0031_approval_audit_event_types.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -319,5 +320,16 @@ describe('0030 approval rejection metadata migration contract', () => {
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS rejection_reason TEXT');
     expect(sql).toContain('approval_requests_rejected_reason_check');
+  });
+});
+
+describe('0031 approval audit event types migration contract', () => {
+  it('extends the existing organization audit constraint without creating a parallel log', async () => {
+    const sql = await readFile(approvalAuditMigrationPath, 'utf8');
+    expect(sql).toContain('ALTER TABLE organization_audit_events');
+    expect(sql).toContain("'approval_request.created'");
+    expect(sql).toContain("'approval_request.approved'");
+    expect(sql).toContain("'approval_request.rejected'");
+    expect(sql).not.toContain('CREATE TABLE');
   });
 });

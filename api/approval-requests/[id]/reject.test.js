@@ -78,6 +78,9 @@ describe('POST /api/approval-requests/:id/reject', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.approvalRequest).toMatchObject({ id: REQUEST, status: 'REJECTED', rejectionReason: 'Cambio no autorizado.' });
     expect(state.sql.calls.find((entry) => entry.text.includes('WITH eligible')).text).toContain("UPDATE change_requests target");
+    const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
+    expect(audit.values[2]).toBe('approval_request.rejected');
+    expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: 'change-1', reason: 'Cambio no autorizado.' });
   });
 
   it('rejects empty reasons before authentication or database writes', async () => {

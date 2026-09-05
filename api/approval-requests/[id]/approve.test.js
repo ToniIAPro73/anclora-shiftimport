@@ -82,6 +82,9 @@ describe('POST /api/approval-requests/:id/approve', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.approvalRequest).toMatchObject({ id: REQUEST, status: 'APPROVED', approvedByUserId: 'admin-1' });
     expect(state.sql.calls.find((entry) => entry.text.includes('WITH eligible')).text).toContain("target.status = 'PENDING'");
+    const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
+    expect(audit.values[2]).toBe('approval_request.approved');
+    expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: 'change-1', policySnapshot: 'ORGANIZATION_ADMIN' });
   });
 
   it('rejects an ineligible caller and an already decided request', async () => {

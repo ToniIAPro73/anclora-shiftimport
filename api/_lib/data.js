@@ -2082,6 +2082,17 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
       policy: routed.approval_policy,
     });
   }
+  if (routed.approval_request_id) {
+    await recordAuditEvent(sql, ctx, {
+      eventType: 'approval_request.created',
+      targetType: 'APPROVAL_REQUEST',
+      targetId: routed.approval_request_id,
+      metadata: {
+        changeRequestId: routed.id,
+        policySnapshot: routed.approval_policy,
+      },
+    });
+  }
   return mapChangeRequestRow(routed);
 }
 

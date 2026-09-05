@@ -10,7 +10,9 @@ Sin auditoría dedicada, una organización no puede demostrar (a efectos operati
 
 ## 3. Estado actual del repositorio
 
-MISSING — y R2-M09 (Organization Audit Events, la base que se reutiliza aquí) también está MISSING en el baseline actual.
+IMPLEMENTED — Gate PASS. R2-M09 ya dispone de `organization_audit_events`,
+`recordAuditEvent` y endpoint de consulta; M06 amplía ese mecanismo para
+Approval Lite.
 
 ## 4. Alcance IN
 
@@ -27,11 +29,16 @@ R2-M09, R5-M02, R5-M04, R5-M05.
 
 ## 7. Decisiones arquitectónicas
 
-**Decisión de reutilización:** se usa el mismo mecanismo de `organization_audit_events` (o el nombre que defina R2-M09) en lugar de una tabla `approval_audit_log` separada. Razón: evita dos sistemas de auditoría paralelos que un futuro auditor tendría que correlacionar manualmente; el dominio Approval simplemente emite eventos con `event_type IN ('approval_request.created','approval_request.approved','approval_request.rejected')` y `payload` jsonb con los detalles (change_request_id, policy_snapshot, reason si aplica).
+**Decisión de reutilización:** se usa el mismo mecanismo de
+`organization_audit_events` en lugar de una tabla `approval_audit_log`
+separada. Los eventos usan `event_type IN
+('approval_request.created','approval_request.approved','approval_request.rejected')`
+y `metadata` JSONB con `changeRequestId`, `policySnapshot` y `reason` si aplica.
 
 ## 8. Modelo de datos afectado
 
-Ninguna tabla nueva propia — inserciones en la tabla de R2-M09 con el `event_type` descrito arriba.
+No hay tabla nueva propia. La migración `0031_approval_audit_event_types.sql`
+amplía el constraint de la tabla existente.
 
 ## 9. API / Backend
 
@@ -59,11 +66,14 @@ N/A — sin UI propia.
 
 ## 15. Observabilidad / errores
 
-Si la emisión del evento de auditoría falla, la transición de estado de `approval_requests` NO debe hacer rollback solo por eso (la auditoría es best-effort loggeada pero no debe bloquear la operación de negocio) — pero el fallo de emisión sí debe loguearse como error operativo de alta prioridad.
+Si la emisión del evento de auditoría falla, la transición de estado de
+`approval_requests` NO hace rollback solo por eso: `recordAuditEvent` captura y
+loguea el fallo como error operativo, sin bloquear la operación de negocio.
 
 ## 16. Migraciones
 
-N/A — depende del esquema ya creado por R2-M09.
+`0031_approval_audit_event_types.sql` amplía de forma forward-safe el constraint
+existente, conservando todos los eventos organizativos previos.
 
 ## 17. Compatibilidad y datos existentes
 
@@ -78,7 +88,7 @@ Archivos: módulo de routing de R5-M02.
 Cambios: llamada al emisor de eventos de R2-M09.
 No hacer: no bloquear la transacción de negocio si la emisión falla (loguear y continuar).
 Criterios de aceptación:
-- [ ] Evento contiene change_request_id, organization_id, policy_snapshot.
+- [x] Evento contiene change_request_id, organization_id, policy_snapshot.
 Tests: verificar inserción del evento en test de integración.
 Evidencia esperada: fila de evento en test DB.
 
@@ -89,7 +99,7 @@ Archivos: módulos de approve/reject.
 Cambios: emisión de `approval_request.approved` / `approval_request.rejected` (con reason en el segundo caso).
 No hacer: no incluir el reason en el evento de aprobación (no aplica).
 Criterios de aceptación:
-- [ ] Evento de rechazo incluye el motivo exacto persistido.
+- [x] Evento de rechazo incluye el motivo exacto persistido.
 Tests: integración cubriendo ambos caminos.
 Evidencia esperada: filas de evento verificadas.
 
@@ -99,12 +109,14 @@ Integración (emisión correcta en los 3 puntos de transición).
 
 ## 20. Evidencias
 
-Resultados de test mostrando eventos insertados con payload correcto.
+Resultados de test mostrando eventos insertados con metadata correcta y
+verificación de la constraint en Neon dev.
 
 ## 21. Gate
 
 Gates requeridos: G2 (DB/migrations — verifica reutilización, no tabla duplicada), G10 (unit/integration tests).
-PASS si no se crea ninguna tabla de auditoría paralela y los 3 eventos se emiten correctamente.
+PASS si no se crea ninguna tabla de auditoría paralela y los 3 eventos se
+emiten correctamente.
 
 ## 22. Rollback / remediación
 
@@ -112,4 +124,16 @@ N/A — auditoría es append-only, no requiere rollback salvo purga administrati
 
 ## 23. Criterio de DONE
 
-Toda transición de `approval_requests` queda registrada en el mecanismo de auditoría único de la organización, sin sistema paralelo.
+Toda transición de `approval_requests` queda registrada en el mecanismo de
+auditoría único de la organización, sin sistema paralelo.
+
+## 24. Resultado de ejecución
+
+- Gate: PASS.
+- Tests focalizados de creación/aprobación/rechazo/auditoría/migraciones: 54/54.
+- Suite completa: 136 archivos, 1210 tests PASS.
+- Lint: PASS.
+- Build: PASS (warning no bloqueante de chunks grandes preexistente).
+- Migración Neon dev: aplicada; constraint existente verificada con los tres
+  eventos Approval Lite.
+- Commit de implementación: pendiente de registrar tras el commit.

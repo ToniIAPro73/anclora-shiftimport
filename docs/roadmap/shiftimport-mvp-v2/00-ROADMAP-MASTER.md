@@ -116,7 +116,7 @@ All MISSING.
 | R5-M03 | Approver Inbox | DONE — PASS | R5-M02 | 2 | G5, G6, G7 |
 | R5-M04 | Approve | DONE — PASS | R5-M03 | 3 | G4, G5 |
 | R5-M05 | Reject with mandatory reason | DONE — PASS | R5-M03 | 3 | G4, G5 |
-| R5-M06 | Audit Trail | MISSING | R5-M04, R5-M05 | 3 | G2, G10 |
+| R5-M06 | Audit Trail | DONE — PASS | R5-M04, R5-M05 | 3 | G2, G10 |
 | R5-M07 | Apply Approved Change | MISSING | R5-M04 | 4 | G3, G5 |
 | R5-M08 | Concurrency / Idempotency | MISSING | R5-M07 | 3 | G3, G10 |
 | R5-M09 | Authorization | MISSING | R5-M01, R2-M08 | 3 | G4, G12 |

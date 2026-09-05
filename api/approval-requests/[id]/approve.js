@@ -1,4 +1,5 @@
 import { getSql, requireOrgContext, resolveContext } from '../../_lib/auth.js';
+import { recordAuditEvent } from '../../_lib/data.js';
 import { handleError, sendJson } from '../../_lib/http.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -85,6 +86,15 @@ export default async function handler(req, res) {
     `]);
 
     if (updatedRows?.[0]) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'approval_request.approved',
+        targetType: 'APPROVAL_REQUEST',
+        targetId: updatedRows[0].id,
+        metadata: {
+          changeRequestId: updatedRows[0].change_request_id,
+          policySnapshot: updatedRows[0].policy_snapshot,
+        },
+      });
       return sendJson(res, 200, { approvalRequest: mapApprovalDecision(updatedRows[0]) });
     }
 

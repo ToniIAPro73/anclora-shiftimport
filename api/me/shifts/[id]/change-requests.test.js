@@ -106,6 +106,9 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
     expect(insert.text).toContain("'PENDING'");
     expect(insert.text).not.toContain('REJECTED');
     expect(insert.text).not.toContain('UPDATE shifts');
+    const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
+    expect(audit.values[2]).toBe('approval_request.created');
+    expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: REQUEST_ID, policySnapshot: 'ORGANIZATION_ADMIN' });
   });
 
   it('auto-approves without creating an approval envelope when policy is NO_APPROVAL', async () => {
