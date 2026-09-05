@@ -106,7 +106,15 @@ describe('POST /api/schedules', () => {
     expect(state.sql.state.schedules[0].area_id).toBe(AREA_A);
   });
 
-  it('rejects a non-Monday period', async () => {
+  it('allows a Sunday period for Sunday-first planning', async () => {
+    const res = await call('POST', { body: { periodStart: '2026-09-06' } });
+    expect(res.statusCode).toBe(201);
+    expect(state.sql.state.schedules[0]).toMatchObject({
+      period_start: '2026-09-06', period_end: '2026-09-12',
+    });
+  });
+
+  it('rejects a period that is neither Monday nor Sunday', async () => {
     const res = await call('POST', { body: { periodStart: '2026-09-08' } });
     expect(res.statusCode).toBe(400);
   });

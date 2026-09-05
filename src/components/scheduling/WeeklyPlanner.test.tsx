@@ -160,6 +160,7 @@ describe('WeeklyPlanner', () => {
     mockedLoad.mockResolvedValue(snapshot({ assignments: [] }));
     renderPlanner();
 
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Tabla accesible' })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Tabla accesible' }));
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
 
@@ -170,6 +171,66 @@ describe('WeeklyPlanner', () => {
     fireEvent.click(addButton);
     expect(screen.getByRole('form', { name: 'Añadir turno' })).toBeInTheDocument();
     expect(within(screen.getByRole('form', { name: 'Añadir turno' })).getByLabelText('Empleado')).toHaveFocus();
+  });
+
+  it('keeps global theme and language controls out of the planner and exposes week start', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot());
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inicio de semana' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: /Cambiar tema/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Cambiar idioma/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Inicio de semana' })).toHaveTextContent('Lunes');
+  });
+
+  it('changes the displayed week range when switching to Sunday start', async () => {
+    const sundayVersion = version({ id: 'version-sunday', periodStart: '2026-09-27', periodEnd: '2026-10-03' });
+    mockedList.mockResolvedValue([version(), sundayVersion]);
+    mockedLoad.mockImplementation(async (_scheduleId, versionId) => snapshot({
+      version: versionId === sundayVersion.id ? sundayVersion : version(),
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inicio de semana' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Inicio de semana' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Domingo' }));
+
+    await waitFor(() => expect(screen.getByText('dom, 27 sept – sáb, 3 oct')).toBeInTheDocument());
+    expect(window.localStorage.getItem('anclora_shiftimport_planner_week_start_v1')).toBe('sunday');
+    expect(remote.loadRemoteScheduleSnapshot).toHaveBeenLastCalledWith('schedule-1', 'version-sunday');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Inicio de semana' }));
+    fireEvent.click(screen.getByRole('option', { name: 'Lunes' }));
+    await waitFor(() => expect(screen.getByText('lun, 28 sept – dom, 4 oct')).toBeInTheDocument());
+  });
+
+  it('changes the active grid day without changing week, filter, or editor state', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [],
+      employees: [
+        { id: 'employee-1', name: 'Ana Planner', externalEmployeeId: 'E001', areaId: 'area-1' },
+        { id: 'employee-2', name: 'Luis Planner', externalEmployeeId: 'E002', areaId: 'area-1' },
+      ],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'mar, 29 sept' })).toBeInTheDocument());
+    const filter = screen.getByRole('button', { name: 'Empleado' });
+    fireEvent.click(filter);
+    fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner' }).find((option) => option.tagName === 'BUTTON')!);
+    const editorForm = screen.getByRole('form', { name: 'Añadir turno' });
+    const editorEmployee = within(editorForm).getByLabelText('Empleado');
+    fireEvent.change(editorEmployee, { target: { value: 'employee-2' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'mar, 29 sept' }));
+
+    expect(screen.getByRole('button', { name: 'mar, 29 sept' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('columnheader', { name: 'mar, 29 sept' })).toHaveAttribute('data-active-day', 'true');
+    expect(screen.getByRole('row', { name: /Luis Planner/ })).toBeInTheDocument();
+    expect(screen.queryByRole('row', { name: /Ana Planner/ })).toBeNull();
+    expect(editorEmployee).toHaveValue('employee-2');
   });
 
   it('filters the grid by employee and restores all rows', async () => {

@@ -164,3 +164,19 @@ Evidencia rápida de navegador (Neon dev + Chromium):
 
 Validación: `weekly-planner-ux.spec.ts` PASS. El E2E funcional largo de scheduling se
 mantiene separado para no confundir latencia de Neon/navegación con la comprobación visual.
+
+## 25. Refinamiento Premium — 2026-09-05
+
+La segunda revisión compacta la superficie operativa sin rediseñar el dominio:
+
+- cabecera reducida a contexto, título y navegación semanal;
+- controles locales de tema/idioma eliminados de `/app/schedule`;
+- filtro de empleado, inicio de semana y modo de presentación integrados en una única toolbar;
+- selector persistente `Lunes`/`Domingo`, con semanas de siete días y navegación coherente;
+- cabecera sticky opaca y columna de empleado con capas estables;
+- foco diario en cuadrícula con navegación anterior/siguiente, `aria-pressed` y foco horizontal
+  sin tocar el scroll vertical ni el estado del editor.
+
+La validación visual usa un harness Playwright aislado que conserva el shell y login reales y
+simula únicamente el snapshot de scheduling con 26 empleados para evitar la latencia variable
+de Neon en una comprobación de layout. Los contratos API de lunes/domingo se validan aparte.

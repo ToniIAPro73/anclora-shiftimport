@@ -29,7 +29,7 @@ Ninguno nuevo — usa `schedules` y `schedule_versions` de R3-M01/M02.
 
 ## 9. API / Backend
 `POST /api/schedules`
-Body: `{ areaId?: string(UUID), periodStart: string(ISO date, lunes) }`
+Body: `{ areaId?: string(UUID), periodStart: string(ISO date, lunes o domingo) }`
 Respuesta 201: `{ scheduleId, scheduleVersionId, versionNumber: 1, status: 'DRAFT' }`
 Respuesta 409: si ya existe DRAFT activo para ese schedule.
 Guard: rol PLANNER o superior, scope ORGANIZATION o AREA coincidente con `areaId` si se especifica.

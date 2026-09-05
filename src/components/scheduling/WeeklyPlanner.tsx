@@ -17,9 +17,7 @@ import {
 } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
-import { LanguageToggle } from '../ui/LanguageToggle';
 import { ModalShell } from '../ui/ModalShell';
-import { ThemeToggle } from '../ui/ThemeToggle';
 import { AccessibleScheduleTable } from './AccessibleScheduleTable';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
 import { ScheduleVersionHistory } from './ScheduleVersionHistory';
@@ -32,7 +30,9 @@ interface WeeklyPlannerProps {
 }
 
 const VIEW_PREFERENCE_KEY = 'anclora_shiftimport_planner_view_v1';
+const WEEK_START_PREFERENCE_KEY = 'anclora_shiftimport_planner_week_start_v1';
 type PlannerView = 'grid' | 'table';
+type WeekStart = 'monday' | 'sunday';
 
 const pad = (value: number): string => String(value).padStart(2, '0');
 
@@ -40,11 +40,20 @@ function isoDate(date: Date): string {
   return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
-function mondayFor(value: Date): string {
+function startOfWeek(value: Date, weekStart: WeekStart): string {
   const date = new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
   const day = date.getUTCDay();
-  date.setUTCDate(date.getUTCDate() + (day === 0 ? -6 : 1 - day));
+  const offset = weekStart === 'sunday' ? -day : (day === 0 ? -6 : 1 - day);
+  date.setUTCDate(date.getUTCDate() + offset);
   return isoDate(date);
+}
+
+function readWeekStart(): WeekStart {
+  try {
+    return window.localStorage.getItem(WEEK_START_PREFERENCE_KEY) === 'sunday' ? 'sunday' : 'monday';
+  } catch {
+    return 'monday';
+  }
 }
 
 function addDays(value: string, days: number): string {
@@ -84,7 +93,8 @@ function errorCopy(error: unknown, t: (key: string) => string): string {
 
 export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodStart }: WeeklyPlannerProps) {
   const { locale, t } = useI18n();
-  const [periodStart, setPeriodStart] = useState(() => initialPeriodStart ?? mondayFor(new Date()));
+  const [weekStart, setWeekStart] = useState<WeekStart>(readWeekStart);
+  const [periodStart, setPeriodStart] = useState(() => initialPeriodStart ?? startOfWeek(new Date(), readWeekStart()));
   const [snapshot, setSnapshot] = useState<ScheduleSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -104,6 +114,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [editor, setEditor] = useState<AssignmentEditorState | null>(null);
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [selectedCell, setSelectedCell] = useState<{ employeeId: string; date: string } | null>(null);
+  const [activeDay, setActiveDay] = useState(periodStart);
   const [editorFocusKey, setEditorFocusKey] = useState(0);
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const [view, setView] = useState<PlannerView>(() => {
@@ -114,8 +125,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     }
   });
   const requestId = useRef(0);
+  const gridWrapRef = useRef<HTMLDivElement>(null);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(periodStart, index)), [periodStart]);
+  const activeDayIndex = Math.max(0, days.indexOf(activeDay));
   const assignmentsByCell = useMemo(() => {
     const byCell = new Map<string, ShiftAssignment[]>();
     for (const assignment of snapshot?.assignments ?? []) {
@@ -155,6 +168,21 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
       setEmployeeFilter('all');
     }
   }, [employeeFilter, snapshot]);
+
+  useEffect(() => {
+    if (!days.includes(activeDay)) {
+      setActiveDay(days[0] ?? periodStart);
+    }
+  }, [activeDay, days, periodStart]);
+
+  useEffect(() => {
+    if (view !== 'grid' || !activeDay) return;
+    const gridWrap = gridWrapRef.current;
+    const activeHeader = gridWrap?.querySelector<HTMLElement>(`th[data-day="${activeDay}"]`);
+    if (!gridWrap || !activeHeader) return;
+    const targetScrollLeft = activeHeader.offsetLeft - ((gridWrap.clientWidth - activeHeader.offsetWidth) / 2);
+    gridWrap.scrollLeft = Math.max(0, targetScrollLeft);
+  }, [activeDay, view, days.length, visibleEmployees.length]);
 
   useEffect(() => {
     if (!editable || isLoading || !defaultEditor) {
@@ -211,7 +239,36 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     }
   }, [view]);
 
-  const shiftWeek = (delta: number) => setPeriodStart((current) => addDays(current, delta * 7));
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WEEK_START_PREFERENCE_KEY, weekStart);
+    } catch {
+      // Presentation preference is best-effort when storage is unavailable.
+    }
+  }, [weekStart]);
+
+  const shiftWeek = (delta: number) => {
+    setPeriodStart((current) => addDays(current, delta * 7));
+    setActiveDay((current) => addDays(current, delta * 7));
+  };
+
+  const handleWeekStartChange = (value: string) => {
+    const nextWeekStart: WeekStart = value === 'sunday' ? 'sunday' : 'monday';
+    if (nextWeekStart === weekStart) return;
+    // Keep the same seven calendar days visible while changing the leading
+    // day: Monday→Sunday moves one day back, Sunday→Monday moves one day on.
+    // Re-normalizing the current start would drift a week when toggled back.
+    const nextPeriodStart = nextWeekStart === 'sunday'
+      ? addDays(periodStart, -1)
+      : addDays(periodStart, 1);
+    setWeekStart(nextWeekStart);
+    setPeriodStart(nextPeriodStart);
+    setActiveDay(nextPeriodStart);
+  };
+
+  const shiftActiveDay = (delta: number) => {
+    setActiveDay((current) => days[(activeDayIndex + delta + days.length) % days.length] ?? current);
+  };
 
   const resetEditor = () => {
     setSelectedCell(null);
@@ -370,31 +427,22 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   return (
     <main className="weekly-planner" data-testid="weekly-planner" data-state={isLoading ? 'loading' : error ? 'error' : snapshot && !editable ? 'disabled' : snapshot ? 'ready' : 'empty'}>
       <header className="weekly-planner__header">
-        <div>
+        <div className="weekly-planner__heading">
           <button type="button" className="weekly-planner__back" onClick={onBack}>
             <ChevronLeft size={16} aria-hidden="true" /> {t('planner.back')}
           </button>
           <p className="weekly-planner__eyebrow">{t('planner.eyebrow')}</p>
           <h1>{t('planner.title')}</h1>
-          <p className="weekly-planner__intro">{t('planner.description')}</p>
         </div>
         <div className="weekly-planner__header-tools">
           <div className="weekly-planner__week-control" role="group" aria-label={t('planner.weekNavigation')}>
-            <button type="button" className="theme-toggle" onClick={() => shiftWeek(-1)} aria-label={t('planner.previousWeek')}>
+            <button type="button" className="weekly-planner__icon-button" onClick={() => shiftWeek(-1)} aria-label={t('planner.previousWeek')}>
               <ChevronLeft size={18} />
             </button>
             <span>{formatDay(periodStart, locale)} – {formatDay(addDays(periodStart, 6), locale)}</span>
-            <button type="button" className="theme-toggle" onClick={() => shiftWeek(1)} aria-label={t('planner.nextWeek')}>
+            <button type="button" className="weekly-planner__icon-button" onClick={() => shiftWeek(1)} aria-label={t('planner.nextWeek')}>
               <ChevronRight size={18} />
             </button>
-          </div>
-          <div className="weekly-planner__view-tools">
-            <div className="weekly-planner__view-switcher" role="group" aria-label={t('planner.viewModeLabel')}>
-              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'grid'} onClick={() => setView('grid')}>{t('planner.gridView')}</button>
-              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'table'} onClick={() => setView('table')}>{t('planner.tableView')}</button>
-            </div>
-            <ThemeToggle />
-            <LanguageToggle />
           </div>
         </div>
       </header>
@@ -446,6 +494,44 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                 ariaLabel={t('planner.employeeFilter')}
                 disabled={!snapshot || snapshot.employees.length === 0}
               />
+            </div>
+            <div className="weekly-planner__week-start">
+              <SearchableSelect
+                label={t('planner.weekStartLabel')}
+                value={weekStart}
+                options={[
+                  { value: 'monday', label: t('planner.weekStartMonday') },
+                  { value: 'sunday', label: t('planner.weekStartSunday') },
+                ]}
+                onChange={handleWeekStartChange}
+                ariaLabel={t('planner.weekStartLabel')}
+              />
+            </div>
+            {view === 'grid' && (
+              <div className="weekly-planner__day-focus" role="group" aria-label={t('planner.activeDayLabel')}>
+                <button type="button" className="weekly-planner__day-focus-nav" onClick={() => shiftActiveDay(-1)} aria-label={t('planner.previousDay')}>
+                  <ChevronLeft size={15} aria-hidden="true" />
+                </button>
+                {days.map((day) => (
+                  <button
+                    type="button"
+                    className="weekly-planner__day-focus-button"
+                    key={day}
+                    aria-pressed={activeDay === day}
+                    aria-label={formatDay(day, locale)}
+                    onClick={() => setActiveDay(day)}
+                  >
+                    {formatDay(day, locale).split(' ')[0]}
+                  </button>
+                ))}
+                <button type="button" className="weekly-planner__day-focus-nav" onClick={() => shiftActiveDay(1)} aria-label={t('planner.nextDay')}>
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
+              </div>
+            )}
+            <div className="weekly-planner__view-switcher" role="group" aria-label={t('planner.viewModeLabel')}>
+              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'grid'} onClick={() => setView('grid')}>{t('planner.gridView')}</button>
+              <button type="button" className="weekly-planner__view-button" aria-pressed={view === 'table'} onClick={() => setView('table')}>{t('planner.tableView')}</button>
             </div>
             {editable && !mobileEditorOpen && (
               <button
@@ -502,13 +588,13 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                   onDelete={(assignment) => void handleDelete(assignment)}
                 />
               ) : (
-                <div className="weekly-planner__grid-wrap" role="region" aria-label={t('planner.gridLabel')} tabIndex={0}>
+                <div ref={gridWrapRef} className="weekly-planner__grid-wrap" role="region" aria-label={t('planner.gridLabel')} tabIndex={0}>
                   <table className="weekly-planner__grid">
                     <caption className="sr-only">{t('planner.gridCaption')}</caption>
                     <thead>
                       <tr>
                         <th scope="col">{t('planner.employeeColumn')}</th>
-                        {days.map((day) => <th scope="col" key={day}>{formatDay(day, locale)}</th>)}
+                        {days.map((day) => <th scope="col" key={day} data-day={day} data-active-day={activeDay === day || undefined} aria-current={activeDay === day ? 'date' : undefined}>{formatDay(day, locale)}</th>)}
                       </tr>
                     </thead>
                     <tbody>
@@ -522,7 +608,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                             const cellAssignments = assignmentsByCell.get(`${employee.id}:${day}`) ?? [];
                             const isSelected = selectedCell?.employeeId === employee.id && selectedCell.date === day;
                             return (
-                              <td key={day} data-selected={isSelected || undefined}>
+                              <td key={day} data-selected={isSelected || undefined} data-active-day={activeDay === day || undefined}>
                                 <div className="weekly-planner__cell" data-empty={cellAssignments.length === 0}>
                                   {cellAssignments.map((assignment) => (
                                     <button

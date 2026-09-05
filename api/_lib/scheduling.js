@@ -28,8 +28,8 @@ function normalizePeriodStart(value) {
     || date.getUTCDate() !== day) {
     throw new HttpError(400, 'periodStart must be a valid date');
   }
-  if (date.getUTCDay() !== 1) {
-    throw new HttpError(400, 'periodStart must be a Monday');
+  if (date.getUTCDay() !== 0 && date.getUTCDay() !== 1) {
+    throw new HttpError(400, 'periodStart must be a Monday or Sunday');
   }
 
   const periodEndDate = new Date(date.getTime());

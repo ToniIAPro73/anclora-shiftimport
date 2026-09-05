@@ -18,6 +18,18 @@ function plannerMonday(): string {
   return date.toISOString().slice(0, 10);
 }
 
+function addDays(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function plannerDayLabel(value: string): string {
+  return new Intl.DateTimeFormat('es-ES', {
+    weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
 async function loginAs(page: Page, email: string) {
   const response = await page.request.post('/api/auth/login', {
     data: { email, password: fixture.password },
@@ -45,37 +57,59 @@ test('weekly planner is a bounded, filterable workspace', async ({ page }, testI
     window.localStorage.setItem('anclora_theme_mode', 'dark');
   });
 
-  await loginAs(page, fixture.emails.admin);
-  const employeeResponses = await Promise.all(Array.from({ length: 24 }, (_, offset) => {
-    const index = offset + 1;
-    return page.request.post('/api/employees', {
-      headers: { 'x-organization-id': fixture.orgA },
-      data: { name: `UX Employee ${String(index).padStart(2, '0')}`, externalEmployeeId: `UX-${index}`, areaId: fixture.areaA, status: 'active' },
-    });
+  const periodStart = plannerMonday();
+  const employees = Array.from({ length: 26 }, (_, offset) => ({
+    id: `ux-employee-${offset + 1}`,
+    name: `UX Employee ${String(offset + 1).padStart(2, '0')}`,
+    externalEmployeeId: `UX-${offset + 1}`,
+    areaId: fixture.areaA,
   }));
-  for (const response of employeeResponses) {
-    expect(response.status()).toBe(201);
-  }
+  const candidateStarts = [-28, -21, -14, -7, 0, 7, 14, 21, 28].map((offset) => addDays(periodStart, offset));
+  const versions = candidateStarts.flatMap((mondayStart) => {
+    const sundayStart = addDays(mondayStart, -1);
+    return [
+      { id: `version-monday-${mondayStart}`, scheduleId: `schedule-monday-${mondayStart}`, areaId: fixture.areaA, versionNumber: 1, status: 'DRAFT', periodStart: mondayStart, periodEnd: addDays(mondayStart, 6) },
+      { id: `version-sunday-${mondayStart}`, scheduleId: `schedule-sunday-${mondayStart}`, areaId: fixture.areaA, versionNumber: 1, status: 'DRAFT', periodStart: sundayStart, periodEnd: addDays(sundayStart, 6) },
+    ];
+  });
+  await page.route('**/api/schedules**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (request.method() === 'GET' && parts.length === 2) {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ schedules: versions }) });
+      return;
+    }
+    if (request.method() === 'GET' && parts.length === 5) {
+      const selectedVersion = versions.find((version) => version.id === parts[4]) ?? versions[0];
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ version: selectedVersion, employees, assignments: [] }),
+      });
+      return;
+    }
+    await route.continue();
+  });
 
   await loginAs(page, fixture.emails.planner);
-  const periodStart = plannerMonday();
-  const draftResponse = await page.request.post('/api/schedules', {
-    headers: { 'x-organization-id': fixture.orgA },
-    data: { periodStart, areaId: fixture.areaA },
-  });
-  expect([201, 409]).toContain(draftResponse.status());
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('button', { name: 'Planificar' })).toBeVisible();
   await page.getByRole('button', { name: 'Planificar' }).click();
   await expect(page).toHaveURL(/\/app\/schedule$/);
 
-  await expect(page.getByTestId('weekly-planner')).toHaveAttribute('data-state', 'ready');
-  const planner = page.getByTestId('weekly-planner');
+  const plannerState = page.getByTestId('weekly-planner');
+  await expect(plannerState).toHaveAttribute('data-state', /ready|empty/);
+  if (await page.getByRole('button', { name: 'Crear borrador semanal' }).count()) {
+    await page.getByRole('button', { name: 'Crear borrador semanal' }).click();
+  }
+  await expect(plannerState).toHaveAttribute('data-state', 'ready');
+  const planner = plannerState;
   const grid = page.locator('.weekly-planner__grid-wrap');
   const editor = page.getByRole('form', { name: 'Añadir turno' });
-  const selectedDate = new Date(`${periodStart}T00:00:00Z`);
-  selectedDate.setUTCDate(selectedDate.getUTCDate() + 1);
-  const selectedDateIso = selectedDate.toISOString().slice(0, 10);
+  const actualPeriodStart = await page.locator('.weekly-planner__grid thead th[data-day]').first().getAttribute('data-day');
+  expect(actualPeriodStart).toBeTruthy();
+  const selectedDateIso = addDays(actualPeriodStart!, 1);
 
   await expect(page.locator('.weekly-planner__grid tbody tr')).toHaveCount(26);
   expect(await planner.evaluate((element) => {
@@ -86,6 +120,8 @@ test('weekly planner is a bounded, filterable workspace', async ({ page }, testI
   expect(await grid.evaluate((element) => getComputedStyle(element).overflowY)).toBe('auto');
   expect(await editor.evaluate((element) => element.getBoundingClientRect().bottom <= window.innerHeight + 1)).toBe(true);
   expect(await grid.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await expect(planner.getByRole('button', { name: /Cambiar tema/ })).toHaveCount(0);
+  await expect(planner.getByRole('button', { name: /Cambiar idioma/ })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath('planner-top-dark.png'), fullPage: false });
 
   await grid.evaluate((element) => { element.scrollTop = Math.floor(element.scrollHeight / 2); });
@@ -120,9 +156,32 @@ test('weekly planner is a bounded, filterable workspace', async ({ page }, testI
   await page.locator('.modal-select-option').filter({ hasText: 'Todos los empleados' }).click();
   await expect(page.locator('.weekly-planner__grid tbody tr')).toHaveCount(26);
 
+  const weekStart = page.getByRole('button', { name: 'Inicio de semana' });
+  await weekStart.click();
+  await page.locator('.modal-select-option').filter({ hasText: 'Domingo' }).click();
+  await expect(weekStart).toContainText('Domingo');
+  await expect(page.locator('.weekly-planner__grid thead th').nth(1)).toContainText('dom,');
+  await page.screenshot({ path: testInfo.outputPath('planner-sunday-start-dark.png'), fullPage: false });
+
+  await weekStart.click();
+  await page.locator('.modal-select-option').filter({ hasText: 'Lunes' }).click();
+  await expect(weekStart).toContainText('Lunes');
+  await expect(page.locator('.weekly-planner__grid thead th').nth(1)).toContainText('lun,');
+
+  const activeDayLabel = plannerDayLabel(selectedDateIso);
+  const activeDayButton = page.getByRole('button', { name: activeDayLabel });
+  await activeDayButton.click();
+  await expect(activeDayButton).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator(`.weekly-planner__grid thead th[data-day="${selectedDateIso}"]`)).toHaveAttribute('data-active-day', 'true');
+
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /Cambiar tema/ }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.screenshot({ path: testInfo.outputPath('planner-light-mobile.png'), fullPage: false });
+  await page.getByRole('button', { name: 'Planificar' }).click();
+  await expect(page).toHaveURL(/\/app\/schedule$/);
+  await expect(page.getByTestId('weekly-planner')).toHaveAttribute('data-state', 'ready');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await page.screenshot({ path: testInfo.outputPath('planner-light-grid.png'), fullPage: false });
 
   for (const viewport of [
     { width: 1440, height: 900 },

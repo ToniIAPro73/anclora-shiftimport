@@ -16,7 +16,7 @@ MISSING. El repo ya contiene las migraciones R2 `0013`–`0016`; por tanto, la s
 
 ## 4. Alcance IN
 
-- Tabla `schedules`: id, organization_id, area_id (nullable), period_start (date, lunes ISO), period_end (date), created_by_user_id, created_at.
+- Tabla `schedules`: id, organization_id, area_id (nullable), period_start (date, lunes o domingo ISO), period_end (date), created_by_user_id, created_at.
 - Constraint de unicidad (organization_id, area_id, period_start) — evita duplicar el contenedor de la misma semana/área.
 - Índices por organization_id y por (organization_id, period_start).
 
