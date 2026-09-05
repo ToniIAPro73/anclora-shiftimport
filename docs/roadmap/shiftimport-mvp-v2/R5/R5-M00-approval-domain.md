@@ -124,4 +124,4 @@ Revertir el commit de documentación; sin impacto en datos.
 Glosario de dominio Approval documentado y coherente con R0-M04 y R4-M06, sin ambigüedad sobre alcance IN/OUT. Microfase completada el 2026-09-05.
 
 Estado: DONE — PASS.
-Commit de cierre: `b79c42a` — `docs(approval): define R5 approval domain`.
+Commit de cierre: `8990f83` — `docs(approval): define R5 approval domain`.
