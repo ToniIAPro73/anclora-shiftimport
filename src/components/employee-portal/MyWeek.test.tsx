@@ -19,11 +19,11 @@ afterEach(() => {
 const mockedLoadWeek = vi.mocked(loadRemoteWeekShifts);
 const currentWeekStart = () => toISODate(getWeekStartMonday(new Date()));
 
-function renderWeek() {
+function renderWeek(onSelectShift?: (shiftId: string) => void) {
   return render(
     <ThemeProvider>
       <I18nProvider>
-        <MyWeek />
+        <MyWeek onSelectShift={onSelectShift} />
       </I18nProvider>
     </ThemeProvider>,
   );
@@ -71,5 +71,18 @@ describe('MyWeek', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     await waitFor(() => expect(screen.getAllByText('Libre').length).toBeGreaterThan(0));
     expect(mockedLoadWeek).toHaveBeenLastCalledWith(weekStart);
+  });
+
+  it('exposes each shift as an accessible detail trigger', async () => {
+    const weekStart = currentWeekStart();
+    const shift: Shift = {
+      id: 'shift-detail-trigger', date: getWeekDaysISO(weekStart)[0], startTime: '08:00', endTime: '16:00', location: 'Lobby', origin: 'IMP',
+    };
+    const onSelectShift = vi.fn();
+    mockedLoadWeek.mockResolvedValue({ weekStart, shifts: [shift] });
+    renderWeek(onSelectShift);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Turno de 08:00 a 16:00' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Turno de 08:00 a 16:00' }));
+    expect(onSelectShift).toHaveBeenCalledWith(shift.id);
   });
 });

@@ -9,7 +9,11 @@ type TodayState =
   | { status: 'ready'; shifts: Shift[] }
   | { status: 'error'; shifts: Shift[] };
 
-export function Today() {
+interface TodayProps {
+  onSelectShift?: (shiftId: string) => void;
+}
+
+export function Today({ onSelectShift }: TodayProps) {
   const { t } = useI18n();
   const [state, setState] = useState<TodayState>({ status: 'loading', shifts: [] });
 
@@ -72,7 +76,14 @@ export function Today() {
       <p className="employee-today__description">{t('employeeToday.description')}</p>
       <div className="employee-today__list">
         {state.shifts.map((shift) => (
-          <article className="employee-today__card" key={shift.id} aria-label={t('employeeToday.shiftLabel', { start: shift.startTime, end: shift.endTime })}>
+          <button
+            type="button"
+            className="employee-today__card"
+            key={shift.id}
+            data-shift-id={shift.id}
+            aria-label={t('employeeToday.shiftLabel', { start: shift.startTime, end: shift.endTime })}
+            onClick={() => onSelectShift?.(shift.id)}
+          >
             <div className="employee-today__card-head">
               <span className="employee-today__status">{t('employeeToday.published')}</span>
               <span className="employee-today__date">{shift.date}</span>
@@ -89,7 +100,7 @@ export function Today() {
               <MapPin size={16} aria-hidden="true" />
               <span>{shift.location.trim() || t('employeeToday.noLocation')}</span>
             </p>
-          </article>
+          </button>
         ))}
       </div>
     </section>

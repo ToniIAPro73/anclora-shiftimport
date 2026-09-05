@@ -22,9 +22,16 @@ function formatWeekRange(days: string[], locale: string): string {
   return `${formatter.format(fromISODate(days[0]))} — ${formatter.format(fromISODate(days[6]))}`;
 }
 
-export function MyWeek() {
+interface MyWeekProps {
+  onSelectShift?: (shiftId: string) => void;
+  weekStart?: string;
+  onWeekStartChange?: (weekStart: string) => void;
+}
+
+export function MyWeek({ onSelectShift, weekStart: controlledWeekStart, onWeekStartChange }: MyWeekProps) {
   const { locale, t } = useI18n();
-  const [weekStart, setWeekStart] = useState(() => toISODate(getWeekStartMonday(new Date())));
+  const [internalWeekStart, setInternalWeekStart] = useState(() => toISODate(getWeekStartMonday(new Date())));
+  const weekStart = controlledWeekStart ?? internalWeekStart;
   const [state, setState] = useState<WeekState>({ status: 'loading', shifts: [] });
   const weekDays = useMemo(() => getWeekDaysISO(weekStart), [weekStart]);
   const today = toISODate(new Date());
@@ -43,7 +50,13 @@ export function MyWeek() {
     void load();
   }, [load]);
 
-  const navigateWeek = (offset: number) => setWeekStart((current) => addWeeks(current, offset));
+  const navigateWeek = (offset: number) => {
+    const nextWeekStart = addWeeks(weekStart, offset);
+    if (!controlledWeekStart) {
+      setInternalWeekStart(nextWeekStart);
+    }
+    onWeekStartChange?.(nextWeekStart);
+  };
   const rangeLabel = formatWeekRange(weekDays, locale);
 
   return (
@@ -98,7 +111,14 @@ export function MyWeek() {
                 ) : (
                   <div className="employee-week__shifts">
                     {shifts.map((shift) => (
-                      <div className="employee-week__shift" key={shift.id} aria-label={t('employeeWeek.shiftLabel', { start: shift.startTime, end: shift.endTime })}>
+                      <button
+                        type="button"
+                        className="employee-week__shift"
+                        key={shift.id}
+                        data-shift-id={shift.id}
+                        aria-label={t('employeeWeek.shiftLabel', { start: shift.startTime, end: shift.endTime })}
+                        onClick={() => onSelectShift?.(shift.id)}
+                      >
                         <p className="employee-week__shift-time">
                           <Clock3 size={15} aria-hidden="true" />
                           <span>{shift.startTime} — {shift.endTime}</span>
@@ -107,7 +127,7 @@ export function MyWeek() {
                           <MapPin size={13} aria-hidden="true" />
                           <span>{shift.location.trim() || t('employeeWeek.noLocation')}</span>
                         </p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}

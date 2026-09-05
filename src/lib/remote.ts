@@ -71,6 +71,11 @@ export interface ShiftAssignment {
   location: string | null;
 }
 
+export interface RemoteShiftDetail {
+  shift: Shift;
+  areaName: string | null;
+}
+
 export interface ScheduleSnapshot {
   version: ScheduleVersion;
   employees: SchedulingEmployee[];
@@ -192,6 +197,13 @@ export async function loadRemoteWeekShifts(weekStart: string): Promise<{ weekSta
     `/api/me/shifts/week?week_start=${encodeURIComponent(weekStart)}`,
   );
   return { weekStart: payload.weekStart, shifts: payload.days.flatMap((day) => day.shifts.map(toShift)) };
+}
+
+export async function loadRemoteShiftDetail(shiftId: string): Promise<RemoteShiftDetail> {
+  const payload = await apiFetch<{ shift: RemoteShiftRow & { areaName?: string | null } }>(
+    `/api/me/shifts/${encodeURIComponent(shiftId)}`,
+  );
+  return { shift: toShift(payload.shift), areaName: payload.shift.areaName ?? null };
 }
 
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {

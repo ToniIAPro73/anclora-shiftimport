@@ -6,7 +6,9 @@ import { TurnosLogo } from '../branding/TurnosLogo';
 import { LanguageToggle } from '../ui/LanguageToggle';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { MyWeek } from './MyWeek';
+import { ShiftDetail } from './ShiftDetail';
 import { Today } from './Today';
+import { getWeekStartMonday, toISODate } from '../../lib/week';
 
 interface PortalShellProps {
   session: SessionInfo;
@@ -27,9 +29,30 @@ function resolveIdentity(session: SessionInfo, employeeName?: string): string {
 
 export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProps) => {
   const { t } = useI18n();
-  const [activeView, setActiveView] = useState<'today' | 'week'>('today');
+  const [activeView, setActiveView] = useState<'today' | 'week' | 'detail'>('today');
+  const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+  const [detailReturnView, setDetailReturnView] = useState<'today' | 'week'>('today');
+  const [weekStart, setWeekStart] = useState(() => toISODate(getWeekStartMonday(new Date())));
   const organizationName = resolveOrganizationName(session);
   const identity = resolveIdentity(session, employeeName);
+  const openDetail = (shiftId: string, returnView: 'today' | 'week') => {
+    setSelectedShiftId(shiftId);
+    setDetailReturnView(returnView);
+    setActiveView('detail');
+  };
+  const closeDetail = () => {
+    setActiveView(detailReturnView);
+    const shiftId = selectedShiftId;
+    window.setTimeout(() => {
+      if (!shiftId) return;
+      document.querySelector<HTMLElement>(`[data-shift-id="${shiftId}"]`)?.focus();
+    }, 0);
+  };
+  const mainHeadingId = activeView === 'today'
+    ? 'employee-today-title'
+    : activeView === 'week'
+      ? 'employee-week-title'
+      : 'employee-shift-detail-title';
 
   return (
     <div className="employee-portal" data-testid="employee-portal">
@@ -58,15 +81,17 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
         </div>
       </header>
 
-      <main className="employee-portal__main" aria-labelledby={activeView === 'today' ? 'employee-today-title' : 'employee-week-title'}>
-        {activeView === 'today' ? <Today /> : <MyWeek />}
+      <main className="employee-portal__main" aria-labelledby={mainHeadingId}>
+        {activeView === 'today' && <Today onSelectShift={(shiftId) => openDetail(shiftId, 'today')} />}
+        {activeView === 'week' && <MyWeek weekStart={weekStart} onWeekStartChange={setWeekStart} onSelectShift={(shiftId) => openDetail(shiftId, 'week')} />}
+        {activeView === 'detail' && selectedShiftId && <ShiftDetail shiftId={selectedShiftId} onBack={closeDetail} />}
       </main>
 
       <nav className="employee-portal__navigation" aria-label={t('employeePortal.navigationLabel')} data-testid="employee-portal-nav">
-        <button type="button" className={`employee-portal__nav-button${activeView === 'today' ? ' is-active' : ''}`} aria-current={activeView === 'today' ? 'page' : undefined} onClick={() => setActiveView('today')}>
+        <button type="button" className={`employee-portal__nav-button${(activeView === 'today' || (activeView === 'detail' && detailReturnView === 'today')) ? ' is-active' : ''}`} aria-current={activeView === 'today' ? 'page' : undefined} onClick={() => setActiveView('today')}>
           {t('employeePortal.today')}
         </button>
-        <button type="button" className={`employee-portal__nav-button${activeView === 'week' ? ' is-active' : ''}`} aria-current={activeView === 'week' ? 'page' : undefined} onClick={() => setActiveView('week')}>
+        <button type="button" className={`employee-portal__nav-button${(activeView === 'week' || (activeView === 'detail' && detailReturnView === 'week')) ? ' is-active' : ''}`} aria-current={activeView === 'week' ? 'page' : undefined} onClick={() => setActiveView('week')}>
           {t('employeePortal.week')}
         </button>
       </nav>

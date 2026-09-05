@@ -122,7 +122,7 @@ export function mapImportRow(row) {
   };
 }
 
-function mapShiftRow(row) {
+export function mapShiftRow(row) {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -1775,6 +1775,34 @@ export async function listWeekShifts(sql, ctx, weekStart) {
     ORDER BY date ASC, start_time ASC, end_time ASC, id ASC
   `;
   return rows.map(mapShiftRow);
+}
+
+/** Returns one SELF-scoped shift without disclosing another employee's rows. */
+export async function getEmployeeShift(sql, ctx, rawShiftId) {
+  if (ctx.role !== 'EMPLOYEE') {
+    throw new HttpError(403, 'Employee portal access required');
+  }
+  if (!ctx.employeeId) {
+    throw new HttpError(403, 'No employee linked to this user');
+  }
+
+  const rows = await sql`
+    SELECT s.id, s.organization_id, s.employee_id, s.import_id, s.area_id,
+           TO_CHAR(s.date, 'YYYY-MM-DD') AS date,
+           TO_CHAR(s.start_time, 'HH24:MI') AS start_time,
+           TO_CHAR(s.end_time, 'HH24:MI') AS end_time,
+           s.location, s.origin, a.name AS area_name
+    FROM shifts s
+    LEFT JOIN areas a ON a.id = s.area_id AND a.organization_id = s.organization_id
+    WHERE s.id = ${rawShiftId}
+      AND s.organization_id = ${ctx.organizationId}
+      AND s.employee_id = ${ctx.employeeId}
+  `;
+  const row = rows[0];
+  if (!row) {
+    throw new HttpError(404, 'Shift not found');
+  }
+  return { ...mapShiftRow(row), areaName: row.area_name ?? null };
 }
 
 /**

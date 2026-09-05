@@ -8,8 +8,14 @@ import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { PortalShell } from './PortalShell';
 
 vi.mock('../../lib/remote', () => ({
-  loadRemoteTodayShifts: vi.fn().mockResolvedValue([]),
+  loadRemoteTodayShifts: vi.fn().mockResolvedValue([{
+    id: '11111111-1111-4111-8111-111111111111', date: '2026-09-05', startTime: '09:00', endTime: '17:00', location: 'Recepción', origin: 'IMP',
+  }]),
   loadRemoteWeekShifts: vi.fn().mockResolvedValue({ weekStart: '2026-09-07', shifts: [] }),
+  loadRemoteShiftDetail: vi.fn().mockResolvedValue({
+    shift: { id: '11111111-1111-4111-8111-111111111111', date: '2026-09-05', startTime: '09:00', endTime: '17:00', location: 'Recepción', origin: 'IMP' },
+    areaName: 'Recepción',
+  }),
 }));
 
 setupLocalStorageMock();
@@ -80,5 +86,18 @@ describe('PortalShell', () => {
     await waitFor(() => expect(screen.getByTestId('my-week')).toBeTruthy());
     expect(screen.getByRole('button', { name: 'Semana' }).getAttribute('aria-current')).toBe('page');
     expect(screen.queryByTestId('today-empty')).toBeNull();
+  });
+
+  it('opens shift detail from Today and restores focus when returning', async () => {
+    renderPortal();
+    const trigger = await screen.findByRole('button', { name: 'Turno de 09:00 a 17:00' });
+    fireEvent.click(trigger);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Detalle del turno' })));
+    expect(screen.getByTestId('shift-detail')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver al portal' }));
+    await waitFor(() => expect(screen.getByTestId('today-shifts')).toBeTruthy());
+    const restoredTrigger = document.querySelector(`[data-shift-id="${trigger.getAttribute('data-shift-id')}"]`);
+    expect(document.activeElement).toBe(restoredTrigger);
   });
 });
