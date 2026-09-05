@@ -29,7 +29,7 @@ function makeRequest(status = 'PENDING') {
     reason: 'Necesito cambiar la hora de entrada.',
     status,
     created_at: '2026-09-05T10:00:00.000Z',
-    resolved_at: status === 'CANCELLED' ? '2026-09-05T10:05:00.000Z' : null,
+    resolved_at: status === 'CANCELLED' || status === 'APPROVED' ? '2026-09-05T10:05:00.000Z' : null,
     resolved_by_user_id: null,
   };
 }
@@ -55,11 +55,19 @@ function makeFakeSql() {
         return Promise.resolve([]);
       }
       state.writes += 1;
-      return Promise.resolve([makeRequest()]);
+      const status = state.policy === 'NO_APPROVAL' ? 'APPROVED' : 'PENDING';
+      return Promise.resolve([{
+        ...makeRequest(status),
+        approval_policy: state.policy,
+        approval_request_id: state.policy === 'NO_APPROVAL' ? null : 'approval-1',
+        approver_count: state.approverCount,
+        notification_count: state.approverCount,
+      }]);
     }
     return Promise.resolve([]);
   };
   sql.calls = calls;
+  sql.transaction = async (build) => Promise.all(build(sql));
   return sql;
 }
 
@@ -79,7 +87,7 @@ async function call({ id = SHIFT_ID, token = TOKEN, method = 'POST', body = {} }
 }
 
 beforeEach(() => {
-  state = { writes: 0, role: 'EMPLOYEE', sql: makeFakeSql() };
+  state = { writes: 0, role: 'EMPLOYEE', policy: 'ORGANIZATION_ADMIN', approverCount: 1, sql: makeFakeSql() };
 });
 
 describe('POST /api/me/shifts/:id/change-requests', () => {
@@ -96,9 +104,40 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
     expect(state.writes).toBe(1);
     const insert = state.sql.calls.find((entry) => entry.text.includes('WITH owned_shift'));
     expect(insert.text).toContain("'PENDING'");
-    expect(insert.text).not.toContain('APPROVED');
     expect(insert.text).not.toContain('REJECTED');
     expect(insert.text).not.toContain('UPDATE shifts');
+  });
+
+  it('auto-approves without creating an approval envelope when policy is NO_APPROVAL', async () => {
+    state.policy = 'NO_APPROVAL';
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'No approval needed.' } });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.request.status).toBe('APPROVED');
+    const routeQuery = state.sql.calls.find((entry) => entry.text.includes('WITH owned_shift'));
+    expect(routeQuery.text).toContain('approval_requests');
+    expect(routeQuery.text).toContain("approval_policy = 'NO_APPROVAL'");
+  });
+
+  it('keeps a pending request behind an approval envelope for AREA_RESPONSIBLE', async () => {
+    state.policy = 'AREA_RESPONSIBLE';
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'Necesito revisión.' } });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.request.status).toBe('PENDING');
+    const routeQuery = state.sql.calls.find((entry) => entry.text.includes('WITH owned_shift'));
+    expect(routeQuery.text).toContain("'APPROVAL_REQUEST_CREATED'");
+  });
+
+  it('logs a warning and keeps the request pending when no approver is resolvable', async () => {
+    state.policy = 'AREA_RESPONSIBLE';
+    state.approverCount = 0;
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'Revisión manual.' } });
+    expect(res.statusCode).toBe(201);
+    expect(res.body.request.status).toBe('PENDING');
+    expect(warning).toHaveBeenCalledWith('[approval] change request has no eligible approver', expect.objectContaining({
+      policy: 'AREA_RESPONSIBLE',
+    }));
+    warning.mockRestore();
   });
 
   it('rejects empty, overlong and invalid requests before any write', async () => {

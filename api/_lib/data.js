@@ -1973,25 +1973,115 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
     throw new HttpError(400, `Change request reason cannot exceed ${MAX_CHANGE_REQUEST_REASON_LENGTH} characters`);
   }
 
-  const rows = await sql`
+  // Neon transactions are non-interactive: they accept a batch of queries,
+  // not an async sequence. A single data-modifying CTE therefore keeps the
+  // Change Request, routing decision, ApprovalRequest and notifications in
+  // one atomic database statement. The eligible-approver CTE mirrors the
+  // pure resolver contract from api/_lib/approval.js using tenant-validated
+  // SQL candidates, so no client-provided approver can influence routing.
+  const [rows] = await sql.transaction((txn) => [txn`
     WITH owned_shift AS (
-      SELECT id, employee_id, organization_id
-      FROM shifts
-      WHERE id = ${rawShiftId}
-        AND organization_id = ${ctx.organizationId}
-        AND employee_id = ${ctx.employeeId}
+      SELECT s.id, s.employee_id, s.organization_id, o.approval_policy
+      FROM shifts s
+      JOIN employees e
+        ON e.id = s.employee_id
+       AND e.organization_id = s.organization_id
+      JOIN organizations o ON o.id = s.organization_id
+      WHERE s.id = ${rawShiftId}
+        AND s.organization_id = ${ctx.organizationId}
+        AND s.employee_id = ${ctx.employeeId}
+    ), created AS (
+      INSERT INTO change_requests
+        (shift_id, employee_id, organization_id, request_type, reason, status, resolved_at)
+      SELECT id, employee_id, organization_id, ${requestType}, ${reason},
+             CASE WHEN approval_policy = 'NO_APPROVAL' THEN 'APPROVED' ELSE 'PENDING' END,
+             CASE WHEN approval_policy = 'NO_APPROVAL' THEN NOW() ELSE NULL END
+      FROM owned_shift
+      RETURNING id, shift_id, employee_id, organization_id, request_type, reason,
+                status, created_at, resolved_at, resolved_by_user_id
+    ), routing AS (
+      SELECT c.*, o.approval_policy, e.area_id
+      FROM created c
+      JOIN organizations o ON o.id = c.organization_id
+      JOIN employees e
+        ON e.id = c.employee_id
+       AND e.organization_id = c.organization_id
+    ), organization_admins AS (
+      SELECT r.id AS change_request_id, m.user_id
+      FROM routing r
+      JOIN memberships m
+        ON m.organization_id = r.organization_id
+       AND m.role IN ('OWNER', 'ADMIN')
+      WHERE r.approval_policy IN ('ORGANIZATION_ADMIN', 'AREA_RESPONSIBLE')
+    ), area_responsible_candidates AS (
+      SELECT DISTINCT r.id AS change_request_id, ar.user_id
+      FROM routing r
+      JOIN area_responsibles ar
+        ON ar.organization_id = r.organization_id
+       AND ar.area_id = r.area_id
+      JOIN memberships m
+        ON m.organization_id = ar.organization_id
+       AND m.user_id = ar.user_id
+       AND m.role = 'ADMIN'
+      WHERE r.approval_policy = 'AREA_RESPONSIBLE'
+        AND r.area_id IS NOT NULL
+    ), eligible_approvers AS (
+      SELECT change_request_id, user_id FROM organization_admins
+      WHERE EXISTS (
+        SELECT 1 FROM routing r
+        WHERE r.id = organization_admins.change_request_id
+          AND r.approval_policy = 'ORGANIZATION_ADMIN'
+      )
+      UNION
+      SELECT change_request_id, user_id FROM area_responsible_candidates
+      UNION
+      SELECT oa.change_request_id, oa.user_id
+      FROM organization_admins oa
+      JOIN routing r ON r.id = oa.change_request_id
+      WHERE r.approval_policy = 'AREA_RESPONSIBLE'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM area_responsible_candidates arc
+          WHERE arc.change_request_id = r.id
+        )
+    ), approval_insert AS (
+      INSERT INTO approval_requests
+        (organization_id, change_request_id, status, policy_snapshot)
+      SELECT organization_id, id, 'PENDING', approval_policy
+      FROM routing
+      WHERE approval_policy <> 'NO_APPROVAL'
+      RETURNING id, organization_id, change_request_id
+    ), notification_insert AS (
+      INSERT INTO notifications
+        (user_id, organization_id, type, resource_type, resource_id)
+      SELECT ea.user_id, ai.organization_id, 'APPROVAL_REQUEST_CREATED',
+             'APPROVAL_REQUEST', ai.id
+      FROM approval_insert ai
+      JOIN eligible_approvers ea ON ea.change_request_id = ai.change_request_id
+      ON CONFLICT (user_id, type, resource_id) DO NOTHING
+      RETURNING id
     )
-    INSERT INTO change_requests
-      (shift_id, employee_id, organization_id, request_type, reason, status)
-    SELECT id, employee_id, organization_id, ${requestType}, ${reason}, 'PENDING'
-    FROM owned_shift
-    RETURNING id, shift_id, employee_id, organization_id, request_type, reason,
-              status, created_at, resolved_at, resolved_by_user_id
-  `;
-  if (!rows[0]) {
+    SELECT r.id, r.shift_id, r.employee_id, r.organization_id, r.request_type,
+           r.reason, r.status, r.created_at, r.resolved_at, r.resolved_by_user_id,
+           r.approval_policy, ai.id AS approval_request_id,
+           (SELECT COUNT(*)::integer FROM eligible_approvers ea
+            WHERE ea.change_request_id = r.id) AS approver_count,
+           (SELECT COUNT(*)::integer FROM notification_insert) AS notification_count
+    FROM routing r
+    LEFT JOIN approval_insert ai ON ai.change_request_id = r.id
+  `]);
+  if (!rows?.[0]) {
     throw new HttpError(404, 'Shift not found');
   }
-  return mapChangeRequestRow(rows[0]);
+  const routed = rows[0];
+  if (routed.approval_policy !== 'NO_APPROVAL' && Number(routed.approver_count) === 0) {
+    console.warn('[approval] change request has no eligible approver', {
+      organizationId: routed.organization_id,
+      changeRequestId: routed.id,
+      policy: routed.approval_policy,
+    });
+  }
+  return mapChangeRequestRow(routed);
 }
 
 export async function cancelEmployeeChangeRequest(sql, ctx, rawRequestId) {

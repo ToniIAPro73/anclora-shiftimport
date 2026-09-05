@@ -17,6 +17,7 @@ const shiftCommentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url
 const changeRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0024_change_requests.sql');
 const notificationsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0025_notifications.sql');
 const approvalPolicyMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0027_approval_policy.sql');
+const approvalRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0028_approval_requests.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -279,5 +280,24 @@ describe('0027 approval policy migration contract', () => {
     expect(sql).toContain('organization_id UUID NOT NULL REFERENCES organizations');
     expect(sql).toContain('PRIMARY KEY (area_id, user_id)');
     expect(sql).toContain('area_responsibles_organization_idx');
+  });
+});
+
+describe('0028 approval requests migration contract', () => {
+  it('creates one tenant-scoped approval envelope per change request', async () => {
+    const sql = await readFile(approvalRequestsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS approval_requests');
+    expect(sql).toContain('organization_id UUID NOT NULL REFERENCES organizations');
+    expect(sql).toContain('change_request_id UUID NOT NULL REFERENCES change_requests');
+    expect(sql).toContain("CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'))");
+    expect(sql).toContain("CHECK (policy_snapshot IN ('NO_APPROVAL', 'AREA_RESPONSIBLE', 'ORGANIZATION_ADMIN'))");
+    expect(sql).toContain('UNIQUE (change_request_id)');
+  });
+
+  it('extends the existing in-app channel for approver discovery', async () => {
+    const sql = await readFile(approvalRequestsMigrationPath, 'utf8');
+    expect(sql).toContain("'APPROVAL_REQUEST_CREATED'");
+    expect(sql).toContain("'APPROVAL_REQUEST'");
+    expect(sql).toContain('approval_requests_organization_status_idx');
   });
 });

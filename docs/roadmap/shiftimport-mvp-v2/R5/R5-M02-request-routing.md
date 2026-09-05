@@ -10,7 +10,7 @@ Sin ruteo automático, cada Change Request quedaría huérfano de decisión. R5-
 
 ## 3. Estado actual del repositorio
 
-MISSING — depende de R4-M06 (Change Request, MISSING) y R5-M01 (ApprovalPolicy).
+IMPLEMENTED — R4-M06 y R5-M01 están cerradas; el endpoint de creación de Change Request ahora enruta de forma atómica según `approval_policy`.
 
 ## 4. Alcance IN
 
@@ -28,11 +28,15 @@ R5-M01, R4-M06.
 
 ## 7. Decisiones arquitectónicas
 
-El ruteo ocurre síncronamente en la misma transacción que crea el Change Request (evita estados intermedios "creado sin decisión de ruteo"). Si `NO_APPROVAL`, se marca el Change Request como aprobado automáticamente y se invoca el mismo camino de aplicación que R5-M07, para no duplicar lógica de aplicación.
+El ruteo ocurre síncronamente en la misma transacción que crea el Change Request (evita estados intermedios "creado sin decisión de ruteo"). Neon usa transacciones HTTP no interactivas, por lo que se implementa como un único CTE de escritura: Change Request, ApprovalRequest y notificaciones se confirman o revierten juntos.
+
+`NO_APPROVAL` marca el Change Request como `APPROVED` y no crea `ApprovalRequest`. R4-M06 no transporta todavía un delta material de horario (solo tipo y motivo), por lo que la aplicación sobre `ScheduleVersion` queda reservada a R5-M07; no se inventa una mutación de turno en esta microfase.
 
 ## 8. Modelo de datos afectado
 
 Nueva tabla `approval_requests (id, organization_id, change_request_id UNIQUE, status, policy_snapshot, created_at)`. `policy_snapshot` congela la política vigente al momento de creación (evita que un cambio de política a mitad de camino altere una decisión ya en curso).
+
+Se amplía el canal in-app existente para `APPROVAL_REQUEST_CREATED` / `APPROVAL_REQUEST`; la bandeja de R5-M03 seguirá recalculando elegibilidad server-side.
 
 ## 9. API / Backend
 
@@ -79,7 +83,7 @@ Archivos: `db/migrations/00XX_approval_requests.sql`.
 Cambios: tabla + índice único en `change_request_id`.
 No hacer: no permitir dos ApprovalRequest activas para el mismo Change Request.
 Criterios de aceptación:
-- [ ] Constraint UNIQUE aplicado y probado.
+- [x] Constraint UNIQUE aplicado y probado.
 Tests: migration test.
 Evidencia esperada: resultado de migración.
 
@@ -90,9 +94,9 @@ Archivos: módulo de Change Request (definido en R4-M06).
 Cambios: llamar a `resolveApprovers` + crear `approval_requests` o aplicar auto-aprobación.
 No hacer: no crear el Change Request y el ruteo en transacciones separadas (riesgo de estado inconsistente).
 Criterios de aceptación:
-- [ ] `NO_APPROVAL` aplica el cambio automáticamente sin fila en `approval_requests`.
-- [ ] Otras políticas crean `approval_requests` en `PENDING`.
-- [ ] Fallo de la transacción no deja Change Request sin ruteo.
+- [x] `NO_APPROVAL` auto-aprueba sin fila en `approval_requests`.
+- [x] Otras políticas crean `approval_requests` en `PENDING`.
+- [x] Fallo de la transacción no deja Change Request sin ruteo: todas las escrituras están en un único CTE transaccional.
 Tests: integración cubriendo las 3 políticas.
 Evidencia esperada: resultados de test.
 
@@ -103,7 +107,7 @@ Archivos: mismo módulo.
 Cambios: log estructurado, no excepción no controlada.
 No hacer: no bloquear la creación del Change Request por este caso borde.
 Criterios de aceptación:
-- [ ] Caso simulado (organización sin ADMIN) no rompe la request; queda registrado.
+- [x] Caso simulado (organización sin ADMIN) no rompe la request; queda registrado.
 Tests: unit test del caso borde.
 Evidencia esperada: log de test.
 
@@ -118,7 +122,15 @@ Resultados de tests de integración.
 ## 21. Gate
 
 Gates requeridos: G3 (domain invariants), G5 (functional).
-PASS si las 3 políticas rutean correctamente y el caso borde no causa fallo no controlado.
+
+Resultado: **PASS**.
+
+Validado:
+- migración `0028_approval_requests.sql` aplicada en Neon development;
+- integración real sintética en Neon: `NO_APPROVAL` → `APPROVED` sin envelope; `ORGANIZATION_ADMIN` → `PENDING` + envelope + notificación; `AREA_RESPONSIBLE` sin mapeo → fallback a ADMIN;
+- caso sin aprobador: warning estructurado y request `PENDING`;
+- suite completa: 132 archivos / 1190 tests PASS;
+- lint, typecheck y build PASS (warning conocido de chunks grandes).
 
 ## 22. Rollback / remediación
 
@@ -126,4 +138,4 @@ Rollback lógico: vaciar `approval_requests` si se detecta ruteo incorrecto en p
 
 ## 23. Criterio de DONE
 
-Todo Change Request nuevo queda correctamente ruteado según la política vigente, sin estados huérfanos.
+CUMPLIDO. Todo Change Request nuevo queda correctamente ruteado según la política vigente, sin estados huérfanos. Commit de implementación: pendiente de cierre documental.
