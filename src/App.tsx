@@ -383,11 +383,15 @@ function App() {
     }
   }, [hydrateAuthenticated]);
 
-  // Unified onboarding: creates the organization, admin membership,
-  // and optionally a self-linked employee.
-  const handleOnboarding = useCallback(async (organizationName: string, employeeName?: string) => {
+  // Unified onboarding: creates the organization and OWNER membership.
+  // Owner-to-Employee linking is an explicit onboarding choice.
+  const handleOnboarding = useCallback(async (
+    organizationName: string,
+    ownerIsEmployee: boolean,
+    employeeName?: string,
+  ) => {
     try {
-      const nextSession = await completeOnboarding(organizationName, employeeName);
+      const nextSession = await completeOnboarding(organizationName, ownerIsEmployee, employeeName);
       clearAnonymousShiftDraft();
       setSession(nextSession);
       setNeedsOrgChoice(false);

@@ -74,15 +74,42 @@ describe('POST /api/onboarding', () => {
       .toHaveLength(2);
   });
 
-  it('keeps the OWNER role when creating the optional self employee', async () => {
+  it('does not create an Employee from a legacy employeeName without explicit opt-in', async () => {
     state = { sql: makeSql() };
     const res = await call({ organizationName: 'Personal Workspace', employeeName: 'Onboarding User' });
 
     expect(res.statusCode).toBe(201);
+    expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO')).map((query) => query.text))
+      .toHaveLength(2);
+  });
+
+  it('creates the self employee only when ownerIsEmployee is explicitly true', async () => {
+    state = { sql: makeSql() };
+    const res = await call({
+      organizationName: 'Personal Workspace',
+      ownerIsEmployee: true,
+      employeeName: 'Onboarding User',
+    });
+
+    expect(res.statusCode).toBe(201);
     const membershipInsert = state.sql.queries.find((query) => query.text.includes('INSERT INTO memberships'));
     expect(membershipInsert?.text).toContain("'OWNER'");
+    expect(state.sql.queries.find((query) => query.text.includes('INSERT INTO employees'))?.text)
+      .toContain("'active'");
     expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO')).map((query) => query.text))
       .toHaveLength(3);
+  });
+
+  it('treats adminName as owner identity and never as an Employee signal', async () => {
+    state = { sql: makeSql() };
+    const res = await call({ organizationName: 'Company Workspace', adminName: 'Owner Display Name' });
+
+    expect(res.statusCode).toBe(201);
+    expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO')).map((query) => query.text))
+      .toHaveLength(2);
+    const userUpdate = state.sql.queries.find((query) => query.text.includes('UPDATE users'));
+    expect(userUpdate?.text).toContain('display_name');
+    expect(userUpdate?.values).toContain('Owner Display Name');
   });
 
   it('rejects repeat onboarding after the user already has a membership', async () => {

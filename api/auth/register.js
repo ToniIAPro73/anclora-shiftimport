@@ -8,10 +8,9 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Account bootstrap: creates the user and opens a session. Organization and
  * membership are deliberately NOT created here — Fase 1.2C.2 requires an
  * explicit "Para mí" / "Para mi empresa" choice right after signup, handled
- * by POST /api/onboarding/personal or /api/onboarding/company. A freshly
- * registered account intentionally has zero memberships until that step
- * completes (see resolveContext: memberships.length === 0 is a valid,
- * expected state, not an error).
+ * by POST /api/onboarding. A freshly registered account intentionally has
+ * zero memberships until that step completes (see resolveContext:
+ * memberships.length === 0 is a valid, expected state, not an error).
  */
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

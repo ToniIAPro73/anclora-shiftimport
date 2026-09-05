@@ -3,8 +3,9 @@ import { getSql, requireAuthenticatedContext, resolveContext } from '../_lib/aut
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * Unified onboarding: creates the organization, an OWNER membership
- * and optionally a self-linked Employee (when employeeName is provided).
+ * Unified onboarding: creates the organization and an OWNER membership.
+ * A self-linked Employee is created only when ownerIsEmployee is explicitly
+ * true. User/Membership/Employee are independent domain entities.
  * Idempotency guard: a user with any existing membership has already
  * onboarded and cannot repeat this step.
  *
@@ -28,20 +29,24 @@ export default async function handler(req, res) {
     }
 
     const organizationName = String(req.body?.organizationName ?? '').trim();
-    // `adminName` accepted as an alias: the web client (src/lib/session.ts
-    // completeOnboarding) sends that field name for the self-employee.
-    const employeeName = String(req.body?.employeeName ?? req.body?.adminName ?? '').trim();
+    // `adminName` remains a backwards-compatible alias for the owner's
+    // display name. It must never imply that the owner is also an Employee.
+    const ownerName = String(req.body?.ownerName ?? req.body?.adminName ?? '').trim();
+    const ownerIsEmployee = req.body?.ownerIsEmployee === true;
+    const employeeName = ownerIsEmployee
+      ? String(req.body?.employeeName ?? '').trim() || ownerName || ctx.user.displayName || ctx.user.email
+      : '';
 
     if (!organizationName) {
       return sendJson(res, 400, { error: 'Organization name is required' });
     }
 
-    // Use displayName or employeeName as the organization label if not provided
+    // Use displayName as the organization label if not provided.
     const orgLabel = organizationName || ctx.user.displayName || ctx.user.email;
 
     // Personal flow (self employee) = B2C personal org; organizationName
     // alone = B2B company org (organizations.type is NOT NULL, no default).
-    const organizationType = employeeName ? 'personal' : 'company';
+    const organizationType = ownerIsEmployee ? 'personal' : 'company';
 
     const organizationId = randomUUID();
     const queries = [
@@ -53,8 +58,18 @@ export default async function handler(req, res) {
         VALUES (${ctx.user.id}, ${organizationId}, 'OWNER')
       `,
     ];
-    // Step 3: optional self-linked Employee ACTIVE
-    if (employeeName) {
+    // Compatibility: legacy clients may send adminName. Keep its intended
+    // identity meaning by updating User.displayName, never by creating an
+    // Employee. The current registration flow already sets this value.
+    if (ownerName) {
+      queries.push(sql`
+        UPDATE users
+        SET display_name = ${ownerName}, updated_at = NOW()
+        WHERE id = ${ctx.user.id}
+      `);
+    }
+    // Step 3: optional self-linked Employee ACTIVE, only after explicit opt-in.
+    if (ownerIsEmployee) {
       queries.push(sql`
         INSERT INTO employees (organization_id, name, user_id, status)
         VALUES (${organizationId}, ${employeeName}, ${ctx.user.id}, 'active')

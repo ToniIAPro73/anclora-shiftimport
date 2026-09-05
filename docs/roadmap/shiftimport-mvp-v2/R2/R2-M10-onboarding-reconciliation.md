@@ -1,10 +1,10 @@
 # R2-M10 — Onboarding Reconciliation
 
-STATUS: DONE — PASS
+STATUS: DONE — PASS (complementado por `R2-M10-owner-employee-separation-remediation.md`)
 
 ## 1. Objetivo
 
-Verificar y ajustar el flujo de onboarding (`api/onboarding.js`) para que asigne correctamente el rol `OWNER` al creador de una nueva organización tras R2-M06.
+Verificar y ajustar el flujo de onboarding (`api/onboarding.js`) para que asigne correctamente el rol `OWNER` al creador de una nueva organización tras R2-M06 y mantenga separado el registro `Employee` salvo opt-in explícito.
 
 ## 2. Problema que resuelve
 
@@ -12,17 +12,18 @@ Antes de R2-M06, el onboarding probablemente asignaba `ADMIN` al creador (único
 
 ## 3. Estado actual del repositorio
 
-`api/onboarding/onboarding.js` crea la organización inicial y su primera membership dentro de una transacción. Antes de esta microfase insertaba `role = 'ADMIN'`; tras R2-M06 el rol correcto para el creador es `OWNER`.
+`api/onboarding/onboarding.js` crea la organización inicial y su primera membership dentro de una transacción. Antes de esta microfase insertaba `role = 'ADMIN'`; tras R2-M06 el rol correcto para el creador es `OWNER`. La remediación posterior documentada en el anexo separa `OWNER` de `Employee`: sólo `ownerIsEmployee: true` crea el Employee vinculado.
 
 ## 4. Alcance IN
 
 - Auditar `api/onboarding.js` para confirmar qué rol asigna hoy.
 - Actualizar para asignar `OWNER` al creador tras R2-M06.
+- Evitar que `adminName` o `employeeName` creen un Employee sin intención explícita.
 - Test de regresión del flujo completo signup → organización creada → membership OWNER.
 
 ## 5. Alcance OUT
 
-No se rediseña el flujo de onboarding más allá de la corrección de rol.
+No se rediseña el flujo de onboarding más allá de la corrección de rol y la decisión explícita OWNER→Employee.
 
 ## 6. Dependencias
 
@@ -42,7 +43,7 @@ N/A — motivo: sin cambio de esquema, solo de lógica de asignación en `api/on
 
 ## 10. Frontend / UX
 
-N/A — motivo: sin cambio de UI visible (el flujo de onboarding no muestra el rol explícitamente, según auditoría a confirmar en T01).
+El onboarding muestra un opt-in accesible y no seleccionado por defecto para indicar si el OWNER también trabajará como Employee.
 
 ## 11. Seguridad y autorización
 
@@ -50,7 +51,7 @@ N/A — motivo: cambio de valor por defecto, no de lógica de autorización.
 
 ## 12. i18n
 
-N/A — motivo: sin nuevos textos.
+Se añadieron las claves ES/EN del opt-in OWNER→Employee.
 
 ## 13. Accesibilidad
 
@@ -93,7 +94,7 @@ Cambios: Cambiar valor de rol en el INSERT de membership inicial.
 No hacer: No modificar otras partes del flujo de onboarding.
 Criterios de aceptación:
 - [x] Nueva organización creada vía onboarding tiene su membership inicial en OWNER.
-Tests: `api/onboarding/onboarding.test.js` cubre organización company, employee personal opcional y rechazo de repetición.
+Tests: `api/onboarding/onboarding.test.js` cubre owner-only, opt-in explícito, compatibilidad `adminName`, legacy sin opt-in y rechazo de repetición.
 Evidencia esperada: resultado de test.
 
 ## 19. Tests obligatorios
@@ -104,12 +105,14 @@ integration test del flujo de onboarding completo.
 
 Resultados de T01, T02:
 
-- Auditoría de código: `api/onboarding/onboarding.js` mantiene la transacción existente y ahora inserta `VALUES (..., 'OWNER')`.
-- Test dirigido: `2 passed (2)`, `6 passed (6)`.
-- Suite completa: `100 passed (100)`, `1021 passed (1021)`.
+- Auditoría de código: `api/onboarding/onboarding.js` mantiene la transacción existente, inserta `VALUES (..., 'OWNER')` y sólo añade Employee con `ownerIsEmployee === true`.
+- Test dirigido: onboarding y UI de elección OWNER→Employee — PASS.
+- Suite completa: `137 passed (137)`, `1220 passed (1220)`.
 - `npm run lint`: PASS.
 - `npm run build`: PASS; permanece el warning conocido de chunks >500 kB.
 - `git diff --check`: PASS.
+
+La remediación de datos y la validación real de `ownerIsEmployee=false/true` están documentadas en `R2-M10-owner-employee-separation-remediation.md`.
 
 ## 21. Gate
 

@@ -4,17 +4,19 @@ import { ModalShell } from '../ui/ModalShell';
 
 interface OnboardingChoiceModalProps {
   isOpen: boolean;
-  onConfirm: (organizationName: string, employeeName?: string) => Promise<void>;
+  onConfirm: (organizationName: string, ownerIsEmployee: boolean, employeeName?: string) => Promise<void>;
   onLogout: () => void;
 }
 
 /**
- * Unified onboarding choice after signup: organization name + optional employee name.
+ * Unified onboarding choice after signup. Owner and Employee remain separate;
+ * the checkbox is the explicit opt-in for creating a self-linked Employee.
  * Blocking modal — only way out without completing is logout.
  */
 export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: OnboardingChoiceModalProps) => {
   const { t } = useI18n();
   const [organizationName, setOrganizationName] = useState('');
+  const [ownerIsEmployee, setOwnerIsEmployee] = useState(false);
   const [employeeName, setEmployeeName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,10 +32,14 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
       setError(t('onboardingChoice.orgNameRequired'));
       return;
     }
+    if (ownerIsEmployee && !trimmedEmp) {
+      setError(t('onboardingChoice.employeeNameRequired'));
+      return;
+    }
 
     setBusy(true);
     try {
-      await onConfirm(trimmedOrg, trimmedEmp || undefined);
+      await onConfirm(trimmedOrg, ownerIsEmployee, ownerIsEmployee ? trimmedEmp : undefined);
     } catch {
       setError(t('onboardingChoice.failed'));
     } finally {
@@ -62,15 +68,32 @@ export const OnboardingChoiceModal = ({ isOpen, onConfirm, onLogout }: Onboardin
             autoFocus
           />
         </label>
-        <label style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
-          <span>{t('onboardingChoice.employeeNameLabel')}</span>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: ownerIsEmployee ? '12px' : '14px', cursor: 'pointer' }}>
           <input
-            className="modal-input"
-            value={employeeName}
-            onChange={(event) => setEmployeeName(event.target.value)}
-            placeholder={t('onboardingChoice.employeeNamePlaceholder')}
+            type="checkbox"
+            checked={ownerIsEmployee}
+            onChange={(event) => setOwnerIsEmployee(event.target.checked)}
+            style={{ marginTop: '3px', accentColor: 'var(--accent-gold)' }}
           />
+          <span style={{ display: 'grid', gap: '3px' }}>
+            <span>{t('onboardingChoice.ownerIsEmployeeLabel')}</span>
+            <small style={{ color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              {t('onboardingChoice.ownerIsEmployeeDescription')}
+            </small>
+          </span>
         </label>
+        {ownerIsEmployee && (
+          <label style={{ display: 'grid', gap: '6px', marginBottom: '14px' }}>
+            <span>{t('onboardingChoice.employeeNameLabel')}</span>
+            <input
+              className="modal-input"
+              value={employeeName}
+              onChange={(event) => setEmployeeName(event.target.value)}
+              placeholder={t('onboardingChoice.employeeNamePlaceholder')}
+              required
+            />
+          </label>
+        )}
         {error && (
           <p style={{ margin: '0 0 14px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
         )}

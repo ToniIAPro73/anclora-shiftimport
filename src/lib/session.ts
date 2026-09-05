@@ -219,10 +219,18 @@ export async function register(email: string, password: string, displayName: str
  * Onboarding: creates the organization for the current (freshly registered, zero-membership) user
  * and re-resolves the session so the caller lands with an active organization.
  */
-export async function completeOnboarding(organizationName: string, adminName?: string): Promise<SessionInfo> {
+export async function completeOnboarding(
+  organizationName: string,
+  ownerIsEmployee = false,
+  employeeName?: string,
+): Promise<SessionInfo> {
   await apiFetch('/api/onboarding', {
     method: 'POST',
-    body: JSON.stringify({ organizationName, adminName }),
+    body: JSON.stringify({
+      organizationName,
+      ownerIsEmployee,
+      employeeName: ownerIsEmployee ? employeeName : undefined,
+    }),
   });
   const session = await fetchSession();
   if (!session) {
