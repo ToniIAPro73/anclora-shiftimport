@@ -91,7 +91,7 @@ All MISSING. Depends on R0-M05 routing decision and R3 schedule data existing.
 |---|---|---|---|---:|---|
 | R4-M00 | Employee IA / Navigation | DONE — PASS; shell EMPLOYEE aislado y bifurcación post-login verificada | R0-M05 | 3 | G1, G6 |
 | R4-M01 | Today | DONE — PASS; endpoint SELF server-side y estados Today integrados | R4-M00, R3-M10 | 4 | G5, G6 |
-| R4-M02 | My Week | MISSING | R4-M01 | 4 | G5, G6 |
+| R4-M02 | My Week | DONE — PASS; semana SELF con siete buckets y navegación accesible | R4-M01 | 4 | G5, G6 |
 | R4-M03 | Shift Detail | MISSING | R4-M02 | 3 | G5, G6 |
 | R4-M04 | Acknowledgement | MISSING | R4-M03 | 4 | G2, G3, G5 |
 | R4-M05 | Comments | MISSING | R4-M04 | 3 | G2, G5 |
