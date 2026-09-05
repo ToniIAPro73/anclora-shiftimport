@@ -9,7 +9,7 @@ Declaración de adopción AOS para `anclora-shiftimport`.
 - Adoption Status: adopted
 - AOS Version: 0.2.0
 - Adoption Date: 2026-08-18
-- Last Reviewed: 2026-08-18
+- Last Reviewed: 2026-09-06
 - Governance Level: Level 3 (autoridad local de producto)
 
 ## Propósito del repositorio
@@ -54,6 +54,7 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 | Fecha | AOS Version | Cambio | Owner |
 | --- | --- | --- | --- |
 | 2026-08-18 | 0.2.0 | Adopción inicial en Commercial Genesis | ToniIAPro73 |
+| 2026-09-06 | 0.2.0 | Revisión P0 post-auditoría: documentación, evidencia E2E compacta y estado del MVP contrastados contra `development` | Codex |
 
 ## Documentos relacionados
 

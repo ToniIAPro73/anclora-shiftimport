@@ -1,6 +1,6 @@
 # Progress Status — MVP v2 Roadmap Execution
 
-Última actualización: 2026-09-05, cierre documental P0 en `development`.
+Última actualización: 2026-09-06, veredicto P0-M10 en `development`.
 
 Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
 auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
@@ -61,27 +61,28 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 
 ## Programa post-auditoría
 
-- **P0 — Baseline Truth & MVP Release Gate: EN EJECUCIÓN.**
+- **P0 — Baseline Truth & MVP Release Gate: MVP_NOT_READY.**
   - P0-M01: PASS — `13ab171`.
   - P0-M02: PASS — `313a7a2`.
   - P0-M03: PASS — `a765bcd` + `fcfd783`.
   - P0-M04: PASS — `809efbd`.
   - P0-M05: este snapshot documental.
   - P0-M06: PASS — `ceacb23`.
-  - P0-M07: PARCIAL — smoke compacto 4/4 PASS (43,3 s) + smoke API 72/72 PASS (16,3 s) + recorrido continuo 1/1 PASS (1m50,7 s) con 19
-    capturas por hito y pasada visual EN/dark/móvil; faltan axe y la evidencia responsive ES/EN completa.
+  - P0-M07: PASS — smoke compacto 4/4 PASS (43,3 s) + smoke API 72/72 PASS (16,3 s) + recorrido continuo 1/1 PASS (1m50,7 s) con 19
+    capturas por hito, ES/light/desktop y pasada visual EN/dark/móvil.
   - P0-M08: PASS — aislamiento cross-tenant 4/4 PASS (OWNER/ADMIN/PLANNER/EMPLOYEE, 37,9 s) y matriz consolidada rol×scope×capacidad archivada en
     `P0-POST-AUDIT-COMPACT-EVIDENCE.md`.
   - P0-M09: PASS — idempotencia dirigida 1/1 PASS (12,6 s) e invariantes 11/11 PASS mediante
     `scripts/verify-mvp-invariants.mjs` contra Neon development.
-  - P0-M10: pendiente — no se emite todavía `MVP_READY`.
-- P1–P7: pendientes; se ejecutan secuencialmente tras el Gate P0.
+  - P0-M10: PASS — `MVP_NOT_READY` formalizado en `R5-M12-mvp-release-gate.md`; no se emite `MVP_READY`.
+- P1–P7: pendientes; P1 no se inicia hasta cerrar los bloqueadores formales de P0.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
 ## Por hacer en el roadmap MVP v2 histórico
 
-- **R5-M12 — MVP Release Gate**: pendiente de ejecución agregada; P0-M07..M10 lo absorben.
+- **R5-M12 — MVP Release Gate**: `MVP_NOT_READY` formalizado en §20.1; bloqueadores trazados a
+  P0 (axe/i18n/responsive/migración desde cero) y P1 (persistencia de intentos no completados).
 - **POST-MVP R6–R9**: Workflow Engine, Attendance, Reconciliation & Reporting y Advanced Org Model;
   no se implementan antes de validar el MVP.
 

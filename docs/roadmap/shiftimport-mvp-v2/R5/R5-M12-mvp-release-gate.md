@@ -10,7 +10,11 @@ Ninguna release individual (R0-R5) certifica el producto como un todo coherente.
 
 ## 3. Estado actual del repositorio
 
-MISSING como verificación agregada — depende de que R0-M07, R1-M16, R2-M12, R3-M16, R4-M13, R5-M11 estén TODOS en PASS.
+STATUS: `MVP_NOT_READY` — 2026-09-06
+
+La verificación agregada se ejecutó mediante P0-M07..P0-M10. El producto mantiene sus gates
+R0–R5 individuales en PASS, pero este gate no puede declarar `MVP_READY` mientras permanezcan
+los bloqueadores listados en §20.1.
 
 ## 4. Alcance IN
 
@@ -171,6 +175,34 @@ Todos los listados en la sección 18 (E2E completo, tenant isolation, permission
 ## 20. Evidencias
 
 Reporte E2E completo, tabla de matriz de permisos, log de invariantes DB, log de checklist de calidad, capturas de los 16 pasos del flujo en al menos ES/light/desktop y una pasada adicional en EN/dark/mobile.
+
+## 20.1. Veredicto P0-M10 y bloqueadores
+
+**Resultado:** `MVP_NOT_READY`.
+
+Evidencia ejecutada:
+
+- recorrido continuo compacto P0-M07: 1/1 PASS en 1m50,7 s, con 19 capturas por hito y una
+  vista adicional EN/dark/móvil reutilizando la sesión;
+- aislamiento P0-M08: 4/4 PASS por rol en 37,9 s, con matriz consolidada;
+- idempotencia P0-M09: 1/1 PASS en 12,6 s;
+- invariantes Neon development: 11/11 PASS, 0 violaciones;
+- calidad: 1.220 tests PASS, lint PASS, typecheck/build PASS, migración incremental PASS.
+
+Bloqueadores que impiden `MVP_READY`:
+
+1. Falta snapshot axe de las pantallas del flujo y su evidencia archivada (PHASE_P0_GATE:
+   `ACCESSIBILITY`).
+2. Falta una pasada funcional completa del flujo en EN/dark/mobile; la evidencia actual EN es
+   visual y reutiliza el estado autenticado, no repite los 16 pasos (PHASE_P0_GATE: `I18N` y
+   `RESPONSIVE`).
+3. Falta validar la aplicación de las 32 migraciones desde cero en un schema efímero de Neon
+   development; sólo se verificó la aplicación incremental (`MIGRATION_VALIDATION`).
+4. La persistencia de intentos de importación `blocked`/`failed` sigue sin implementar, hallazgo
+   R1-M09, asignado a P1-M01..P1-M10.
+
+No se emite `MVP_READY` parcial. Estos bloqueadores quedan trazados en el programa post-auditoría
+y deben cerrarse en su fase de origen antes de repetir este Gate.
 
 ## 21. Gate
 
