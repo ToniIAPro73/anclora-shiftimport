@@ -7,10 +7,11 @@ import { ApprovalInbox } from './ApprovalInbox';
 
 vi.mock('../../lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/remote')>();
-  return { ...actual, listRemoteApprovalRequests: vi.fn() };
+  return { ...actual, listRemoteApprovalRequests: vi.fn(), approveRemoteApprovalRequest: vi.fn() };
 });
 
 const mockedList = vi.mocked(remote.listRemoteApprovalRequests);
+const mockedApprove = vi.mocked(remote.approveRemoteApprovalRequest);
 
 const request: remote.ApprovalRequest = {
   id: 'approval-1',
@@ -42,6 +43,7 @@ function renderInbox() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedApprove.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
 
@@ -62,6 +64,25 @@ describe('ApprovalInbox', () => {
     expect(screen.getByText('Necesito cambiar la hora de entrada.')).toBeTruthy();
     expect(screen.getByText('Recepción')).toBeTruthy();
     expect(screen.getByLabelText('1 pendiente')).toBeTruthy();
+  });
+
+  it('approves a request and removes it after the server confirms', async () => {
+    mockedList.mockResolvedValue([request]);
+    renderInbox();
+    await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar' }));
+    await waitFor(() => expect(mockedApprove).toHaveBeenCalledWith('approval-1'));
+    await waitFor(() => expect(screen.getByTestId('approval-inbox-empty')).toBeTruthy());
+  });
+
+  it('refreshes and explains a 409 conflict instead of hiding the request optimistically', async () => {
+    mockedList.mockResolvedValue([request]);
+    mockedApprove.mockRejectedValueOnce(Object.assign(new Error('conflict'), { status: 409 }));
+    renderInbox();
+    await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Esta solicitud ya fue decidida'));
+    expect(mockedList).toHaveBeenCalledTimes(2);
   });
 
   it('shows an error and retries the request', async () => {

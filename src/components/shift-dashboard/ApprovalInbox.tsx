@@ -1,6 +1,6 @@
 import { RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { ApprovalRequest, listRemoteApprovalRequests } from '../../lib/remote';
+import { ApprovalRequest, approveRemoteApprovalRequest, listRemoteApprovalRequests } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 
 type InboxState =
@@ -11,6 +11,8 @@ type InboxState =
 export function ApprovalInbox() {
   const { t } = useI18n();
   const [state, setState] = useState<InboxState>({ status: 'loading', requests: [] });
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState('');
 
   const load = useCallback(async () => {
     setState((current) => ({ status: 'loading', requests: current.requests }));
@@ -21,6 +23,29 @@ export function ApprovalInbox() {
       setState((current) => ({ status: 'error', requests: current.requests }));
     }
   }, []);
+
+  const handleApprove = async (request: ApprovalRequest) => {
+    if (approvingId) return;
+    setApprovingId(request.id);
+    setApprovalError('');
+    try {
+      await approveRemoteApprovalRequest(request.id);
+      setState((current) => ({
+        status: current.status === 'error' ? 'ready' : current.status,
+        requests: current.requests.filter((item) => item.id !== request.id),
+      }));
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? Number(error.status)
+        : 0;
+      setApprovalError(status === 409
+        ? t('approvalInbox.conflict')
+        : t('approvalInbox.approveError'));
+      if (status === 409) void load();
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -39,6 +64,7 @@ export function ApprovalInbox() {
         </div>
         <span className="approval-inbox__count" aria-live="polite" aria-label={countLabel}>{state.requests.length}</span>
       </div>
+      {approvalError && <p className="approval-inbox__feedback" role="alert">{approvalError}</p>}
 
       {state.status === 'loading' && (
         <p className="approval-inbox__state" role="status" aria-busy="true" data-testid="approval-inbox-loading">
@@ -89,6 +115,14 @@ export function ApprovalInbox() {
                     <div><dt>{t('approvalInbox.reason')}</dt><dd>{request.reason}</dd></div>
                   </dl>
                   <p className="approval-inbox__location">{request.shiftLocation || t('approvalInbox.noLocation')}</p>
+                  <button
+                    type="button"
+                    className="approval-inbox__approve"
+                    disabled={Boolean(approvingId)}
+                    onClick={() => void handleApprove(request)}
+                  >
+                    {approvingId === request.id ? t('approvalInbox.approving') : t('approvalInbox.approve')}
+                  </button>
                 </article>
               </li>
             );

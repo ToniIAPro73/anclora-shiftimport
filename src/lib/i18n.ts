@@ -247,6 +247,10 @@ const translations: Record<Locale, TranslationTree> = {
       noArea: 'Sin área',
       noLocation: 'Sin ubicación',
       statusPending: 'Pendiente',
+      approve: 'Aprobar',
+      approving: 'Aprobando…',
+      approveError: 'No se pudo aprobar la solicitud. Inténtalo de nuevo.',
+      conflict: 'Esta solicitud ya fue decidida. Se ha actualizado su estado.',
     },
     stats: {
       own: 'Propios',
@@ -1498,6 +1502,10 @@ const translations: Record<Locale, TranslationTree> = {
       noArea: 'No area',
       noLocation: 'No location',
       statusPending: 'Pending',
+      approve: 'Approve',
+      approving: 'Approving…',
+      approveError: 'The request could not be approved. Try again.',
+      conflict: 'This request was already decided. Its status has been refreshed.',
     },
     stats: {
       own: 'Own',

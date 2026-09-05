@@ -131,6 +131,13 @@ export async function listRemoteApprovalRequests(): Promise<ApprovalRequest[]> {
   return payload.requests;
 }
 
+export async function approveRemoteApprovalRequest(approvalRequestId: string): Promise<void> {
+  await apiFetch(`/api/approval-requests/${encodeURIComponent(approvalRequestId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export type NotificationType = 'SHIFT_PUBLISHED' | 'CHANGE_REQUEST_RESOLVED' | 'APPROVAL_REQUEST_CREATED';
 
 export interface EmployeeNotification {
