@@ -138,4 +138,4 @@ Rollback lógico: vaciar `approval_requests` si se detecta ruteo incorrecto en p
 
 ## 23. Criterio de DONE
 
-CUMPLIDO. Todo Change Request nuevo queda correctamente ruteado según la política vigente, sin estados huérfanos. Commit de implementación: pendiente de cierre documental.
+CUMPLIDO. Todo Change Request nuevo queda correctamente ruteado según la política vigente, sin estados huérfanos. Commit de implementación: `88c12fe`.
