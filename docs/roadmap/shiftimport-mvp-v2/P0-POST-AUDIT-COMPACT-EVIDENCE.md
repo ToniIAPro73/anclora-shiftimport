@@ -110,6 +110,20 @@ de auditoría intentando cruzar Org A → Org B; las denegaciones se verifican s
 El perfil usa login HTTP y logout HTTP porque es una prueba de aislamiento API: no navega por el
 shell ni espera controles de logout que no forman parte del contrato de este caso.
 
+### Matriz consolidada de rol y scope
+
+| Rol | Scope efectivo | Empleados / imports / shifts | Scheduling | Memberships / áreas | Approval / auditoría | Evidencia |
+|---|---|---|---|---|---|---|
+| OWNER | ORGANIZATION | PASS | PASS | PASS | PASS | `cross-tenant-isolation.spec.ts`; `data.test.js`; gates R3/R5 |
+| ADMIN | ORGANIZATION | PASS | PASS | PASS | PASS | `cross-tenant-isolation.spec.ts`; `data.test.js`; gates R3/R5 |
+| PLANNER | AREA si tiene `scoped_area_id`; ORGANIZATION si no | PASS dentro del scope; 403 fuera | PASS dentro del scope; 403 fuera | 403 | PASS según responsabilidad | `scope.test.js`; `schedules/authorization.test.js`; `future-import.spec.ts` |
+| EMPLOYEE | SELF (`employeeId` vinculado) | PASS sólo propio; 403/404 ajeno | lectura propia publicada; escritura de planner 403 | 403 | solicitudes propias; aprobación 403 | `scope.test.js`; `employee-portal.spec.ts`; gates R4/R5 |
+
+La matriz cubre las cuatro identidades reales y los tres scopes del contrato; las filas de
+aislamiento cruzado se ejecutaron en navegador contra Neon development y las restricciones de
+capacidad se verifican además en integración/API. No se añade una quinta identidad ni se usa
+`MANAGER` como rol vigente.
+
 ## Calidad transversal
 
 - `npm test -- --run`: **137 ficheros / 1.220 tests PASS**.

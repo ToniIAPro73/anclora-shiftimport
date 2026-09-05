@@ -70,10 +70,10 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
   - P0-M06: PASS — `ceacb23`.
   - P0-M07: PARCIAL — smoke compacto 4/4 PASS (43,3 s) + smoke API 72/72 PASS (16,3 s) + recorrido continuo 1/1 PASS (1m50,7 s) con 19
     capturas por hito y pasada visual EN/dark/móvil; faltan axe y la evidencia responsive ES/EN completa.
-  - P0-M08: PARCIAL — aislamiento cross-tenant 4/4 PASS (OWNER/ADMIN/PLANNER/EMPLOYEE, 37,9 s) y matriz compacta PASS; falta completar la tabla
-    rol×scope×endpoint exigida por el Gate.
-  - P0-M09: PARCIAL — idempotencia en smoke compacto e invariantes 11/11 PASS mediante
-    `scripts/verify-mvp-invariants.mjs`; falta cerrar la evidencia agregada del Gate.
+  - P0-M08: PASS — aislamiento cross-tenant 4/4 PASS (OWNER/ADMIN/PLANNER/EMPLOYEE, 37,9 s) y matriz consolidada rol×scope×capacidad archivada en
+    `P0-POST-AUDIT-COMPACT-EVIDENCE.md`.
+  - P0-M09: PASS — idempotencia dirigida 1/1 PASS (12,6 s) e invariantes 11/11 PASS mediante
+    `scripts/verify-mvp-invariants.mjs` contra Neon development.
   - P0-M10: pendiente — no se emite todavía `MVP_READY`.
 - P1–P7: pendientes; se ejecutan secuencialmente tras el Gate P0.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
