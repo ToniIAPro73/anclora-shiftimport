@@ -40,6 +40,7 @@ export function NotificationsPanel({ controller, onOpenShift }: NotificationsPan
   const notificationText = useMemo(() => ({
     SHIFT_PUBLISHED: t('employeeNotifications.shiftPublished'),
     CHANGE_REQUEST_RESOLVED: t('employeeNotifications.changeRequestResolved'),
+    APPROVAL_REQUEST_CREATED: t('employeeNotifications.approvalRequestCreated'),
   }), [t]);
 
   const handleOpen = async (notification: EmployeeNotification) => {

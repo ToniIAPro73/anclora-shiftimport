@@ -106,14 +106,39 @@ export interface ChangeRequest {
   shiftLocation?: string;
 }
 
-export type NotificationType = 'SHIFT_PUBLISHED' | 'CHANGE_REQUEST_RESOLVED';
+export interface ApprovalRequest {
+  id: string;
+  organizationId: string;
+  changeRequestId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  policySnapshot: ApprovalPolicy;
+  createdAt: string;
+  requestType: ChangeRequestType;
+  reason: string;
+  employeeId: string;
+  employeeName: string;
+  areaId: string | null;
+  areaName: string | null;
+  shiftId: string;
+  shiftDate: string;
+  shiftStartTime: string;
+  shiftEndTime: string;
+  shiftLocation: string;
+}
+
+export async function listRemoteApprovalRequests(): Promise<ApprovalRequest[]> {
+  const payload = await apiFetch<{ requests: ApprovalRequest[] }>('/api/approval-requests?status=pending');
+  return payload.requests;
+}
+
+export type NotificationType = 'SHIFT_PUBLISHED' | 'CHANGE_REQUEST_RESOLVED' | 'APPROVAL_REQUEST_CREATED';
 
 export interface EmployeeNotification {
   id: string;
   userId: string;
   organizationId: string;
   type: NotificationType;
-  resourceType: 'SHIFT' | 'CHANGE_REQUEST';
+  resourceType: 'SHIFT' | 'CHANGE_REQUEST' | 'APPROVAL_REQUEST';
   resourceId: string;
   readAt: string | null;
   createdAt: string;

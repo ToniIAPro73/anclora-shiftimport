@@ -53,6 +53,7 @@ import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryMo
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
+import { ApprovalInbox } from './components/shift-dashboard/ApprovalInbox';
 import { PortalShell } from './components/employee-portal/PortalShell';
 import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
 import { AuthScreen } from './components/AuthScreen';
@@ -1464,6 +1465,8 @@ function App() {
 
         {!accountIncomplete && !needsOrgChoice && (
           <>
+        {session && isAdminRole(session.role) && <ApprovalInbox />}
+
         <StatsBar
           currentMonthShifts={currentMonthShifts}
           daysInMonth={daysInMonth}

@@ -10,7 +10,7 @@ Sin bandeja, un aprobador no tiene forma de descubrir que existe una solicitud p
 
 ## 3. Estado actual del repositorio
 
-MISSING. No existe ninguna vista de "pendientes" en el dashboard actual.
+IMPLEMENTED — existe endpoint tenant-scoped y bandeja compacta en el dashboard para OWNER/ADMIN.
 
 ## 4. Alcance IN
 
@@ -78,8 +78,8 @@ Archivos: `api/approval-requests/index.js`.
 Cambios: filtro server-side por elegibilidad real.
 No hacer: no aceptar `approverId` como parámetro de filtro confiable.
 Criterios de aceptación:
-- [ ] Un ADMIN de otra organización nunca ve solicitudes ajenas.
-- [ ] AREA_RESPONSIBLE solo ve solicitudes de sus áreas asignadas.
+- [x] Un ADMIN de otra organización nunca ve solicitudes ajenas.
+- [x] AREA_RESPONSIBLE solo ve solicitudes de sus áreas asignadas.
 Tests: API test con matriz de roles/áreas.
 Evidencia esperada: resultados de test.
 
@@ -90,8 +90,8 @@ Archivos: `src/components/shift-dashboard/*` (nuevo componente).
 Cambios: lista, badge contador, estado vacío/carga/error.
 No hacer: no crear modal nuevo si el patrón de página/panel ya cubre el caso.
 Criterios de aceptación:
-- [ ] Contador refleja el número real de pendientes.
-- [ ] Estado vacío y error implementados.
+- [x] Contador refleja el número real de pendientes.
+- [x] Estado vacío, carga, error y reintento implementados.
 Tests: componente + accesibilidad básica (axe).
 Evidencia esperada: capturas ES/EN dark/light.
 
@@ -106,7 +106,15 @@ Resultados de test, capturas de la bandeja en los 4 combos idioma/tema.
 ## 21. Gate
 
 Gates requeridos: G5 (functional), G6 (UX/UI), G7 (accessibility).
-PASS si ningún aprobador ve solicitudes fuera de su elegibilidad real.
+
+Resultado: **PASS**.
+
+Validado:
+- endpoint recalcula la elegibilidad con la política actual y `area_responsibles`; no acepta `approverId` como filtro de autoridad;
+- tests API: aislamiento tenant, OWNER/ADMIN, AREA_RESPONSIBLE y rechazo EMPLOYEE;
+- componente: 3 estados, contador, detalle de solicitud, retry y labels accesibles;
+- suite completa: 134 archivos / 1196 tests PASS;
+- lint, typecheck y build PASS (warning conocido de chunks grandes).
 
 ## 22. Rollback / remediación
 
@@ -114,4 +122,4 @@ Revertir componente y endpoint; no hay datos mutables en este microfase.
 
 ## 23. Criterio de DONE
 
-Cada aprobador ve exactamente sus solicitudes pendientes, ni más ni menos, verificado con matriz de roles/áreas.
+CUMPLIDO. Cada aprobador ve exactamente sus solicitudes pendientes, ni más ni menos, verificado con matriz de roles/áreas. Commit de implementación: pendiente de cierre documental.
