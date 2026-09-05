@@ -115,6 +115,12 @@ export function RequestStatus({ onSelectShift }: RequestStatusProps) {
                 </div>
                 <p className="employee-request-status__item-label">{t('employeeRequestStatus.reason')}</p>
                 <p className="employee-request-status__reason">{request.reason}</p>
+                {request.status === 'REJECTED' && request.rejectionReason && (
+                  <>
+                    <p className="employee-request-status__item-label">{t('employeeRequestStatus.rejectionReason')}</p>
+                    <p className="employee-request-status__reason">{request.rejectionReason}</p>
+                  </>
+                )}
                 <div className="employee-request-status__shift">
                   <div>
                     <p className="employee-request-status__item-label">{t('employeeRequestStatus.shift')}</p>

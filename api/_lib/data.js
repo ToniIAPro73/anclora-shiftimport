@@ -1934,6 +1934,7 @@ export function mapChangeRequestRow(row) {
     createdAt: row.created_at,
     resolvedAt: row.resolved_at ?? null,
     resolvedByUserId: row.resolved_by_user_id ?? null,
+    rejectionReason: row.rejection_reason ?? null,
   };
 }
 
@@ -2130,11 +2131,15 @@ export async function listEmployeeChangeRequests(sql, ctx, rawStatus = null) {
     SELECT cr.id, cr.shift_id, cr.employee_id, cr.organization_id,
            cr.request_type, cr.reason, cr.status, cr.created_at,
            cr.resolved_at, cr.resolved_by_user_id,
+           ar.rejection_reason,
            TO_CHAR(s.date, 'YYYY-MM-DD') AS shift_date,
            s.start_time AS shift_start_time,
            s.end_time AS shift_end_time,
            s.location AS shift_location
     FROM change_requests cr
+    LEFT JOIN approval_requests ar
+      ON ar.change_request_id = cr.id
+     AND ar.organization_id = cr.organization_id
     JOIN shifts s
       ON s.id = cr.shift_id
      AND s.employee_id = cr.employee_id

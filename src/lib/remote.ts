@@ -100,6 +100,7 @@ export interface ChangeRequest {
   createdAt: string;
   resolvedAt: string | null;
   resolvedByUserId: string | null;
+  rejectionReason?: string | null;
   shiftDate?: string;
   shiftStartTime?: string;
   shiftEndTime?: string;
@@ -135,6 +136,13 @@ export async function approveRemoteApprovalRequest(approvalRequestId: string): P
   await apiFetch(`/api/approval-requests/${encodeURIComponent(approvalRequestId)}/approve`, {
     method: 'POST',
     body: JSON.stringify({}),
+  });
+}
+
+export async function rejectRemoteApprovalRequest(approvalRequestId: string, reason: string): Promise<void> {
+  await apiFetch(`/api/approval-requests/${encodeURIComponent(approvalRequestId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
   });
 }
 

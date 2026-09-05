@@ -1,6 +1,6 @@
 import { RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { ApprovalRequest, approveRemoteApprovalRequest, listRemoteApprovalRequests } from '../../lib/remote';
+import { ApprovalRequest, approveRemoteApprovalRequest, listRemoteApprovalRequests, rejectRemoteApprovalRequest } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 
 type InboxState =
@@ -13,6 +13,10 @@ export function ApprovalInbox() {
   const [state, setState] = useState<InboxState>({ status: 'loading', requests: [] });
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [approvalError, setApprovalError] = useState('');
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectingRequestId, setRejectingRequestId] = useState<string | null>(null);
+  const [rejectionError, setRejectionError] = useState('');
 
   const load = useCallback(async () => {
     setState((current) => ({ status: 'loading', requests: current.requests }));
@@ -25,7 +29,7 @@ export function ApprovalInbox() {
   }, []);
 
   const handleApprove = async (request: ApprovalRequest) => {
-    if (approvingId) return;
+    if (approvingId || rejectingRequestId) return;
     setApprovingId(request.id);
     setApprovalError('');
     try {
@@ -44,6 +48,52 @@ export function ApprovalInbox() {
       if (status === 409) void load();
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const openRejectForm = (requestId: string) => {
+    if (approvingId || rejectingRequestId) return;
+    setRejectingId(requestId);
+    setRejectionReason('');
+    setRejectionError('');
+  };
+
+  const closeRejectForm = () => {
+    if (rejectingRequestId) return;
+    setRejectingId(null);
+    setRejectionReason('');
+    setRejectionError('');
+  };
+
+  const handleReject = async (request: ApprovalRequest) => {
+    const trimmedReason = rejectionReason.trim();
+    if (!trimmedReason) {
+      setRejectionError(t('approvalInbox.reasonRequired'));
+      return;
+    }
+    if (approvingId || rejectingRequestId) return;
+    setRejectingRequestId(request.id);
+    setRejectionError('');
+    try {
+      await rejectRemoteApprovalRequest(request.id, trimmedReason);
+      setState((current) => ({
+        status: current.status === 'error' ? 'ready' : current.status,
+        requests: current.requests.filter((item) => item.id !== request.id),
+      }));
+      setRejectingId(null);
+      setRejectionReason('');
+    } catch (error) {
+      const status = typeof error === 'object' && error !== null && 'status' in error
+        ? Number(error.status)
+        : 0;
+      setRejectionError(status === 409
+        ? t('approvalInbox.conflict')
+        : status === 400
+          ? t('approvalInbox.rejectError')
+          : t('approvalInbox.rejectError'));
+      if (status === 409) void load();
+    } finally {
+      setRejectingRequestId(null);
     }
   };
 
@@ -115,14 +165,49 @@ export function ApprovalInbox() {
                     <div><dt>{t('approvalInbox.reason')}</dt><dd>{request.reason}</dd></div>
                   </dl>
                   <p className="approval-inbox__location">{request.shiftLocation || t('approvalInbox.noLocation')}</p>
-                  <button
-                    type="button"
-                    className="approval-inbox__approve"
-                    disabled={Boolean(approvingId)}
-                    onClick={() => void handleApprove(request)}
-                  >
-                    {approvingId === request.id ? t('approvalInbox.approving') : t('approvalInbox.approve')}
-                  </button>
+                  <div className="approval-inbox__actions">
+                    <button
+                      type="button"
+                      className="approval-inbox__approve"
+                      disabled={Boolean(approvingId || rejectingRequestId)}
+                      onClick={() => void handleApprove(request)}
+                    >
+                      {approvingId === request.id ? t('approvalInbox.approving') : t('approvalInbox.approve')}
+                    </button>
+                    <button
+                      type="button"
+                      className="approval-inbox__reject-trigger"
+                      disabled={Boolean(approvingId || rejectingRequestId)}
+                      onClick={() => openRejectForm(request.id)}
+                    >
+                      {t('approvalInbox.reject')}
+                    </button>
+                  </div>
+                  {rejectingId === request.id && (
+                    <form className="approval-inbox__reject-form" onSubmit={(event) => { event.preventDefault(); void handleReject(request); }}>
+                      <label htmlFor={`approval-rejection-${request.id}`}>{t('approvalInbox.rejectionReasonLabel')}</label>
+                      <textarea
+                        id={`approval-rejection-${request.id}`}
+                        value={rejectionReason}
+                        onChange={(event) => { setRejectionReason(event.target.value); setRejectionError(''); }}
+                        placeholder={t('approvalInbox.rejectionReasonPlaceholder')}
+                        maxLength={2000}
+                        rows={3}
+                        required
+                        aria-describedby={rejectionError ? `approval-rejection-error-${request.id}` : undefined}
+                        autoFocus
+                      />
+                      {rejectionError && <p id={`approval-rejection-error-${request.id}`} className="approval-inbox__feedback" role="alert">{rejectionError}</p>}
+                      <div className="approval-inbox__reject-actions">
+                        <button type="submit" className="approval-inbox__approve" disabled={!rejectionReason.trim() || Boolean(rejectingRequestId)}>
+                          {rejectingRequestId === request.id ? t('approvalInbox.rejecting') : t('approvalInbox.confirmReject')}
+                        </button>
+                        <button type="button" className="approval-inbox__reject-cancel" disabled={Boolean(rejectingRequestId)} onClick={closeRejectForm}>
+                          {t('approvalInbox.cancelReject')}
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </article>
               </li>
             );

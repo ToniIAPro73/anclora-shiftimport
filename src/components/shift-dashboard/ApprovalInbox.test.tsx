@@ -7,11 +7,12 @@ import { ApprovalInbox } from './ApprovalInbox';
 
 vi.mock('../../lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/remote')>();
-  return { ...actual, listRemoteApprovalRequests: vi.fn(), approveRemoteApprovalRequest: vi.fn() };
+  return { ...actual, listRemoteApprovalRequests: vi.fn(), approveRemoteApprovalRequest: vi.fn(), rejectRemoteApprovalRequest: vi.fn() };
 });
 
 const mockedList = vi.mocked(remote.listRemoteApprovalRequests);
 const mockedApprove = vi.mocked(remote.approveRemoteApprovalRequest);
+const mockedReject = vi.mocked(remote.rejectRemoteApprovalRequest);
 
 const request: remote.ApprovalRequest = {
   id: 'approval-1',
@@ -44,6 +45,7 @@ function renderInbox() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockedApprove.mockResolvedValue(undefined);
+  mockedReject.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
 
@@ -92,5 +94,18 @@ describe('ApprovalInbox', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
     expect(mockedList).toHaveBeenCalledTimes(2);
+  });
+
+  it('requires a rejection reason and removes the request after server confirmation', async () => {
+    mockedList.mockResolvedValue([request]);
+    renderInbox();
+    await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }));
+    expect((screen.getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Motivo del rechazo'), { target: { value: 'No hay cobertura.' } });
+    expect((screen.getByRole('button', { name: 'Confirmar rechazo' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar rechazo' }));
+    await waitFor(() => expect(mockedReject).toHaveBeenCalledWith('approval-1', 'No hay cobertura.'));
+    await waitFor(() => expect(screen.getByTestId('approval-inbox-empty')).toBeTruthy());
   });
 });

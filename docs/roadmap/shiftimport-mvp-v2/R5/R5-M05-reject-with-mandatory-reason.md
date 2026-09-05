@@ -10,12 +10,12 @@ Un rechazo sin motivo deja al empleado que solicitó el cambio sin contexto acci
 
 ## 3. Estado actual del repositorio
 
-MISSING.
+IMPLEMENTED — Gate PASS.
 
 ## 4. Alcance IN
 
 - Endpoint y UI de rechazo con campo de motivo obligatorio.
-- Transición `PENDING` → `REJECTED`, sin efecto sobre `shifts`/`schedule` (el cambio propuesto simplemente no se aplica).
+- Transición `PENDING` → `REJECTED` en `approval_requests` y `change_requests`, sin efecto sobre `shifts`/`schedule` (el cambio propuesto simplemente no se aplica).
 - Visibilidad del motivo para el solicitante (vía R4-M07 Request Status).
 
 ## 5. Alcance OUT
@@ -32,7 +32,10 @@ El motivo se almacena en `approval_requests.rejection_reason` (no en una tabla d
 
 ## 8. Modelo de datos afectado
 
-`approval_requests`: `status` → `REJECTED`, `rejected_by_user_id`, `rejected_at`, `rejection_reason TEXT NOT NULL` (constraint a nivel de aplicación: no se persiste transición a REJECTED sin reason no vacío; constraint a nivel DB opcional pero recomendado con `CHECK (rejection_reason IS NULL OR length(trim(rejection_reason)) > 0)` combinado con NOT NULL condicional vía trigger o verificación en capa de datos).
+`approval_requests`: `status` → `REJECTED`, `rejected_by_user_id`,
+`rejected_at`, `rejection_reason TEXT`. La API exige un motivo no vacío y la
+constraint `approval_requests_rejected_reason_check` impide a nivel DB que una
+fila `REJECTED` carezca de él.
 
 ## 9. API / Backend
 
@@ -64,7 +67,9 @@ Hereda del sistema de diseño.
 
 ## 16. Migraciones
 
-Nueva columna `rejection_reason` en `approval_requests` (o ya incluida en la migración de R5-M02 si se anticipa aquí — decisión de implementación, documentar cuál).
+`0030_approval_rejection_metadata.sql` añade actor, timestamp y motivo de
+rechazo con `IF NOT EXISTS`, además de la constraint de dominio. La migración
+usa únicamente sentencias compatibles con el runner SQL del repositorio.
 
 ## 17. Compatibilidad y datos existentes
 
@@ -79,8 +84,8 @@ Archivos: `api/approval-requests/[id]/reject.js`.
 Cambios: validación server-side de `reason` no vacío (nunca confiar solo en el disabled del botón de UI).
 No hacer: no aceptar rechazo sin motivo aunque el cliente lo permita por bug de UI.
 Criterios de aceptación:
-- [ ] Motivo vacío o solo espacios → 400.
-- [ ] Motivo válido → transición a REJECTED persistida junto al motivo.
+- [x] Motivo vacío o solo espacios → 400.
+- [x] Motivo válido → transición a REJECTED persistida junto al motivo.
 Tests: API test, incluyendo bypass directo del endpoint sin pasar por UI.
 Evidencia esperada: resultados de test.
 
@@ -91,8 +96,8 @@ Archivos: componente de detalle de R5-M03.
 Cambios: validación de cliente (UX) + manejo del 400 del servidor como red de seguridad.
 No hacer: no confiar solo en la validación de cliente.
 Criterios de aceptación:
-- [ ] Botón deshabilitado sin texto.
-- [ ] Error de servidor se muestra si, por cualquier vía, llega un 400.
+- [x] Botón deshabilitado sin texto.
+- [x] Error de servidor se muestra si, por cualquier vía, llega un 400.
 Tests: componente.
 Evidencia esperada: capturas ES/EN.
 
@@ -102,7 +107,8 @@ API (validación server-side, no solo cliente), componente.
 
 ## 20. Evidencias
 
-Resultados de test, capturas.
+Resultados de test, validación de migración y pruebas de componente de motivo
+obligatorio y confirmación server-side.
 
 ## 21. Gate
 
@@ -115,4 +121,16 @@ N/A — rechazo no aplica ningún cambio a `shifts`, por lo que no hay estado qu
 
 ## 23. Criterio de DONE
 
-Ningún rechazo puede persistirse sin motivo no vacío, verificado a nivel de API independientemente de la UI.
+Ningún rechazo puede persistirse sin motivo no vacío, verificado a nivel de API
+independientemente de la UI; el solicitante puede consultar el motivo desde
+R4-M07.
+
+## 24. Resultado de ejecución
+
+- Gate: PASS.
+- API/componente/portal/migración focalizados: 53/53 tests PASS.
+- Suite completa: 136 archivos, 1209 tests PASS.
+- Lint: PASS.
+- Build: PASS (warning no bloqueante de chunks grandes preexistente).
+- Migración Neon dev: aplicada correctamente; columnas y constraint verificadas.
+- Commit de implementación: pendiente de registrar tras el commit.

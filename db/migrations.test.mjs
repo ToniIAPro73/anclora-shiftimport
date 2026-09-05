@@ -19,6 +19,7 @@ const notificationsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url
 const approvalPolicyMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0027_approval_policy.sql');
 const approvalRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0028_approval_requests.sql');
 const approvalDecisionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0029_approval_decision_metadata.sql');
+const approvalRejectionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0030_approval_rejection_metadata.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -308,5 +309,15 @@ describe('0029 approval decision metadata migration contract', () => {
     const sql = await readFile(approvalDecisionMigrationPath, 'utf8');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS approved_by_user_id UUID REFERENCES users');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ');
+  });
+});
+
+describe('0030 approval rejection metadata migration contract', () => {
+  it('adds auditable rejection fields and prevents rejected requests without a reason', async () => {
+    const sql = await readFile(approvalRejectionMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS rejected_by_user_id UUID REFERENCES users');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS rejection_reason TEXT');
+    expect(sql).toContain('approval_requests_rejected_reason_check');
   });
 });

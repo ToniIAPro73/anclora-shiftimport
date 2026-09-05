@@ -17,7 +17,7 @@ afterEach(cleanup);
 const mockedLoad = vi.mocked(loadRemoteChangeRequests);
 const shiftId = '11111111-1111-4111-8111-111111111111';
 
-function request(status: ChangeRequest['status'], id: string): ChangeRequest {
+function request(status: ChangeRequest['status'], id: string, rejectionReason?: string): ChangeRequest {
   return {
     id,
     shiftId,
@@ -29,6 +29,7 @@ function request(status: ChangeRequest['status'], id: string): ChangeRequest {
     createdAt: '2026-09-05T10:00:00.000Z',
     resolvedAt: status === 'PENDING' ? null : '2026-09-05T11:00:00.000Z',
     resolvedByUserId: null,
+    rejectionReason: rejectionReason ?? null,
     shiftDate: '2026-09-08',
     shiftStartTime: '09:00',
     shiftEndTime: '17:00',
@@ -88,5 +89,12 @@ describe('RequestStatus', () => {
     mockedLoad.mockRejectedValue(new Error('offline'));
     renderStatus();
     await waitFor(() => expect(screen.getByTestId('request-status-error')).toBeTruthy());
+  });
+
+  it('shows the approver reason for rejected requests', async () => {
+    mockedLoad.mockResolvedValue([request('REJECTED', 'request-rejected', 'Falta cobertura en el turno.')]);
+    renderStatus();
+    await waitFor(() => expect(screen.getByText('Falta cobertura en el turno.')).toBeTruthy());
+    expect(screen.getByText('Motivo del rechazo')).toBeTruthy();
   });
 });
