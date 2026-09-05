@@ -10,7 +10,7 @@ Hoy un Change Request creado por un empleado (R4-M06) no tiene ningún mecanismo
 
 ## 3. Estado actual del repositorio
 
-MISSING. No existe tabla, endpoint ni componente de aprobación. `imports`, `shifts`, `employees`, `memberships` existen (ver 00-BASELINE.md) pero ninguno referencia un concepto de aprobación. R4-M06 (Change Request) es prerequisito y también está MISSING a fecha de este baseline.
+Antes de esta microfase no existía tabla, endpoint ni componente de aprobación. R4-M06 y R4-M13 ya están cerradas con Gate PASS y proporcionan el `ChangeRequest` sobre el que se apoya este dominio.
 
 ## 4. Alcance IN
 
@@ -92,8 +92,8 @@ No hacer:
 - No definir aún columnas de tabla (eso es R5-M01/M02).
 
 Criterios de aceptación:
-- [ ] Glosario incluye ApprovalPolicy, ApprovalRequest, ApprovalDecision con relaciones explícitas.
-- [ ] Referencia cruzada a R0-M04 (Change Request state model).
+- [x] Glosario incluye ApprovalPolicy, ApprovalRequest, ApprovalDecision con relaciones explícitas.
+- [x] Referencia cruzada a R0-M04 (Change Request state model) mediante el ciclo y los límites de Change Request/Approval Request.
 
 Tests:
 - N/A — documento.
@@ -107,13 +107,13 @@ N/A — microfase de documentación de dominio.
 
 ## 20. Evidencias
 
-Documento de glosario commiteado.
+`docs/roadmap/shiftimport-mvp-v2/R0/DOMAIN-GLOSSARY.md` actualizado; `git diff --check` PASS.
 
 ## 21. Gate
 
 Gates requeridos: G1 (Architecture), G3 (Domain invariants).
 
-Resultado posible: PASS si el glosario es coherente con R0-M04 y R4-M06; FAIL si introduce conceptos no alineados (p.ej. múltiples pasos de aprobación).
+Resultado: **PASS**. El glosario es coherente con R0-M04 y R4-M06, fija cardinalidad 1:1 activa y no introduce múltiples pasos de aprobación.
 
 ## 22. Rollback / remediación
 
@@ -121,4 +121,7 @@ Revertir el commit de documentación; sin impacto en datos.
 
 ## 23. Criterio de DONE
 
-Glosario de dominio Approval documentado y coherente con R0-M04 y R4-M06, sin ambigüedad sobre alcance IN/OUT.
+Glosario de dominio Approval documentado y coherente con R0-M04 y R4-M06, sin ambigüedad sobre alcance IN/OUT. Microfase completada el 2026-09-05.
+
+Estado: DONE — PASS.
+Commit de cierre: `b79c42a` — `docs(approval): define R5 approval domain`.

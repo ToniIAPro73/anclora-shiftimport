@@ -59,10 +59,37 @@ Vocabulario extraído de `db/migrations/*.sql` y `api/_lib/data.js` (ver `../00-
 - **Estados de `status`**: `candidate` → `validated` → `verified` → `legacy` → `deprecated`. Un perfil `deprecated` puede ser sustituido por otro vía `supersedes_profile_id`.
 - **EN**: Format Profile / **ES**: Perfil de formato (a veces referido como "formato aprendido" en UI/copy)
 
+## Approval domain (R5)
+
+### ApprovalPolicy
+
+- **Tabla**: se concreta en R5-M01; no existe todavía en el esquema actual.
+- **Significado**: política fija que determina si un `ChangeRequest` requiere aprobación y cuál es el grupo responsable de resolverlo. El MVP admite únicamente `NO_APPROVAL`, `AREA_RESPONSIBLE` y `ORGANIZATION_ADMIN`.
+- **Límite**: no es un editor de reglas ni un workflow multi-paso. No introduce delegación, cadenas de aprobación ni roles personalizados.
+- **EN**: Approval Policy / **ES**: Política de aprobación
+
+### ApprovalRequest
+
+- **Tabla**: se concreta en R5-M02; no existe todavía en el esquema actual.
+- **Significado**: recurso tenant-scoped que envuelve un `ChangeRequest` cuando la política aplicable requiere decisión. Pertenece a exactamente una `Organization`, referencia exactamente un `ChangeRequest` de esa misma organización y puede derivar un `Area` opcional del turno/solicitud.
+- **Cardinalidad**: como máximo una `ApprovalRequest` activa por `ChangeRequest`. Una solicitud cancelada/resuelta puede conservarse para auditoría; no se crean envoltorios paralelos para la misma solicitud pendiente.
+- **Estados MVP**: `PENDING` → `APPROVED` o `REJECTED`; `CANCELLED` solo si la solicitud subyacente se cancela antes de la decisión. El estado del `ChangeRequest` y el de `ApprovalRequest` deben transicionar de forma coherente en una única operación backend.
+- **Qué NO es**: no sustituye a `ChangeRequest`, no es un `ScheduleVersion` y no modifica por sí misma el `Shift`; aplicar el cambio aprobado es responsabilidad de R5-M07.
+- **EN**: Approval Request / **ES**: Solicitud de aprobación
+
+### ApprovalDecision
+
+- **Tabla**: se concreta en R5-M06; no existe todavía en el esquema actual.
+- **Significado**: resultado auditable de la única decisión sobre una `ApprovalRequest`: aprobación o rechazo, con actor, fecha y motivo cuando corresponda. No representa un paso configurable ni una cadena.
+- **Regla**: solo un aprobador autorizado puede emitir la decisión; una decisión existente no se sobrescribe. Los reintentos deben ser idempotentes y una decisión terminal no puede cambiarse desde la API de aprobación lite.
+- **EN**: Approval Decision / **ES**: Decisión de aprobación
+
 ## Límites y no-conceptos
 
 - **Area ≠ Team ≠ WorkCenter**: solo Area existe hoy. Team y WorkCenter son R9 (post-MVP), con relaciones configurables, no jerarquía fija.
 - **Import ≠ Schedule**: Import es ingestión de datos ya confirmados; Schedule (R3, no implementado) es planificación futura en borrador con su propio ciclo `Schedule` → `ScheduleVersion` → `ShiftAssignment`.
+- **Change Request ≠ Approval Request**: Change Request es la petición de cambio iniciada por el empleado; Approval Request es el envoltorio de gobernanza que solo aparece cuando la `ApprovalPolicy` exige decisión.
+- **Approval ≠ Workflow Engine**: R5 resuelve un único paso de aprobación; Workflow Engine, múltiples pasos y delegación pertenecen a R6/R9 post-MVP.
 - **Employee ≠ User**: un Employee puede no tener `user_id` (roster-only, sin acceso). User es la identidad de login; Employee es el sujeto operativo que recibe turnos.
 - **Membership.role ≠ modelo RBAC objetivo**: hoy solo `ADMIN`/`EMPLOYEE` existen en el CHECK constraint de `memberships`. `OWNER`/`PLANNER` y los scopes `ORGANIZATION`/`AREA`/`SELF` son diseño de R0-M03, ejecución de R2-M06/M07 — no confundir con el estado actual.
 - **Shift (turno ya confirmado) ≠ ShiftAssignment (R3, asignación dentro de un borrador de planificación)**: mismo campo semántico (turno de un empleado en una fecha) pero ciclos de vida distintos; no fusionar ambos conceptos en una spec.
@@ -85,6 +112,9 @@ Vocabulario extraído de `db/migrations/*.sql` y `api/_lib/data.js` (ver `../00-
 | Acknowledgement (futuro, R4) | Confirmación de lectura |
 | Change Request (futuro, R4/R5) | Solicitud de cambio |
 | Approval (futuro, R5) | Aprobación |
+| ApprovalPolicy (futuro, R5) | Política de aprobación |
+| ApprovalRequest (futuro, R5) | Solicitud de aprobación |
+| ApprovalDecision (futuro, R5) | Decisión de aprobación |
 
 ## Consistencia con 00-ROADMAP-MASTER.md
 
