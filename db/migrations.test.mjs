@@ -14,6 +14,7 @@ const shiftScheduleVersionMigrationPath = resolve(dirname(fileURLToPath(import.m
 const shiftAssignmentImportMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0021_shift_assignments_import_id.sql');
 const shiftAcknowledgementsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0022_shift_acknowledgements.sql');
 const shiftCommentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0023_shift_comments.sql');
+const changeRequestsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0024_change_requests.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -209,5 +210,31 @@ describe('0023 shift comments migration contract', () => {
     const sql = await readFile(shiftCommentsMigrationPath, 'utf8');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_comments_shift_created_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_comments_employee_idx');
+  });
+});
+
+describe('0024 change requests migration contract', () => {
+  it('creates an independent bounded change-request lifecycle', async () => {
+    const sql = await readFile(changeRequestsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS change_requests');
+    expect(sql).toContain("CHECK (request_type IN ('TIME_CHANGE', 'OTHER'))");
+    expect(sql).toContain("CHECK (status IN ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'))");
+    expect(sql).toContain('char_length(btrim(reason)) BETWEEN 1 AND 2000');
+    expect(sql).not.toContain('ALTER TABLE shifts');
+  });
+
+  it('keeps approval metadata reserved for the approval phase', async () => {
+    const sql = await readFile(changeRequestsMigrationPath, 'utf8');
+    expect(sql).toContain('resolved_at TIMESTAMPTZ');
+    expect(sql).toContain('resolved_by_user_id UUID REFERENCES users');
+  });
+
+  it('enforces shift ownership and adds tenant/status lookup indexes', async () => {
+    const sql = await readFile(changeRequestsMigrationPath, 'utf8');
+    expect(sql).toContain('FOREIGN KEY (shift_id, employee_id)');
+    expect(sql).toContain('REFERENCES shifts (id, employee_id) ON DELETE CASCADE');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS change_requests_employee_status_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS change_requests_shift_idx');
+    expect(sql).toContain('CREATE INDEX IF NOT EXISTS change_requests_organization_idx');
   });
 });

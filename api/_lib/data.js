@@ -140,6 +140,8 @@ export function mapShiftRow(row) {
 }
 
 const MAX_SHIFT_COMMENT_LENGTH = 2000;
+const MAX_CHANGE_REQUEST_REASON_LENGTH = 2000;
+const CHANGE_REQUEST_TYPES = new Set(['TIME_CHANGE', 'OTHER']);
 
 export function mapShiftCommentRow(row) {
   return {
@@ -1920,6 +1922,95 @@ export async function createEmployeeShiftComment(sql, ctx, rawShiftId, rawBody) 
     throw new HttpError(404, 'Shift not found');
   }
   return mapShiftCommentRow(rows[0]);
+}
+
+export function mapChangeRequestRow(row) {
+  return {
+    id: row.id,
+    shiftId: row.shift_id,
+    employeeId: row.employee_id,
+    organizationId: row.organization_id,
+    requestType: row.request_type,
+    reason: row.reason,
+    status: row.status,
+    createdAt: row.created_at,
+    resolvedAt: row.resolved_at ?? null,
+    resolvedByUserId: row.resolved_by_user_id ?? null,
+  };
+}
+
+function assertEmployeePortalContext(ctx) {
+  if (ctx.role !== 'EMPLOYEE') {
+    throw new HttpError(403, 'Employee portal access required');
+  }
+  if (!ctx.employeeId) {
+    throw new HttpError(403, 'No employee linked to this user');
+  }
+}
+
+export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawRequestType, rawReason) {
+  assertEmployeePortalContext(ctx);
+  const requestType = String(rawRequestType ?? '').trim().toUpperCase();
+  if (!CHANGE_REQUEST_TYPES.has(requestType)) {
+    throw new HttpError(400, 'Invalid change request type');
+  }
+  const reason = String(rawReason ?? '').trim();
+  if (!reason) {
+    throw new HttpError(400, 'Change request reason is required');
+  }
+  if (reason.length > MAX_CHANGE_REQUEST_REASON_LENGTH) {
+    throw new HttpError(400, `Change request reason cannot exceed ${MAX_CHANGE_REQUEST_REASON_LENGTH} characters`);
+  }
+
+  const rows = await sql`
+    WITH owned_shift AS (
+      SELECT id, employee_id, organization_id
+      FROM shifts
+      WHERE id = ${rawShiftId}
+        AND organization_id = ${ctx.organizationId}
+        AND employee_id = ${ctx.employeeId}
+    )
+    INSERT INTO change_requests
+      (shift_id, employee_id, organization_id, request_type, reason, status)
+    SELECT id, employee_id, organization_id, ${requestType}, ${reason}, 'PENDING'
+    FROM owned_shift
+    RETURNING id, shift_id, employee_id, organization_id, request_type, reason,
+              status, created_at, resolved_at, resolved_by_user_id
+  `;
+  if (!rows[0]) {
+    throw new HttpError(404, 'Shift not found');
+  }
+  return mapChangeRequestRow(rows[0]);
+}
+
+export async function cancelEmployeeChangeRequest(sql, ctx, rawRequestId) {
+  assertEmployeePortalContext(ctx);
+  const rows = await sql`
+    UPDATE change_requests
+    SET status = 'CANCELLED',
+        resolved_at = COALESCE(resolved_at, NOW())
+    WHERE id = ${rawRequestId}
+      AND organization_id = ${ctx.organizationId}
+      AND employee_id = ${ctx.employeeId}
+      AND status = 'PENDING'
+    RETURNING id, shift_id, employee_id, organization_id, request_type, reason,
+              status, created_at, resolved_at, resolved_by_user_id
+  `;
+  if (rows[0]) {
+    return mapChangeRequestRow(rows[0]);
+  }
+
+  const existing = await sql`
+    SELECT id, status
+    FROM change_requests
+    WHERE id = ${rawRequestId}
+      AND organization_id = ${ctx.organizationId}
+      AND employee_id = ${ctx.employeeId}
+  `;
+  if (existing[0]) {
+    throw new HttpError(409, 'Only pending change requests can be cancelled');
+  }
+  throw new HttpError(404, 'Change request not found');
 }
 
 /**

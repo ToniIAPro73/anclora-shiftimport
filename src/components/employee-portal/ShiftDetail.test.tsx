@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { I18nProvider } from '../../lib/i18n-react';
 import { ThemeProvider } from '../../lib/theme-react';
-import { acknowledgeRemoteShift, createRemoteShiftComment, loadRemoteShiftComments, loadRemoteShiftDetail } from '../../lib/remote';
+import { acknowledgeRemoteShift, cancelRemoteChangeRequest, createRemoteChangeRequest, createRemoteShiftComment, loadRemoteShiftComments, loadRemoteShiftDetail } from '../../lib/remote';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { ShiftDetail } from './ShiftDetail';
 
@@ -12,6 +12,8 @@ vi.mock('../../lib/remote', () => ({
   acknowledgeRemoteShift: vi.fn(),
   loadRemoteShiftComments: vi.fn(),
   createRemoteShiftComment: vi.fn(),
+  cancelRemoteChangeRequest: vi.fn(),
+  createRemoteChangeRequest: vi.fn(),
 }));
 
 setupLocalStorageMock();
@@ -21,6 +23,8 @@ const mockedLoadDetail = vi.mocked(loadRemoteShiftDetail);
 const mockedAcknowledge = vi.mocked(acknowledgeRemoteShift);
 const mockedLoadComments = vi.mocked(loadRemoteShiftComments);
 const mockedCreateComment = vi.mocked(createRemoteShiftComment);
+const mockedCancelChangeRequest = vi.mocked(cancelRemoteChangeRequest);
+const mockedCreateChangeRequest = vi.mocked(createRemoteChangeRequest);
 const shift = {
   id: '11111111-1111-4111-8111-111111111111',
   date: '2026-09-05',
@@ -46,9 +50,11 @@ describe('ShiftDetail', () => {
     mockedAcknowledge.mockReset();
     mockedLoadComments.mockReset();
     mockedCreateComment.mockReset();
+    mockedCancelChangeRequest.mockReset();
+    mockedCreateChangeRequest.mockReset();
   });
 
-  it('renders the published shift facts and disabled future actions', async () => {
+  it('renders the published shift facts and the employee actions', async () => {
     mockedLoadDetail.mockResolvedValue({ shift, areaName: 'Recepción', acknowledgementStatus: 'PENDING', acknowledgedAt: null });
     mockedLoadComments.mockResolvedValue([]);
     renderDetail();
@@ -62,7 +68,7 @@ describe('ShiftDetail', () => {
     const acknowledgeButton = screen.getByRole('button', { name: 'Marcar el turno del 2026-09-05 como visto' });
     expect(acknowledgeButton).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Añadir comentario' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('button', { name: 'Solicitar cambio' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Enviar solicitud' })).toHaveProperty('disabled', false);
     mockedAcknowledge.mockResolvedValue({ status: 'ACKNOWLEDGED', acknowledgedAt: '2026-09-05T10:00:00.000Z' });
     fireEvent.click(acknowledgeButton);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Turno reconocido' })).toHaveProperty('disabled', true));

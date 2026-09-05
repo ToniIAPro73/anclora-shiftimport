@@ -1,8 +1,9 @@
-import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Layers3, MapPin, RotateCcw, Send } from 'lucide-react';
+import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Layers3, MapPin, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { acknowledgeRemoteShift, loadRemoteShiftDetail } from '../../lib/remote';
 import { Shift } from '../../lib/types';
 import { useI18n } from '../../lib/use-i18n';
+import { ChangeRequestForm } from './ChangeRequestForm';
 import { ShiftComments } from './ShiftComments';
 
 type DetailState =
@@ -153,19 +154,15 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
                     ? t('employeeDetail.acknowledging')
                     : t('employeeDetail.acknowledge')}
               </button>
-              <button type="button" disabled title={t('employeeDetail.comingSoon')}>
-                <Send size={16} aria-hidden="true" />
-                {t('employeeDetail.changeRequest')}
-              </button>
             </div>
             {acknowledgementAction === 'error' && (
               <p className="employee-shift-detail__acknowledgement-error" role="alert">
                 {t('employeeDetail.acknowledgementError')}
               </p>
             )}
-            <p className="employee-shift-detail__coming-soon">{t('employeeDetail.comingSoon')}</p>
           </div>
           <ShiftComments shiftId={state.shift.id} />
+          <ChangeRequestForm key={state.shift.id} shiftId={state.shift.id} />
         </>
       )}
     </section>

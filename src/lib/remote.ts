@@ -86,6 +86,22 @@ export interface ShiftComment {
   createdAt: string;
 }
 
+export type ChangeRequestType = 'TIME_CHANGE' | 'OTHER';
+export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface ChangeRequest {
+  id: string;
+  shiftId: string;
+  employeeId: string;
+  organizationId: string;
+  requestType: ChangeRequestType;
+  reason: string;
+  status: ChangeRequestStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedByUserId: string | null;
+}
+
 export interface ScheduleSnapshot {
   version: ScheduleVersion;
   employees: SchedulingEmployee[];
@@ -247,6 +263,26 @@ export async function createRemoteShiftComment(shiftId: string, body: string): P
     { method: 'POST', body: JSON.stringify({ body }) },
   );
   return payload.comment;
+}
+
+export async function createRemoteChangeRequest(
+  shiftId: string,
+  requestType: ChangeRequestType,
+  reason: string,
+): Promise<ChangeRequest> {
+  const payload = await apiFetch<{ request: ChangeRequest }>(
+    `/api/me/shifts/${encodeURIComponent(shiftId)}/change-requests`,
+    { method: 'POST', body: JSON.stringify({ requestType, reason }) },
+  );
+  return payload.request;
+}
+
+export async function cancelRemoteChangeRequest(requestId: string): Promise<ChangeRequest> {
+  const payload = await apiFetch<{ request: ChangeRequest }>(
+    `/api/me/change-requests/${encodeURIComponent(requestId)}/cancel`,
+    { method: 'POST' },
+  );
+  return payload.request;
 }
 
 export async function listRemoteScheduleVersions(areaId?: string | null): Promise<ScheduleVersion[]> {
