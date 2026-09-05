@@ -9,9 +9,11 @@ interface AccessibleScheduleTableProps {
   days: string[];
   locale: Locale;
   snapshot: ScheduleSnapshot;
+  editorSnapshot?: ScheduleSnapshot;
   assignmentsByCell: Map<string, ShiftAssignment[]>;
   editable: boolean;
   editor: AssignmentEditorState | null;
+  showEditor?: boolean;
   isSaving: boolean;
   operationError: string | null;
   onAdd: (employeeId: string, date: string) => void;
@@ -36,9 +38,11 @@ export function AccessibleScheduleTable({
   days,
   locale,
   snapshot,
+  editorSnapshot = snapshot,
   assignmentsByCell,
   editable,
   editor,
+  showEditor = true,
   isSaving,
   operationError,
   onAdd,
@@ -95,9 +99,9 @@ export function AccessibleScheduleTable({
           </tbody>
         </table>
       </div>
-      {editor && (
+      {showEditor && editor && (
         <ScheduleAssignmentEditor
-          snapshot={snapshot}
+          snapshot={editorSnapshot}
           editor={editor}
           isSaving={isSaving}
           operationError={operationError}

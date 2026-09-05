@@ -15,6 +15,8 @@ export interface AssignmentEditorState {
 interface ScheduleAssignmentEditorProps {
   snapshot: ScheduleSnapshot;
   editor: AssignmentEditorState;
+  focusKey?: number;
+  mobileOpen?: boolean;
   isSaving: boolean;
   operationError: string | null;
   onChange: (next: AssignmentEditorState) => void;
@@ -26,6 +28,8 @@ interface ScheduleAssignmentEditorProps {
 export function ScheduleAssignmentEditor({
   snapshot,
   editor,
+  focusKey,
+  mobileOpen = true,
   isSaving,
   operationError,
   onChange,
@@ -38,11 +42,11 @@ export function ScheduleAssignmentEditor({
 
   useEffect(() => {
     employeeRef.current?.focus();
-  }, [editor.id]);
+  }, [editor.date, editor.employeeId, editor.id, focusKey]);
 
   return (
     <form
-      className="weekly-planner__editor"
+      className={`weekly-planner__editor${mobileOpen ? ' weekly-planner__editor--mobile-open' : ' weekly-planner__editor--mobile-collapsed'}`}
       onSubmit={onSave}
       aria-label={editor.id ? t('planner.editTitle') : t('planner.addTitle')}
       aria-describedby={operationError ? 'planner-editor-error' : undefined}

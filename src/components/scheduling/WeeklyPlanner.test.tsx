@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { ApiError } from '../../lib/session';
 import { I18nProvider } from '../../lib/i18n-react';
@@ -96,7 +96,7 @@ describe('WeeklyPlanner', () => {
     await waitFor(() => expect(remote.createRemoteScheduleDraft).toHaveBeenCalledWith({
       periodStart: expect.any(String), areaId: 'area-1',
     }));
-    await waitFor(() => expect(screen.getByText('Ana Planner')).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('row', { name: /Ana Planner/ })).toBeTruthy());
   });
 
   it('shows a recoverable error state when the snapshot fails', async () => {
@@ -169,7 +169,59 @@ describe('WeeklyPlanner', () => {
     fireEvent.keyDown(addButton, { key: 'Enter', code: 'Enter' });
     fireEvent.click(addButton);
     expect(screen.getByRole('form', { name: 'Añadir turno' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Empleado')).toHaveFocus();
+    expect(within(screen.getByRole('form', { name: 'Añadir turno' })).getByLabelText('Empleado')).toHaveFocus();
+  });
+
+  it('filters the grid by employee and restores all rows', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [],
+      employees: [
+        { id: 'employee-1', name: 'Ana Planner', externalEmployeeId: 'E001', areaId: 'area-1' },
+        { id: 'employee-2', name: 'Luis Planner', externalEmployeeId: 'E002', areaId: 'area-1' },
+      ],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('row', { name: /Luis Planner/ })).toBeInTheDocument());
+    const filter = screen.getByRole('button', { name: 'Empleado' });
+    fireEvent.click(filter);
+    fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner' }).find((option) => option.tagName === 'BUTTON')!);
+
+    expect(screen.queryByRole('row', { name: /Ana Planner/ })).toBeNull();
+    expect(screen.getByRole('row', { name: /Luis Planner/ })).toBeInTheDocument();
+
+    fireEvent.click(filter);
+    fireEvent.click(screen.getAllByRole('option', { name: 'Todos los empleados' }).find((option) => option.tagName === 'BUTTON')!);
+    expect(screen.getByRole('row', { name: /Ana Planner/ })).toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /Luis Planner/ })).toBeInTheDocument();
+  });
+
+  it('prefills the stable editor from a grid cell without scrolling the document', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [],
+      employees: [
+        { id: 'employee-1', name: 'Ana Planner', externalEmployeeId: 'E001', areaId: 'area-1' },
+        { id: 'employee-2', name: 'Luis Planner', externalEmployeeId: 'E002', areaId: 'area-1' },
+      ],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Añadir turno para Luis Planner el 2026-09-29' })).toBeInTheDocument());
+    const scrollTo = vi.spyOn(window, 'scrollTo');
+    const addButton = screen.getByRole('button', { name: 'Añadir turno para Luis Planner el 2026-09-29' });
+    fireEvent.click(addButton);
+
+    const editorForm = screen.getByRole('form', { name: 'Añadir turno' });
+    expect(within(editorForm).getByLabelText('Empleado')).toHaveValue('employee-2');
+    expect(within(editorForm).getByLabelText('Fecha')).toHaveValue('2026-09-29');
+    expect(addButton.closest('td')).toHaveAttribute('data-selected', 'true');
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    fireEvent.click(within(editorForm).getByRole('button', { name: 'Cancelar' }));
+    expect(addButton.closest('td')).not.toHaveAttribute('data-selected', 'true');
+    scrollTo.mockRestore();
   });
 
   it('requires explicit confirmation before publishing the draft', async () => {

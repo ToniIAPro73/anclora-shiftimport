@@ -129,3 +129,38 @@ Si el Gate falla por accesibilidad/responsive: no commitear hasta corregir — e
 
 ## 23. Criterio de DONE
 R0-M05 en PASS, grid operativo con los 3 tasks completos, estados verificados en ambos temas y responsive, Gate G6+G9 PASS. Commit de implementación: `0490289`.
+
+## 24. Remediación UX — 2026-09-05
+
+La validación del planner con un roster grande detectó que el grid podía hacer crecer
+la página y comprimir el editor fuera del viewport. La remediación conserva el dominio
+de scheduling y añade:
+
+- workspace de altura limitada al viewport, con scroll vertical únicamente en la matriz;
+- cabecera de días sticky y scrollbar visible de la región del grid;
+- selector searchable de empleado, con `Todos los empleados` y filtro de visualización;
+- editor común estable para grid y tabla accesible;
+- selección de celda con `+` que rellena empleado/fecha, mantiene scroll y marca la celda;
+- editor móvil como drawer inferior; en estado cerrado no intercepta las celdas del grid y
+  mantiene una entrada directa `Abrir editor de turno`;
+- guardado/cancelación sin cambiar semana ni filtro.
+
+Archivos principales:
+
+- `src/components/scheduling/WeeklyPlanner.tsx`
+- `src/components/scheduling/AccessibleScheduleTable.tsx`
+- `src/components/scheduling/ScheduleAssignmentEditor.tsx`
+- `src/index.css`
+- `src/components/scheduling/WeeklyPlanner.test.tsx`
+- `qa/e2e-acceptance/specs-local/weekly-planner-ux.spec.ts`
+
+Evidencia rápida de navegador (Neon dev + Chromium):
+
+- 26 empleados activos: todas las filas accesibles; `scrollHeight > clientHeight` en el grid.
+- 1440×900: dark, top/middle/bottom, sticky header, editor completo dentro del viewport.
+- filtro individual y restauración a todos; celda seleccionada y editor prellenado.
+- 1366×768, 1024×768, 768×1024 y 390×844: layout contenido; en móvil drawer inferior.
+- light/dark, ES, consola sin errores y `document` sin scroll vertical global.
+
+Validación: `weekly-planner-ux.spec.ts` PASS. El E2E funcional largo de scheduling se
+mantiene separado para no confundir latencia de Neon/navegación con la comprobación visual.
