@@ -2,7 +2,7 @@
 
 Fecha: 2026-09-05  
 Rama: `development`  
-Commit de la ejecución: `dd99b92`  
+Commits de la evidencia: `b9082a7` (runner) + `dd99b92` (verificador)
 Entorno: Neon **development** (prefijo de host verificado por el runner)
 
 ## Perfil E2E
