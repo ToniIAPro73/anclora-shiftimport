@@ -1847,7 +1847,7 @@ development, con limpieza de fixture y del tenant sintético al terminar.
 
 **PHASE_ID**: P5.4
 **PHASE_NAME**: Employee Self-Service Completion
-**STATUS**: PASS
+**STATUS**: PASS_WITH_GAPS
 **GOAL**: Completar el autoservicio del Employee bajo la Application Shell compartida, con calendario
 mensual como home, navegación role-aware y scope `SELF`.
 **WHY_NOW**: R4 ya permite consultar turnos y solicitudes existentes, pero el portal no ofrecía una
