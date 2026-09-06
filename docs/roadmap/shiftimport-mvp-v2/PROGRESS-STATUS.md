@@ -1,6 +1,6 @@
 # Progress Status — MVP v2 Roadmap Execution
 
-Última actualización: 2026-09-06, veredicto P0-M10 en `development`.
+Última actualización: 2026-09-06, Gate P4 en `development`.
 
 Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
 auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
@@ -76,11 +76,17 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
     `scripts/verify-mvp-invariants.mjs` y migraciones desde cero 32/32 PASS en schema efímero
     mediante `scripts/verify-migrations-from-scratch.mjs`, todo contra Neon development.
   - P0-M10: PASS — `MVP_NOT_READY` formalizado en `R5-M12-mvp-release-gate.md`; no se emite `MVP_READY`.
-- P4 — remediación UX/a11y en curso: P4-M01..M07 implementadas con evidencia en
-  `P4-POST-AUDIT-EVIDENCE.md`; el runner compacto `test:p4` pasa 1/1 y el inventario axe
-  focalizado del dashboard/planner/portal pasa. El Gate formal de P4 queda pendiente de la
-  evidencia visual comparativa y del checklist transversal.
-- P1–P3 y P5–P7: pendientes; P1 no se inicia hasta cerrar los bloqueadores formales de P0.
+- P1 — Trusted Import Completion: `PASS_WITH_GAPS`, commit `7f65138`; los intentos bloqueados y
+  fallidos dejan resultado persistente y la migración `0033` fue validada en development.
+- P2 — Plan Entitlement UX: `PASS_WITH_GAPS`, commit `c256928`; las capacidades bloqueadas por
+  plan se anticipan con estado visible y explicación.
+- P3 — Dialog Replacement & Copy Correctness: `PASS_WITH_GAPS`, commit `f797b2f`; los journeys de
+  negocio ya no usan diálogos nativos y los errores quedan persistentes.
+- P4 — Accessibility & Responsive Hardening: `PASS_WITH_GAPS`, commit `cc767b9`; runner compacto
+  `test:p4` 1/1, tests dirigidos 45/45, lint y build PASS. El gap restante es el archivado de
+  capturas comparativas, documentado en `docs/roadmap/P4-ACCESSIBILITY-RESPONSIVE-GATE.md`.
+- P5: BLOCKED por las decisiones de producto D-03, D-04 y D-05; P6 depende de P5 y P7 depende
+  de P6.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
@@ -108,7 +114,9 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 
 ## Decisiones que mantienen bloqueos
 
+- **D-03**: la capacidad de self-import del EMPLOYEE no está registrada como decisión aprobada.
 - **D-04**: el comportamiento exacto del self-import de EMPLOYEE cuando el fichero contiene otras
   personas y su alcance temporal no está decidido. P5 quedará BLOCKED hasta recibir esa decisión.
+- **D-05**: no está registrada la decisión sobre el alcance de un PLANNER sin área asignada.
 - **D-07 / P8**: la fuente CRC Tryp sigue inaccesible; se requiere exportación, fuentes originales,
   acceso autenticado autorizado o cancelación explícita de P8.
