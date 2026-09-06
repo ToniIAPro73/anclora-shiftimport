@@ -3,10 +3,12 @@
  *
  * "Off" tokens are not hardcoded: they are whatever resolves to the `Libre`
  * type through the configurable shift-type registry (src/lib/shift-types.ts).
- * Company tokens (e.g. dl/aj via SHIFT_TYPE_PRESET_EXAMPLE) therefore work
- * only when the corresponding alias set is loaded.
+ * Company tokens (e.g. dl via SHIFT_TYPE_PRESET_EXAMPLE) therefore work only
+ * when the corresponding alias set is loaded. AJ is explicitly ignored by
+ * product decision and is filtered before any alias can resolve it.
  */
 import { resolveShiftTypeId } from '../../lib/shift-types';
+import { isExplicitlyIgnoredCode } from './ignored-codes';
 import { isSeparatorToken, isTimeToken, normalizeText, normalizeTimeToken } from './normalize';
 import { resolveCode, ShiftCodeMapping } from './shift-code-profile';
 
@@ -43,6 +45,10 @@ export function expandShiftTokens(value: string, codeProfile?: Map<string, Shift
   }
 
   const core = stripFootnoteAnnotation(trimmed);
+
+  if (isExplicitlyIgnoredCode(core)) {
+    return [];
+  }
 
   if (isOffToken(core)) {
     return ['OFF'];
@@ -108,6 +114,7 @@ function isStructuralLabel(value: string): boolean {
 export function looksLikeEmployeeLabel(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
+  if (isExplicitlyIgnoredCode(trimmed)) return false;
   if (isTimeToken(trimmed) || isOffToken(trimmed) || isSeparatorToken(trimmed)) return false;
   if (isEmployeeIdToken(trimmed)) return true;
   if (isStructuralLabel(trimmed)) return false;

@@ -30,6 +30,7 @@ import { computeImportResult, ImportResult, QualitySignals } from '../lib/import
 import { resolveShiftTypeId } from '../lib/shift-types';
 import { getDaysInMonth } from '../lib/week';
 import { normalizeText, normalizeTimeToken } from './core/normalize';
+import { isExplicitlyIgnoredCode } from './core/ignored-codes';
 import { EmployeeSelector, matchesNameTokens } from './core/row-detection';
 import {
   AssistantAnswers,
@@ -334,6 +335,9 @@ export function analyzeRosterTable(table: RosterTable, selector: EmployeeSelecto
       if (!cell || seen.has(cell)) {
         continue;
       }
+      if (isExplicitlyIgnoredCode(cell)) {
+        continue;
+      }
       if (TIME_LIKE.test(cell) || resolveShiftTypeId(cell) || parseTableDate(cell)) {
         continue;
       }
@@ -491,7 +495,7 @@ export function buildTabularProfileFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed) {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -573,6 +577,9 @@ function buildTabularCellShifts(
   for (const rawCell of cells) {
     const cell = rawCell.trim();
     if (!cell) {
+      continue;
+    }
+    if (isExplicitlyIgnoredCode(cell)) {
       continue;
     }
 

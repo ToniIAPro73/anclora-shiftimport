@@ -13,6 +13,7 @@ import { ParsedCalendarShift } from '../../lib/import-types';
 import { isTimeToken, normalizeTimeToken } from './normalize';
 import { resolveCode, ShiftCodeMapping } from './shift-code-profile';
 import { expandShiftTokens, isOffToken } from './tokens';
+import { isExplicitlyIgnoredCode } from './ignored-codes';
 
 function buildAbsenceShift(date: string, rawText: string, shiftTypeId: string): ParsedCalendarShift {
   return {
@@ -79,14 +80,18 @@ export function buildShiftEntriesForDay(
   tokens: string[],
   codeProfile?: Map<string, ShiftCodeMapping>,
 ): ParsedCalendarShift[] {
+  const effectiveTokens = tokens.filter((token) => !isExplicitlyIgnoredCode(token));
+  if (effectiveTokens.length === 0) {
+    return [];
+  }
   if (codeProfile) {
-    const fromCode = buildFromSingleCode(date, tokens, codeProfile);
+    const fromCode = buildFromSingleCode(date, effectiveTokens, codeProfile);
     if (fromCode) {
       return fromCode;
     }
   }
 
-  const meaningful = tokens.flatMap((token) => expandShiftTokens(token, codeProfile)).map((token) => token.trim()).filter(Boolean);
+  const meaningful = effectiveTokens.flatMap((token) => expandShiftTokens(token, codeProfile)).map((token) => token.trim()).filter(Boolean);
   if (meaningful.length === 0) {
     return [];
   }

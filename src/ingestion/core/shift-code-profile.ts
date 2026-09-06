@@ -12,6 +12,7 @@
  */
 import { shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { PdfTextItem } from './text-items';
+import { isExplicitlyIgnoredCode } from './ignored-codes';
 
 export interface ShiftCodeMapping {
   code: string;
@@ -95,7 +96,7 @@ export function codeOverridesFromLearning(learned: {
 
   for (const [rawToken, typeId] of Object.entries(learned.tokenAliases)) {
     const code = rawToken.trim().toUpperCase();
-    if (!code || !typeId) {
+    if (!code || !typeId || isExplicitlyIgnoredCode(code)) {
       continue;
     }
     const times = learned.codeTimes?.[rawToken] ?? learned.codeTimes?.[code];
@@ -116,7 +117,7 @@ export function codeOverridesFromLearning(learned: {
 
   for (const token of learned.offTokens) {
     const code = token.trim().toUpperCase();
-    if (code && !overrides.has(code)) {
+    if (code && !overrides.has(code) && !isExplicitlyIgnoredCode(code)) {
       overrides.set(code, { code, startTime: null, endTime: null, status: 'free', shiftTypeId: 'Libre' });
     }
   }

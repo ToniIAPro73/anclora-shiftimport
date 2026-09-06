@@ -5,12 +5,12 @@
  * single-employee flow (analyzeShiftsFromItems — now multi-page aware, see
  * row-detection.ts / parse-items.ts), so a fix to one flow is a fix to both.
  *
- * Unknown non-time codes (e.g. DL, AJ) are resolved automatically as rest
- * days for the WHOLE batch, sampled from whichever codes the first
+ * Unknown non-time codes (e.g. DL) are resolved automatically as rest days
+ * for the WHOLE batch, sampled from whichever codes the first
  * employee's row surfaces — the legend is document-wide, not per-employee,
  * so there is no 40-person interactive Q&A. This mirrors the CSV team
- * import's structural "no times = Libre" policy (team-roster.ts): AJ is not
- * modeled as a distinct type from DL here either. The interactive
+ * import's structural policy (team-roster.ts): AJ is explicitly ignored and
+ * never modeled as a type. The interactive
  * single-employee flow is untouched and still asks the token-meaning
  * question per code, unaffected by this batch policy.
  */

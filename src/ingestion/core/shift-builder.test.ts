@@ -44,6 +44,20 @@ describe('buildShiftEntriesForDay', () => {
     expect(buildShiftEntriesForDay('2026-08-06', [''])).toEqual([]);
   });
 
+  it.each(['2026-08-01', '2026-09-07', '2026-10-01'])('ignores AJ on %s without creating a parsed record', (date) => {
+    mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
+    expect(buildShiftEntriesForDay(date, ['AJ'])).toEqual([]);
+    expect(buildShiftEntriesForDay(date, ['AJ [2]'])).toEqual([]);
+  });
+
+  it('keeps DL as a distinct supported rest token when AJ is present elsewhere', () => {
+    mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
+    expect(summarize(buildShiftEntriesForDay('2026-08-02', ['DL']))).toEqual([
+      { date: '2026-08-02', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    ]);
+    expect(buildShiftEntriesForDay('2026-08-03', ['AJ', ''])).toEqual([]);
+  });
+
   it('treats company tokens as nothing unless the preset alias is loaded', () => {
     expect(buildShiftEntriesForDay('2026-08-03', ['DL'])).toEqual([]);
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);

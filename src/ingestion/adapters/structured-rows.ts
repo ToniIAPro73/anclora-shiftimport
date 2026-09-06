@@ -17,6 +17,7 @@ import { IngestionErrorCode } from '../../lib/ingestion-errors';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { normalizeTimeToken } from '../core/normalize';
 import { parseTableDate } from '../tabular-assistant';
+import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
 import { DetectedTeamEmployee, TeamRosterDetection } from '../team-roster';
 
 /** One row before grouping — field names already resolved by the adapter. */
@@ -129,6 +130,9 @@ export function normalizeStructuredRows(rows: StructuredShiftRow[]): StructuredN
     const endTime = hasEnd ? normalizeTimeToken(endRaw) : '';
     const isWork = hasStart && hasEnd;
     const rawType = (row.shiftType ?? '').trim();
+    if (isExplicitlyIgnoredCode(rawType)) {
+      continue;
+    }
     // Only registry-known codes (Regular/Libre/Vacaciones/Extras/custom
     // org aliases) are resolved; an org-specific work-shift label (M, T,
     // X1, ...) that isn't in the registry is NOT flagged as "unknown" here

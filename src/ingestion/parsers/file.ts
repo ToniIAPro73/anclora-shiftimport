@@ -20,6 +20,7 @@ import { UserFormatProfile } from '../../lib/format-profiles';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
 import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
+import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
 import { analyzeWithVlmFallback, isVlmFallbackAvailable, VlmRecords } from '../vlm-client';
 import { classifyVlmTrigger } from '../vlm-trigger';
 import {
@@ -332,6 +333,9 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
     if (valueCol !== undefined && !rowDate) {
       for (let col = valueCol; col < cells.length; col += 1) {
         const cell = cells[col] ?? '';
+        if (isExplicitlyIgnoredCode(cell)) {
+          continue;
+        }
         const slots = parseRosterSlot(cell, null, options.weekStart ?? null);
         const base = {
           notes: workerId || null,
@@ -382,6 +386,10 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
     const hasTime = Boolean(startTime && endTime);
     const rawType = typeCol !== undefined ? (cells[typeCol] ?? '') : '';
     const effectiveValue = valueRaw || rawType;
+
+    if (isExplicitlyIgnoredCode(rawType) || isExplicitlyIgnoredCode(valueRaw)) {
+      continue;
+    }
 
     // value cell may hold "22:00-06:00", "(split) + (split)" or a code.
     let slots: Array<{ date: string; start: string; end: string }> | null | undefined;
@@ -791,6 +799,10 @@ function analyzeRosterDocument(
         continue;
       }
       totalTokens += 1;
+      if (isExplicitlyIgnoredCode(cell)) {
+        recognizedTokens += 1;
+        continue;
+      }
       if (resolveShiftTypeId(cell) || ROSTER_TIME_LIKE.test(cell) || ROSTER_WEEKDAY_SLOT.test(cell)) {
         recognizedTokens += 1;
         continue;

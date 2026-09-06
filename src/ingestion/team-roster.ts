@@ -12,7 +12,7 @@
  *
  * Shift type is inferred structurally, not via the shift-type alias
  * registry: a row with both start and end times is a worked (Regular)
- * shift; anything else (DL, AJ, blank) is treated as Libre. That keeps
+ * shift; DL is treated as Libre and AJ is intentionally ignored. That keeps
  * this module dependency-light and matches the reference dataset
  * (test-data/fixtures/parser-regression/04_turnos_septiembre_2026.csv).
  */

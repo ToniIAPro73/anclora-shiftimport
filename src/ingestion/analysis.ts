@@ -43,6 +43,7 @@ import {
 } from './core/row-detection';
 import { buildCodeProfile, codeOverridesFromLearning, parseLegendCodes, ShiftCodeMapping } from './core/shift-code-profile';
 import { isEmployeeIdToken, expandShiftTokens } from './core/tokens';
+import { isExplicitlyIgnoredCode } from './core/ignored-codes';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
 import { IngestionProfile } from './profiles/types';
@@ -401,6 +402,10 @@ export function analyzeItemsForImport(
       continue;
     }
     totalTokens += 1;
+    if (isExplicitlyIgnoredCode(text)) {
+      recognizedTokens += 1;
+      continue;
+    }
     if (expandShiftTokens(text, codeProfile).length > 0) {
       recognizedTokens += 1;
       continue;

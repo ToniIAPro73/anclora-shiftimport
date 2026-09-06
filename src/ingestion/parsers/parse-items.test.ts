@@ -45,7 +45,7 @@ describe('parseShiftsFromItems — TYPE_A fixture', () => {
     expect(summarize(shifts)).toEqual(TYPE_A_EXPECTED);
   });
 
-  it('resolves company aliases (DL/AJ -> Libre) with the preset loaded', () => {
+  it('resolves DL and ignores AJ with the preset loaded', () => {
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
     const context = detectCalendarContextFromItems(TYPE_A_FIXTURE_ITEMS);
     const shifts = parseShiftsFromItems(TYPE_A_FIXTURE_ITEMS, context, TYPE_A_SELECTOR);

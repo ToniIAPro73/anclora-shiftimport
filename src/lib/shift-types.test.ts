@@ -31,7 +31,7 @@ describe('configurable shift type registry', () => {
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
     expect(resolveShiftTypeId('JT')).toBe('JT');
     expect(resolveShiftTypeId('DL')).toBe('Libre');
-    expect(resolveShiftTypeId('AJ')).toBe('Libre');
+    expect(resolveShiftTypeId('AJ')).toBeNull();
     expect(resolveShiftTypeId('TD')).toBe('Regular');
     expect(getShiftTypes().map((type) => type.id)).toContain('JT');
   });

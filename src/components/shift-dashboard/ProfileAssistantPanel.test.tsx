@@ -78,13 +78,11 @@ describe('ProfileAssistantPanel', () => {
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
-    // The picked row's cells reveal DL/AJ — asked now, not silently excluded.
+    // The picked row's cells reveal DL; AJ is explicitly ignored.
     expect(onComplete).not.toHaveBeenCalled();
     expect(screen.getByText('¿Qué turno representa DL?')).toBeTruthy();
-    expect(screen.getByText('¿Qué turno representa AJ?')).toBeTruthy();
 
     fireEvent.click(screen.getAllByText('Descanso')[0]);
-    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
@@ -96,28 +94,21 @@ describe('ProfileAssistantPanel', () => {
 
   it('supports shift-code work/rest answers and applies the aliases', () => {
     const { analysis, questions } = setup(TYPE_A_SELECTOR);
-    expect(questions.map((q) => q.kind)).toEqual(['shift-code', 'shift-code']);
+    expect(questions.map((q) => q.kind)).toEqual(['shift-code']);
     const onComplete = vi.fn();
     renderPanel(questions, analysis, TYPE_A_SELECTOR, onComplete);
 
     expect(screen.getByText('¿Qué turno representa DL?')).toBeTruthy();
-    expect(screen.getByText('¿Qué turno representa AJ?')).toBeTruthy();
 
-    // DL = rest (Libre). AJ = work: times are required before confirming.
+    // DL = rest (Libre). AJ is intentionally ignored.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
-    fireEvent.click(screen.getAllByText('Turno de trabajo')[1]);
-    expect((screen.getByText('Aplicar y continuar') as HTMLButtonElement).disabled).toBe(true);
-
-    fireEvent.change(screen.getByLabelText('Hora Inicio'), { target: { value: '08:00' } });
-    fireEvent.change(screen.getByLabelText('Hora Fin'), { target: { value: '16:00' } });
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(resolveShiftTypeId('DL')).toBe('Libre');
-    expect(resolveShiftTypeId('AJ')).toBe('Regular');
-    // The learned work code rebuilt its shift on the re-parse (GS-10).
+    expect(resolveShiftTypeId('AJ')).toBeNull();
     const result = onComplete.mock.calls[0][0] as AssistantCompletion;
-    expect(result.shifts.some((shift) => shift.rawText.includes('AJ') && shift.startTime === '08:00')).toBe(true);
+    expect(result.shifts.some((shift) => shift.rawText.includes('AJ'))).toBe(false);
   });
 
   it('persists the format profile without any PII (no candidate labels, names or ids)', () => {
@@ -127,9 +118,8 @@ describe('ProfileAssistantPanel', () => {
 
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
     fireEvent.click(screen.getByText('Aplicar y continuar'));
-    // Follow-up round: classify the codes revealed by the picked row.
+    // Follow-up round: classify DL; AJ is intentionally ignored.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
-    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     const profiles = loadFormatProfiles();
@@ -149,9 +139,8 @@ describe('ProfileAssistantPanel', () => {
     renderPanel(questions, analysis, TYPE_A_SELECTOR, onComplete);
 
     fireEvent.click(screen.getByLabelText('Guardar este formato para próximos meses'));
-    // Both unknown codes must be classified before confirming.
+    // DL must be classified before confirming; AJ is intentionally ignored.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
-    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(loadFormatProfiles()).toHaveLength(0);
@@ -191,7 +180,6 @@ describe('ProfileAssistantPanel', () => {
     );
 
     fireEvent.click(screen.getAllByText('Descanso')[0]);
-    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     // The import completes synchronously — it never waits on the save.

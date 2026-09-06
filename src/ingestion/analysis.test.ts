@@ -41,8 +41,8 @@ describe('analyzeShiftsFromItems — happy path', () => {
 
     expect(summarize(shifts)).toEqual(TYPE_A_EXPECTED_WITH_PRESET);
     expect(quality.state).toBe('CORRECT');
-    expect(quality.confidence).toBe(1);
-    expect(quality.warnings).toEqual([]);
+    expect(quality.confidence).toBeLessThan(1);
+    expect(quality.warnings).toEqual([{ code: 'PARTIAL_EXTRACTION', context: { expected: 5, mapped: 4 } }]);
     expect(analysis.employeeMatch).toBe('strong');
     expect(analysis.structure.documentType).toBe('TYPE_A');
     expect(analysis.structure.dayHeaderCount).toBe(5);
@@ -58,8 +58,8 @@ describe('analyzeShiftsFromItems — happy path', () => {
     const { shifts, quality, analysis } = analyzeShiftsFromItems(TYPE_A_FIXTURE_ITEMS, context, TYPE_A_SELECTOR);
 
     expect(summarize(shifts)).toEqual(TYPE_A_EXPECTED);
-    expect(analysis.unknownTokens).toEqual(['DL', 'AJ']);
-    expect(quality.warnings.filter((w) => w.code === 'UNKNOWN_SHIFT_TOKEN')).toHaveLength(2);
+    expect(analysis.unknownTokens).toEqual(['DL']);
+    expect(quality.warnings.filter((w) => w.code === 'UNKNOWN_SHIFT_TOKEN')).toHaveLength(1);
     expect(quality.confidence).toBeLessThan(1);
     expect(quality.state).not.toBe('CORRECT');
   });

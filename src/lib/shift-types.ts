@@ -8,7 +8,7 @@
  *
  * The effective registry is DEFAULT_SHIFT_TYPES (neutral, generic for any
  * shift worker) merged with per-user overrides persisted in localStorage.
- * Company-specific types (e.g. JT) and aliases (dl/aj/td) are NOT product
+ * Company-specific types (e.g. JT) and aliases (dl/td) are NOT product
  * defaults; they live in SHIFT_TYPE_PRESET_EXAMPLE as documentation and can
  * be loaded via mergeShiftTypeOverrides.
  */
@@ -63,7 +63,6 @@ export const SHIFT_TYPE_PRESET_EXAMPLE: ShiftTypeOverrides = {
   aliases: {
     jt: 'JT',
     dl: 'Libre',
-    aj: 'Libre',
     td: 'Regular',
   },
 };

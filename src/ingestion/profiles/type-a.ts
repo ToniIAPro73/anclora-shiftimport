@@ -5,7 +5,7 @@
  * employee (name + parenthesized id in the left marker column, shift cells
  * aligned under the day columns at the same y as the markers).
  *
- * Off-token aliases (`off` by default; company tokens like dl/aj when
+ * Off-token aliases (`off` by default; company tokens like dl when
  * SHIFT_TYPE_PRESET_EXAMPLE is loaded) resolve via the shift-type registry.
  */
 import { IngestionProfile } from './types';

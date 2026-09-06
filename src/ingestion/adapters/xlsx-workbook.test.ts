@@ -211,14 +211,14 @@ describe('parseXlsxTeamWorkbook', () => {
     expect(result.layout).toBe('individual-calendar');
     expect(result.employees).toHaveLength(1);
     expect(result.employees[0].name).toBe('Sebastian Pozo Mendoza');
-    expect(result.employees[0].shifts).toHaveLength(246);
+    expect(result.employees[0].shifts).toHaveLength(232);
     expect(result.employees[0].shifts.find((shift) => shift.date === '2026-01-04')).toMatchObject({ startTime: '21:00', endTime: '05:00' });
     expect(result.employees[0].shifts.find((shift) => shift.date === '2026-07-02')).toMatchObject({ startTime: '21:00', endTime: '05:00' });
     expect(result.employees[0].shifts.some((shift) => shift.rawText.includes('!'))).toBe(false);
     expect(result.employees[0].shifts.every((shift) => shift.date < '2026-10-01')).toBe(true);
-    expect(result.employees[0].shifts.filter((shift) => shift.shiftType === 'Libre')).toHaveLength(93);
+    expect(result.employees[0].shifts.filter((shift) => shift.shiftType === 'Libre')).toHaveLength(79);
     expect(result.sheets).toEqual([
-      { sheetName: 'Calendario empleado', status: 'processed', rowCount: 246 },
+      { sheetName: 'Calendario empleado', status: 'processed', rowCount: 232 },
       { sheetName: 'Leyenda', status: 'ignored', rowCount: 6 },
     ]);
     expect(result.diagnostics.some((diagnostic) => diagnostic.sourceRef === 'Leyenda')).toBe(true);
@@ -230,7 +230,7 @@ describe('parseXlsxTeamWorkbook', () => {
     const file = new File([buffer], 'Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const result = await parseXlsxTeamWorkbook(file);
     expect(result.sheets).toEqual([
-      { sheetName: 'Calendario empleado', status: 'processed', rowCount: 246 },
+      { sheetName: 'Calendario empleado', status: 'processed', rowCount: 232 },
       { sheetName: 'Leyenda', status: 'ignored', rowCount: 6 },
     ]);
     expect(result.employees[0]?.shifts).toEqual(expect.arrayContaining([

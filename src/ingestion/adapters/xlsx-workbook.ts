@@ -23,6 +23,7 @@ import { findHeaderColumnIndex, RosterTable } from '../tabular-assistant';
 import { normalizeStructuredRows, RowDiagnostic, StructuredShiftRow } from './structured-rows';
 import { DetectedTeamEmployee, TeamRosterDetection } from '../team-roster';
 import { normalizeTimeToken } from '../core/normalize';
+import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import JSZip from 'jszip';
 
@@ -147,6 +148,7 @@ function positionalCalendarFromSheet(sheet: XlsxWorksheet): { employee: Detected
       if (!day || day > 31) continue;
       const raw = cleanCell(row[column] ?? '');
       if (!raw) continue;
+      if (isExplicitlyIgnoredCode(raw)) continue;
       const times = raw.match(/\b\d{1,2}:\d{2}\b/g) ?? [];
       const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       if (times.length >= 2) {
@@ -155,8 +157,8 @@ function positionalCalendarFromSheet(sheet: XlsxWorksheet): { employee: Detected
       } else {
         // These document codes are known rest markers in this calendar
         // family. Keep the product registry authoritative, with the
-        // documented DL/AJ compatibility fallback when no user alias exists.
-        const type = resolveShiftTypeId(raw) ?? (/^(DL|AJ)$/i.test(raw) ? 'Libre' : null);
+        // documented DL compatibility fallback when no user alias exists.
+        const type = resolveShiftTypeId(raw) ?? (/^DL$/i.test(raw) ? 'Libre' : null);
         if (type) {
           shifts.push({ date, startTime: '', endTime: '', origin: 'IMP', isValid: true, confidence: 0.95, rawText: raw, shiftType: type, notes: null, color: null });
           monthHasData = true;

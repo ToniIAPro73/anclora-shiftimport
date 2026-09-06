@@ -22,6 +22,7 @@ import { mapColumnGroupsToDays } from './core/clustering';
 import { EmployeeRow, EmployeeSelector, isBareEmployeeId } from './core/row-detection';
 import { normalizeEmployeeId, normalizeText } from './core/normalize';
 import { buildCodeProfile, codeOverridesFromLearning, ShiftCodeMapping } from './core/shift-code-profile';
+import { isExplicitlyIgnoredCode } from './core/ignored-codes';
 import { isEmployeeIdToken, isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
 import { getIngestionProfile } from './profiles';
@@ -288,7 +289,7 @@ export function buildProfileFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed) {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -494,7 +495,7 @@ export function buildCodeOverridesFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed) {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -558,9 +559,11 @@ export function parseWithDayMapping(
  * profile by construction, so this never registers unasked tokens.
  */
 export function applyTokenAliasesToShiftTypes(profile: UserFormatProfile): ShiftTypeOverrides {
-  const aliases: Record<string, string> = { ...profile.tokenAliases };
+  const aliases: Record<string, string> = Object.fromEntries(
+    Object.entries(profile.tokenAliases).filter(([token]) => !isExplicitlyIgnoredCode(token)),
+  );
   for (const token of profile.offTokens) {
-    if (!aliases[token]) {
+    if (!isExplicitlyIgnoredCode(token) && !aliases[token]) {
       aliases[token] = 'Libre';
     }
   }
