@@ -12,7 +12,7 @@ repositorio. `docs/specs/` **no existía** y se ha creado para este documento, p
 transversal de release que abarca 8 fases. `sdd/` sigue siendo canónico para specs de feature; este
 documento es una spec de programa y queda subordinado a los contratos de `docs/standards/` y a AOS.
 
-**Estado**: P5.5 `PASS_WITH_GAPS`; P5.4 `PASS_WITH_GAPS` (implementada localmente). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
+**Estado**: P5.5 `PASS`; P5.4 `PASS_WITH_GAPS` (implementada localmente). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
 fuente CRC Tryp inaccesible.
 
 ---
@@ -91,6 +91,8 @@ P5.5 se añade después de P5.4 para cerrar la separación temporal de importaci
 persiste como histórico y `date >= today` se añade a planificación `DRAFT` solo para OWNER/ADMIN/PLANNER
 con consentimiento explícito por operación. La importación nunca publica; el calendario operativo muestra
 solo realidad publicada y Planner muestra los borradores. EMPLOYEE conserva la exclusión de futuro de P5.
+El cierre posterior P5.5-R01 valida los dos ficheros reales del caso y cierra G-20; el Gate P5.5 pasa a
+`PASS` sin cambiar el comportamiento funcional.
 P5.6 conserva, como intención futura, el workflow de intercambio de turnos previamente documentado.
 
 ---

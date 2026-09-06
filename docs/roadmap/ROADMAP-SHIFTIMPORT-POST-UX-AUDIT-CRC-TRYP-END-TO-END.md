@@ -6,7 +6,7 @@
 > de dominio, journeys objetivo, matrices de roles/planes y el Final Product Gate.
 >
 > **Estado**: P5 cerrado (PASS); P5.1 cerrado (PASS); P5.2 cerrado (PASS) y remediación post-M15
-> cerrada (PASS). P5.3 cerrado (PASS); P5.4 `PASS_WITH_GAPS`; P5.5 cerrado (`PASS_WITH_GAPS`); P6/P7 no iniciadas.
+> cerrada (PASS). P5.3 cerrado (PASS); P5.4 `PASS_WITH_GAPS`; P5.5 cerrado (`PASS` tras P5.5-R01); P6/P7 no iniciadas.
 
 ---
 
@@ -2006,10 +2006,11 @@ ocultar el detalle nuevo sin reinterpretar datos existentes.
 | PLANNER_VISIBILITY | PASS | Draft aparece en Planner y CTA apunta a la primera semana. |
 | EMPLOYEE_FUTURE_EXCLUDED | PASS | Cero ScheduleVersion/assignment futuro en SELF. |
 | IDEMPOTENCY | PASS | Reimport no duplica filas ni versiones. |
-| REAL_FILE_REGRESSION | PASS_WITH_GAPS | PASS con PDF/XLSX reales o gap explícito si no están disponibles. |
+| REAL_FILE_REGRESSION | PASS | P5.5-R01 ejecuta el PDF y XLSX reales del caso; ambos pasan con fecha operativa `2026-09-06` y sin escritura en producción. |
 
 `PHASE_P5.5_GATE` no puede ser PASS si falla la frontera temporal, el consentimiento, la autorización,
-la idempotencia o la separación published/draft. P6 no comienza hasta PASS o PASS_WITH_GAPS no bloqueante.
+la idempotencia o la separación published/draft. P5.5-R01 cierra G-20 con los ficheros reales; el Gate
+es `PASS`. P6 no comienza en esta remediación.
 
 ## FUTURE PHASE P5.6 — Shift Swap Workflow
 

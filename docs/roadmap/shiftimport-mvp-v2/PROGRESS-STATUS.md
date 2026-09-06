@@ -103,8 +103,8 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - P5.5 — Future Import to Draft Scheduling: `PASS_WITH_GAPS`; la frontera `date < today` persiste
   histórico y `date >= today` enruta a Scheduling en borrador para OWNER/ADMIN/PLANNER con consentimiento
   explícito. El calendario conserva únicamente realidad publicada y EMPLOYEE no crea futuro. Suite completa,
-  lint, build y E2E compacto pasan; queda G-20 abierto porque los PDF/XLSX reales del caso no están en el
-  workspace, sin bloquear P6.
+  lint, build y E2E compacto pasan. P5.5-R01 valida los ficheros PDF/XLSX reales del caso, cierra G-20
+  y mantiene P6 sin iniciar.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
