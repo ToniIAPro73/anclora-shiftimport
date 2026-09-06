@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Shift } from '../../lib/types';
-import { getDaysInMonth, getFirstWeekdayOfMonth, orderWeekdayLabels, toISODate } from '../../lib/week';
+import { getDaysInMonth, getFirstWeekdayOfMonth, orderWeekdayLabels } from '../../lib/week';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getShiftTypeColor } from '../../lib/shift-types';
 import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
+import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
 import { Plus } from 'lucide-react';
 
 interface MonthGridProps {
@@ -46,7 +47,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstWeekday = getFirstWeekdayOfMonth(year, month, weekStartsOn);
-  const todayISO = toISODate(new Date());
+  const todayISO = getOperationalDate();
 
   const cells: Array<number | null> = [];
   for (let index = 0; index < firstWeekday; index += 1) cells.push(null);
@@ -142,6 +143,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
             const isToday = iso === todayISO;
             const isWeekend = index % 7 >= 5;
             const hasVacationShift = visibleShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
+            const isHistorical = isHistoricalDate(iso, todayISO);
 
             return (
               <div
@@ -177,8 +179,12 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
                       }
                     }}
                     disabled={hasVacationShift}
-                    aria-label={hasVacationShift ? t('calendar.addShiftBlockedAria', { date: iso }) : t('calendar.addShiftAria', { date: iso })}
-                    title={hasVacationShift ? t('calendar.addShiftBlockedTitle') : t('calendar.addShiftTitle')}
+                    aria-label={hasVacationShift
+                      ? t('calendar.addShiftBlockedAria', { date: iso })
+                      : isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso })}
+                    title={hasVacationShift
+                      ? t('calendar.addShiftBlockedTitle')
+                      : isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
                   >
                     <Plus size={14} strokeWidth={2.2} />
                   </button>

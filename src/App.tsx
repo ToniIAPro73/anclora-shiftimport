@@ -54,7 +54,7 @@ import { FormatProfilesModal } from './components/shift-dashboard/FormatProfiles
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal, ImportOutcomeReport } from './components/shift-dashboard/ImportResultModal';
 import { ModalShell } from './components/ui/ModalShell';
-import { ApprovalInbox } from './components/shift-dashboard/ApprovalInbox';
+import { ApprovalInboxModal } from './components/shift-dashboard/ApprovalInboxModal';
 import { PortalShell } from './components/employee-portal/PortalShell';
 import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
 import { AuthScreen } from './components/AuthScreen';
@@ -78,6 +78,7 @@ import { loadFormatProfiles } from './lib/format-profiles';
 import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
+import { getOperationalDate, getPreviousOperationalDate, isHistoricalDate } from './lib/operational-date';
 
 /** localStorage flag: local→org format-profile migration already resolved
  * (Format Memory v1). Separate from MIGRATION_DONE_KEY — shift data and
@@ -203,6 +204,7 @@ function App() {
   const [isAreasOpen, setIsAreasOpen] = useState(false);
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
+  const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
@@ -661,6 +663,10 @@ function App() {
     if (isImporting || isSavingShift) {
       return;
     }
+    if (!isHistoricalDate(shift.date)) {
+      setAppFeedback({ kind: 'alert', message: t('shiftModal.historicalOnly') });
+      return;
+    }
     const conflict = findShiftConflict(shifts, shift, locale);
     if (conflict) {
       setAppFeedback({ kind: 'alert', message: conflict });
@@ -716,9 +722,13 @@ function App() {
     if (isImporting) {
       return;
     }
-    setEditingShiftId(null);
-    setDraftShiftDate(date);
-    setIsModalOpen(true);
+    if (isHistoricalDate(date)) {
+      setEditingShiftId(null);
+      setDraftShiftDate(date);
+      setIsModalOpen(true);
+      return;
+    }
+    navigate('/app/schedule', `date=${encodeURIComponent(date)}`);
   };
 
   const requestImportDecision = (existing: Shift, incoming: Shift) =>
@@ -1066,7 +1076,7 @@ function App() {
       ? [...shifts]
       : await loadRemoteShifts(targetEmployeeId ?? '').catch(() => [] as Shift[]);
     const normalizedIncoming = newShifts.map(normalizeShift);
-    const selfImportCutoff = new Date().toISOString().slice(0, 10);
+    const selfImportCutoff = getOperationalDate();
     const selfFutureCount = session.role === 'EMPLOYEE'
       ? normalizedIncoming.filter((shift) => shift.date > selfImportCutoff).length
       : 0;
@@ -1157,7 +1167,7 @@ function App() {
       return false;
     }
 
-    const todayIso = new Date().toISOString().slice(0, 10);
+    const todayIso = getOperationalDate();
     const futureUpserts = session.role === 'EMPLOYEE'
       ? normalizedIncoming.filter((shift) => shift.date > todayIso)
       : upserts.filter((shift) => shift.date > todayIso);
@@ -1531,6 +1541,28 @@ function App() {
   const plannerNeedsArea = session?.role === 'PLANNER'
     && !activeMembership?.scopedAreaId
     && activeAreas.length > 0;
+  const activeOrganizationName = session?.memberships.find((membership) => membership.organizationId === session.organizationId)?.organizationName ?? '';
+  const viewedEmployee = session?.role === 'EMPLOYEE'
+    ? selfEmployee
+    : employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
+  const contextSummary = session && !needsOrgChoice && !accountIncomplete ? (
+    <>
+      <span className="app-shell__context-summary-item" title={activeOrganizationName}>
+        <small>{t('shell.organization')}</small><strong>{activeOrganizationName}</strong>
+      </span>
+      <span className="app-shell__context-summary-item app-shell__context-summary-item--role">
+        <small>{t('shell.role')}</small><strong>{session.role ? t(`role.${session.role.toLowerCase()}`) : ''}</strong>
+      </span>
+      {viewedEmployee && (
+        <span className="app-shell__context-summary-item app-shell__context-summary-item--employee" title={viewedEmployee.name}>
+          <small>{t('shell.employeeContext')}</small><strong>{viewedEmployee.name}</strong>
+        </span>
+      )}
+    </>
+  ) : null;
+  const plannerInitialDate = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('date') ?? undefined
+    : undefined;
 
   const contextContent = session && !needsOrgChoice && !accountIncomplete ? (
     <div className="team-bar" data-testid="app-shell-context">
@@ -1622,10 +1654,12 @@ function App() {
           themeControl={<ThemeToggle />}
           languageControl={<LanguageToggle />}
           contextContent={contextContent}
+          contextSummary={contextSummary}
           onImport={() => { if (!isImporting) setIsImportOpen(true); }}
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
+          onApprovals={isAdminRole(session.role) ? () => setIsApprovalsOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -1655,21 +1689,33 @@ function App() {
           themeControl={<ThemeToggle />}
           languageControl={<LanguageToggle />}
           contextContent={contextContent}
+          contextSummary={contextSummary}
           onImport={() => { if (!isImporting) setIsImportOpen(true); }}
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
+          onApprovals={isAdminRole(session.role) ? () => setIsApprovalsOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
           onSettings={isAdminRole(session.role) ? () => setIsSettingsOpen(true) : undefined}
           onLogout={() => void handleLogout()}
         >
-          <WeeklyPlanner
-            areaId={plannerAreaId}
-            canEdit={session.role === 'OWNER' || session.role === 'ADMIN' || session.role === 'PLANNER'}
-            onBack={() => navigate('/app')}
-          />
+          <ModalShell
+            isOpen
+            onClose={() => navigate('/app')}
+            title={t('planner.title')}
+            closeAriaLabel={t('planner.close')}
+            workspace
+            maxWidth="1440px"
+          >
+            <WeeklyPlanner
+              areaId={plannerAreaId}
+              canEdit={session.role === 'OWNER' || session.role === 'ADMIN' || session.role === 'PLANNER'}
+              embedded
+              initialDate={plannerInitialDate}
+            />
+          </ModalShell>
         </AppShell>
         <CookieConsent />
       </>
@@ -1699,6 +1745,7 @@ function App() {
       themeControl={<ThemeToggle />}
       languageControl={<LanguageToggle />}
       contextContent={contextContent}
+      contextSummary={contextSummary}
       onSignIn={!session ? () => { if (!isImporting) setIsAuthOpen(true); } : undefined}
       onImport={() => { if (!isImporting && authResolved) setIsImportOpen(true); }}
       onAddShift={() => {
@@ -1709,6 +1756,7 @@ function App() {
       }}
       onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
       onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
+      onApprovals={session && isAdminRole(session.role) ? () => setIsApprovalsOpen(true) : undefined}
       onMembers={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsMembersOpen(true); } : undefined}
       onAreas={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsAreasOpen(true); } : undefined}
       onFormatProfiles={session ? () => { if (!isImporting) setIsFormatProfilesOpen(true); } : undefined}
@@ -1719,6 +1767,7 @@ function App() {
         <CalendarToolbar
           year={currentYear}
           month={currentMonth}
+          shiftCount={currentMonthShifts.length}
           onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
         />
         {appFeedback && (
@@ -1764,20 +1813,12 @@ function App() {
 
         {!accountIncomplete && !needsOrgChoice && (
           <>
-        {session && isAdminRole(session.role) && <ApprovalInbox />}
-
         <StatsBar
           currentMonthShifts={currentMonthShifts}
           daysInMonth={daysInMonth}
           currentYearShifts={currentYearShifts}
           daysInYear={daysInYear}
         />
-
-        {session && currentMonthShifts.length === 0 && (session.role === 'EMPLOYEE' || selectedEmployeeId) && (
-          <p role="status" style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--glass-border)', background: 'var(--panel-muted-bg)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-            {t('calendar.noShiftsForEmployee', { month: tl('calendar.months')[currentMonth], year: currentYear })}
-          </p>
-        )}
 
         <section className="calendar-stage">
           <MonthGrid
@@ -1806,6 +1847,7 @@ function App() {
         isOpen={isModalOpen && !isImporting}
         editingShift={editingShift}
         defaultDate={draftShiftDate}
+        maxDate={getPreviousOperationalDate()}
         isSaving={isSavingShift}
         onClose={() => {
           if (isImporting || isSavingShift) {
@@ -1816,6 +1858,11 @@ function App() {
         }}
         onSave={handleSaveShift}
         onDelete={handleDeleteShift}
+      />
+
+      <ApprovalInboxModal
+        isOpen={isApprovalsOpen && !isImporting}
+        onClose={() => setIsApprovalsOpen(false)}
       />
 
       <SettingsModal

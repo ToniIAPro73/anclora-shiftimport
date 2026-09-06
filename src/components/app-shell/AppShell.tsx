@@ -26,7 +26,7 @@ const SIDEBAR_STATE_KEY = 'anclora_shiftimport_sidebar_v1';
 
 export type ShellSection = 'calendar' | 'planner';
 
-export function CalendarToolbar({ year, month, onNavigate }: { year: number; month: number; onNavigate: (delta: number) => void }) {
+export function CalendarToolbar({ year, month, shiftCount, onNavigate }: { year: number; month: number; shiftCount?: number; onNavigate: (delta: number) => void }) {
   const { t, tl } = useI18n();
   const monthNames = tl('calendar.months');
   return (
@@ -35,6 +35,11 @@ export function CalendarToolbar({ year, month, onNavigate }: { year: number; mon
         <p className="calendar-toolbar__eyebrow">{t('shell.calendar')}</p>
         <h1 className="calendar-toolbar__title">{monthNames[month]} {year}</h1>
       </div>
+      {typeof shiftCount === 'number' && (
+        <span className="calendar-toolbar__count" role="status" aria-live="polite">
+          {t('calendar.shiftCount', { count: shiftCount })}
+        </span>
+      )}
       <div className="month-navigator" aria-label={t('calendar.monthNavigation')}>
         <button type="button" className="month-nav-button" onClick={() => onNavigate(-1)} aria-label={t('header.previousMonth')}>
           <ChevronDown size={18} aria-hidden="true" style={{ transform: 'rotate(90deg)' }} />
@@ -57,12 +62,14 @@ export interface AppShellProps {
   themeControl: ReactNode;
   languageControl: ReactNode;
   contextContent?: ReactNode;
+  contextSummary?: ReactNode;
   hasContext?: boolean;
   onSignIn?: () => void;
   onImport?: () => void;
   onAddShift?: () => void;
   onHistory?: () => void;
   onPlanner?: () => void;
+  onApprovals?: () => void;
   onMembers?: () => void;
   onAreas?: () => void;
   onFormatProfiles?: () => void;
@@ -187,12 +194,14 @@ export function AppShell({
   themeControl,
   languageControl,
   contextContent,
+  contextSummary,
   hasContext = Boolean(contextContent),
   onSignIn,
   onImport,
   onAddShift,
   onHistory,
   onPlanner,
+  onApprovals,
   onMembers,
   onAreas,
   onFormatProfiles,
@@ -208,6 +217,8 @@ export function AppShell({
   const [contextOpen, setContextOpen] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const contextRef = useRef<HTMLDivElement>(null);
+  const contextTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, expanded ? 'expanded' : 'collapsed');
@@ -244,6 +255,25 @@ export function AppShell({
     };
   }, [drawerOpen]);
 
+  useEffect(() => {
+    if (!contextOpen) return undefined;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!contextRef.current?.contains(event.target as Node)) setContextOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setContextOpen(false);
+        contextTriggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [contextOpen]);
+
   const closeDrawer = () => setDrawerOpen(false);
   const runAction = (action?: () => void) => {
     closeDrawer();
@@ -277,10 +307,11 @@ export function AppShell({
               <SidebarItem label={t('shell.calendar')} icon={<CalendarDays size={18} />} active={activeSection === 'calendar'} collapsed={!expanded} onClick={() => runAction()} testId="sidebar-calendar" />
             </SidebarGroup>
             <SidebarGroup label={t('shell.operation')}>
-              {onImport && <SidebarItem label={t('header.import')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
-              {onAddShift && <SidebarItem label={t('header.add')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
-              {onHistory && <SidebarItem label={t('header.importHistory')} icon={<History size={18} />} collapsed={!expanded} onClick={() => runAction(onHistory)} testId="sidebar-history" />}
+              {onImport && <SidebarItem label={t('shell.import')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
+              {onAddShift && <SidebarItem label={t('shell.addShift')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
+              {onHistory && <SidebarItem label={t('shell.history')} icon={<History size={18} />} collapsed={!expanded} onClick={() => runAction(onHistory)} testId="sidebar-history" />}
               {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!expanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
+              {onApprovals && <SidebarItem label={t('approvalInbox.navLabel')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onApprovals)} testId="sidebar-approvals" />}
             </SidebarGroup>
             {canManage && (
               <SidebarGroup label={t('shell.management')}>
@@ -291,26 +322,6 @@ export function AppShell({
               </SidebarGroup>
             )}
           </nav>
-
-          {hasContext && contextContent && (
-            <div className="app-shell__context">
-              <div className="app-shell__context-heading">
-                <span>{t('shell.context')}</span>
-                <button
-                  type="button"
-                  className="app-shell__context-toggle"
-                  aria-label={t('shell.openContext')}
-                  title={t('shell.openContext')}
-                  onClick={() => setContextOpen((value) => !value)}
-                  aria-expanded={contextOpen}
-                >
-                  <UsersRound size={16} aria-hidden="true" />
-                </button>
-              </div>
-              {expanded && <div className="app-shell__context-content">{contextContent}</div>}
-              {!expanded && contextOpen && <div className="app-shell__context-popover">{contextContent}</div>}
-            </div>
-          )}
 
           <button
             type="button"
@@ -340,6 +351,31 @@ export function AppShell({
           >
             <Menu size={20} aria-hidden="true" />
           </button>
+          {hasContext && (contextSummary || contextContent) && (
+            <div className="app-shell__context-topbar" ref={contextRef}>
+              <div className="app-shell__context-summary">{contextSummary}</div>
+              {contextContent && (
+                <button
+                  ref={contextTriggerRef}
+                  type="button"
+                  className="app-shell__context-trigger"
+                  aria-label={t('shell.openContext')}
+                  aria-expanded={contextOpen}
+                  aria-haspopup="dialog"
+                  onClick={() => setContextOpen((value) => !value)}
+                  data-testid="app-shell-context-menu"
+                >
+                  <UsersRound size={16} aria-hidden="true" />
+                  <span className="sr-only">{t('shell.openContext')}</span>
+                </button>
+              )}
+              {contextOpen && contextContent && (
+                <div className="app-shell__context-popover" role="dialog" aria-label={t('shell.openContext')}>
+                  {contextContent}
+                </div>
+              )}
+            </div>
+          )}
           <div className="app-shell__topbar-spacer" />
           <div className="app-shell__topbar-controls">
             {themeControl}
