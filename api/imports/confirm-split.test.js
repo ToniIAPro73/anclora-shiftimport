@@ -12,6 +12,7 @@ function request(date) {
   return {
     fileName: 'm14.csv', sourceFormat: 'CSV', fileFingerprint: 'a'.repeat(64),
     employeeId: EMPLOYEE, periodYear: 2026, periodMonth: 9,
+    futureConsent: 'draft',
     shifts: [{ ...base, date }],
   };
 }
@@ -20,10 +21,24 @@ describe('R3-M14 future import contract', () => {
   it('classifies historical, future and mixed rows against server time', () => {
     expect(classifyImportDates([{ ...base, date: '2026-09-04' }], new Date('2026-09-04T23:00:00Z')).classification).toBe('HISTORICAL');
     expect(classifyImportDates([{ ...base, date: '2026-09-05' }], new Date('2026-09-04T23:00:00Z')).classification).toBe('FUTURE');
+    expect(classifyImportDates([{ ...base, date: '2026-09-04' }], new Date('2026-09-04T10:00:00Z')).classification).toBe('FUTURE');
     expect(classifyImportDates([
       { ...base, date: '2026-09-04' },
       { ...base, date: '2026-09-05' },
     ], new Date('2026-09-04T23:00:00Z')).classification).toBe('MIXED');
+  });
+
+  it('rejects future rows without explicit draft consent before opening a transaction', async () => {
+    const transaction = vi.fn();
+    const sql = () => Promise.resolve([]);
+    sql.transaction = transaction;
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', scopedAreaId: AREA, employeeId: null, plan: 'team' };
+
+    await expect(confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), futureConsent: undefined })).rejects.toMatchObject({
+      status: 409,
+      code: 'FUTURE_IMPORT_CONSENT_REQUIRED',
+    });
+    expect(transaction).not.toHaveBeenCalled();
   });
 
   it('rejects future imports before opening a transaction without planning capability', async () => {

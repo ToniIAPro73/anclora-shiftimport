@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { Shift } from './lib/types';
-import { getMonthDaysISO, getDaysInMonth } from './lib/week';
+import { getMonthDaysISO, getDaysInMonth, getPlannerWeekStartPreference } from './lib/week';
 import { clearAnonymousShiftDraft, loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
 import { findShiftConflict } from './lib/shift-conflicts';
 
@@ -43,7 +43,7 @@ import { setVlmFallbackSessionActive } from './ingestion/vlm-client';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
-import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
+import { FutureImportDecision, ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
@@ -54,7 +54,7 @@ import { AreasModal } from './components/shift-dashboard/AreasModal';
 import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryModal';
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
-import { ImportResultModal, ImportOutcomeReport } from './components/shift-dashboard/ImportResultModal';
+import { ImportResultModal, ImportOutcomeReport, TemporalImportReport } from './components/shift-dashboard/ImportResultModal';
 import { ModalShell } from './components/ui/ModalShell';
 import { ApprovalInboxModal } from './components/shift-dashboard/ApprovalInboxModal';
 import { PortalShell } from './components/employee-portal/PortalShell';
@@ -132,6 +132,7 @@ interface PendingImportRetry {
   fileName?: string;
   fileFingerprint?: string;
   selfImportSummary?: SelfImportSummary;
+  futureImportDecision?: FutureImportDecision;
 }
 
 interface ImportResolutionState {
@@ -275,7 +276,7 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [appOperation, setAppOperation] = useState<'idle' | 'importing' | 'saving-shift'>('idle');
-  const [importResult, setImportResult] = useState<(ReconciliationReport | ImportOutcomeReport) | null>(null);
+  const [importResult, setImportResult] = useState<(ReconciliationReport | ImportOutcomeReport | TemporalImportReport) | null>(null);
   const [importResolutionState, setImportResolutionState] = useState<ImportResolutionState | null>(null);
   const [appFeedback, setAppFeedback] = useState<AppFeedback | null>(null);
   const [pendingImportRetry, setPendingImportRetry] = useState<PendingImportRetry | null>(null);
@@ -1046,6 +1047,7 @@ function App() {
     fileName?: string,
     fileFingerprint?: string,
     selfImportSummary?: SelfImportSummary,
+    futureImportDecision: FutureImportDecision = 'historical-only',
   ): Promise<boolean> => {
     // Defense in depth: the modal disables guest confirmation, and the
     // controller also fails closed so a stale event cannot write locally.
@@ -1171,12 +1173,12 @@ function App() {
       : await loadRemoteShifts(targetEmployeeId ?? '').catch(() => [] as Shift[]);
     const normalizedIncoming = newShifts.map(normalizeShift);
     const selfImportCutoff = getOperationalDate();
-    const selfFutureCount = session.role === 'EMPLOYEE'
-      ? normalizedIncoming.filter((shift) => shift.date > selfImportCutoff).length
-      : 0;
-    const eligibleIncoming = session.role === 'EMPLOYEE'
-      ? normalizedIncoming.filter((shift) => shift.date <= selfImportCutoff)
-      : normalizedIncoming;
+    const schedulingIncoming = normalizedIncoming.filter((shift) => shift.date >= selfImportCutoff);
+    const historicalIncoming = normalizedIncoming.filter((shift) => shift.date < selfImportCutoff);
+    const eligibleIncoming = historicalIncoming;
+    const excludedSchedulingCount = schedulingIncoming.length > 0 && (
+      session.role === 'EMPLOYEE' || futureImportDecision === 'historical-only'
+    ) ? schedulingIncoming.length : 0;
     let working = [...snapshot];
     const pendingImportedByDate = new Map<string, Shift[]>();
     const upserts: Shift[] = [];
@@ -1232,15 +1234,16 @@ function App() {
     // and do not create another Import record or send an empty write request.
     // This also protects the flow when a second import is started after the
     // first one has already finished.
-    if (upserts.length === 0 && identicalCount > 0) {
-      if (session.role === 'EMPLOYEE' && selfFutureCount > 0) {
+    if (upserts.length === 0 && (identicalCount > 0 || excludedSchedulingCount > 0)) {
+      if (excludedSchedulingCount > 0) {
+        const reason = session.role === 'EMPLOYEE' ? 'SELF_FUTURE_ROWS_EXCLUDED' : 'FUTURE_ROWS_NOT_CONFIRMED';
         const outcome: ImportOutcomeReport = {
           status: 'partial',
-          reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+          reason,
           attemptedCount: normalizedIncoming.length,
           createdShiftCount: 0,
           existingShiftCount: identicalCount,
-          outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: selfFutureCount },
+          outcomeDetail: { ...(selfImportDetail ?? {}), futureRows: excludedSchedulingCount, futureOwnRows: session.role === 'EMPLOYEE' ? excludedSchedulingCount : undefined },
         };
         setImportResult(outcome);
         await createRemoteImport({
@@ -1253,7 +1256,7 @@ function App() {
           shiftCount: normalizedIncoming.length,
           createdShiftCount: 0,
           existingShiftCount: identicalCount,
-          outcome: { status: 'partial', reason: 'SELF_FUTURE_ROWS_EXCLUDED', detail: outcome.outcomeDetail ?? undefined },
+          outcome: { status: 'partial', reason, detail: outcome.outcomeDetail ?? undefined },
         }).catch((error) => console.error('Failed to persist self-import future outcome', error));
         return false;
       }
@@ -1261,12 +1264,11 @@ function App() {
       return false;
     }
 
-    const todayIso = getOperationalDate();
-    const futureUpserts = session.role === 'EMPLOYEE'
-      ? normalizedIncoming.filter((shift) => shift.date > todayIso)
-      : upserts.filter((shift) => shift.date > todayIso);
-    const historicalUpserts = upserts.filter((shift) => shift.date <= todayIso);
-    const requiresPlanningImport = session.role !== 'EMPLOYEE' && futureUpserts.length > 0;
+    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision === 'draft'
+      ? schedulingIncoming
+      : [];
+    const historicalUpserts = upserts;
+    const requiresPlanningImport = futureUpserts.length > 0;
 
     if (session.role === 'EMPLOYEE' && futureUpserts.length > 0 && upserts.length === 0) {
       const outcome: ImportOutcomeReport = {
@@ -1275,7 +1277,7 @@ function App() {
         attemptedCount: normalizedIncoming.length,
         createdShiftCount: 0,
         existingShiftCount: 0,
-        outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: futureUpserts.length },
+        outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: futureUpserts.length, futureRows: futureUpserts.length },
       };
       setImportResult(outcome);
       await createRemoteImport({
@@ -1314,11 +1316,11 @@ function App() {
           shiftCount: normalizedIncoming.length,
           createdShiftCount: upserts.length,
           existingShiftCount: identicalCount,
-          outcome: session.role === 'EMPLOYEE' && selfFutureCount > 0
+          outcome: excludedSchedulingCount > 0
             ? {
               status: 'partial',
-              reason: 'SELF_FUTURE_ROWS_EXCLUDED',
-              detail: { ...(selfImportDetail ?? {}), futureOwnRows: selfFutureCount },
+              reason: session.role === 'EMPLOYEE' ? 'SELF_FUTURE_ROWS_EXCLUDED' : 'FUTURE_ROWS_NOT_CONFIRMED',
+              detail: { ...(selfImportDetail ?? {}), futureRows: excludedSchedulingCount, futureOwnRows: session.role === 'EMPLOYEE' ? excludedSchedulingCount : undefined },
             }
             : undefined,
         });
@@ -1356,7 +1358,7 @@ function App() {
             sourceFormat: newShifts[0]?.sourceFormat ?? '',
             fileFingerprint: fileFingerprint ?? '',
             employeeId: targetEmployeeId,
-            shifts: upserts.map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
+            shifts: [...historicalUpserts, ...futureUpserts].map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
             deleteIds,
             periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
             periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
@@ -1364,6 +1366,8 @@ function App() {
             importMode: 'individual',
             periodKind: targetPeriod.kind,
             periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
+            futureConsent: 'draft',
+            weekStart: getPlannerWeekStartPreference(),
           });
           const persisted = historicalUpserts.length > 0
             ? await loadRemoteShifts(targetEmployeeId)
@@ -1376,17 +1380,27 @@ function App() {
             setImportResult(reconciliation);
             return false;
           }
-          if (reconciliation) setImportResult(reconciliation);
+          setImportResult({
+            status: 'COMPLETED',
+            historical: {
+              submittedCount: historicalUpserts.length,
+              persistedCount: reconciliation?.matchedCount ?? 0,
+              existingCount: identicalCount,
+            },
+            future: {
+              submittedCount: futureUpserts.length,
+              createdAssignmentCount: futureResult.future.createdAssignmentCount,
+              existingAssignmentCount: futureResult.future.existingAssignmentCount,
+              draftCount: futureResult.future.draftCount,
+            },
+            firstDraftPeriodStart: futureResult.future.drafts[0]?.periodStart,
+          });
           if (targetEmployeeId !== selectedEmployeeId) {
             setSelectedEmployeeId(targetEmployeeId);
           }
           const localHistoricalWorking = working.filter(
             (shift) => !futureUpserts.some((incoming) => incoming.id === shift.id),
           );
-          setAppFeedback({ kind: 'status', message: t('importModal.futureImportConfirmed', {
-            assignments: futureResult.future.submittedCount,
-            drafts: futureResult.future.draftCount,
-          }) });
           applySuccessTail(localHistoricalWorking);
           return true;
         }
@@ -1413,14 +1427,14 @@ function App() {
           return false;
         }
         if (upserts.length > 0) {
-          if (session.role === 'EMPLOYEE' && selfFutureCount > 0) {
+          if (excludedSchedulingCount > 0) {
             setImportResult({
               status: 'partial',
-              reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+              reason: session.role === 'EMPLOYEE' ? 'SELF_FUTURE_ROWS_EXCLUDED' : 'FUTURE_ROWS_NOT_CONFIRMED',
               attemptedCount: normalizedIncoming.length,
               createdShiftCount: reconciliation.matchedCount,
               existingShiftCount: identicalCount,
-              outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: selfFutureCount },
+              outcomeDetail: { ...(selfImportDetail ?? {}), futureRows: excludedSchedulingCount, futureOwnRows: session.role === 'EMPLOYEE' ? excludedSchedulingCount : undefined },
             });
           } else {
             setImportResult(reconciliation);
@@ -1712,6 +1726,14 @@ function App() {
   const plannerInitialDate = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('date') ?? undefined
     : undefined;
+  const importPlanningTarget = importResult?.status === 'COMPLETED'
+    ? importResult.firstDraftPeriodStart
+    : undefined;
+  const openImportPlanning = () => {
+    if (!importPlanningTarget) return;
+    setImportResult(null);
+    navigate('/app/schedule', `date=${encodeURIComponent(importPlanningTarget)}`);
+  };
 
   const contextContent = session && !needsOrgChoice && !accountIncomplete ? (
     <div className="team-bar" data-testid="app-shell-context">
@@ -1938,6 +1960,7 @@ function App() {
                     setPendingImportRetry(null);
                   }}
                   report={importResult}
+                  onViewPlanning={importPlanningTarget ? openImportPlanning : undefined}
                   onRetry={pendingImportRetry ? () => {
                     const retry = pendingImportRetry;
                     setImportResult(null);
@@ -2265,6 +2288,7 @@ function App() {
             setMembersRecoveryResult(null);
           }}
           report={importResult}
+          onViewPlanning={importPlanningTarget ? openImportPlanning : undefined}
           onCompleteEmployee={(employeeId) => {
             if (importResult && 'status' in importResult && importResult.status !== 'PASS' && importResult.status !== 'FAIL') {
               setMembersRecoveryResult(importResult as ImportOutcomeReport);

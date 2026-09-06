@@ -214,6 +214,7 @@ test('P0-M07 compact continuous flow: signup → audit', async ({ browser, page 
       data: {
         fileName: 'p0-flow-future.csv', sourceFormat: 'CSV', fileFingerprint: futureFingerprint,
         employeeId, areaId, ...futureFields, periodKind: 'single', periodLabel: 'P0 future',
+        futureConsent: 'draft',
         shifts: [{ employeeId, date: futureDate, startTime: '10:00', endTime: '18:00', location: 'P0 future', origin: 'IMP' }],
       },
     }), 201);

@@ -31,6 +31,7 @@ import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPa
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { RemoteArea } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
+import { getOperationalDate } from '../../lib/operational-date';
 
 export interface SelfImportSummary {
   totalRows: number;
@@ -40,6 +41,8 @@ export interface SelfImportSummary {
   futureOwnRows: number;
   identityAmbiguous?: boolean;
 }
+
+export type FutureImportDecision = 'draft' | 'historical-only';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -53,6 +56,7 @@ interface ImportModalProps {
     fileName?: string,
     fileFingerprint?: string,
     selfImportSummary?: SelfImportSummary,
+    futureImportDecision?: FutureImportDecision,
   ) => Promise<boolean>;
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
@@ -332,6 +336,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [selfNotFound, setSelfNotFound] = useState(false);
   const [selfAmbiguous, setSelfAmbiguous] = useState(false);
   const [selfImportSummary, setSelfImportSummary] = useState<SelfImportSummary | null>(null);
+  const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialFileHandledRef = useRef<File | null>(null);
   const previewTrackedRef = useRef(false);
@@ -362,11 +367,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     && importDiff.new.length === 0
     && importDiff.changed.length === 0;
   const temporalSummary = useMemo(() => {
-    const cutoff = new Date().toISOString().slice(0, 10);
+    const cutoff = getOperationalDate();
     const ready = parsedShifts.filter(hasImportableShiftData);
     return {
-      historical: ready.filter((shift) => shift.date <= cutoff).length,
-      future: ready.filter((shift) => shift.date > cutoff).length,
+      historical: ready.filter((shift) => shift.date < cutoff).length,
+      future: ready.filter((shift) => shift.date >= cutoff).length,
     };
   }, [parsedShifts]);
 
@@ -473,6 +478,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setAuthError(false);
     setSelfNotFound(false);
     setSelfAmbiguous(false);
+    setFutureImportDecision('historical-only');
     setScanTime(null);
     setAnalysis(null);
     setQualityOverride(null);
@@ -854,6 +860,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         file?.name,
         file ? await fingerprintFile(file) : undefined,
         selfImportSummary ?? undefined,
+        futureImportDecision,
       );
       if (persisted) {
         onClose();
@@ -1427,6 +1434,47 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 {temporalSummary.historical > 0 && <span data-testid="import-historical-count">{t('importModal.temporalHistorical', { count: temporalSummary.historical })}</span>}
                 {temporalSummary.future > 0 && <span data-testid="import-future-count">{t('importModal.temporalFutureDraft', { count: temporalSummary.future })}</span>}
               </div>
+            )}
+
+            {temporalSummary.future > 0 && (
+              identityLocked ? (
+                <div
+                  role="status"
+                  data-testid="import-self-future-notice"
+                  style={{ marginTop: '12px', padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', color: 'var(--text-muted)', lineHeight: 1.45 }}
+                >
+                  {t('importModal.selfFutureDraftExcluded', { count: temporalSummary.future })}
+                </div>
+              ) : (
+                <fieldset
+                  data-testid="import-future-consent"
+                  style={{ marginTop: '12px', padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', display: 'grid', gap: '10px' }}
+                >
+                  <legend style={{ padding: '0 6px', fontWeight: 700 }}>{t('importModal.futureConsentTitle')}</legend>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('importModal.futureConsentDescription')}</p>
+                  <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <input
+                      type="radio"
+                      name="future-import-decision"
+                      value="historical-only"
+                      checked={futureImportDecision === 'historical-only'}
+                      onChange={() => setFutureImportDecision('historical-only')}
+                    />
+                    <span>{t('importModal.futureConsentHistoricalOnly')}</span>
+                  </label>
+                  <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <input
+                      type="radio"
+                      name="future-import-decision"
+                      value="draft"
+                      checked={futureImportDecision === 'draft'}
+                      onChange={() => setFutureImportDecision('draft')}
+                    />
+                    <span>{t('importModal.futureConsentDraft')}</span>
+                  </label>
+                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('importModal.futureConsentCancelHint')}</p>
+                </fieldset>
+              )
             )}
 
             {importAlreadyExists && (

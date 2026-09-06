@@ -54,6 +54,7 @@ async function confirm(request: APIRequestContext, shifts: unknown[], fingerprin
       periodMonth: 9,
       periodKind: 'multi',
       periodLabel: 'M14 E2E',
+      futureConsent: 'draft',
       areaId: fixture.areaA,
       ...extra,
     },
@@ -63,6 +64,10 @@ async function confirm(request: APIRequestContext, shifts: unknown[], fingerprin
 test.describe('R3-M14 future import integration', () => {
   test('A/B/D/F/G/L: historical compatibility, future/mixed atomicity, multiweek drafts, idempotency and provenance', async ({ page }) => {
     await login(page.request, fixture.emails.planner, fixture.orgA);
+
+    const missingConsent = await confirm(page.request, [shift(futureDate(19))], '6'.repeat(64), fixture.empA1, { futureConsent: undefined });
+    expect(missingConsent.status()).toBe(409);
+    expect((await missingConsent.json()).code).toBe('FUTURE_IMPORT_CONSENT_REQUIRED');
 
     const futureFingerprint = 'a'.repeat(64);
     const futureResponse = await confirm(page.request, [shift(futureDate(20))], futureFingerprint);
@@ -86,12 +91,12 @@ test.describe('R3-M14 future import integration', () => {
     ]));
 
     const mixedFingerprint = 'b'.repeat(64);
-    const mixedResponse = await confirm(page.request, [shift(pastDate()), shift(futureDate(21))], mixedFingerprint);
+    const mixedResponse = await confirm(page.request, [shift(pastDate()), shift(today), shift(futureDate(21))], mixedFingerprint);
     expect(mixedResponse.status()).toBe(201);
     const mixedBody = await mixedResponse.json();
     expect(mixedBody.classification).toBe('MIXED');
     expect(mixedBody.historical.persistedCount).toBe(1);
-    expect(mixedBody.future.createdAssignmentCount).toBe(1);
+    expect(mixedBody.future.createdAssignmentCount).toBe(2);
 
     const multiweekShifts = [shift(futureDate(23)), shift(futureDate(24))];
     const multiweekFingerprint = 'c'.repeat(64);
@@ -113,6 +118,7 @@ test.describe('R3-M14 future import integration', () => {
       data: {
         fileName: 'm14-historical.csv', sourceFormat: 'CSV', fileFingerprint: 'd'.repeat(64),
         employeeId: fixture.empA1, periodYear: 2026, periodMonth: 9, areaId: fixture.areaA,
+        shiftCount: 1, createdShiftCount: 1, existingShiftCount: 0,
       },
     });
     expect(historicalResponse.status()).toBe(201);

@@ -14,6 +14,18 @@ export const getWeekStartMonday = (date: Date): Date => {
   return monday;
 };
 
+export const PLANNER_WEEK_START_PREFERENCE_KEY = 'anclora_shiftimport_planner_week_start_v1';
+export type PlannerWeekStart = 'monday' | 'sunday';
+
+export const getPlannerWeekStartPreference = (): PlannerWeekStart => {
+  if (typeof window === 'undefined') return 'monday';
+  try {
+    return window.localStorage.getItem(PLANNER_WEEK_START_PREFERENCE_KEY) === 'sunday' ? 'sunday' : 'monday';
+  } catch {
+    return 'monday';
+  }
+};
+
 /**
  * Formats a Date object to ISO YYYY-MM-DD.
  */

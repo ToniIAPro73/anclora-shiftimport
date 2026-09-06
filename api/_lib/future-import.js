@@ -6,6 +6,7 @@ import {
 } from './data.js';
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
+import { getOperationalDate } from './operational-date.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -17,16 +18,12 @@ function requestError(status, message, code) {
   return error;
 }
 
-function todayIso(now = new Date()) {
-  return now.toISOString().slice(0, 10);
-}
-
 export function classifyImportDates(rawShifts, now = new Date()) {
-  const cutoff = todayIso(now);
+  const cutoff = getOperationalDate(now);
   const shifts = rawShifts.map((raw) => {
     const shift = normalizeShiftInput(raw);
     if (!ISO_DATE_RE.test(shift.date)) throw requestError(400, 'Every imported shift needs a valid ISO date');
-    const temporalClass = shift.date > cutoff ? 'FUTURE' : 'HISTORICAL';
+    const temporalClass = shift.date >= cutoff ? 'FUTURE' : 'HISTORICAL';
     if (temporalClass === 'FUTURE' && (!TIME_RE.test(shift.startTime) || !TIME_RE.test(shift.endTime))) {
       throw requestError(400, 'Every imported shift needs valid HH:mm times');
     }
@@ -43,10 +40,10 @@ export function classifyImportDates(rawShifts, now = new Date()) {
   };
 }
 
-function mondayOf(date) {
+function startOfSchedulingWeek(date, weekStart) {
   const value = new Date(`${date}T00:00:00.000Z`);
   const day = value.getUTCDay();
-  const offset = day === 0 ? -6 : 1 - day;
+  const offset = weekStart === 'sunday' ? -day : (day === 0 ? -6 : 1 - day);
   value.setUTCDate(value.getUTCDate() + offset);
   return value.toISOString().slice(0, 10);
 }
@@ -116,6 +113,15 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       'SELF_IMPORT_FUTURE_FORBIDDEN',
     );
   }
+
+  if (input.futureConsent !== 'draft') {
+    throw requestError(
+      409,
+      'Future rows require explicit consent before they can be added to draft planning',
+      'FUTURE_IMPORT_CONSENT_REQUIRED',
+    );
+  }
+  const weekStart = input.weekStart === 'sunday' ? 'sunday' : 'monday';
 
   // This is the canonical R2 capability mapping. It intentionally asks the
   // effective authorization model for the minimum PLANNER capability rather
@@ -221,7 +227,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
 
   const groups = new Map();
   for (const shift of future) {
-    const periodStart = mondayOf(shift.date);
+    const periodStart = startOfSchedulingWeek(shift.date, weekStart);
     const key = `${periodStart}:${shift.areaId ?? 'global'}`;
     if (!groups.has(key)) groups.set(key, { periodStart, areaId: shift.areaId ?? null, shifts: [] });
     groups.get(key).shifts.push(shift);

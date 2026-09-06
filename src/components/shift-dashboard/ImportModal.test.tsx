@@ -117,7 +117,7 @@ function renderImportModal(
   locale: 'es' | 'en',
   onClose: () => void,
   options: {
-    onConfirmImport?: (shifts: unknown, period: unknown, selector?: unknown) => Promise<boolean>;
+    onConfirmImport?: (shifts: unknown, period: unknown, selector?: unknown, areaId?: unknown, fileName?: unknown, fileFingerprint?: unknown, selfImportSummary?: unknown, futureImportDecision?: unknown) => Promise<boolean>;
     initialFile?: File | null;
     employeePreset?: { name: string; externalId: string } | null;
     identityLocked?: boolean;
@@ -222,6 +222,28 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(loadFormatProfiles()[0].useCount).toBe(1);
+  });
+
+  it('requires an explicit future-draft choice and defaults to historical-only', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts: [makeShift({ date: '2099-03-04' })],
+      quality: { shifts: [makeShift({ date: '2099-03-04' })], confidence: 1, warnings: [], state: 'CORRECT' },
+    }));
+    const receivedDecisions: unknown[] = [];
+    const onConfirmImport = vi.fn(async (...args: [unknown, unknown, unknown?, unknown?, unknown?, unknown?, unknown?, unknown?]) => {
+      receivedDecisions.push(args[7]);
+      return true;
+    });
+
+    renderImportModal('es', () => {}, { onConfirmImport, initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-future-consent')).toBeTruthy());
+    expect(screen.getByTestId('import-future-consent').textContent).toContain('Importar solo los turnos históricos');
+    fireEvent.click(screen.getByRole('radio', { name: /Importar históricos y añadir los futuros/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar Importación/ }));
+
+    await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
+    expect(receivedDecisions).toEqual(['draft']);
   });
 
   it('locks confirmation with a busy cursor and stays open when persistence returns false', async () => {

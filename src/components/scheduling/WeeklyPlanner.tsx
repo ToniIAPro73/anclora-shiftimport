@@ -17,6 +17,7 @@ import {
 } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate } from '../../lib/operational-date';
+import { getPlannerWeekStartPreference, PLANNER_WEEK_START_PREFERENCE_KEY } from '../../lib/week';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -36,7 +37,6 @@ interface WeeklyPlannerProps {
 }
 
 const VIEW_PREFERENCE_KEY = 'anclora_shiftimport_planner_view_v1';
-const WEEK_START_PREFERENCE_KEY = 'anclora_shiftimport_planner_week_start_v1';
 type PlannerView = 'grid' | 'table';
 type WeekStart = 'monday' | 'sunday';
 
@@ -52,14 +52,6 @@ function startOfWeek(value: Date, weekStart: WeekStart): string {
   const offset = weekStart === 'sunday' ? -day : (day === 0 ? -6 : 1 - day);
   date.setUTCDate(date.getUTCDate() + offset);
   return isoDate(date);
-}
-
-function readWeekStart(): WeekStart {
-  try {
-    return window.localStorage.getItem(WEEK_START_PREFERENCE_KEY) === 'sunday' ? 'sunday' : 'monday';
-  } catch {
-    return 'monday';
-  }
 }
 
 function addDays(value: string, days: number): string {
@@ -101,9 +93,9 @@ function errorCopy(error: unknown, t: (key: string) => string): string {
 export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false, initialDate, initialPeriodStart, modalHeader = false, onClose }: WeeklyPlannerProps) {
   const { locale, t } = useI18n();
   const today = getOperationalDate();
-  const [weekStart, setWeekStart] = useState<WeekStart>(readWeekStart);
+  const [weekStart, setWeekStart] = useState<WeekStart>(getPlannerWeekStartPreference);
   const [periodStart, setPeriodStart] = useState(() => {
-    const preference = readWeekStart();
+    const preference = getPlannerWeekStartPreference();
     if (initialPeriodStart) return initialPeriodStart;
     if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
       return startOfWeek(new Date(`${initialDate}T00:00:00Z`), preference);
@@ -253,7 +245,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(WEEK_START_PREFERENCE_KEY, weekStart);
+      window.localStorage.setItem(PLANNER_WEEK_START_PREFERENCE_KEY, weekStart);
     } catch {
       // Presentation preference is best-effort when storage is unavailable.
     }

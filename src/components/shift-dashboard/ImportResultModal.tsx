@@ -13,12 +13,20 @@ export interface ImportOutcomeReport {
   outcomeDetail?: Record<string, unknown> | null;
 }
 
+export interface TemporalImportReport {
+  status: 'COMPLETED';
+  historical: { submittedCount: number; persistedCount: number; existingCount: number };
+  future: { submittedCount: number; createdAssignmentCount: number; existingAssignmentCount: number; draftCount: number };
+  firstDraftPeriodStart?: string;
+}
+
 interface ImportResultModalProps {
   isOpen: boolean;
   onClose: () => void;
-  report: ReconciliationReport | ImportOutcomeReport;
+  report: ReconciliationReport | ImportOutcomeReport | TemporalImportReport;
   onCompleteEmployee?: (employeeId: string) => void;
   onRetry?: () => void;
+  onViewPlanning?: () => void;
 }
 
 /**
@@ -27,13 +35,39 @@ interface ImportResultModalProps {
  * confirmation; a FAIL shows exactly which dates/shifts didn't make it,
  * instead of a generic "something went wrong" alert.
  */
-export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee, onRetry }: ImportResultModalProps) => {
+export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee, onRetry, onViewPlanning }: ImportResultModalProps) => {
   const { t } = useI18n();
   if (!isOpen) {
     return null;
   }
 
   const isPass = report.status === 'PASS';
+
+  if (report.status === 'COMPLETED') {
+    return (
+      <ModalShell isOpen onClose={onClose} title={t('importResult.titleTemporalComplete')} closeAriaLabel={t('importResult.close')}>
+        <div role="status" aria-live="polite">
+          <p style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
+            {t('importResult.temporalCounts', {
+              historical: report.historical.persistedCount,
+              historicalExisting: report.historical.existingCount,
+              future: report.future.createdAssignmentCount,
+              drafts: report.future.draftCount,
+            })}
+          </p>
+          <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            {t('importResult.temporalNotPublished')}
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+          {report.future.draftCount > 0 && onViewPlanning ? (
+            <button className="btn-gold" type="button" onClick={onViewPlanning}>{t('importResult.viewPlanning')}</button>
+          ) : null}
+          <button className="btn-outline" type="button" onClick={onClose}>{t('importResult.close')}</button>
+        </div>
+      </ModalShell>
+    );
+  }
 
   if (report.status !== 'PASS' && report.status !== 'FAIL') {
     const outcomeReport = report as ImportOutcomeReport;
@@ -44,6 +78,7 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
       EMPLOYEE_UNKNOWN: 'importResult.reasonEmployeeUnknown',
       SELF_IDENTITY_NOT_FOUND: 'importResult.reasonSelfIdentity',
       SELF_FUTURE_ROWS_EXCLUDED: 'importResult.reasonSelfFutureExcluded',
+      FUTURE_ROWS_NOT_CONFIRMED: 'importResult.reasonFutureNotConfirmed',
       PLAN_LIMIT: 'importResult.reasonPlanLimit',
       AREA_MISMATCH_DECLINED: 'importResult.reasonAreaMismatch',
       DOCUMENT_ERROR: 'importResult.reasonDocument',
@@ -74,7 +109,7 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
                 totalRows: Number(outcomeReport.outcomeDetail.totalRows ?? outcomeReport.attemptedCount),
                 ownRows: Number(outcomeReport.outcomeDetail.ownRows ?? outcomeReport.attemptedCount),
                 ignoredRows: Number(outcomeReport.outcomeDetail.ignoredRows ?? 0),
-                futureRows: Number(outcomeReport.outcomeDetail.futureOwnRows ?? 0),
+                futureRows: Number(outcomeReport.outcomeDetail.futureOwnRows ?? outcomeReport.outcomeDetail.futureRows ?? 0),
               })}
             </p>
           )}

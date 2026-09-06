@@ -41,6 +41,8 @@ import { EmployeeSelector } from '../../ingestion/core/row-detection';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
+import { getOperationalDate } from '../../lib/operational-date';
+import { getPlannerWeekStartPreference } from '../../lib/week';
 
 /** No employee identity is known yet when the team-roster detectors can't
  * classify the file — this selector only feeds the shared diagnosis
@@ -172,6 +174,7 @@ export const TeamImportModal = ({
     ambiguous: rows.filter((row) => row.status === 'ambiguous').length,
   }), [rows]);
   const [preview, setPreview] = useState<PreviewEntry[]>([]);
+  const [futureImportDecision, setFutureImportDecision] = useState<'draft' | 'historical-only'>('historical-only');
   const [outcomes, setOutcomes] = useState<ImportOutcome[]>([]);
   const [importing, setImporting] = useState(false);
   // Fase 1.2F-PDF §12: PDF batches share ONE Import record across every
@@ -665,6 +668,7 @@ export const TeamImportModal = ({
         };
       }));
       setPreview(entries);
+      setFutureImportDecision('historical-only');
       setStep('preview');
     } catch (err) {
       console.error('Failed to build team import preview', err);
@@ -690,22 +694,33 @@ export const TeamImportModal = ({
     const monthNames = tl('calendar.months');
     const fileFingerprint = sourceFile ? await fingerprintFile(sourceFile) : undefined;
 
-    const cutoff = new Date().toISOString().slice(0, 10);
-    const hasFutureData = preview.some((entry) => entry.newShifts.some((shift) => shift.date > cutoff));
-    if (hasFutureData) {
-      // A team file containing any future row is one atomic import. The
-      // backend classifies every row and rejects the whole request when the
-      // effective planning capability/scope is insufficient.
-      const submitted = preview.flatMap((entry) => entry.newShifts
-        // A future day without actual times (e.g. a LIBRE marker) has no
-        // schedulable assignment representation. Historical rows retain the
-        // legacy blank-time behavior; future timed rows go to the draft.
-        .filter((shift) => shift.date <= cutoff || (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.startTime) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.endTime)))
-        .map((shift) => ({
+    const cutoff = getOperationalDate();
+    const temporalCounts = preview.reduce((counts, entry) => {
+      for (const shift of entry.newShifts) {
+        if (shift.date < cutoff) counts.historical += 1;
+        else counts.future += 1;
+      }
+      return counts;
+    }, { historical: 0, future: 0 });
+    const hasFutureData = temporalCounts.future > 0;
+    const submitted = preview.flatMap((entry) => entry.newShifts
+      .filter((shift) => shift.date < cutoff || (futureImportDecision === 'draft' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.startTime) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.endTime)))
+      .map((shift) => ({
         ...shift,
         employeeId: entry.row.resolvedEmployeeId as string,
         areaId: importAreaId ?? null,
-        })));
+      })));
+    if (submitted.length === 0) {
+      setError(t('teamImport.noHistoricalRows'));
+      return;
+    }
+    if (hasFutureData && futureImportDecision === 'draft') {
+      // A team file containing any future row is one atomic import. The
+      // backend classifies every row and rejects the whole request when the
+      // effective planning capability/scope is insufficient.
+      // A future day without actual times (e.g. a LIBRE marker) has no
+      // schedulable assignment representation. Historical rows retain the
+      // legacy blank-time behavior; future timed rows go to the draft.
       const firstPeriod = periodOf(submitted[0].date);
       const periodKeys = new Set(submitted.map((shift) => {
         const period = periodOf(shift.date);
@@ -725,6 +740,8 @@ export const TeamImportModal = ({
         periodLabel: periodKeys.size > 1
           ? t('importModal.multiPeriod')
           : `${monthNames[firstPeriod.month] ?? firstPeriod.month} ${firstPeriod.year}`,
+        futureConsent: 'draft',
+        weekStart: getPlannerWeekStartPreference(),
       });
       for (const entry of preview) {
         results.push({ row: entry.row, ok: true, created: entry.newShifts.length });
@@ -734,8 +751,9 @@ export const TeamImportModal = ({
       // Historical-only team imports retain their established behavior.
       for (const entry of preview) {
         try {
-          if (entry.newShifts.length > 0) {
-            const period = periodOf(entry.newShifts[0].date);
+          const historicalShifts = entry.newShifts.filter((shift) => shift.date < cutoff);
+          if (historicalShifts.length > 0) {
+            const period = periodOf(historicalShifts[0].date);
             const created = await createRemoteImport({
               fileName: sourceFile?.name ?? '',
               sourceFormat,
@@ -748,12 +766,12 @@ export const TeamImportModal = ({
               periodKind: 'single',
               periodLabel: `${monthNames[period.month] ?? period.month} ${period.year}`,
               employeeCount: 1,
-              shiftCount: entry.newCount + entry.conflictCount + entry.unchangedCount,
-              createdShiftCount: entry.newCount,
+              shiftCount: historicalShifts.length,
+              createdShiftCount: historicalShifts.length,
               existingShiftCount: entry.unchangedCount,
             });
             await syncRemoteShifts(entry.row.resolvedEmployeeId as string, {
-              upserts: entry.newShifts,
+              upserts: historicalShifts,
               importId: created.id,
             });
           }
@@ -1183,6 +1201,21 @@ export const TeamImportModal = ({
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewErrors')}</div>
               </div>
             </div>
+            {(preview.reduce((count, entry) => count + entry.newShifts.filter((shift) => shift.date >= getOperationalDate()).length, 0)) > 0 && (
+              <fieldset data-testid="team-import-future-consent" style={{ padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', display: 'grid', gap: '10px' }}>
+                <legend style={{ padding: '0 6px', fontWeight: 700 }}>{t('importModal.futureConsentTitle')}</legend>
+                <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('importModal.futureConsentDescription')}</p>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <input type="radio" name="team-future-import-decision" value="historical-only" checked={futureImportDecision === 'historical-only'} onChange={() => setFutureImportDecision('historical-only')} />
+                  <span>{t('importModal.futureConsentHistoricalOnly')}</span>
+                </label>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                  <input type="radio" name="team-future-import-decision" value="draft" checked={futureImportDecision === 'draft'} onChange={() => setFutureImportDecision('draft')} />
+                  <span>{t('importModal.futureConsentDraft')}</span>
+                </label>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('importModal.futureConsentCancelHint')}</p>
+              </fieldset>
+            )}
             <div style={{ overflowY: 'auto', display: 'grid', gap: '6px', paddingRight: '4px', flex: 1, minHeight: 0 }}>
               {preview.map((entry) => (
                 <div

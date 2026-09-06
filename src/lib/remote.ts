@@ -203,6 +203,8 @@ export interface FutureImportResult {
   import: RemoteImport;
 }
 
+export type FutureImportConsent = 'draft';
+
 export interface NewScheduleDraftResult {
   newVersionId: string;
   scheduleId: string;
@@ -737,6 +739,8 @@ export async function confirmRemoteFutureImport(input: {
   importMode?: 'individual' | 'team';
   periodKind?: 'single' | 'multi';
   periodLabel?: string;
+  futureConsent: FutureImportConsent;
+  weekStart?: 'monday' | 'sunday';
 }): Promise<FutureImportResult> {
   return apiFetch<FutureImportResult>('/api/imports/confirm-split', {
     method: 'POST',

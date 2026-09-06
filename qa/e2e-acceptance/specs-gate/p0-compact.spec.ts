@@ -50,6 +50,7 @@ function importPayload(date: string, fingerprint: string, employeeId = fixture.e
     periodMonth: parsed.getUTCMonth() + 1,
     periodKind: 'multi',
     periodLabel: 'P0 compact gate',
+    futureConsent: 'draft',
     areaId: fixture.areaA,
   };
 }
