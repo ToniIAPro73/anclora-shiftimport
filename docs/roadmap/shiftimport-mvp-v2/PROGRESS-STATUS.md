@@ -1,6 +1,6 @@
 # Progress Status — MVP v2 Roadmap Execution
 
-Última actualización: 2026-09-06, Gate P4 en `development`.
+Última actualización: 2026-09-06, Gate P5.1 en `development`.
 
 Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
 auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
@@ -88,6 +88,10 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - P5 — Role Reality & Employee Self-Service: `PASS`; D-03, D-04 y D-05 están aprobadas y
   registradas en `sdd/decisions/`. Gate y evidencia en
   `docs/roadmap/P5-ROLE-REALITY-GATE.md`; smoke compacto `test:p5-role` 1/1 PASS.
+- P5.1 — Premium Application Shell & Collapsible Sidebar: `PASS`; shell role-aware, topbar
+  compacto, contexto y navegación mensual reubicados, drawer responsive y menú de cuenta. Gate,
+  inventario y evidencia en `docs/roadmap/P5.1-PREMIUM-APPLICATION-SHELL-GATE.md` y
+  `P5.1-SHELL-NAVIGATION-INVENTORY.md`. P6 permanece sin iniciar.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 

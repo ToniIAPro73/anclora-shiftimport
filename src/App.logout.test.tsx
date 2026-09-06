@@ -93,12 +93,13 @@ describe('App — deterministic logout', () => {
     renderApp();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Empleado:' })).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+    fireEvent.click(screen.getByTestId('app-shell-user-menu'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Salir' }));
 
     // Login screen, and none of the authenticated chrome survives.
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
     expect(window.location.pathname).toBe('/login');
-    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Salir' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Empleado:' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Usuarios de la organización' })).toBeNull();
     expect(document.querySelector('.team-bar')).toBeNull();
@@ -112,9 +113,10 @@ describe('App — deterministic logout', () => {
     mockedLogout.mockRejectedValue(new Error('network down'));
 
     renderApp();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Salir' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-user-menu')).toBeTruthy());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+    fireEvent.click(screen.getByTestId('app-shell-user-menu'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Salir' }));
 
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
     expect(document.querySelector('.team-bar')).toBeNull();
@@ -143,8 +145,9 @@ describe('App — deterministic logout', () => {
     fireEvent.submit(document.querySelector('#auth-email')!.closest('form') as Element);
 
     // Authenticated chrome appears while the roster request is still pending.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Salir' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('button', { name: 'Salir' }));
+    await waitFor(() => expect(screen.getByTestId('app-shell-user-menu')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('app-shell-user-menu'));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Salir' }));
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
 
     // The in-flight roster resolves AFTER the logout — it must be discarded.

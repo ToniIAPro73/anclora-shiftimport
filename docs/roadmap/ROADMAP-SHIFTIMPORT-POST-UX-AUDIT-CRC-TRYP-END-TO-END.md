@@ -5,8 +5,7 @@
 > Este documento contiene las FASES, las MICROTAREAS y los GATES. La SPEC contiene el modelo
 > de dominio, journeys objetivo, matrices de roles/planes y el Final Product Gate.
 >
-> **Estado**: PLANIFICACIÓN. Ninguna microtarea de este roadmap ha sido ejecutada.
-> Creado sin commit, sin push, sin deploy.
+> **Estado**: P5 cerrado (PASS); P5.1 en ejecución. P6/P7 no iniciadas.
 
 ---
 
@@ -16,11 +15,11 @@
 |---|---|
 | Repositorio | `anclora-shiftimport` (`https://github.com/ToniIAPro73/anclora-shiftimport.git`) |
 | Rama | `development` (default; excepción AOS `EX-SI-001`) |
-| HEAD local | `36e78573c01f968a71cef6066249d0ce2f008576` |
-| HEAD `origin/development` | `36e78573c01f968a71cef6066249d0ce2f008576` |
+| HEAD local | `c6b7cfc0c283f4a8ed05406c272e072534b6179c` |
+| HEAD `origin/development` | `c6b7cfc0c283f4a8ed05406c272e072534b6179c` |
 | Drift | Ninguno |
 | Worktree al inicio | Limpio |
-| Último commit | `test(scheduling): cover active employee eligibility` |
+| Último commit | `feat(scheduling): close P5 role reality and self-import` |
 | Entorno auditado | `https://shiftimport.anclora.com` |
 | Auditoría UX/UI de referencia | "Auditoría ShiftImport" — `ux-product-experience-review` / `AUDIT_WITH_REPO_CONTEXT` — 9 findings, `PASS_WITH_GAPS` |
 
@@ -55,7 +54,7 @@ Relación formal con la historia:
 ```
 R0 → R1 → R2 → R3 → R4 → R5 → [R5-M12 abierto]
                                    │
-                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P6 → P7
+                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P6 → P7
                                                                                                      P8 (BLOCKED)
 R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 ```
@@ -80,6 +79,8 @@ R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 | P6 ↔ P1 | NO | P6 consume el modelo de estados de importación (`completed` / `partial` / `blocked` / `failed`) que introduce P1-M03. |
 | P5 ↔ P2 | NO | Verificar ADMIN/PLANNER/EMPLOYEE en navegador requiere una organización Team; el camino de provisión y su señalización se definen en P2. |
 | P7 ↔ P1 | NO | El refuerzo Import↔Schedule se ancla en la superficie de resultado persistente que crea P1. |
+| P5.1 ↔ P5 | NO | P5.1 consume el modelo de roles ya cerrado y cambia únicamente la shell/navegación; no puede adelantarse a la verificación de roles. |
+| P6 ↔ P5.1 | NO | P6 consume el entry point y el contexto del histórico ya reubicados por P5.1. |
 | P8 ↔ todo | SÍ | Investigación externa; no toca código. |
 
 ---
@@ -1324,6 +1325,168 @@ filas ajenas, identidad ausente/ambigua y exclusión de fechas futuras.
 
 ---
 
+## PHASE P5.1 — Premium Application Shell & Collapsible Sidebar
+
+**PHASE_ID**: P5.1
+**PHASE_NAME**: Premium Application Shell & Collapsible Sidebar
+**STATUS**: PASS
+**GOAL**: Recuperar espacio útil para el calendario con sidebar role-aware, topbar global compacta
+y workspace calendar-first.
+**WHY_NOW**: El finding post-P5 `DASHBOARD NAVIGATION DENSITY` reproduce una saturación real del
+header: branding, mes, contexto, preferencias y acciones competían por la misma franja.
+**USER_VALUE**: El usuario encuentra cada capacidad sin perder de vista el calendario y conserva
+su contexto en desktop, tablet y móvil.
+**BUSINESS_VALUE**: Añadir capacidades futuras no exige seguir ampliando el header.
+**SOURCE_DRIVERS**: Finding post-P5 de densidad; contratos de accesibilidad, responsive, i18n y
+motion; principio de navegación diferenciada de CRC Tryp sin copiar su UI.
+**SCOPE**: Inventario de acciones, `AppShell`, sidebar expandido/contraído, drawer móvil, topbar
+con preferencias y menú de cuenta, migración de contexto y navegación mensual, visibilidad por rol
+y validación visual.
+**OUT_OF_SCOPE**: API, base de datos, autorización de dominio, Approval Lite, Portal EMPLOYEE,
+nuevas rutas de negocio y rediseño de P6.
+**DEPENDENCIES**: P5 PASS.
+**PREREQUISITES**: matriz de roles y portal EMPLOYEE cerrados; sin cambios pendientes en DB/API.
+**RISKS**: pérdida de una acción o del estado de calendario; drawer inaccesible; capacidades
+administrativas visibles a PLANNER.
+**DO_NOT_BREAK**: P5, SELF import, R3, R4, R5, P1/P2/P3/P4, mes/contexto, logout, dark/light e
+i18n.
+**AFFECTED_DOMAINS**: UI, navegación, responsive, accesibilidad.
+**AFFECTED_ROLES**: OWNER, ADMIN, PLANNER; EMPLOYEE solo como regresión de portal.
+**AFFECTED_ROUTES**: `/app`, `/app/schedule`; Portal EMPLOYEE preservado.
+**MIGRATION_IMPACT**: N/A — no hay cambios API/DB/migraciones; verificado por diff sin ficheros
+bajo `api/` o `db/`.
+**ROLLBACK_STRATEGY**: revertir los commits P5.1 en orden inverso; no hay rollback de datos.
+**OBSERVABILITY**: métricas de posición/altura del calendario, capturas por rol/tema/viewport y
+smoke E2E compacto.
+**DOCUMENTATION_UPDATES**: SPEC, roadmap, inventario de navegación, manual y Gate P5.1.
+
+### MICROTASKS — P5.1
+
+---
+**ID**: P5.1-M01
+**TITLE**: Inventario de navegación y contrato de shell
+**PURPOSE**: Enumerar todas las acciones de `/app`, clasificación y visibilidad por rol sin perder capacidades.
+**ACCEPTANCE_CRITERIA**: Given el dashboard actual, When se contrastan controles y handlers, Then
+existe un inventario completo y un árbol objetivo sin rutas inventadas.
+**DO_NOT_BREAK**: ninguna acción ni permiso. **DEPENDENCIES**: P5. **RISK**: BAJO.
+**ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.1-M02
+**TITLE**: Fundaciones de AppShell, Sidebar, TopBar y MainWorkspace
+**PURPOSE**: Aislar layout/navegación de la orquestación de estado de `App.tsx`.
+**ACCEPTANCE_CRITERIA**: Given `/app`, When se renderiza la shell, Then existen `aside`, `nav`,
+`header` y `main`, el calendario conserva su estado y no se toca API/DB.
+**DO_NOT_BREAK**: modales y handlers existentes. **DEPENDENCIES**: M01. **RISK**: MEDIO.
+**ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.1-M03
+**TITLE**: Migrar operaciones al sidebar role-aware
+**PURPOSE**: Mover Importar, Añadir, Histórico, Planificar, Usuarios, Áreas, Formatos y Ajustes
+fuera del header global respetando permisos y modales existentes.
+**ACCEPTANCE_CRITERIA**: Given OWNER/ADMIN/PLANNER, When inspeccionan el sidebar, Then cada acción
+autorizada sigue disponible, las administrativas no aparecen a PLANNER y no hay duplicados en header.
+**DO_NOT_BREAK**: entitlement, import, scheduling y MembersModal. **DEPENDENCIES**: M02.
+**RISK**: ALTO. **ESTIMATED_COMPLEXITY**: L.
+
+---
+**ID**: P5.1-M04
+**TITLE**: Migrar contexto y toolbar de calendario
+**PURPOSE**: Reubicar Organización/Área/Empleado al contexto lateral y mes al workspace.
+**ACCEPTANCE_CRITERIA**: Given empleado, área y mes seleccionados, When se navega o recarga, Then
+contexto y mes se conservan y los handlers actuales siguen gobernando los cambios.
+**DO_NOT_BREAK**: aislamiento por organización y filtro de empleados activos. **DEPENDENCIES**: M03.
+**RISK**: ALTO. **ESTIMATED_COMPLEXITY**: L.
+
+---
+**ID**: P5.1-M05
+**TITLE**: Estado colapsado y preferencias persistentes
+**PURPOSE**: Añadir expand/collapse, persistencia local, tooltips, active state y reduced motion.
+**ACCEPTANCE_CRITERIA**: Given desktop, When se contrae y recarga, Then se conserva el estado,
+se libera ancho real y todos los iconos tienen nombre accesible y foco visible.
+**DO_NOT_BREAK**: mes, empleado, área ni modales. **DEPENDENCIES**: M04. **RISK**: MEDIO.
+**ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.1-M06
+**TITLE**: Simplificar topbar y crear menú de cuenta
+**PURPOSE**: Dejar en topbar tema, idioma y usuario; mover logout sin reimplementar auth.
+**ACCEPTANCE_CRITERIA**: Given una sesión, When se abre el menú, Then Salir conserva logout,
+anuncia `aria-expanded` y cierra con Escape/click-outside.
+**DO_NOT_BREAK**: limpieza de sesión y redirect. **DEPENDENCIES**: M05. **RISK**: MEDIO.
+**ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.1-M07
+**TITLE**: Drawer responsive y visibilidad por rol
+**PURPOSE**: Convertir el sidebar en drawer en tablet/móvil y proteger OWNER/ADMIN/PLANNER y
+el Portal EMPLOYEE.
+**ACCEPTANCE_CRITERIA**: Given 390/768/1024 px, When se abre navegación, Then el drawer atrapa
+foco, se cierra con Escape, no deja scroll horizontal en body y EMPLOYEE conserva R4.
+**DO_NOT_BREAK**: role matrix y portal móvil-first. **DEPENDENCIES**: M06. **RISK**: ALTO.
+**ESTIMATED_COMPLEXITY**: L.
+
+---
+**ID**: P5.1-M08
+**TITLE**: Accesibilidad, visual y browser QA
+**PURPOSE**: Validar landmarks, keyboard, focus, tooltips, zoom, dark/light, ES/EN y densidad.
+**ACCEPTANCE_CRITERIA**: Given viewports requeridos, When se ejecuta smoke e inspección visual,
+Then se observan shell expanded/collapsed, drawer y portal sin regresiones y el calendario gana
+superficie útil.
+**DO_NOT_BREAK**: contratos P4. **DEPENDENCIES**: M07. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: L.
+
+---
+**ID**: P5.1-M09
+**TITLE**: Documentación y cierre de regresión
+**PURPOSE**: Reconciliar documentos, manual, estado y matriz de pruebas con la shell implementada.
+**ACCEPTANCE_CRITERIA**: Given el código final, When se comparan documentos y tests, Then no se
+declaran P6 iniciadas, los conteos son correctos y la ausencia API/DB queda probada.
+**DO_NOT_BREAK**: trazabilidad histórica. **DEPENDENCIES**: M08. **RISK**: BAJO.
+**ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.1-M10
+**TITLE**: Gate final P5.1
+**PURPOSE**: Emitir veredicto formal con evidencia reproducible.
+**ACCEPTANCE_CRITERIA**: Given M01–M09 PASS, When se ejecutan tests, lint, typecheck, build y
+browser QA, Then todos los criterios del Gate pasan y el worktree queda limpio tras commit.
+**DO_NOT_BREAK**: no introducir cambios funcionales nuevos en el Gate. **DEPENDENCIES**: M01–M09.
+**RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
+### PHASE_P5_1_GATE
+
+| Criterio | Exigencia | Evidencia |
+|---|---|---|
+| FUNCTIONAL | Toda acción migrada sigue funcionando | smoke E2E + tests de componente |
+| DATA_INTEGRITY | N/A: no hay cambios de datos | diff sin `api/` ni `db/` |
+| AUTHORIZATION | Ningún rol gana capacidades | AppShell role-aware + matriz P5 |
+| TENANT_ISOLATION | N/A: backend/scope sin cambios | diff y smoke P5 reutilizado |
+| SECURITY | Logout/auth sin regresión | menú de cuenta + logout existente |
+| REGRESSION | P1–P5 y R3/R4/R5 preservados | suite dirigida + smoke |
+| ACCESSIBILITY | landmarks, keyboard, focus, drawer y menu | AppShell.test + árbol E2E |
+| RESPONSIVE | 390, 768, 1024, 1366, 1440 | capturas y smoke |
+| I18N | ES/EN en claves nuevas | i18n-coverage |
+| UNIT_TESTS / INTEGRATION_TESTS | PASS | Vitest dirigido y suite |
+| E2E | OWNER shell + planner + EMPLOYEE protegido | test:p5-1-shell + smoke P5 |
+| BUILD / LINT / TYPECHECK | PASS | comandos reproducibles |
+| DOCUMENTATION | SPEC, roadmap, inventario y Gate coherentes | docs auditados |
+| AOS_COMPLIANCE | PASS | AOS adoption y un solo escritor |
+| WORKTREE_STATE | limpio tras commit | git status |
+| ROLE_MATRIX | OWNER/ADMIN/PLANNER/EMPLOYEE | P5 artifact + shell test |
+| BROWSER_QA | capturas expanded/collapsed, temas, drawer, planner, portal | artefactos E2E |
+| VISUAL_DENSITY | calendario empieza antes y crece en altura | métricas 1366/1440 |
+| NAVIGATION_COMPLETENESS | 100% de acciones inventariadas | inventario P5.1 |
+| STATE_PRESERVATION | mes, contexto, scroll y modales estables | smoke + tests |
+
+**EVIDENCE_REQUIRED**: inventario completo; tests de shell; smoke E2E compacto; capturas OWNER
+expanded/collapsed dark/light, drawer móvil, PLANNER y Portal EMPLOYEE; métricas antes/después a
+1366×768 y 1440×900; diff sin `api/` ni `db/`.
+
+**RESULTADOS**: `PASS` | `PASS_WITH_GAPS` | `FAIL` | `BLOCKED`.
+
+---
+
 ## PHASE P6 — Import History & Operational Traceability
 
 **PHASE_ID**: P6
@@ -1345,7 +1508,7 @@ importaciones registradas" tras un intento real.
 - Semántica de reintento coherente con la idempotencia.
 
 **OUT_OF_SCOPE**: exportación del histórico; reporting agregado (es R8 POST-MVP).
-**DEPENDENCIES**: P1 (estados), P5 (visibilidad por rol del histórico).
+**DEPENDENCIES**: P1 (estados), P5 (visibilidad por rol del histórico), P5.1 (entry point y contexto de navegación).
 **PREREQUISITES**: `GET /api/imports` ya soporta los filtros (verificado en HEAD).
 **RISKS**: exponer en el histórico datos de empleados fuera del scope del lector.
 **DO_NOT_BREAK**: la política de borrado (soft-delete de la fila, hard-delete de sus shifts por
@@ -1662,7 +1825,8 @@ mientras la fuente no sea legible.
 | P3 | Dialog Replacement & Copy | 9 | P1 | PASS / PASS_WITH_GAPS |
 | P4 | Accessibility & Responsive | 7 | P0 (independiente de P1–P3) | PASS / PASS_WITH_GAPS |
 | P5 | Role Reality & Employee Self-Service | 6 | P0, P2 | PASS / PASS_WITH_GAPS / BLOCKED ante nuevo bloqueo |
-| P6 | Import History & Traceability | 6 | P1, P5 | PASS |
+| P5.1 | Premium Application Shell & Collapsible Sidebar | 10 | P5 | PASS |
+| P6 | Import History & Traceability | 6 | P1, P5.1 | PASS |
 | P7 | Import vs Schedule Communication | 5 | P1, P6 | PASS |
 | P8 | CRC Tryp Research | — | fuente accesible | **BLOCKED** |
-| **Total** | | **58** | | |
+| **Total** | | **68** | | |

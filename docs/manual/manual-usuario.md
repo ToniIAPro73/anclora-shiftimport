@@ -127,7 +127,7 @@ Tanto el nombre de la organización como tu propio nombre se pueden cambiar desp
 
 ### 3.3 Varias organizaciones con la misma cuenta
 
-Si tu correo pertenece a más de una organización (por ejemplo, trabajas en dos empresas distintas que usan ShiftImport), la aplicación te pedirá elegir explícitamente con cuál quieres trabajar cada vez que haya ambigüedad — nunca selecciona una por ti en silencio. Puedes cambiar de organización en cualquier momento desde el selector de la cabecera.
+Si tu correo pertenece a más de una organización (por ejemplo, trabajas en dos empresas distintas que usan ShiftImport), la aplicación te pedirá elegir explícitamente con cuál quieres trabajar cada vez que haya ambigüedad — nunca selecciona una por ti en silencio. Puedes cambiar de organización en cualquier momento desde el bloque **Contexto** del panel lateral.
 
 ### 3.4 Roles dentro de una organización
 
@@ -171,7 +171,7 @@ Este es el flujo central de ShiftImport. Funciona igual para invitados y para us
 
 ### 5.1 Abrir el importador
 
-Pulsa el botón **Importar** en la cabecera de la aplicación. Se abre una ventana con:
+Pulsa **Importar** en el panel lateral de la aplicación. Se abre una ventana con:
 
 - Un selector de **mes** y **año** del calendario (rellenado por defecto con el mes en curso).
 - Una zona para **subir el archivo** del cuadrante.
@@ -235,7 +235,7 @@ Cada vez que enseñas a ShiftImport cómo leer un cuadrante nuevo, esa configura
 
 ### 6.1 Abrir «Formatos aprendidos»
 
-Pulsa el botón **Formatos aprendidos** en la cabecera. Verás la lista de formatos de tu organización, cada uno con:
+Pulsa **Formatos aprendidos** en el panel lateral. Verás la lista de formatos de tu organización, cada uno con:
 
 - Un **nombre** descriptivo (por ejemplo, «Cuadrante mensual recepción»).
 - El **tipo de origen**: PDF/imagen o CSV/tabla.
@@ -304,7 +304,7 @@ El calendario se adapta a pantallas pequeñas: en móvil, la cuadrícula mensual
 
 ![Ajustes: pestaña de perfil](screenshots/settings-profile-dark.png)
 
-Abre **Ajustes** desde el icono de engranaje de la cabecera. Encontrarás distintas pestañas según tu situación (invitado, empleado o administrador).
+Abre **Ajustes** desde el panel lateral. Encontrarás distintas pestañas según tu situación (invitado, empleado o administrador).
 
 ### 8.1 Perfil
 
@@ -327,7 +327,7 @@ Estos tipos son los que usa el selector de turnos, las estadísticas y el asiste
 
 ### 8.3 Equipo (solo si tienes una organización de empresa)
 
-Un resumen con el nombre de tu organización, tu rol y accesos rápidos a la gestión de usuarios (ver [sección 9](#9-gestión-de-la-organización-solo-administradores)) y, si eres administrador con varios empleados, un selector para elegir qué calendario de empleado ver.
+El panel lateral muestra el contexto activo —organización, área y empleado—, tu rol y los accesos rápidos autorizados a la gestión de usuarios (ver [sección 9](#9-gestión-de-la-organización-solo-administradores)). Si eres administrador con varios empleados, el selector permite elegir qué calendario de empleado ver. La navegación puede contraerse para liberar espacio al calendario.
 
 ### 8.4 Borrar tus datos locales
 
@@ -374,7 +374,7 @@ Dentro de Ajustes, en la sección **Zona de peligro**, un administrador puede **
 
 ### 9.5 Historial de importaciones
 
-Junto al botón **Importar**, un icono de reloj abre el **Historial de importaciones**: la lista de todas las importaciones confirmadas en la organización activa. Cualquier usuario con sesión iniciada puede consultarlo; **eliminar** una importación concreta está reservado a los administradores (un empleado ve la misma lista en modo solo lectura, sin el botón de eliminar).
+Desde **Historial** en el panel lateral se abre el **Historial de importaciones**: la lista de todas las importaciones confirmadas en la organización activa. Cualquier usuario con sesión iniciada puede consultarlo; **eliminar** una importación concreta está reservado a los administradores (un empleado ve la misma lista en modo solo lectura, sin el botón de eliminar).
 
 Cada fila del historial muestra:
 

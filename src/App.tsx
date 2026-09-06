@@ -39,7 +39,6 @@ import { findAreaMismatch } from './lib/areas';
 import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
 import { setVlmFallbackSessionActive } from './ingestion/vlm-client';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
-import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
@@ -69,6 +68,9 @@ import { PricingPage } from './pages/PricingPage';
 import { navigate, useRoute } from './lib/route';
 import { resolvePostLoginDestination, POST_LOGIN_TITLES } from './lib/post-login';
 import { SearchableSelect } from './components/ui/SearchableSelect';
+import { AppShell, CalendarToolbar } from './components/app-shell/AppShell';
+import { ThemeToggle } from './components/ui/ThemeToggle';
+import { LanguageToggle } from './components/ui/LanguageToggle';
 import { ImportPeriod } from './lib/import-types';
 import type { DetectedTeamEmployee } from './ingestion/team-roster';
 import { normalizeText } from './ingestion/core/normalize';
@@ -1530,15 +1532,113 @@ function App() {
     && !activeMembership?.scopedAreaId
     && activeAreas.length > 0;
 
+  const contextContent = session && !needsOrgChoice && !accountIncomplete ? (
+    <div className="team-bar" data-testid="app-shell-context">
+      <label>
+        {t('orgSelector.activeLabel')}
+        {session.memberships.length > 1 ? (
+          <SearchableSelect
+            label=""
+            value={session.organizationId ?? ''}
+            onChange={(organizationId) => void handleSwitchOrganization(organizationId)}
+            searchPlaceholder={t('orgSelector.searchPlaceholder')}
+            emptyMessage={t('orgSelector.noResults')}
+            ariaLabel={t('orgSelector.title')}
+            options={session.memberships.map((membership) => ({
+              value: membership.organizationId,
+              label: membership.organizationName,
+              searchText: membership.organizationName.toLowerCase(),
+            }))}
+            style={{ width: '100%', fontWeight: 700 }}
+          />
+        ) : (
+          <strong>{session.memberships.find((membership) => membership.organizationId === session.organizationId)?.organizationName ?? ''}</strong>
+        )}
+      </label>
+      <label>
+        {t('team.roleLabel')}
+        <strong>{session.role ? t(`role.${session.role.toLowerCase()}`) : ''}</strong>
+      </label>
+      {session.role !== 'EMPLOYEE' && activeAreas.length === 1 && (
+        <label>
+          {t('areas.contextLabel')}
+          <strong>{activeAreas[0].name}</strong>
+        </label>
+      )}
+      {session.role !== 'EMPLOYEE' && activeAreas.length >= 2 && (
+        <label>
+          {t('areas.contextLabel')}
+          <SearchableSelect
+            label=""
+            value={selectedAreaId ?? ''}
+            onChange={(value) => setSelectedAreaId(value || null)}
+            searchPlaceholder={t('orgSelector.searchPlaceholder')}
+            emptyMessage={t('orgSelector.noResults')}
+            ariaLabel={t('areas.contextLabel')}
+            options={[
+              { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
+              ...activeAreas.map((area) => ({
+                value: area.id,
+                label: area.name,
+                searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
+              })),
+            ]}
+            style={{ width: '100%' }}
+          />
+        </label>
+      )}
+      {session.role !== 'EMPLOYEE' && (
+        <label>
+          {t('team.employeeLabel')}
+          <SearchableSelect
+            label=""
+            value={selectedEmployeeId ?? ''}
+            onChange={(employeeId) => void handleSelectEmployee(employeeId)}
+            searchPlaceholder={t('employeeSelect.searchPlaceholder')}
+            emptyMessage={visibleEmployees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
+            ariaLabel={t('team.employeeLabel')}
+            options={visibleEmployees
+              .filter((employee) => employee.status === 'active')
+              .map((employee) => ({
+                value: employee.id,
+                label: employee.externalEmployeeId ? `${employee.name} · ID ${employee.externalEmployeeId}` : employee.name,
+                searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
+              }))}
+            style={{ width: '100%' }}
+          />
+        </label>
+      )}
+    </div>
+  ) : null;
+
   if (route === '/app/schedule' && authResolved && session && session.role !== 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete && plannerNeedsArea) {
     return (
       <>
-        <main className="container" data-testid="planner-scope-unavailable" role="alert" style={{ padding: '48px 16px' }}>
-          <section className="card" style={{ maxWidth: 680, margin: '0 auto', padding: 32 }}>
+        <AppShell
+          role={session.role}
+          userName={session.user.displayName}
+          userRole={session.role ? t(`role.${session.role.toLowerCase()}`) : ''}
+          activeSection="planner"
+          themeControl={<ThemeToggle />}
+          languageControl={<LanguageToggle />}
+          contextContent={contextContent}
+          onImport={() => { if (!isImporting) setIsImportOpen(true); }}
+          onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
+          onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
+          onPlanner={() => navigate('/app/schedule')}
+          onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
+          onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
+          onFormatProfiles={() => setIsFormatProfilesOpen(true)}
+          onSettings={isAdminRole(session.role) ? () => setIsSettingsOpen(true) : undefined}
+          onLogout={() => void handleLogout()}
+        >
+          <div className="planner-scope-unavailable" data-testid="planner-scope-unavailable" role="alert">
+            <section className="card">
             <h1>{t('planner.scopeUnavailableTitle')}</h1>
             <p style={{ color: 'var(--text-muted)' }}>{t('planner.scopeUnavailableDescription')}</p>
-          </section>
-        </main>
+            </section>
+          </div>
+        </AppShell>
         <CookieConsent />
       </>
     );
@@ -1547,11 +1647,30 @@ function App() {
   if (route === '/app/schedule' && authResolved && session && session.role !== 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete) {
     return (
       <>
-        <WeeklyPlanner
-          areaId={plannerAreaId}
-          canEdit={session.role === 'OWNER' || session.role === 'ADMIN' || session.role === 'PLANNER'}
-          onBack={() => navigate('/app')}
-        />
+        <AppShell
+          role={session.role}
+          userName={session.user.displayName}
+          userRole={session.role ? t(`role.${session.role.toLowerCase()}`) : ''}
+          activeSection="planner"
+          themeControl={<ThemeToggle />}
+          languageControl={<LanguageToggle />}
+          contextContent={contextContent}
+          onImport={() => { if (!isImporting) setIsImportOpen(true); }}
+          onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
+          onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
+          onPlanner={() => navigate('/app/schedule')}
+          onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
+          onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
+          onFormatProfiles={() => setIsFormatProfilesOpen(true)}
+          onSettings={isAdminRole(session.role) ? () => setIsSettingsOpen(true) : undefined}
+          onLogout={() => void handleLogout()}
+        >
+          <WeeklyPlanner
+            areaId={plannerAreaId}
+            canEdit={session.role === 'OWNER' || session.role === 'ADMIN' || session.role === 'PLANNER'}
+            onBack={() => navigate('/app')}
+          />
+        </AppShell>
         <CookieConsent />
       </>
     );
@@ -1571,38 +1690,37 @@ function App() {
   }
 
   return (
-    <div className={`container${isImporting || isSavingShift ? ' app--busy' : ''}`} aria-busy={isImporting || isSavingShift}>
-      <MonthHeader
-        year={currentYear}
-        month={currentMonth}
-        onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
-        onAddShift={() => {
-          if (isImporting) {
-            return;
-          }
-          setEditingShiftId(null);
-          setDraftShiftDate(null);
-          setIsModalOpen(true);
-        }}
-        onImport={() => { if (!isImporting && authResolved) setIsImportOpen(true); }}
-        onOpenImportHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
-        onOpenSettings={(role) => {
-          if (isImporting) {
-            return;
-          }
-          if (role === 'EMPLOYEE') {
-            // EMPLOYEE role: only profile tab is accessible
-            setIsSettingsOpen(true);
-          } else {
-            // ADMIN: full settings access
-            setIsSettingsOpen(true);
-          }
-        }}
-        session={session}
-        employees={employees}
-      />
-
-      <main className="dashboard-body">
+    <>
+    <AppShell
+      role={session?.role ?? null}
+      userName={session?.user.displayName ?? ''}
+      userRole={session?.role ? t(`role.${session.role.toLowerCase()}`) : undefined}
+      activeSection="calendar"
+      themeControl={<ThemeToggle />}
+      languageControl={<LanguageToggle />}
+      contextContent={contextContent}
+      onSignIn={!session ? () => { if (!isImporting) setIsAuthOpen(true); } : undefined}
+      onImport={() => { if (!isImporting && authResolved) setIsImportOpen(true); }}
+      onAddShift={() => {
+        if (isImporting) return;
+        setEditingShiftId(null);
+        setDraftShiftDate(null);
+        setIsModalOpen(true);
+      }}
+      onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
+      onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
+      onMembers={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsMembersOpen(true); } : undefined}
+      onAreas={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsAreasOpen(true); } : undefined}
+      onFormatProfiles={session ? () => { if (!isImporting) setIsFormatProfilesOpen(true); } : undefined}
+      onSettings={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsSettingsOpen(true); } : undefined}
+      onLogout={session ? () => { if (!isImporting) void handleLogout(); } : undefined}
+    >
+      <div className={`dashboard-body${isImporting || isSavingShift ? ' app--busy' : ''}`} aria-busy={isImporting || isSavingShift}>
+        <CalendarToolbar
+          year={currentYear}
+          month={currentMonth}
+          onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
+        />
         {appFeedback && (
           <div
             role={appFeedback.kind}
@@ -1615,20 +1733,9 @@ function App() {
             </button>
           </div>
         )}
-        {!session && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={() => { if (!isImporting) setIsAuthOpen(true); }}
-              style={{ padding: '8px 14px', fontWeight: 700 }}
-            >
-              {t('auth.signIn')}
-            </button>
-          </div>
-        )}
+        {!session && <div className="dashboard-sign-in-hint"><button type="button" className="btn-outline" onClick={() => { if (!isImporting) setIsAuthOpen(true); }}>{t('auth.signIn')}</button></div>}
 
-        {accountIncomplete ? (
+        {accountIncomplete && (
           <div
             role="status"
             style={{
@@ -1649,159 +1756,6 @@ function App() {
               className="btn-outline"
               onClick={() => { if (!isImporting) void handleLogout(); }}
               style={{ padding: '8px 14px', fontWeight: 700 }}
-            >
-              {t('auth.logoutAction')}
-            </button>
-          </div>
-        ) : session && !needsOrgChoice && (
-          <div
-            className="team-bar"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              flexWrap: 'wrap',
-              marginBottom: '12px',
-              padding: '10px 14px',
-              border: '1px solid var(--glass-border)',
-              borderRadius: '12px',
-              background: 'var(--panel-muted-bg)',
-              fontSize: '0.85rem',
-            }}
-          >
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-              {t('orgSelector.activeLabel')}
-              {session.memberships.length > 1 ? (
-                <SearchableSelect
-                  label=""
-                  value={session.organizationId ?? ''}
-                  onChange={(organizationId) => void handleSwitchOrganization(organizationId)}
-                  searchPlaceholder={t('orgSelector.searchPlaceholder')}
-                  emptyMessage={t('orgSelector.noResults')}
-                  ariaLabel={t('orgSelector.title')}
-                  options={session.memberships.map((membership) => ({
-                    value: membership.organizationId,
-                    label: membership.organizationName,
-                    searchText: membership.organizationName.toLowerCase(),
-                  }))}
-                  style={{ width: 'auto', fontWeight: 700 }}
-                />
-              ) : (
-                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {(() => {
-                    const active = session.memberships.find((m) => m.organizationId === session.organizationId);
-                    return active?.organizationName ?? '';
-                  })()}
-                </span>
-              )}
-            </label>
-            {session.role && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-                {t('team.roleLabel')}
-                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{t(`role.${session.role.toLowerCase()}`)}</span>
-              </label>
-            )}
-            {session.role !== 'EMPLOYEE' && activeAreas.length === 1 && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-                {t('areas.contextLabel')}
-                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{activeAreas[0].name}</span>
-              </label>
-            )}
-            {session.role !== 'EMPLOYEE' && activeAreas.length >= 2 && (
-              <div style={{ minWidth: '180px', maxWidth: '260px' }}>
-                <SearchableSelect
-                  label={t('areas.contextLabel')}
-                  value={selectedAreaId ?? ''}
-                  onChange={(value) => setSelectedAreaId(value || null)}
-                  searchPlaceholder={t('orgSelector.searchPlaceholder')}
-                  emptyMessage={t('orgSelector.noResults')}
-                  ariaLabel={t('areas.contextLabel')}
-                  options={[
-                    { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
-                    ...activeAreas.map((area) => ({
-                      value: area.id,
-                      label: area.name,
-                      searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
-                    })),
-                  ]}
-                />
-              </div>
-            )}
-            {session.role === 'EMPLOYEE' && selfEmployee?.areaId && (
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
-                {t('areas.contextLabel')}
-                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {areas.find((area) => area.id === selfEmployee.areaId)?.name ?? ''}
-                </span>
-              </label>
-            )}
-            <span style={{ width: '1px', alignSelf: 'stretch', background: 'var(--glass-border)' }} aria-hidden="true" />
-            {session.role === 'EMPLOYEE' ? (
-              <span style={{ color: 'var(--text-muted)' }}>{t('team.myShifts')}</span>
-            ) : (
-              <div style={{ minWidth: '220px', maxWidth: '320px' }}>
-                <SearchableSelect
-                  label={t('team.employeeLabel')}
-                  value={selectedEmployeeId ?? ''}
-                  onChange={(employeeId) => void handleSelectEmployee(employeeId)}
-                  searchPlaceholder={t('employeeSelect.searchPlaceholder')}
-                  emptyMessage={visibleEmployees.length === 0 ? t('employeeSelect.noEmployees') : t('employeeSelect.noResults')}
-                  ariaLabel={t('team.employeeLabel')}
-                  options={visibleEmployees
-                    .filter((employee) => employee.status === 'active')
-                    .map((employee) => ({
-                      value: employee.id,
-                      label: employee.externalEmployeeId
-                        ? `${employee.name} · ID ${employee.externalEmployeeId}`
-                        : employee.name,
-                      searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
-                    }))}
-                />
-              </div>
-            )}
-            {isAdminRole(session.role) && (
-              <button
-                type="button"
-                className="btn-outline"
-                onClick={() => { if (!isImporting) setIsMembersOpen(true); }}
-                style={{ padding: '6px 12px', fontWeight: 700 }}
-              >
-                {t('members.title')}
-              </button>
-            )}
-            {isAdminRole(session.role) && (
-              <button
-                type="button"
-                className="btn-outline"
-                onClick={() => { if (!isImporting) setIsAreasOpen(true); }}
-                style={{ padding: '6px 12px', fontWeight: 700 }}
-              >
-                {t('areas.manage')}
-              </button>
-            )}
-            {session.role !== 'EMPLOYEE' && (
-              <button
-                type="button"
-                className="btn-gold"
-                onClick={() => { if (!isImporting) navigate('/app/schedule'); }}
-                style={{ padding: '6px 12px', minHeight: '36px', fontWeight: 800 }}
-              >
-                {t('planner.navLabel')}
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={() => { if (!isImporting) setIsFormatProfilesOpen(true); }}
-              style={{ padding: '6px 12px', fontWeight: 700 }}
-            >
-              {t('formatProfiles.manage')}
-            </button>
-            <button
-              type="button"
-              className="btn-outline"
-              onClick={() => { if (!isImporting) void handleLogout(); }}
-              style={{ padding: '6px 12px', fontWeight: 700, marginLeft: 'auto' }}
             >
               {t('auth.logoutAction')}
             </button>
@@ -1836,7 +1790,8 @@ function App() {
         </section>
           </>
         )}
-      </main>
+      </div>
+    </AppShell>
 
       {(isImporting || isSavingShift) && (
         <div className="app-operation-lock" role="presentation" aria-busy="true">
@@ -2222,7 +2177,7 @@ function App() {
       )}
       <LegalFooter />
       <CookieConsent />
-    </div>
+    </>
   );
 }
 
