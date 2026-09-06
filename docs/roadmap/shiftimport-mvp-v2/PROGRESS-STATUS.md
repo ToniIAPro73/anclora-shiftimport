@@ -96,11 +96,12 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
   Approval Lite en navegación, shell y frontera temporal verificadas.
 - P5.3 — Plan-Aware Organization Onboarding & Initial Governance: `PASS`; plan, OWNER válido,
   áreas y ADMIN opcionales, y separación User↔Employee preservados.
-- P5.4 — Employee Self-Service Completion: `PASS_WITH_GAPS`; `Hoy`/`Semana`/`Solicitudes`/`Más`
-  mantienen la IA del portal, con creación de ChangeRequest, self-import y alta histórica bajo
-  SELF. Tests, lint, build y smoke E2E compacto pasan; queda pendiente la matriz de capturas
-  visuales manuales para el Gate final del programa. P6 permanece sin iniciar.
-- P5.5 — Future Import to Draft Scheduling: `PASS_WITH_GAPS`; la frontera `date < today` persiste
+- P5.4 — Employee Self-Service Completion: `PASS_WITH_GAPS`; el EMPLOYEE usa ahora la Application
+  Shell compartida con calendario mensual, Sidebar role-aware y TopBar común. ChangeRequest,
+  self-import y alta histórica siguen bajo SELF. Tests, lint, build y smoke E2E compacto pasan;
+  queda pendiente la matriz de capturas visuales manuales para el Gate final del programa. P6
+  permanece sin iniciar.
+- P5.5 — Future Import to Draft Scheduling: `PASS`; la frontera `date < today` persiste
   histórico y `date >= today` enruta a Scheduling en borrador para OWNER/ADMIN/PLANNER con consentimiento
   explícito. El calendario conserva únicamente realidad publicada y EMPLOYEE no crea futuro. Suite completa,
   lint, build y E2E compacto pasan. P5.5-R01 valida los ficheros PDF/XLSX reales del caso, cierra G-20

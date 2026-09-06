@@ -38,14 +38,15 @@ async function assertNoAxeViolations(page: Page, label: string, testInfo: TestIn
   expect(results.violations, `${label} accessibility violations`).toEqual([]);
 }
 
-test('focused axe pass: planner desktop and employee portal mobile', async ({ browser }, testInfo) => {
+test('focused axe pass: planner desktop and unified employee shell mobile', async ({ browser }, testInfo) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'es-ES' });
   const plannerPage = await context.newPage();
   try {
     await prepare(plannerPage, 'es', 'light');
     await login(plannerPage, fixture.emails.planner);
     await plannerPage.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(plannerPage.getByRole('heading', { name: 'Anclora ShiftImport' })).toBeVisible();
+    await expect(plannerPage.getByTestId('app-shell')).toBeVisible();
+    await expect(plannerPage.getByText('Anclora ShiftImport', { exact: true })).toBeVisible();
     await assertNoAxeViolations(plannerPage, 'dashboard-es-light-desktop', testInfo);
     await plannerPage.getByRole('button', { name: 'Planificar' }).click();
     await expect(plannerPage).toHaveURL(/\/app\/schedule$/);
@@ -56,7 +57,7 @@ test('focused axe pass: planner desktop and employee portal mobile', async ({ br
     await prepare(employeePage, 'en', 'dark');
     await login(employeePage, fixture.emails.emp);
     await employeePage.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(employeePage.getByTestId('employee-portal')).toBeVisible();
+    await expect(employeePage.getByTestId('app-shell')).toBeVisible();
     await assertNoAxeViolations(employeePage, 'employee-en-dark-mobile', testInfo);
   } finally {
     await context.close();

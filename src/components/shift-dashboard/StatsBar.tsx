@@ -170,7 +170,7 @@ export const StatsBar = ({ currentMonthShifts, daysInMonth, currentYearShifts, d
   );
 
   return (
-    <div className="totals-ribbon">
+    <div className="totals-ribbon" tabIndex={0}>
       <SummaryLine title={ownTitle} cells={ownCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
       <SummaryLine title={companyTitle} cells={companyCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
     </div>

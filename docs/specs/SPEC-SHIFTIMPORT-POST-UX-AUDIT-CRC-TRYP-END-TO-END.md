@@ -80,12 +80,14 @@ un OWNER válido sin Employee, ADMIN ni áreas se mostraba como “Configuració
 introduce un wizard plan-aware con submit único y transaccional. No implementa billing ni reabre P5,
 P5.1 o P5.2.
 
-P5.4 se añade después del cierre de P5.3 para completar el autoservicio operativo del Employee sin
-cambiar su IA móvil `Hoy / Semana / Solicitudes / Más`. Expone solicitudes de cambio, self-import y
-alta histórica mediante los contratos existentes, siempre bajo scope `SELF`. El intercambio de
-turnos se registra como P5.6 futura y no se implementa aquí. P5.4 queda en `PASS_WITH_GAPS`: la
-implementación y el smoke E2E pasan, pero la matriz de capturas visuales manuales queda pendiente
-de una sesión de QA visual con navegador interactivo.
+P5.4 se añade después del cierre de P5.3 para completar el autoservicio operativo del Employee bajo
+la Application Shell compartida. La decisión posterior de unificación supersede la IA dedicada móvil
+`Hoy / Semana / Solicitudes / Más` como arquitectura primaria: el calendario mensual es el home, el
+Sidebar muestra las capacidades SELF y el TopBar es común a OWNER/ADMIN/PLANNER/EMPLOYEE. Expone
+solicitudes de cambio, self-import y alta histórica mediante los contratos existentes, siempre bajo
+scope `SELF`. El intercambio de turnos se registra como P5.6 futura y no se implementa aquí. P5.4
+queda en `PASS_WITH_GAPS`: la implementación y el smoke E2E pasan, pero la matriz de capturas visuales
+manuales queda pendiente de una sesión de QA visual con navegador interactivo.
 
 P5.5 se añade después de P5.4 para cerrar la separación temporal de importación mixta: `date < today`
 persiste como histórico y `date >= today` se añade a planificación `DRAFT` solo para OWNER/ADMIN/PLANNER

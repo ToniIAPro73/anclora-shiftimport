@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from './lib/i18n-react';
 import { ThemeProvider } from './lib/theme-react';
 import { setupLocalStorageMock } from './test-utils/local-storage';
@@ -60,7 +61,7 @@ function renderAuthenticated(role: 'EMPLOYEE' | 'ADMIN') {
   );
 }
 
-describe('R4-M00 employee entry point', () => {
+describe('unified role-aware employee entry point', () => {
   beforeEach(() => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: false,
@@ -70,12 +71,20 @@ describe('R4-M00 employee entry point', () => {
     }));
   });
 
-  it('sends an authenticated EMPLOYEE to the dedicated portal shell', async () => {
+  it('sends an authenticated EMPLOYEE to the shared application shell', async () => {
     renderAuthenticated('EMPLOYEE');
 
-    await waitFor(() => expect(screen.getByTestId('employee-portal')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: 'Importar turnos' })).toBeNull();
-    expect(screen.getByRole('navigation', { name: 'Navegación del portal' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy());
+    expect(screen.getByTestId('app-shell-sidebar')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-calendar')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-self-import')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-historical-add')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-requests')).toBeTruthy();
+    expect(screen.queryByTestId('sidebar-planner')).toBeNull();
+    expect(screen.queryByTestId('sidebar-approvals')).toBeNull();
+    expect(screen.queryByTestId('sidebar-members')).toBeNull();
+    expect(screen.queryByTestId('employee-portal')).toBeNull();
+    expect(screen.getByTestId('calendar-employee-readonly')).toHaveTextContent('Ana Demo');
   });
 
   it('keeps the existing dashboard for an authenticated ADMIN', async () => {

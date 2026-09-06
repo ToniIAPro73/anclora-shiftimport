@@ -51,7 +51,7 @@ function mondayOfCurrentWeek(): string {
   return date.toISOString().slice(0, 10);
 }
 
-test('P5 role smoke: scoped planner, admin eligibility, employee portal', async ({ page }) => {
+test('P5 role smoke: scoped planner, admin eligibility, unified employee shell', async ({ page }) => {
   const nativeDialogs: string[] = [];
   page.on('dialog', async (dialog) => {
     nativeDialogs.push(dialog.type());
@@ -152,16 +152,20 @@ test('P5 role smoke: scoped planner, admin eligibility, employee portal', async 
   expect(['TENANT_FORBIDDEN', 'SCOPE_FORBIDDEN']).toContain((await crossTenantWrite.json()).code);
   await page.goto('/app/schedule', { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByTestId('employee-portal')).toBeVisible();
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await expect(page.getByTestId('sidebar-calendar')).toBeVisible();
+  await expect(page.getByTestId('sidebar-self-import')).toBeVisible();
+  await expect(page.getByTestId('sidebar-historical-add')).toBeVisible();
+  await expect(page.getByTestId('sidebar-requests')).toBeVisible();
   await logoutApi(page);
 
   // An inactive Employee cannot obtain SELF scope and therefore cannot
-  // receive new shifts, even when the membership remains EMPLOYEE.
+  // receive new shifts, even when the membership remains EMPLOYEE. The
+  // browser shell is covered by the linked active-employee journey; this
+  // inactive case stays API-only to avoid a redundant navigation.
   await loginApi(page, fixture.emails.inactiveEmployee);
   const inactiveShifts = await page.request.get(`/api/shifts?employeeId=${fixture.empInactive}`);
   expect(inactiveShifts.status()).toBe(403);
-  await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Cuenta no vinculada')).toBeVisible();
   await logoutApi(page);
 
   // ADMIN reset capability is checked last because it intentionally clears

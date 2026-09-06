@@ -33,14 +33,19 @@ con recuento y explicación (`SELF_FUTURE_ROWS_EXCLUDED`); no crean `Shift`, `Sc
 - La previsualización precede a la escritura; la idempotencia y la atomicidad existentes se conservan.
 - La UI muestra el desglose, pero no sustituye las comprobaciones de autorización del backend.
 
-## Portal de autoservicio (P5.4)
+## Autoservicio unificado (P5.4)
 
-El portal conserva su navegación `Hoy` / `Semana` / `Solicitudes` / `Más` y mantiene scope `SELF`.
-`Hoy` y `Semana` muestran únicamente turnos publicados del Employee vinculado. Desde el detalle de
-un turno y desde `Solicitudes`, el Employee puede crear una solicitud de cambio usando el dominio
-`ChangeRequest` existente; no puede editar el turno directamente ni aprobar solicitudes.
+La IA anterior `Hoy` / `Semana` / `Solicitudes` / `Más` queda supersedida como shell primaria por la
+Application Shell compartida con OWNER, ADMIN y PLANNER. La pantalla principal del EMPLOYEE es el
+calendario mensual canónico; el Sidebar muestra únicamente `Calendario`, `Importar mis turnos`,
+`Añadir turno pasado` y `Solicitudes`. El TopBar compartido concentra Organización, Rol, Employee,
+tema, idioma y el menú del usuario. No se crea una segunda navegación ni bottom navigation.
 
-`Más` expone `Importar mis turnos` y `Añadir turno pasado`. Ambas entradas reutilizan los flujos
+El calendario muestra únicamente turnos publicados del Employee vinculado y el campo Employee es de
+solo lectura. Desde `Solicitudes`, el Employee puede crear una solicitud de cambio usando el dominio
+`ChangeRequest` existente; no puede editar turnos directamente ni aprobar solicitudes.
+
+El Sidebar expone `Importar mis turnos` y `Añadir turno pasado`. Ambas entradas reutilizan los flujos
 existentes: el import filtra filas propias y excluye futuro, y el alta manual sólo acepta `date <
 today` en `Europe/Madrid`. El backend sigue resolviendo identidad, organización, Employee activo,
 propiedad del turno y frontera temporal; la UI no es una autoridad de seguridad.

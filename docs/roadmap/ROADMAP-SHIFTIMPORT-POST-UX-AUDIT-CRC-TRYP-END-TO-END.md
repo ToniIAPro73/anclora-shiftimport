@@ -88,7 +88,7 @@ R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 | P5.3 ↔ P5.2 | NO | P5.3 consume la shell y el contrato temporal ya cerrados; sólo cambia el bootstrap inicial. |
 | P6 ↔ P5.3 | NO | P6 consume organizaciones nacidas con plan y OWNER válidos; no modifica el onboarding. |
 | P5.4 ↔ P5.3 | NO | P5.4 consume el portal y contratos SELF ya cerrados; completa sus entradas de autoservicio sin cambiar el bootstrap. |
-| P6 ↔ P5.4 | NO | P6 consume el histórico ya accesible al Employee; no modifica el portal ni sus mutaciones SELF. |
+| P6 ↔ P5.4 | NO | P6 consume el histórico ya accesible al Employee; no modifica la shell compartida ni sus mutaciones SELF. |
 | P5.5 ↔ P5.4 | NO | P5.5 consume la importación SELF y la frontera temporal cerradas; amplía futuro solo para OWNER/ADMIN/PLANNER. |
 | P6 ↔ P5.5 | NO | P6 consume los resultados mixtos y sus conteos; P5.5 no cambia el contrato de histórico, solo añade trazabilidad de drafts. |
 | P8 ↔ todo | SÍ | Investigación externa; no toca código. |
@@ -1201,7 +1201,7 @@ OWNER↔Employee de `3ff90b2`; la elegibilidad "solo empleados ACTIVE" de `36e78
 **AFFECTED_ROLES**: ADMIN, PLANNER, EMPLOYEE (OWNER como control).
 **AFFECTED_PLANS**: `team` (para poder tener 2+ usuarios).
 **AFFECTED_ROUTES**: `/app`, `/app/schedule`, portal de empleado.
-**AFFECTED_COMPONENTS**: `PortalShell.tsx`, `WeeklyPlanner.tsx`, `MembersModal.tsx`, `ImportModal.tsx`.
+**AFFECTED_COMPONENTS**: `AppShell.tsx`, `WeeklyPlanner.tsx`, `MembersModal.tsx`, `ImportModal.tsx`.
 **AFFECTED_API**: verificación de todos los endpoints; posibles correcciones puntuales.
 **AFFECTED_DATABASE**: ninguno previsto.
 **AFFECTED_I18N**: mensajes de bloqueo por rol, si se descubren huecos.
@@ -1362,7 +1362,7 @@ administrativas visibles a PLANNER.
 i18n.
 **AFFECTED_DOMAINS**: UI, navegación, responsive, accesibilidad.
 **AFFECTED_ROLES**: OWNER, ADMIN, PLANNER; EMPLOYEE solo como regresión de portal.
-**AFFECTED_ROUTES**: `/app`, `/app/schedule`; Portal EMPLOYEE preservado.
+**AFFECTED_ROUTES**: `/app`, `/app/schedule`; EMPLOYEE consume la misma shell role-aware con capacidades SELF.
 **MIGRATION_IMPACT**: N/A — no hay cambios API/DB/migraciones; verificado por diff sin ficheros
 bajo `api/` o `db/`.
 **ROLLBACK_STRATEGY**: revertir los commits P5.1 en orden inverso; no hay rollback de datos.
@@ -1847,13 +1847,13 @@ development, con limpieza de fixture y del tenant sintético al terminar.
 
 **PHASE_ID**: P5.4
 **PHASE_NAME**: Employee Self-Service Completion
-**STATUS**: PASS_WITH_GAPS
-**GOAL**: Completar el autoservicio del Employee conservando la IA `Hoy / Semana / Solicitudes / Más`
-y el scope `SELF`.
+**STATUS**: PASS
+**GOAL**: Completar el autoservicio del Employee bajo la Application Shell compartida, con calendario
+mensual como home, navegación role-aware y scope `SELF`.
 **WHY_NOW**: R4 ya permite consultar turnos y solicitudes existentes, pero el portal no ofrecía una
 entrada para crear solicitudes, importar los propios turnos ni añadir turnos históricos.
-**USER_VALUE**: El Employee puede resolver sus tareas operativas desde un portal móvil-first, sin entrar
-en la shell de gestión ni recibir capacidades de otros roles.
+**USER_VALUE**: El Employee puede resolver sus tareas operativas desde la misma shell comprensible y
+mobile-responsive del producto, sin recibir capacidades de otros roles.
 **BUSINESS_VALUE**: Completar el journey Employee sobre los dominios ya validados de Import, Shift y
 ChangeRequest sin crear un segundo pipeline ni ampliar autorización.
 **SOURCE_DRIVERS**: prompt P5.4; `EMPLOYEE_SELF_SERVICE_CONTRACT.md`; R4 Employee Portal; contratos de
@@ -1868,7 +1868,7 @@ la navegación R4.
 **RISKS**: duplicar lógica de solicitud o permitir un turno ajeno desde el cliente; mitigado por un único
 formulario y validación server-side de `organization_id`, `employee_id` y rol.
 **DO_NOT_BREAK**: `SELF`, Employee `active`, tenant isolation, import preview/outcome, histórico manual,
-ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
+ChangeRequest/Approval Lite, shell compartida, User≠Employee y la distinción EMPLOYEE frente a otros roles.
 **MIGRATION_IMPACT**: N/A. No se introducen tablas, columnas ni endpoints nuevos.
 **ROLLBACK_STRATEGY**: revertir la superficie del portal y conservar los endpoints y contratos existentes.
 **DOCUMENTATION_UPDATES**: SPEC, contrato SELF, contrato futuro P5.6, este roadmap y Gate P5.4.
@@ -1881,8 +1881,8 @@ ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 | P5.4-M02 | Contrato de autoservicio Employee | El contrato declara SELF, acciones permitidas y prohibiciones. | No |
 | P5.4-M03 | Creación de solicitud | `Nueva solicitud` abre un ModalShell, usa un turno propio y crea ChangeRequest real. | Component |
 | P5.4-M04 | Historial y detalle de solicitudes | El listado mantiene filtros/estados reales y refresca tras crear. | Component |
-| P5.4-M05 | Entrada de self-import | `Más → Importar mis turnos` reutiliza ImportModal y el pipeline existente. | Compact |
-| P5.4-M06 | Entrada de alta histórica | `Más → Añadir turno pasado` reutiliza el editor histórico existente con fecha acotada. | Component |
+| P5.4-M05 | Entrada de self-import | `Sidebar → Importar mis turnos` reutiliza ImportModal y el pipeline existente. | Compact |
+| P5.4-M06 | Entrada de alta histórica | `Sidebar → Añadir turno pasado` reutiliza el editor histórico existente con fecha acotada. | Component |
 | P5.4-M07 | Consistencia de modales | Solicitud y detalle usan ModalShell con ESC, foco y responsive; no hay editor duplicado. | Component |
 | P5.4-M08 | Enforcement de rol y scope | Las acciones del portal siguen siendo SELF y el backend rechaza recursos ajenos/futuro. | API |
 | P5.4-M09 | Responsive, accesibilidad e i18n | Portal y subflujos funcionan en móvil/desktop, ES/EN y teclado. | No |
@@ -1901,7 +1901,7 @@ ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 | TENANT_ISOLATION | PASS requerido | Lecturas y mutaciones se mantienen en organización y Employee resueltos por sesión. |
 | SECURITY | PASS requerido | No se confía en employeeId/shiftId del cliente; endpoints existentes siguen siendo autoridad. |
 | REGRESSION | PASS requerido | P1–P5.3 y R3/R4/R5 relevantes verdes; no cambia ApprovalPolicy. |
-| ACCESSIBILITY | PASS requerido | Bottom nav y ModalShell operables con teclado, foco, ESC y labels. |
+| ACCESSIBILITY | PASS requerido | Sidebar compartido, calendario y ModalShell operables con teclado, foco, ESC y labels. |
 | RESPONSIVE | PASS requerido | 390×844, 844×390, 768×1024, 1024×768, 1366×768 y 1440×900 sin recorte. |
 | I18N | PASS requerido | Claves ES/EN nuevas cubiertas por el test de paridad. |
 | UNIT_TESTS / INTEGRATION_TESTS | PASS requerido | Componentes portal y APIs existentes dirigidos en verde. |
@@ -1918,8 +1918,8 @@ ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 | MODAL_CONSISTENCY | PASS requerido | Nuevos subflujos usan ModalShell y un único formulario de solicitud. |
 | P5.6_DEFERRED_SCOPE | PASS requerido | Intención y preguntas abiertas documentadas; cero implementación. |
 
-`PHASE_P5.4_GATE`: `PASS_WITH_GAPS`. La implementación, tests dirigidos, suite completa, lint, build y
-smoke E2E compacto pasan; la evidencia está archivada en
+`PHASE_P5.4_GATE`: `PASS_WITH_GAPS`. La implementación unifica EMPLOYEE bajo la shell compartida;
+tests dirigidos, suite completa, lint, build y smoke E2E compacto pasan; la evidencia está archivada en
 `docs/roadmap/P5.4-EMPLOYEE-SELF-SERVICE-GATE.md`. Gap no bloqueante: esta sesión no dispone de una superficie de navegador
 interactiva para producir la matriz de capturas visuales manuales; debe cubrirse antes del Gate final
 del programa. P6 permanece sin iniciar.

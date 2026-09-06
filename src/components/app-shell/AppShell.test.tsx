@@ -15,6 +15,9 @@ function renderShell(role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE' | null = '
   const callbacks = {
     onImport: vi.fn(),
     onAddShift: vi.fn(),
+    onSelfImport: vi.fn(),
+    onHistoricalAdd: vi.fn(),
+    onRequests: vi.fn(),
     onHistory: vi.fn(),
     onPlanner: vi.fn(),
     onApprovals: vi.fn(),
@@ -75,6 +78,22 @@ describe('AppShell', () => {
     expect(screen.queryByTestId('sidebar-areas')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-settings')).not.toBeInTheDocument();
     expect(screen.getByTestId('app-shell-main-context')).toHaveTextContent('Organization context');
+  });
+
+  it('renders the shared shell with only self-service actions for EMPLOYEE', () => {
+    renderShell('EMPLOYEE');
+
+    expect(screen.getByTestId('sidebar-calendar')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-self-import')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-historical-add')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-requests')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-history')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-planner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-approvals')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-members')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-areas')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-formats')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-settings')).not.toBeInTheDocument();
   });
 
   it('persists collapsed state and keeps icon actions named', () => {

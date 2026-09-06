@@ -4,8 +4,23 @@ import { join } from 'node:path';
 
 const fixture = JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'local-fixture.json'), 'utf8')) as {
   password: string;
+  areaA: string;
+  empA1: string;
   emails: Record<string, string>;
 };
+
+function mondayOfCurrentWeek(): string {
+  const date = new Date();
+  const day = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() + (day === 0 ? -6 : 1 - day));
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 async function loginApi(page: Page, email: string) {
   const response = await page.request.post('/api/auth/login', { data: { email, password: fixture.password } });
@@ -27,6 +42,20 @@ test('P5.2 compact owner smoke: operational navigation and temporal boundaries',
   });
 
   await loginApi(page, fixture.emails.owner);
+  // The visual gate must show the planner's real grid, not the empty-state
+  // branch. Seed one current-week draft through the existing scheduling API;
+  // teardown removes it with the synthetic organization.
+  const currentWeek = mondayOfCurrentWeek();
+  const draftResponse = await page.request.post('/api/schedules', {
+    data: { areaId: fixture.areaA, periodStart: currentWeek },
+  });
+  expect(draftResponse.status()).toBe(201);
+  const draft = await draftResponse.json() as { scheduleId: string; scheduleVersionId: string };
+  const assignmentResponse = await page.request.post(
+    `/api/schedules/${draft.scheduleId}/versions/${draft.scheduleVersionId}/assignments`,
+    { data: { employeeId: fixture.empA1, date: addDays(currentWeek, 6), startTime: '09:00', endTime: '17:00', location: 'P5.2 visual fixture' } },
+  );
+  expect(assignmentResponse.status()).toBe(201);
   await page.goto('/app', { waitUntil: 'networkidle' });
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('calendar-toolbar')).toBeVisible();

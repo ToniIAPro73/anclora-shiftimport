@@ -70,6 +70,9 @@ export interface AppShellProps {
   onSignIn?: () => void;
   onImport?: () => void;
   onAddShift?: () => void;
+  onSelfImport?: () => void;
+  onHistoricalAdd?: () => void;
+  onRequests?: () => void;
   onHistory?: () => void;
   onPlanner?: () => void;
   onApprovals?: () => void;
@@ -202,6 +205,9 @@ export function AppShell({
   onSignIn,
   onImport,
   onAddShift,
+  onSelfImport,
+  onHistoricalAdd,
+  onRequests,
   onHistory,
   onPlanner,
   onApprovals,
@@ -262,14 +268,12 @@ export function AppShell({
   };
   const isEmployee = role === 'EMPLOYEE';
   const canManage = role === 'OWNER' || role === 'ADMIN';
-  const canUseManagementShell = !isEmployee;
 
   return (
     <div className={`app-shell${expanded ? ' is-expanded' : ' is-collapsed'}${drawerOpen ? ' is-drawer-open' : ''}`} data-testid="app-shell">
       <a className="app-shell__skip-link" href="#main-content">{t('shell.skipToMain')}</a>
       <div className="app-shell__mobile-backdrop" aria-hidden="true" onClick={closeDrawer} />
-      {canUseManagementShell && (
-        <aside
+      <aside
           ref={drawerRef}
           className="app-shell__sidebar"
           aria-label={t('shell.sidebarLabel')}
@@ -288,11 +292,21 @@ export function AppShell({
               <SidebarItem label={t('shell.calendar')} icon={<CalendarDays size={18} />} active={activeSection === 'calendar'} collapsed={!expanded} onClick={() => runAction()} testId="sidebar-calendar" />
             </SidebarGroup>
             <SidebarGroup label={t('shell.operation')}>
-              {onImport && <SidebarItem label={t('shell.import')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
-              {onAddShift && <SidebarItem label={t('shell.addShift')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
-              {onHistory && <SidebarItem label={t('shell.history')} icon={<History size={18} />} collapsed={!expanded} onClick={() => runAction(onHistory)} testId="sidebar-history" />}
-              {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!expanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
-              {onApprovals && <SidebarItem label={t('approvalInbox.navLabel')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onApprovals)} testId="sidebar-approvals" />}
+              {isEmployee ? (
+                <>
+                  {onSelfImport && <SidebarItem label={t('employeePortal.importSelf')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onSelfImport)} testId="sidebar-self-import" />}
+                  {onHistoricalAdd && <SidebarItem label={t('employeePortal.addHistorical')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onHistoricalAdd)} testId="sidebar-historical-add" />}
+                  {onRequests && <SidebarItem label={t('employeePortal.requests')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onRequests)} testId="sidebar-requests" />}
+                </>
+              ) : (
+                <>
+                  {onImport && <SidebarItem label={t('shell.import')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
+                  {onAddShift && <SidebarItem label={t('shell.addShift')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
+                  {onHistory && <SidebarItem label={t('shell.history')} icon={<History size={18} />} collapsed={!expanded} onClick={() => runAction(onHistory)} testId="sidebar-history" />}
+                  {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!expanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
+                  {onApprovals && <SidebarItem label={t('approvalInbox.navLabel')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onApprovals)} testId="sidebar-approvals" />}
+                </>
+              )}
             </SidebarGroup>
             {canManage && (
               <SidebarGroup label={t('shell.management')}>
@@ -315,8 +329,7 @@ export function AppShell({
           >
             {expanded ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
           </button>
-        </aside>
-      )}
+      </aside>
 
       <div className="app-shell__content">
         <header className="app-shell__topbar">
