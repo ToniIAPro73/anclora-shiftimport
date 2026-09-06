@@ -53,7 +53,7 @@ const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 function renderTeamImportModal(
   onImported: () => void = () => {},
   sessionRole: 'ADMIN' | 'EMPLOYEE' = 'ADMIN',
-  options: { areas?: RemoteArea[]; currentAreaId?: string | null; allowAreaChoice?: boolean } = {},
+  options: { areas?: RemoteArea[]; currentAreaId?: string | null; allowAreaChoice?: boolean; currentPlan?: 'free' | 'personal' | 'team' | null } = {},
 ) {
   return render(
     <I18nProvider>
@@ -62,6 +62,7 @@ function renderTeamImportModal(
         onClose={() => {}}
         onImported={onImported}
         sessionRole={sessionRole}
+        currentPlan={options.currentPlan ?? null}
         areas={options.areas ?? []}
         currentAreaId={options.currentAreaId ?? null}
         allowAreaChoice={options.allowAreaChoice ?? false}
@@ -105,6 +106,13 @@ const rosterShift = (date: string) => ({
 });
 
 describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', () => {
+  it('announces the Team gate before file selection on Personal', () => {
+    renderTeamImportModal(() => {}, 'ADMIN', { currentPlan: 'personal' });
+
+    expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy();
+    expect(screen.getByText(/La importación multi-empleado requiere el plan Team/)).toBeTruthy();
+    expect((screen.getByLabelText('Elegir archivo') as HTMLInputElement).closest('fieldset')).toHaveProperty('disabled', true);
+  });
   it('recognized/new/ambiguous rows render with the right per-status controls', async () => {
     mockedDetectTeamRoster.mockReturnValue({
       employees: [

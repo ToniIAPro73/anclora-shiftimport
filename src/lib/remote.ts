@@ -565,6 +565,26 @@ export interface RemoteOrganization {
   id: string;
   name: string;
   plan: string | null;
+  entitlement?: RemoteEntitlement;
+}
+
+export interface RemoteEntitlement {
+  planId: 'free' | 'personal' | 'team';
+  features: {
+    multiEmployeeImport: boolean;
+    teamManagement: boolean;
+    fullHistory: boolean;
+  };
+  limits: {
+    maxEmployees: number | null;
+    maxMonthlyImports: number | null;
+  };
+  usage: { activeEmployees: number };
+}
+
+export async function loadRemoteOrganization(): Promise<RemoteOrganization> {
+  const payload = await apiFetch<{ organization: RemoteOrganization; entitlement: RemoteEntitlement }>('/api/organizations/current');
+  return { ...payload.organization, entitlement: payload.entitlement };
 }
 
 export type ApprovalPolicy = 'NO_APPROVAL' | 'AREA_RESPONSIBLE' | 'ORGANIZATION_ADMIN';

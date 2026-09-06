@@ -6,6 +6,7 @@ import {
   canUseFeature,
   checkLimit,
   getPlanDefinition,
+  getEntitlementDescriptor,
   requireFeature,
   requireWithinLimit,
 } from './plans.js';
@@ -20,6 +21,17 @@ describe('plan model (Fase 1.2G)', () => {
     expect(getPlanDefinition('nonexistent')).toBe(PLANS.free);
     expect(getPlanDefinition(undefined)).toBe(PLANS.free);
     expect(getPlanDefinition(null)).toBe(PLANS.free);
+  });
+
+  it('exposes a bounded entitlement descriptor without changing plan authority', () => {
+    expect(getEntitlementDescriptor('personal', 3)).toEqual({
+      planId: 'personal',
+      features: { multiEmployeeImport: false, teamManagement: false, fullHistory: true },
+      limits: { maxEmployees: 1, maxMonthlyImports: null },
+      usage: { activeEmployees: 3 },
+    });
+    expect(getEntitlementDescriptor('unknown', -2).planId).toBe('free');
+    expect(getEntitlementDescriptor('unknown', -2).usage.activeEmployees).toBe(0);
   });
 
   it('free and personal are both capped at 1 employee; team is unlimited', () => {

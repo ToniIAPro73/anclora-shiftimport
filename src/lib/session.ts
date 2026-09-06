@@ -22,6 +22,8 @@ export interface SessionInfo {
   /** Null when the user has several orgs and none selected yet. */
   organizationId: string | null;
   role: Role | null;
+  /** Commercial plan of the active organization, informational only. */
+  plan?: 'free' | 'personal' | 'team' | null;
   /** Employee linked to this user in the active organization (if any). */
   employeeId: string | null;
   memberships: SessionMembership[];

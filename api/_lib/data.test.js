@@ -1228,6 +1228,19 @@ describe('membership management (B2B minimal)', () => {
     ).rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT' });
   });
 
+  it('audits a plan-limit rejection without storing submitted contact or credential data', async () => {
+    const { sql, calls } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
+    await expect(
+      addMember(sql, { ...adminCtx, plan: 'personal' }, { email: 'private@example.com', role: 'EMPLOYEE', password: 'secret-123' }, fakeHash),
+    ).rejects.toMatchObject({ code: 'PLAN_LIMIT' });
+    const audit = calls.find((call) => call.text.startsWith('INSERT INTO organization_audit_events'));
+    expect(audit).toBeTruthy();
+    expect(audit.values[2]).toBe('PLAN_LIMIT_REJECTED');
+    expect(audit.values[5]).not.toContain('private@example.com');
+    expect(audit.values[5]).not.toContain('secret-123');
+    expect(JSON.parse(audit.values[5])).toMatchObject({ feature: 'teamManagement' });
+  });
+
   it('a supplied initial password must be at least 8 characters', async () => {
     const { sql } = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
     await expect(addMember(sql, adminCtx, { email: 'nuevo@example.com', role: 'EMPLOYEE', password: 'short' }, fakeHash))

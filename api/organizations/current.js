@@ -1,5 +1,6 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
 import { updateOrganizationName } from '../_lib/data.js';
+import { getEntitlementDescriptor } from '../_lib/plans.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -21,12 +22,19 @@ export default async function handler(req, res) {
 
     if (req.method === 'GET') {
       const membership = ctx.memberships.find((m) => m.organizationId === ctx.organizationId);
+      const activeEmployeeRows = await sql`
+        SELECT count(*)::int AS active_employees
+        FROM employees
+        WHERE organization_id = ${ctx.organizationId} AND status = 'active'
+      `;
+      const entitlement = getEntitlementDescriptor(ctx.plan, activeEmployeeRows[0]?.active_employees ?? 0);
       return sendJson(res, 200, {
         organization: {
           id: ctx.organizationId,
           name: membership?.organizationName ?? null,
           plan: ctx.plan,
         },
+        entitlement,
       });
     }
 

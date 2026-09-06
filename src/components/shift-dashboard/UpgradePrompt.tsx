@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import { navigate } from '../../lib/route';
 import { ModalShell } from '../ui/ModalShell';
@@ -11,6 +12,38 @@ interface UpgradePromptProps {
   switchTarget?: { id: string; name: string } | null;
   onSwitchOrg?: (organizationId: string) => void;
 }
+
+interface PlanGateNoticeProps {
+  id: string;
+  children: ReactNode;
+}
+
+/** Inline, non-error notice used before a gated form. */
+export const PlanGateNotice = ({ id, children }: PlanGateNoticeProps) => {
+  const { t } = useI18n();
+  return (
+    <div
+      id={id}
+      role="note"
+      style={{
+        display: 'grid', gap: '6px', padding: '10px 12px', borderRadius: '12px',
+        border: '1px solid var(--color-gold)', background: 'var(--gold-tint-bg)',
+        color: 'var(--text)', fontSize: '0.8rem', lineHeight: 1.45,
+      }}
+    >
+      <strong>{t('upgrade.title')}</strong>
+      <span style={{ color: 'var(--text-muted)' }}>{children}</span>
+      <button
+        type="button"
+        className="btn-outline"
+        onClick={() => navigate('/pricing')}
+        style={{ padding: '6px 10px', fontWeight: 800, justifySelf: 'start' }}
+      >
+        {t('upgrade.cta')}
+      </button>
+    </div>
+  );
+};
 
 /**
  * Shown when a feature gate (e.g. PLAN_LIMIT) is hit after other upgrade paths

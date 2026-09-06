@@ -56,6 +56,7 @@ function renderMembersModal(
   employees: RemoteEmployee[] = [],
   onChanged: () => void = () => {},
   areas: RemoteArea[] = [],
+  currentPlan: 'free' | 'personal' | 'team' | null = null,
 ) {
   return render(
     <I18nProvider>
@@ -66,6 +67,7 @@ function renderMembersModal(
         areas={areas}
         currentUserId="user-admin"
         onChanged={onChanged}
+        currentPlan={currentPlan}
       />
     </I18nProvider>,
   );
@@ -82,6 +84,19 @@ describe('MembersModal — tabs', () => {
     fireEvent.click(screen.getByText('Empleados'));
     expect(screen.getByText('Añadir empleado')).toBeTruthy();
     expect(screen.getByText('Ana')).toBeTruthy();
+  });
+
+  it('announces the Team gate before allowing user-management input on Personal', async () => {
+    mockedListRemoteMembers.mockResolvedValue([]);
+    renderMembersModal([], () => {}, [], 'personal');
+
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+    expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy();
+    expect(screen.getByText(/Añadir usuarios y gestionar accesos requiere el plan Team/)).toBeTruthy();
+    const emailInput = screen.getByPlaceholderText('Email del usuario') as HTMLInputElement;
+    const formGate = emailInput.closest('fieldset') as HTMLFieldSetElement;
+    expect(formGate.disabled).toBe(true);
+    expect((screen.getByLabelText('Contraseña') as HTMLInputElement).closest('fieldset')).toBe(formGate);
   });
 
   it('offers all four MVP roles in the add-user selector', async () => {

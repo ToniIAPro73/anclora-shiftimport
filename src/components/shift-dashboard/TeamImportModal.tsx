@@ -28,6 +28,8 @@ import { normalizeShiftTypeLabel } from '../../lib/shifts';
 import { Shift } from '../../lib/types';
 import { ApiError, isAdminRole, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
+import { PlanGateNotice } from './UpgradePrompt';
+import { canUseFeature } from '../../lib/plans';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { detectImportFlow } from '../../ingestion/import-dispatcher';
 import { fingerprintFile } from '../../lib/file-fingerprint';
@@ -183,6 +185,7 @@ export const TeamImportModal = ({
   const [rowDiagnostics, setRowDiagnostics] = useState<RowDiagnostic[]>([]);
   const [importAreaId, setImportAreaId] = useState<string | null>(defaultImportAreaId);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const multiEmployeeImportLocked = currentPlan !== null && !canUseFeature(currentPlan, 'multiEmployeeImport');
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ created: number; existing: number; failed: number } | null>(null);
@@ -784,7 +787,7 @@ export const TeamImportModal = ({
 
         {interactionLocked && <p role="status" aria-live="polite" data-import-progress tabIndex={-1} style={{ margin: '0 0 12px', color: 'var(--color-gold)', fontWeight: 700 }}>{t('importModal.importing')}</p>}
 
-        <fieldset disabled={interactionLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
+        <fieldset disabled={interactionLocked || multiEmployeeImportLocked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'flex', flexDirection: 'column', flex: 1 }}>
 
         {error && (
           <p role="alert" style={{ margin: '0 0 12px', color: 'var(--danger)', fontSize: '0.85rem' }}>{error}</p>
@@ -866,6 +869,11 @@ export const TeamImportModal = ({
 
         {step === 'upload' && (
           <div style={{ display: 'grid', gap: '12px' }}>
+            {multiEmployeeImportLocked && (
+              <PlanGateNotice id="team-multi-import-gate">
+                {t('upgrade.multiEmployeeImportBlocked')}
+              </PlanGateNotice>
+            )}
             {areas.length === 1 && (
               <p data-testid="team-import-area-context" style={{ margin: 0, color: 'var(--text-subtle)', fontSize: '0.82rem' }}>
                 {t('areas.contextLabel')}: <strong>{areas[0].name}</strong>

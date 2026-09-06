@@ -20,8 +20,10 @@ import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv, UserCsvRow } from '..
 import { findActiveArea } from '../../lib/areas';
 import { ModalShell } from '../ui/ModalShell';
 import { UpgradePrompt } from './UpgradePrompt';
+import { PlanGateNotice } from './UpgradePrompt';
 import { ApiError } from '../../lib/session';
 import type { PlanId } from '../../lib/plans';
+import { canUseFeature } from '../../lib/plans';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { PasswordInput } from '../ui/PasswordInput';
 import { buildCredentialsTxt, credentialsFileName, downloadTextFile, GeneratedCredential } from '../../lib/credentials-export';
@@ -186,6 +188,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const [error, setError] = useState('');
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [busy, setBusy] = useState(false);
+  const teamManagementLocked = currentPlan !== null && !canUseFeature(currentPlan, 'teamManagement');
 
   // Manual "add user" form.
   const [email, setEmail] = useState('');
@@ -1120,12 +1123,22 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
             </section>
 
             <aside className="members-users-panel">
-              <div className="members-panel-head">
-                <strong style={{ fontSize: '0.9rem' }}>{t('members.addTitle')}</strong>
-                <button type="button" className="btn-outline" style={{ padding: '6px 12px', fontWeight: 700 }} onClick={() => usersFileRef.current?.click()}>
-                  {t('members.importUsersCsv')}
-                </button>
-              </div>
+              {teamManagementLocked && (
+                <PlanGateNotice id="members-team-management-gate">
+                  {t('upgrade.teamManagementBlocked')}
+                </PlanGateNotice>
+              )}
+              <fieldset
+                disabled={teamManagementLocked}
+                aria-describedby={teamManagementLocked ? 'members-team-management-gate' : undefined}
+                style={{ border: 0, padding: 0, margin: 0, minWidth: 0, display: 'grid', gap: '8px' }}
+              >
+                <div className="members-panel-head">
+                  <strong style={{ fontSize: '0.9rem' }}>{t('members.addTitle')}</strong>
+                  <button type="button" className="btn-outline" style={{ padding: '6px 12px', fontWeight: 700 }} onClick={() => usersFileRef.current?.click()}>
+                    {t('members.importUsersCsv')}
+                  </button>
+                </div>
               <input
                 ref={usersFileRef}
                 type="file"
@@ -1234,6 +1247,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   {busy ? t('auth.working') : t('members.addAction')}
                 </button>
               </form>
+              </fieldset>
             </aside>
           </div>
         )

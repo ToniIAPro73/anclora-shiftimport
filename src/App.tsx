@@ -1826,6 +1826,7 @@ function App() {
             void hydrateAuthenticated(session);
           }}
           sessionRole={session.role}
+          currentPlan={session.plan ?? null}
           onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
@@ -1968,6 +1969,7 @@ function App() {
         employees={employees}
         areas={activeAreas}
         currentUserId={session?.user.id ?? ''}
+        currentPlan={session?.plan ?? null}
         initialEmployeeId={membersInitialEmployeeId}
         organizationName={session?.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
         onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}

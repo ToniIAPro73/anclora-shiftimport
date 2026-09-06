@@ -62,6 +62,18 @@ export function getPlanDefinition(planId) {
   return PLANS[planId] ?? PLANS.free;
 }
 
+/** Informational contract for clients. Enforcement remains server-side in the
+ * callers that use requireFeature/requireWithinLimit. */
+export function getEntitlementDescriptor(planId, activeEmployees = 0) {
+  const plan = getPlanDefinition(planId);
+  return {
+    planId: plan.id,
+    features: { ...plan.features },
+    limits: { ...plan.limits },
+    usage: { activeEmployees: Math.max(0, Math.trunc(Number(activeEmployees) || 0)) },
+  };
+}
+
 export function canUseFeature(planId, feature) {
   return Boolean(getPlanDefinition(planId).features[feature]);
 }

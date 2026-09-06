@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, requireRole, resolveAccessScope } from './auth.js';
-import { canUseFeature, checkLimit, requireFeature, requireWithinLimit } from './plans.js';
+import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -53,6 +53,38 @@ export async function recordAuditEvent(sql, ctx, {
       targetId,
       error: error instanceof Error ? error.message : 'unknown error',
     });
+  }
+}
+
+async function enforcePlanFeature(sql, ctx, feature, message) {
+  try {
+    requireFeature(ctx.plan, feature, message);
+  } catch (error) {
+    if (error instanceof PlanLimitError) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'PLAN_LIMIT_REJECTED',
+        targetType: 'ORGANIZATION',
+        targetId: ctx.organizationId,
+        metadata: { feature: error.feature ?? feature, limitKey: error.limitKey ?? null },
+      });
+    }
+    throw error;
+  }
+}
+
+async function enforcePlanLimit(sql, ctx, limitKey, currentCount, message) {
+  try {
+    requireWithinLimit(ctx.plan, limitKey, currentCount, message);
+  } catch (error) {
+    if (error instanceof PlanLimitError) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'PLAN_LIMIT_REJECTED',
+        targetType: 'ORGANIZATION',
+        targetId: ctx.organizationId,
+        metadata: { feature: error.feature ?? null, limitKey: error.limitKey ?? limitKey },
+      });
+    }
+    throw error;
   }
 }
 
@@ -418,8 +450,9 @@ export async function createEmployee(sql, ctx, input) {
   const existing = await sql`
     SELECT count(*) AS count FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
   `;
-  requireWithinLimit(
-    ctx.plan,
+  await enforcePlanLimit(
+    sql,
+    ctx,
     'maxEmployees',
     Number(existing[0]?.count ?? 0),
     'This plan only allows 1 employee. Upgrade to Team to add more.',
@@ -540,6 +573,12 @@ export async function bulkCreateEmployees(sql, ctx, items) {
     }
 
     if (!checkLimit(ctx.plan, 'maxEmployees', runningCount)) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'PLAN_LIMIT_REJECTED',
+        targetType: 'ORGANIZATION',
+        targetId: ctx.organizationId,
+        metadata: { limitKey: 'maxEmployees' },
+      });
       results.push({ key, status: 'failed', reason: 'plan_limit' });
       continue;
     }
@@ -695,8 +734,9 @@ export async function updateEmployee(sql, ctx, input) {
     const existing = await sql`
       SELECT count(*) AS count FROM employees WHERE organization_id = ${ctx.organizationId} AND status = 'active'
     `;
-    requireWithinLimit(
-      ctx.plan,
+    await enforcePlanLimit(
+      sql,
+      ctx,
       'maxEmployees',
       Number(existing[0]?.count ?? 0),
       'This plan only allows 1 employee. Upgrade to Team to add more.',
@@ -868,7 +908,7 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
   requireRole(ctx, 'ADMIN');
   // Fase 1.2G: inviting another user into the org is "team management" —
   // Free/Personal orgs are single-person by design, never silently.
-  requireFeature(ctx.plan, 'teamManagement', 'Inviting team members requires the Team plan.');
+  await enforcePlanFeature(sql, ctx, 'teamManagement', 'Inviting team members requires the Team plan.');
   const email = String(input?.email ?? '').trim().toLowerCase();
   const role = String(input?.role ?? '').trim();
   if (!email || !VALID_ROLES.includes(role)) {

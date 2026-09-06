@@ -40,13 +40,17 @@ placeholder price as a committed one.
 - Team management gate: inviting a member (`addMember`) requires the
   `teamManagement` feature, which only `team` has. `free`/`personal` are
   rejected with `PlanLimitError` (`code: 'PLAN_LIMIT'`, HTTP 403).
-- Multi-employee PDF/CSV roster import is not separately gated — it is a
-  frontend loop over the same single-employee employee-creation endpoint,
-  so it is already covered transitively by the employee-count cap above.
-- Frontend UX for blocked actions: `UpgradePrompt` (a modal, no checkout)
-  shown whenever the backend returns `code: 'PLAN_LIMIT'`, wired into
-  `MembersModal` (add member) and `TeamImportModal` (inline employee
-  creation during roster import).
+- Multi-employee PDF/CSV roster import is explicitly Team-only at the UI
+  boundary and remains enforced transitively by the employee-count cap and
+  backend feature checks. The capability is visible before file selection;
+  detected rows still receive the same server-side validation if reached by
+  an older client.
+- Frontend UX for blocked actions: the capability remains visible and
+  disabled with a link to `/pricing` before effort is spent. `UpgradePrompt`
+  remains the contextual fallback when a direct or stale client request
+  returns `code: 'PLAN_LIMIT'`; rejected requests are also recorded as
+  `PLAN_LIMIT_REJECTED` audit events without credentials or contact details.
+  The entitlement descriptor is exposed by `GET /api/organizations/current`.
 - Public `/pricing` page: three plan cards + capability comparison table,
   CTA routing per plan, works for both anonymous and authenticated visitors
   (authenticated visitors are routed to `/app`, never through a second

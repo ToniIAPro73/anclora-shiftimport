@@ -32,7 +32,7 @@ export default async function globalSetup() {
   // Org B and Org Fresh only cover viewing/migration flows → default 'free'.
   const orgA = (await sql`INSERT INTO organizations (name, type, plan) VALUES ('E2E Org A', 'company', 'team') RETURNING id`)[0].id;
   const orgB = (await sql`INSERT INTO organizations (name, type) VALUES ('E2E Org B', 'company') RETURNING id`)[0].id;
-  const orgFresh = (await sql`INSERT INTO organizations (name, type) VALUES ('E2E Fresh', 'personal') RETURNING id`)[0].id;
+  const orgFresh = (await sql`INSERT INTO organizations (name, type, plan) VALUES ('E2E Fresh', 'personal', 'personal') RETURNING id`)[0].id;
   const areaA = (await sql`INSERT INTO areas (organization_id, name, code) VALUES (${orgA}, 'E2E Area A', 'AREA-A') RETURNING id`)[0].id;
   const areaB = (await sql`INSERT INTO areas (organization_id, name, code) VALUES (${orgB}, 'E2E Area B', 'AREA-B') RETURNING id`)[0].id;
 

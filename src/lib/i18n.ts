@@ -1125,6 +1125,8 @@ const translations: Record<Locale, TranslationTree> = {
     upgrade: {
       title: 'Esta función está disponible en Team',
       description: 'Actualiza tu plan para desbloquear la gestión de equipo y la importación multi-empleado.',
+      teamManagementBlocked: 'Añadir usuarios y gestionar accesos requiere el plan Team. Los campos permanecen visibles para que conozcas esta capacidad.',
+      multiEmployeeImportBlocked: 'La importación multi-empleado requiere el plan Team. Puedes revisar la capacidad en Precios antes de continuar.',
       currentPlanContext: 'Esta organización usa el plan {{plan}}. Las funciones multi-empleado están disponibles en Team.',
       switchTo: 'Cambiar a {{name}}',
       cta: 'Ver planes',
@@ -2425,6 +2427,8 @@ const translations: Record<Locale, TranslationTree> = {
     upgrade: {
       title: 'This feature is available on Team',
       description: 'Upgrade your plan to unlock team management and multi-employee import.',
+      teamManagementBlocked: 'Adding users and managing access requires the Team plan. The fields stay visible so you can discover this capability.',
+      multiEmployeeImportBlocked: 'Multi-employee import requires the Team plan. Review the capability in Pricing before continuing.',
       currentPlanContext: 'This organization is on the {{plan}} plan. Multi-employee features are available on Team.',
       switchTo: 'Switch to {{name}}',
       cta: 'View plans',
