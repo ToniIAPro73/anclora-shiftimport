@@ -288,7 +288,11 @@ Justo encima del calendario, una barra de estadísticas resume, para el mes visi
 
 ### 7.3 Añadir un turno manualmente
 
-Pulsa sobre un día vacío del calendario (o el botón **Añadir**) para abrir la ventana **Programar Turno**: eliges fecha, hora de inicio, hora de fin y tipo de turno, y confirmas. Los turnos añadidos a mano conviven sin problema con los importados — cada uno conserva su origen (manual o importado) internamente.
+Pulsa sobre un día vacío anterior a hoy (o el botón **Añadir turno**) para abrir la ventana
+**Programar Turno**: eliges fecha, hora de inicio, hora de fin y tipo de turno, y confirmas. La
+fecha está limitada al día anterior; los turnos de hoy y futuros se gestionan desde **Planificar**.
+Los turnos añadidos a mano conviven sin problema con los importados — cada uno conserva su origen
+(manual o importado) internamente.
 
 ### 7.4 Editar o eliminar un turno
 
@@ -296,7 +300,9 @@ Pulsa sobre un turno ya existente para abrir la misma ventana en modo edición (
 
 ### 7.5 Vista en móvil
 
-El calendario se adapta a pantallas pequeñas: en móvil, la cuadrícula mensual se reorganiza para que cada día siga siendo legible y los turnos táctiles fáciles de abrir.
+El calendario se adapta a pantallas pequeñas: en móvil, la navegación global se abre desde el botón
+de menú como un panel lateral, mientras la cuadrícula mensual se reorganiza para que cada día siga
+siendo legible y los turnos táctiles fáciles de abrir.
 
 ---
 
@@ -327,7 +333,11 @@ Estos tipos son los que usa el selector de turnos, las estadísticas y el asiste
 
 ### 8.3 Equipo (solo si tienes una organización de empresa)
 
-El panel lateral muestra el contexto activo —organización, área y empleado—, tu rol y los accesos rápidos autorizados a la gestión de usuarios (ver [sección 9](#9-gestión-de-la-organización-solo-administradores)). Si eres administrador con varios empleados, el selector permite elegir qué calendario de empleado ver. La navegación puede contraerse para liberar espacio al calendario.
+La barra superior muestra de forma compacta la organización, tu rol y el Employee cuyo calendario
+estás visualizando. Al abrir el menú de contexto puedes cambiar organización, área o empleado. La
+barra lateral concentra la navegación y las acciones autorizadas; puede contraerse para liberar
+espacio al calendario. El acceso a usuarios y empleados está en **Usuarios y empleados** (ver
+[sección 9](#9-gestión-de-la-organización-solo-administradores)).
 
 ### 8.4 Borrar tus datos locales
 

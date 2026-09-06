@@ -56,6 +56,7 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 | 2026-08-18 | 0.2.0 | Adopción inicial en Commercial Genesis | ToniIAPro73 |
 | 2026-09-06 | 0.2.0 | Revisión P0 post-auditoría: documentación, evidencia E2E compacta y estado del MVP contrastados contra `development` | Codex |
 | 2026-09-06 | 0.2.0 | Revisión P5.1: shell de aplicación y navegación role-aware añadidas sin cambios de dominio, API o DB | Codex |
+| 2026-09-06 | 0.2.0 | Revisión P5.2: navegación operacional, frontera temporal Importar/Añadir/Planificar y Approval Lite integrados sin migración | Codex |
 
 ## Documentos relacionados
 

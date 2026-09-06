@@ -44,12 +44,13 @@ Gate), sin línea `STATUS`, lo que deja al producto sin veredicto formal pese a 
 El cuaderno NotebookLM sobre CRC Tryp es **inaccesible** (redirección 302 a `accounts.google.com`).
 No se ha derivado ninguna idea de esa fuente y la fase correspondiente queda `BLOCKED`.
 
-El plan resultante son 9 fases ejecutables (`P0`–`P7` más `P5.1`) con 68 microtareas, más una fase `P8`
+El plan resultante son 10 fases ejecutables (`P0`–`P7`, `P5.1` y `P5.2`) con 83 microtareas, más una fase `P8`
 bloqueada. `P0` restaura la verdad documental y cierra el MVP Release Gate; `P1` convierte la
 importación en una operación que siempre deja rastro y siempre indica cómo recuperarse; `P2`
 adelanta el gating de plan; `P3` erradica los 18 diálogos nativos restantes; `P4` cierra los
 defectos confirmados de accesibilidad y responsive; `P5` verifica en navegador real los tres roles
-nunca probados y define el autoservicio del empleado; `P6` hace legible el histórico; `P7` alinea
+nunca probados y define el autoservicio del empleado; `P5.2` consolida navegación operacional,
+Approval Lite y la frontera temporal Importar/Añadir/Planificar; `P6` hace legible el histórico; `P7` alinea
 la promesa comercial con el modelo Import↔Schedule.
 
 ### POST-P5 UX FINDING — DASHBOARD NAVIGATION DENSITY
@@ -60,6 +61,10 @@ de más capacidades convierte el header en un panel de botones y reduce de forma
 útil del calendario. El hallazgo no cambia autorización ni dominio: requiere una shell de aplicación
 con sidebar colapsable, topbar global compacta y workspace calendar-first. Se incorpora como `P5.1`,
 entre P5 y P6, sin migración ni cambios de API.
+
+P5.2 se añade después del cierre de P5.1 por un hallazgo de consolidación operacional: integra
+Approval Lite en la navegación, retira densidad residual del dashboard y formaliza `PASADO →
+Importar/Añadir turno` y `HOY/FUTURO → Planificar`. No reescribe P5.1 ni cambia el modelo semanal.
 
 ---
 
@@ -792,7 +797,7 @@ Requisitos que ninguna fase puede degradar:
 
 ## 30. ROADMAP
 
-Nueve fases ejecutables (`P0`–`P7` más `P5.1`) más una bloqueada. Detalle completo en el documento de roadmap.
+Diez fases ejecutables (`P0`–`P7`, `P5.1` y `P5.2`) más una bloqueada. Detalle completo en el documento de roadmap.
 
 | Fase | Nombre | Prioridad del encargo cubierta |
 |---|---|---|
@@ -803,6 +808,7 @@ Nueve fases ejecutables (`P0`–`P7` más `P5.1`) más una bloqueada. Detalle co
 | P4 | Accessibility & Responsive Hardening | (6) accesibilidad; (7) responsive; (H); (I) |
 | P5 | Role Reality & Employee Self-Service | (8) roles reales; (9) autoservicio; (10) multiempleado; (C); (D); (E) |
 | P5.1 | Premium Application Shell & Collapsible Sidebar | densidad de navegación post-P5; calendario-first; shell role-aware; (H) ampliado |
+| P5.2 | Operational Navigation & Time-Scope Consolidation | Importar/Añadir/Planificar; Approval Lite; densidad y frontera temporal |
 | P6 | Import History & Operational Traceability | (11) histórico; (F) |
 | P7 | Import vs Schedule Communication | (12) scheduling/approval — comunicación; (J) |
 | P8 | CRC Tryp Research | (13) mejoras CRC Tryp — **BLOCKED** |
@@ -828,13 +834,13 @@ documento para evitar dos autoridades divergentes.
 
 ## 32. MICROTASKS
 
-68 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
+83 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
 `FILES_LIKELY_AFFECTED`, impactos (`DATA_MODEL` / `API` / `UI` / `I18N` / `ACCESSIBILITY` /
 `SECURITY`), `TESTS_REQUIRED`, `E2E_REQUIRED`, `MANUAL_QA_REQUIRED`, `ACCEPTANCE_CRITERIA` en
 Given/When/Then, `DO_NOT_BREAK`, `DEPENDENCIES`, `RISK` y `ESTIMATED_COMPLEXITY`, en el documento
 de roadmap, sección `MICROTASKS` de cada fase.
 
-Distribución: P0 = 10, P1 = 10, P2 = 5, P3 = 9, P4 = 7, P5 = 6, P5.1 = 10, P6 = 6, P7 = 5, P8 = 0 (bloqueada).
+Distribución: P0 = 10, P1 = 10, P2 = 5, P3 = 9, P4 = 7, P5 = 6, P5.1 = 10, P5.2 = 15, P6 = 6, P7 = 5, P8 = 0 (bloqueada).
 
 Orden general aplicado, con las desviaciones justificadas en cada fase:
 
@@ -905,6 +911,7 @@ en `api/` ni `db/`), nunca omitirse.
 | Redirección de EMPLOYEE fuera de `/app/schedule` | SÍ (`867858d`) | P5 | MEDIO | `scheduling-authz.spec.ts` | Redirige al portal |
 | Estado "Cuenta no vinculada" | SÍ | P5 | MEDIO | `scope.test.js` | EMPLOYEE sin Employee ⇒ sin datos |
 | Application shell y navegación role-aware | NUEVO POST-P5 | P5.1 | MEDIO | `AppShell.test.tsx`, `p5-1-shell-smoke.spec.ts` | calendario, contexto, logout y Portal EMPLOYEE preservados |
+| Navegación operacional y frontera temporal | NUEVO POST-P5.1 | P5.2 | ALTO | tests de contrato, `p5-2-operations.spec.ts` | Approval Lite, Import/Añadir/Planificar, scopes y shell preservados |
 | Modo invitado local-first | SÍ | P3 (LegalPage) | MEDIO | manual + `LandingPage.test.tsx` | Sin sesión, todo en `localStorage`; reset solo local |
 | Tema claro y oscuro | SÍ (browser) | P1, P3, P4, P7 | MEDIO | QA visual + capturas de Gate | Contraste correcto en ambas superficies |
 | `prefers-reduced-motion` | SÍ (R1-M14) | P1, P3, P4 | BAJO | `ImportModal.test.tsx` | Spinner y transiciones respetan la preferencia |
@@ -980,6 +987,7 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 | `docs/roadmap/shiftimport-mvp-v2/R0/DOMAIN-GLOSSARY.md` | Anexo de glosario de UI | P7-M01 |
 | `docs/manual/manual-usuario.md` | Histórico y comunicación de futuros | P6, P7 |
 | `docs/roadmap/P5.1-SHELL-NAVIGATION-INVENTORY.md` y `P5.1-PREMIUM-APPLICATION-SHELL-GATE.md` | Inventario de acciones, contrato de navegación y evidencia del Gate | P5.1 |
+| `docs/product/OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT.md` y `docs/roadmap/P5.2-OPERATIONAL-NAVIGATION-TIME-SCOPE-GATE.md` | Contrato temporal, matriz operacional y evidencia del Gate | P5.2 |
 | `.anclora/AOS_ADOPTION.md` | `Last Reviewed` actualizado; `EX-SI-001` intacta | P0 |
 
 ---
@@ -1136,6 +1144,7 @@ la organización; el cliente no puede elegir el alcance.
 | G-15 | `i18n-integrity-check` no soporta i18n centralizado en un módulo TS | Auditoría §11 | NULA (herramienta) | No genera trabajo |
 | G-16 | Posicionamiento B2C vs B2B contradictorio entre documentos vigentes | Análisis de repo | MEDIA | D-01 |
 | G-17 | Densidad de navegación: el header de gestión mezcla contexto, preferencias y operaciones y relega el calendario | Hallazgo post-P5 reproducido en navegador | MEDIA | P5.1 |
+| G-18 | Densidad residual y separación temporal: Approval Lite en calendario, count ausente y Añadir/Planificar ambiguos | Hallazgo post-P5.1 / contrato operacional | MEDIA | P5.2 |
 
 ---
 
@@ -1144,7 +1153,7 @@ la organización; el cliente no puede elegir el alcance.
 ### FINAL_PRODUCT_GATE
 
 Se ejecuta **una sola vez**, tras el cierre de P7. Absorbe además los gaps G-02, G-04, G-05 y G-06.
-Solo puede ejecutarse si P0–P5.1 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada gap nombrado y asignado.
+Solo puede ejecutarse si P0–P5.2 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada gap nombrado y asignado.
 
 | # | Pregunta | Criterio de aprobación | Evidencia exigida |
 |---|---|---|---|

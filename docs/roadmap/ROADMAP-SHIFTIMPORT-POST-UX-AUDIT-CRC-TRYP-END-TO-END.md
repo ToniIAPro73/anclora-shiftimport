@@ -5,7 +5,7 @@
 > Este documento contiene las FASES, las MICROTAREAS y los GATES. La SPEC contiene el modelo
 > de dominio, journeys objetivo, matrices de roles/planes y el Final Product Gate.
 >
-> **Estado**: P5 cerrado (PASS); P5.1 en ejecución. P6/P7 no iniciadas.
+> **Estado**: P5 cerrado (PASS); P5.1 cerrado (PASS); P5.2 cerrado (PASS). P6/P7 no iniciadas.
 
 ---
 
@@ -54,7 +54,7 @@ Relación formal con la historia:
 ```
 R0 → R1 → R2 → R3 → R4 → R5 → [R5-M12 abierto]
                                    │
-                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P6 → P7
+                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P6 → P7
                                                                                                      P8 (BLOCKED)
 R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 ```
@@ -81,6 +81,8 @@ R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 | P7 ↔ P1 | NO | El refuerzo Import↔Schedule se ancla en la superficie de resultado persistente que crea P1. |
 | P5.1 ↔ P5 | NO | P5.1 consume el modelo de roles ya cerrado y cambia únicamente la shell/navegación; no puede adelantarse a la verificación de roles. |
 | P6 ↔ P5.1 | NO | P6 consume el entry point y el contexto del histórico ya reubicados por P5.1. |
+| P5.2 ↔ P5.1 | NO | P5.2 consolida la shell ya cerrada y sólo reabre P5.1 ante una regresión causada por esa shell. |
+| P6 ↔ P5.2 | NO | P6 consume la navegación y la frontera Import/Añadir/Planificar ya reconciliadas por P5.2. |
 | P8 ↔ todo | SÍ | Investigación externa; no toca código. |
 
 ---
@@ -1487,6 +1489,173 @@ expanded/collapsed dark/light, drawer móvil, PLANNER y Portal EMPLOYEE; métric
 
 ---
 
+## PHASE P5.2 — Operational Navigation & Time-Scope Consolidation
+
+**PHASE_ID**: P5.2
+**PHASE_NAME**: Operational Navigation & Time-Scope Consolidation
+**STATUS**: PASS
+**GOAL**: Consolidar la shell de P5.1, separar Importar/Añadir turno/Planificar, integrar Approval Lite
+en la navegación y hacer cumplir la frontera temporal `PASADO → Importar/Añadir` y `HOY/FUTURO → Planificar`.
+**SOURCE_DRIVERS**: decisión de producto P5.2; `docs/product/OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT.md`;
+P5/P5.1 y R3/R4/R5 ya cerrados.
+**DEPENDENCIES**: P5.1 Gate PASS.
+**OUT_OF_SCOPE**: CRC Tryp adicional, migraciones, billing, cambios del modelo semanal, rediseño de
+Approval Lite o reescritura global de `App.tsx`.
+**DO_NOT_BREAK**: P1 outcomes, P2 entitlements, P3 dialogs, P4 accessibility, P5 role/self scope,
+P5.1 shell, R3 scheduling, R4 portal EMPLOYEE, R5 approval, tenant isolation e idempotencia.
+**AFFECTED_DOMAINS**: navegación, calendario, histórico manual, scheduling y presentación de approvals.
+**MIGRATION_IMPACT**: ninguno previsto; si aparece una necesidad de esquema, la fase se detiene.
+**ROLLBACK_STRATEGY**: revertir microtareas/commits individualmente; no se modifican datos ni migraciones.
+**DOCUMENTATION_UPDATES**: SPEC, este roadmap, contrato temporal, matriz P5.2 y Gate.
+
+### MICROTASKS — P5.2
+
+---
+**ID**: P5.2-M01
+**TITLE**: Contrato de producto y matriz rol × capacidad × tiempo
+**PURPOSE**: Fijar la semántica inequívoca de Importar turnos, Añadir turno y Planificar.
+**PRECONDITIONS**: P5.1 Gate PASS.
+**FILES_LIKELY_AFFECTED**: `docs/product/OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT.md`, `docs/fase1-multitenant.md`.
+**ACCEPTANCE_CRITERIA**: Given los cuatro roles, When se consulta la matriz, Then cada capacidad tiene scope y frontera temporal explícitos y coincide con P5.
+**DEPENDENCIES**: P5.1. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-M02
+**TITLE**: Reconciliar la arquitectura de navegación operativa
+**PURPOSE**: Auditar la IA de P5.1 y garantizar que no se pierda ninguna acción ni capacidad.
+**PRECONDITIONS**: P5.2-M01.
+**FILES_LIKELY_AFFECTED**: `AppShell.tsx`, `App.tsx`, inventario P5.1.
+**ACCEPTANCE_CRITERIA**: Given el inventario actual, When se compara con Sidebar/TopBar/toolbar, Then toda acción tiene un único entry point y el contexto queda separado de la navegación global.
+**DEPENDENCIES**: P5.2-M01. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M03
+**TITLE**: Entry point de Aprobaciones y modal Approval Lite
+**PURPOSE**: Retirar el bloque permanente del calendario y conservar el workflow R5 bajo demanda.
+**PRECONDITIONS**: P5.2-M02.
+**FILES_LIKELY_AFFECTED**: `ApprovalInbox.tsx`, `App.tsx`, `AppShell.tsx`.
+**ACCEPTANCE_CRITERIA**: Given un actor autorizado, When pulsa Aprobaciones, Then se abre un `ModalShell` con lista, approve/reject y motivo obligatorio; And el calendario no muestra el card permanente.
+**DO_NOT_BREAK**: API, policy, routing, idempotencia y auditoría R5.
+**DEPENDENCIES**: P5.2-M02. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M04
+**TITLE**: Densidad del calendario y contador mensual
+**PURPOSE**: Eliminar el estado vacío grande y mostrar el conteo del Employee visualizado junto al mes.
+**PRECONDITIONS**: P5.2-M02.
+**FILES_LIKELY_AFFECTED**: `CalendarToolbar.tsx`, `App.tsx`, `i18n.ts`.
+**ACCEPTANCE_CRITERIA**: Given mes y Employee actuales, When cambia cualquiera, Then el contador se actualiza sin fetch duplicado y el calendario gana espacio visible.
+**DEPENDENCIES**: P5.2-M02. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-M05
+**TITLE**: Contexto de identidad compacto en TopBar
+**PURPOSE**: Distinguir User conectado, rol y Employee visualizado sin recuperar la densidad del header anterior.
+**PRECONDITIONS**: P5.2-M02.
+**FILES_LIKELY_AFFECTED**: `AppShell.tsx`, `App.tsx`, `AppShell.css`.
+**ACCEPTANCE_CRITERIA**: Given una sesión con o sin Employee vinculado, When se observa TopBar, Then User, rol y Employee context se distinguen; And los selectores siguen accesibles desde un popover.
+**DO_NOT_BREAK**: User ≠ Employee y aislamiento de organización.
+**DEPENDENCIES**: P5.2-M02. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M06
+**TITLE**: Cierre de comportamiento colapsable de Sidebar
+**PURPOSE**: Asegurar expanded/collapsed persistente, nombrado y sin pérdida de contexto.
+**PRECONDITIONS**: P5.1 Gate PASS.
+**FILES_LIKELY_AFFECTED**: `AppShell.tsx`, `AppShell.css`, tests de shell.
+**ACCEPTANCE_CRITERIA**: Given desktop, tablet y móvil, When se contrae/abre, Then labels, tooltips, focus, active state y drawer funcionan y el workspace recupera el ancho disponible.
+**DEPENDENCIES**: P5.2-M05. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-M07
+**TITLE**: Contrato de Añadir turno histórico
+**PURPOSE**: Hacer explícito que la alta manual sólo registra `date < today`.
+**PRECONDITIONS**: P5.2-M01.
+**FILES_LIKELY_AFFECTED**: `ShiftModal.tsx`, `operational-date.ts`, `i18n.ts`.
+**ACCEPTANCE_CRITERIA**: Given today en `Europe/Madrid`, When se abre Añadir turno, Then el selector limita fechas anteriores y today/futuro se explica como Planificar.
+**DEPENDENCIES**: P5.2-M01. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-M08
+**TITLE**: Enforcement server-side de alta histórica
+**PURPOSE**: Impedir que una llamada directa use el flujo manual para crear today/futuro.
+**PRECONDITIONS**: P5.2-M07.
+**FILES_LIKELY_AFFECTED**: `api/_lib/data.js`, `api/_lib/operational-date.js`, tests de shifts.
+**SECURITY_IMPACT**: backend valida auth, tenant, scope, Employee ACTIVE y fecha; el cliente no decide.
+**ACCEPTANCE_CRITERIA**: Given `origin=MAN`, When `date >= today`, Then la API responde error de dominio controlado antes de mutar; And fechas históricas dentro del scope se guardan.
+**DO_NOT_BREAK**: importación, publicación, cambios aprobados y reconciliación.
+**DEPENDENCIES**: P5.2-M07. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M09
+**TITLE**: Routing del botón + por ámbito temporal
+**PURPOSE**: Evitar que today/futuro abran el flujo histórico.
+**PRECONDITIONS**: P5.2-M04, P5.2-M07.
+**FILES_LIKELY_AFFECTED**: `MonthGrid.tsx`, `App.tsx`, `WeeklyPlanner.tsx`.
+**ACCEPTANCE_CRITERIA**: Given una celda pasada, today o futura, When se pulsa +, Then abre Añadir, Planificar o Planificar respectivamente con la fecha conservada.
+**DEPENDENCIES**: P5.2-M04. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M10
+**TITLE**: Reconciliar Planificar como modal
+**PURPOSE**: Mantener el planificador dentro de la shell sin ruta de navegación paralela visible.
+**PRECONDITIONS**: P5.2-M02.
+**FILES_LIKELY_AFFECTED**: `WeeklyPlanner.tsx`, `App.tsx`, CSS de scheduling.
+**ACCEPTANCE_CRITERIA**: Given `/app`, When se elige Planificar, Then se abre un `ModalShell` grande con X, ESC, focus trap, toolbar, grid y editor; And no aparece “Volver al calendario”.
+**DO_NOT_BREAK**: deep link `/app/schedule` y versionado semanal.
+**DEPENDENCIES**: P5.2-M02. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: L.
+
+---
+**ID**: P5.2-M11
+**TITLE**: Guard temporal del planificador
+**PURPOSE**: Hacer no accionables días pasados y semanas completamente pasadas.
+**PRECONDITIONS**: P5.2-M10.
+**FILES_LIKELY_AFFECTED**: `WeeklyPlanner.tsx`, `AccessibleScheduleTable.tsx`, `api/_lib/scheduling.js` si la defensa server-side existente necesita ajuste.
+**ACCEPTANCE_CRITERIA**: Given hoy y una semana operativa, When se muestra el planner, Then past days no tienen +/edit alcanzables, previous se deshabilita para una semana completamente pasada y today/futuro siguen editables dentro del scope.
+**DO_NOT_BREAK**: modelo semanal, week-start Monday/Sunday y publicación.
+**DEPENDENCIES**: P5.2-M10. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: L.
+
+---
+**ID**: P5.2-M12
+**TITLE**: Matriz E2E compacta de roles y operaciones
+**PURPOSE**: Cubrir fronteras reales con una fixture y un worker, dejando combinaciones puramente contractuales a Vitest/integration.
+**PRECONDITIONS**: P5.2-M03..M11.
+**FILES_LIKELY_AFFECTED**: nuevo smoke P5.2 y artefacto de matriz.
+**ACCEPTANCE_CRITERIA**: Given la fixture Team, When se ejecuta un único smoke focalizado, Then verifica OWNER/ADMIN/PLANNER/EMPLOYEE sólo en journeys UI materiales y las fronteras API sin duplicar baterías lentas.
+**DEPENDENCIES**: P5.2-M03..M11. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M13
+**TITLE**: Accessibility, responsive y browser QA
+**PURPOSE**: Verificar shell, modal, temporalidad y densidad en los viewports obligatorios.
+**PRECONDITIONS**: P5.2-M12.
+**MANUAL_QA_REQUIRED**: capturas y medidas antes/después en 1366×768 y 1440×900; dark/light; mobile drawer; Planner; Employee portal.
+**ACCEPTANCE_CRITERIA**: Given 1440, 1366×768, 1024×768, 834, 390×844 y 844×390, When se recorren los journeys, Then no hay overflow horizontal de body, focus/ESC/zoom/contraste funcionan y calendarTop/height mejoran.
+**DEPENDENCIES**: P5.2-M12. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-M14
+**TITLE**: Reconciliación documental y evidencia
+**PURPOSE**: Alinear SPEC, roadmap, contrato, matriz, manual y metadatos AOS con el estado real.
+**PRECONDITIONS**: P5.2-M01..M13.
+**ACCEPTANCE_CRITERIA**: Given los resultados de implementación, When se revisan los documentos, Then no contradicen el código, P6 sigue bloqueada hasta este Gate y no se declara un cambio de DB/API inexistente.
+**DEPENDENCIES**: P5.2-M13. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-M15
+**TITLE**: Gate final P5.2
+**PURPOSE**: Cerrar la fase sólo con evidencia funcional, de seguridad y de navegador.
+**PRECONDITIONS**: P5.2-M01..M14.
+**ACCEPTANCE_CRITERIA**: Given todos los criterios del Gate, When se ejecutan tests, lint, typecheck, build y smoke browser, Then el resultado es PASS o PASS_WITH_GAPS no bloqueante; And no se inicia P6 en este commit.
+**DEPENDENCIES**: P5.2-M14. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
+### PHASE_P5.2_GATE
+
+Consultar `docs/roadmap/P5.2-OPERATIONAL-NAVIGATION-TIME-SCOPE-GATE.md` para los criterios completos.
+`PHASE_P5.2_GATE = PASS`; P6 queda planificada y no se inicia en este commit.
+
+---
+
 ## PHASE P6 — Import History & Operational Traceability
 
 **PHASE_ID**: P6
@@ -1508,7 +1677,8 @@ importaciones registradas" tras un intento real.
 - Semántica de reintento coherente con la idempotencia.
 
 **OUT_OF_SCOPE**: exportación del histórico; reporting agregado (es R8 POST-MVP).
-**DEPENDENCIES**: P1 (estados), P5 (visibilidad por rol del histórico), P5.1 (entry point y contexto de navegación).
+**DEPENDENCIES**: P1 (estados), P5 (visibilidad por rol del histórico), P5.1 (shell), P5.2 (entry point,
+contexto de identidad y frontera operativa).
 **PREREQUISITES**: `GET /api/imports` ya soporta los filtros (verificado en HEAD).
 **RISKS**: exponer en el histórico datos de empleados fuera del scope del lector.
 **DO_NOT_BREAK**: la política de borrado (soft-delete de la fila, hard-delete de sus shifts por
@@ -1826,7 +1996,8 @@ mientras la fuente no sea legible.
 | P4 | Accessibility & Responsive | 7 | P0 (independiente de P1–P3) | PASS / PASS_WITH_GAPS |
 | P5 | Role Reality & Employee Self-Service | 6 | P0, P2 | PASS / PASS_WITH_GAPS / BLOCKED ante nuevo bloqueo |
 | P5.1 | Premium Application Shell & Collapsible Sidebar | 10 | P5 | PASS |
-| P6 | Import History & Traceability | 6 | P1, P5.1 | PASS |
-| P7 | Import vs Schedule Communication | 5 | P1, P6 | PASS |
+| P5.2 | Operational Navigation & Time-Scope Consolidation | 15 | P5.1 | PASS |
+| P6 | Import History & Traceability | 6 | P1, P5.2 | PLANNED |
+| P7 | Import vs Schedule Communication | 5 | P1, P6 | PLANNED |
 | P8 | CRC Tryp Research | — | fuente accesible | **BLOCKED** |
-| **Total** | | **68** | | |
+| **Total** | | **83** | | |
