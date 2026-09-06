@@ -93,7 +93,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('app-shell-user-menu'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Salir' }));
@@ -171,7 +171,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
 
     // Session dies server-side (expired / invalidated in another tab): the
     // next data call answers 401 and the app must leave the partial-auth UI.
@@ -193,7 +193,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
 
     // Browser restores the page from bfcache after the cookie was invalidated.
     mockedFetchSession.mockResolvedValue(null);

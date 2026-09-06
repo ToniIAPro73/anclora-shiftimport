@@ -301,7 +301,9 @@ function App() {
       ? nextSession.employeeId
       : (previousSelection && activeIds.has(previousSelection)
         ? previousSelection
-        : (nextSession.employeeId ?? areaEmployees[0]?.id ?? null));
+        : (nextSession.employeeId && activeIds.has(nextSession.employeeId)
+          ? nextSession.employeeId
+          : areaEmployees.find((employee) => employee.status === 'active')?.id ?? null));
     setSelectedEmployeeId(initialEmployeeId);
 
     if (!initialEmployeeId) {
@@ -566,6 +568,10 @@ function App() {
       ? employees.filter((employee) => employee.areaId === effectiveAreaId)
       : employees),
     [session, effectiveAreaId, employees],
+  );
+  const activeVisibleEmployees = useMemo(
+    () => visibleEmployees.filter((employee) => employee.status === 'active'),
+    [visibleEmployees],
   );
 
   useEffect(() => {
@@ -1567,6 +1573,68 @@ function App() {
   const viewedEmployee = session?.role === 'EMPLOYEE'
     ? selfEmployee
     : employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
+  const calendarEmployeeControl = session && !needsOrgChoice && !accountIncomplete ? (
+    session.role === 'EMPLOYEE' ? (
+      <div className="calendar-toolbar__employee-readonly" data-testid="calendar-employee-readonly">
+        <span className="calendar-toolbar__employee-label">{t('team.employeeLabel')}</span>
+        <strong>{selfEmployee?.name ?? t('shell.noEmployee')}</strong>
+      </div>
+    ) : activeVisibleEmployees.length > 0 ? (
+      <div className="calendar-toolbar__employee-filter" data-testid="calendar-employee-filter">
+        <SearchableSelect
+          label={t('team.employeeLabel')}
+          value={selectedEmployeeId ?? ''}
+          placeholder={t('employeeSelect.placeholder')}
+          onChange={(employeeId) => void handleSelectEmployee(employeeId)}
+          searchPlaceholder={t('employeeSelect.searchPlaceholder')}
+          emptyMessage={t('employeeSelect.noResults')}
+          ariaLabel={t('team.employeeLabel')}
+          options={activeVisibleEmployees.map((employee) => ({
+            value: employee.id,
+            label: employee.externalEmployeeId ? `${employee.name} · ID ${employee.externalEmployeeId}` : employee.name,
+            searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
+          }))}
+          style={{ width: '100%', minWidth: 0 }}
+        />
+      </div>
+    ) : (
+      <div className="calendar-toolbar__employee-placeholder" data-testid="calendar-employee-placeholder">
+        <span className="calendar-toolbar__employee-label">{t('team.employeeLabel')}</span>
+        <strong>{t('employeeSelect.placeholder')}</strong>
+      </div>
+    )
+  ) : null;
+  const calendarAreaContext = session && !needsOrgChoice && !accountIncomplete && session.role !== 'EMPLOYEE' && activeAreas.length > 0 ? (
+    <div className="team-bar" data-testid="app-shell-calendar-area-context">
+      {activeAreas.length === 1 ? (
+        <label>
+          {t('areas.contextLabel')}
+          <strong>{activeAreas[0].name}</strong>
+        </label>
+      ) : (
+        <label>
+          {t('areas.contextLabel')}
+          <SearchableSelect
+            label=""
+            value={selectedAreaId ?? ''}
+            onChange={(value) => setSelectedAreaId(value || null)}
+            searchPlaceholder={t('orgSelector.searchPlaceholder')}
+            emptyMessage={t('orgSelector.noResults')}
+            ariaLabel={t('areas.contextLabel')}
+            options={[
+              { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
+              ...activeAreas.map((area) => ({
+                value: area.id,
+                label: area.name,
+                searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
+              })),
+            ]}
+            style={{ width: '100%' }}
+          />
+        </label>
+      )}
+    </div>
+  ) : null;
   const contextSummary = session && !needsOrgChoice && !accountIncomplete ? (
     <>
       <span className="app-shell__context-summary-item" title={activeOrganizationName}>
@@ -1768,7 +1836,7 @@ function App() {
       activeSection="calendar"
       themeControl={<ThemeToggle />}
       languageControl={<LanguageToggle />}
-      contextContent={contextContent}
+      contextContent={calendarAreaContext}
       contextSummary={contextSummary}
       onSignIn={!session ? () => { if (!isImporting) setIsAuthOpen(true); } : undefined}
       onImport={() => { if (!isImporting && authResolved) setIsImportOpen(true); }}
@@ -1792,6 +1860,7 @@ function App() {
           year={currentYear}
           month={currentMonth}
           shiftCount={currentMonthShifts.length}
+          employeeControl={calendarEmployeeControl}
           onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
         />
         {appFeedback && (

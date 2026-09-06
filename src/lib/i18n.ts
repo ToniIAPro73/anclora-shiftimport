@@ -856,6 +856,7 @@ const translations: Record<Locale, TranslationTree> = {
       areaMismatchConfirm: 'El empleado "{{name}}" pertenece al área "{{employeeArea}}", pero esta importación apunta a "{{targetArea}}". ¿Importar de todos modos en esta área?',
     },
     employeeSelect: {
+      placeholder: 'Seleccionar empleado',
       searchPlaceholder: 'Buscar empleado…',
       noResults: 'Sin resultados.',
       noEmployees: 'No hay empleados.',
@@ -2245,6 +2246,7 @@ const translations: Record<Locale, TranslationTree> = {
       areaMismatchConfirm: 'Employee "{{name}}" belongs to area "{{employeeArea}}", but this import targets "{{targetArea}}". Import anyway into this area?',
     },
     employeeSelect: {
+      placeholder: 'Select employee',
       searchPlaceholder: 'Search employee…',
       noResults: 'No results.',
       noEmployees: 'No employees.',

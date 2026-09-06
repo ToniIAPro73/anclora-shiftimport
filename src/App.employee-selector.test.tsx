@@ -83,7 +83,7 @@ function renderApp() {
 }
 
 function openContext() {
-  expect(screen.getByTestId('app-shell-main-context')).toBeTruthy();
+  expect(screen.getByTestId('calendar-toolbar')).toBeTruthy();
 }
 
 describe('App — Employee calendar selector (ADMIN)', () => {
@@ -94,7 +94,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
     openContext();
     await waitFor(() => expect(screen.getAllByText('Employee A · ID 1001').length).toBeGreaterThan(0));
     expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(1); // Employee A: 1 shift
@@ -117,7 +117,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     mockedLoadRemoteShifts.mockImplementation(shiftsFor);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
     openContext();
     await waitFor(() => expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(1));
 
@@ -134,6 +134,43 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     const idsRequested = mockedLoadRemoteShifts.mock.calls.map((call) => call[0]);
     expect(idsRequested).toContain('emp-b');
     expect(idsRequested).toContain('emp-c');
+  });
+
+  it('defaults to the linked active Employee when the authenticated admin is also an Employee', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({
+      session: { ...adminSession, employeeId: 'emp-b' },
+      needsOrgChoice: false,
+    });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedLoadRemoteShifts.mockImplementation(shiftsFor);
+
+    renderApp();
+
+    await waitFor(() => expect(screen.getByTestId('calendar-employee-filter')).toBeTruthy());
+    const trigger = screen.getByRole('button', { name: 'Empleado:' });
+    expect(trigger.textContent).toContain('Employee B · ID 1002');
+    expect(mockedLoadRemoteShifts).toHaveBeenCalledWith('emp-b');
+  });
+
+  it('does not list inactive Employees in the calendar filter', async () => {
+    const inactiveEmployee: RemoteEmployee = {
+      id: 'emp-inactive',
+      organizationId: 'org-1',
+      externalEmployeeId: '1999',
+      name: 'Inactive Employee',
+      userId: null,
+      status: 'inactive',
+    };
+    mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue([...employees, inactiveEmployee]);
+    mockedLoadRemoteShifts.mockImplementation(shiftsFor);
+
+    renderApp();
+
+    await waitFor(() => expect(screen.getByTestId('calendar-employee-filter')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+
+    expect(screen.queryByRole('option', { name: 'Inactive Employee · ID 1999' })).toBeNull();
   });
 
   it('the employee selector never renders for role EMPLOYEE', async () => {
@@ -160,12 +197,10 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
-    openContext();
-    await waitFor(() => expect(document.querySelector('.team-bar')).toBeTruthy());
-    const teamBar = document.querySelector('.team-bar');
-    expect(teamBar?.textContent).toContain('OrganizaciónAnclora Group');
-    expect(teamBar?.textContent).not.toContain('Anclora Group — Anclora Group');
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
+    expect(document.querySelector('.app-shell__context-summary')?.textContent).toContain('Anclora Group');
+    expect(screen.getByTestId('calendar-toolbar').textContent).not.toContain('Organización');
+    expect(screen.getByTestId('calendar-toolbar').textContent).not.toContain('Rol');
   });
 
   it('treats an owner-only organization as complete without an Employee', async () => {
@@ -183,7 +218,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
-    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
     expect(screen.queryByText('Configuración incompleta')).toBeNull();
     expect(screen.queryByText('Cuenta no vinculada')).toBeNull();
     expect(screen.getAllByText('No vinculado').length).toBeGreaterThan(0);

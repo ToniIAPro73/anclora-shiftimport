@@ -76,7 +76,7 @@ function renderApp() {
 }
 
 async function openContext() {
-  await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+  await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
 }
 
 describe('App — area context (dashboard)', () => {

@@ -26,28 +26,31 @@ const SIDEBAR_STATE_KEY = 'anclora_shiftimport_sidebar_v1';
 
 export type ShellSection = 'calendar' | 'planner';
 
-export function CalendarToolbar({ year, month, shiftCount, onNavigate }: { year: number; month: number; shiftCount?: number; onNavigate: (delta: number) => void }) {
+export function CalendarToolbar({ year, month, shiftCount, employeeControl, onNavigate }: { year: number; month: number; shiftCount?: number; employeeControl?: ReactNode; onNavigate: (delta: number) => void }) {
   const { t, tl } = useI18n();
   const monthNames = tl('calendar.months');
   return (
     <div className="calendar-toolbar" data-testid="calendar-toolbar">
-      <div>
+      <div className="calendar-toolbar__heading">
         <p className="calendar-toolbar__eyebrow">{t('shell.calendar')}</p>
         <h1 className="calendar-toolbar__title">{monthNames[month]} {year}</h1>
       </div>
-      {typeof shiftCount === 'number' && (
-        <span className="calendar-toolbar__count" role="status" aria-live="polite">
-          {t('calendar.shiftCount', { count: shiftCount })}
-        </span>
-      )}
-      <div className="month-navigator" aria-label={t('calendar.monthNavigation')}>
-        <button type="button" className="month-nav-button" onClick={() => onNavigate(-1)} aria-label={t('header.previousMonth')}>
-          <ChevronDown size={18} aria-hidden="true" style={{ transform: 'rotate(90deg)' }} />
-        </button>
-        <span className="month-nav-label">{monthNames[month]} {year}</span>
-        <button type="button" className="month-nav-button" onClick={() => onNavigate(1)} aria-label={t('header.nextMonth')}>
-          <ChevronDown size={18} aria-hidden="true" style={{ transform: 'rotate(-90deg)' }} />
-        </button>
+      <div className="calendar-toolbar__controls">
+        {employeeControl}
+        {typeof shiftCount === 'number' && (
+          <span className="calendar-toolbar__count" role="status" aria-live="polite">
+            {t('calendar.shiftCount', { count: shiftCount })}
+          </span>
+        )}
+        <div className="month-navigator" aria-label={t('calendar.monthNavigation')}>
+          <button type="button" className="month-nav-button" onClick={() => onNavigate(-1)} aria-label={t('header.previousMonth')}>
+            <ChevronDown size={18} aria-hidden="true" style={{ transform: 'rotate(90deg)' }} />
+          </button>
+          <span className="month-nav-label">{monthNames[month]} {year}</span>
+          <button type="button" className="month-nav-button" onClick={() => onNavigate(1)} aria-label={t('header.nextMonth')}>
+            <ChevronDown size={18} aria-hidden="true" style={{ transform: 'rotate(-90deg)' }} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -195,7 +198,7 @@ export function AppShell({
   languageControl,
   contextContent,
   contextSummary,
-  hasContext = Boolean(contextContent),
+  hasContext = Boolean(contextContent || contextSummary),
   onSignIn,
   onImport,
   onAddShift,

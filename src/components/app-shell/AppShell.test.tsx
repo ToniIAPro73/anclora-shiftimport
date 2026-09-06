@@ -33,7 +33,7 @@ function renderShell(role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE' | null = '
         activeSection={activeSection}
         themeControl={<button type="button">Theme</button>}
         languageControl={<button type="button">Language</button>}
-        contextContent={<div>Organization context</div>}
+        contextContent={activeSection === 'planner' ? <div>Organization context</div> : null}
         contextSummary={<span>Organization summary</span>}
         {...callbacks}
       >
@@ -58,7 +58,7 @@ describe('AppShell', () => {
     expect(screen.getByTestId('sidebar-areas')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-formats')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-settings')).toBeInTheDocument();
-    expect(screen.getByTestId('app-shell-main-context')).toHaveTextContent('Organization context');
+    expect(screen.queryByTestId('app-shell-main-context')).not.toBeInTheDocument();
     const sidebar = screen.getByTestId('app-shell-sidebar');
     expect(sidebar).not.toHaveTextContent('Organization context');
     expect(sidebar.lastElementChild).toBe(screen.getByTestId('sidebar-collapse'));
@@ -74,6 +74,7 @@ describe('AppShell', () => {
     expect(screen.queryByTestId('sidebar-members')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-areas')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-settings')).not.toBeInTheDocument();
+    expect(screen.getByTestId('app-shell-main-context')).toHaveTextContent('Organization context');
   });
 
   it('persists collapsed state and keeps icon actions named', () => {

@@ -15,6 +15,7 @@ interface SearchableSelectProps {
   value: string;
   options: SearchableSelectOption[];
   onChange: (value: string) => void;
+  placeholder?: string;
   searchPlaceholder?: string;
   emptyMessage?: string;
   ariaLabel?: string;
@@ -34,6 +35,7 @@ export const SearchableSelect = ({
   value,
   options,
   onChange,
+  placeholder,
   searchPlaceholder = '',
   emptyMessage = '',
   ariaLabel,
@@ -162,7 +164,7 @@ export const SearchableSelect = ({
         disabled={disabled}
         style={{ minWidth: 0, fontWeight: 700, opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer' }}
       >
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedOption?.label ?? ''}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedOption?.label ?? placeholder ?? ''}</span>
         <ChevronDown size={16} style={{ flexShrink: 0 }} />
       </button>
       {open && createPortal(
