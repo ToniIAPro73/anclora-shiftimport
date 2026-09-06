@@ -72,6 +72,8 @@ describe('ShiftDetail', () => {
     const acknowledgeButton = screen.getByRole('button', { name: 'Marcar el turno del 2026-09-05 como visto' });
     expect(acknowledgeButton).toHaveProperty('disabled', false);
     expect(screen.getByRole('button', { name: 'Añadir comentario' })).toHaveProperty('disabled', false);
+    fireEvent.click(screen.getByRole('button', { name: 'Solicitar cambio' }));
+    expect(screen.getByRole('dialog', { name: 'Solicitar un cambio' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Enviar solicitud' })).toHaveProperty('disabled', false);
     mockedAcknowledge.mockResolvedValue({ status: 'ACKNOWLEDGED', acknowledgedAt: '2026-09-05T10:00:00.000Z' });
     fireEvent.click(acknowledgeButton);

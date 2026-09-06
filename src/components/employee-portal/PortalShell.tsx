@@ -1,5 +1,5 @@
 import { SessionInfo } from '../../lib/session';
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import { TurnosLogo } from '../branding/TurnosLogo';
 import { MyWeek } from './MyWeek';
@@ -10,10 +10,15 @@ import { BottomNav, PortalSection, PortalView } from './BottomNav';
 import { More } from './More';
 import { useNotifications } from './use-notifications';
 import { getWeekStartMonday, toISODate } from '../../lib/week';
+import { NewChangeRequestModal } from './NewChangeRequestModal';
 
 interface PortalShellProps {
   session: SessionInfo;
   employeeName?: string;
+  employeeId?: string | null;
+  onOpenSelfImport?: () => void;
+  onOpenHistoricalAdd?: () => void;
+  actionOverlays?: ReactNode;
   onLogout: () => void;
 }
 
@@ -28,11 +33,13 @@ function resolveIdentity(session: SessionInfo, employeeName?: string): string {
   return employeeName?.trim() || session.user.displayName.trim() || session.user.email;
 }
 
-export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProps) => {
+export const PortalShell = ({ session, employeeName, employeeId, onOpenSelfImport = () => {}, onOpenHistoricalAdd = () => {}, actionOverlays, onLogout }: PortalShellProps) => {
   const { t } = useI18n();
   const [activeView, setActiveView] = useState<PortalView>('today');
   const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
   const [detailReturnView, setDetailReturnView] = useState<PortalSection>('today');
+  const [isNewRequestOpen, setIsNewRequestOpen] = useState(false);
+  const [requestRefreshSignal, setRequestRefreshSignal] = useState(0);
   const [weekStart, setWeekStart] = useState(() => toISODate(getWeekStartMonday(new Date())));
   const notificationsController = useNotifications();
   const organizationName = resolveOrganizationName(session);
@@ -77,7 +84,13 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
       <main className="employee-portal__main" aria-labelledby={mainHeadingId}>
         {activeView === 'today' && <Today onSelectShift={(shiftId) => openDetail(shiftId, 'today')} />}
         {activeView === 'week' && <MyWeek weekStart={weekStart} onWeekStartChange={setWeekStart} onSelectShift={(shiftId) => openDetail(shiftId, 'week')} />}
-        {activeView === 'requests' && <RequestStatus onSelectShift={(shiftId) => openDetail(shiftId, 'requests')} />}
+        {activeView === 'requests' && (
+          <RequestStatus
+            onSelectShift={(shiftId) => openDetail(shiftId, 'requests')}
+            onNewRequest={employeeId ? () => setIsNewRequestOpen(true) : undefined}
+            refreshSignal={requestRefreshSignal}
+          />
+        )}
         {activeView === 'more' && (
           <More
             session={session}
@@ -85,6 +98,8 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
             organizationName={organizationName}
             notificationsController={notificationsController}
             onOpenShift={(shiftId) => openDetail(shiftId, 'more')}
+            onOpenSelfImport={onOpenSelfImport}
+            onOpenHistoricalAdd={onOpenHistoricalAdd}
             onLogout={onLogout}
           />
         )}
@@ -97,6 +112,19 @@ export const PortalShell = ({ session, employeeName, onLogout }: PortalShellProp
         unreadCount={notificationsController.unreadCount}
         onNavigate={setActiveView}
       />
+
+      {employeeId && (
+        <NewChangeRequestModal
+          isOpen={isNewRequestOpen}
+          employeeId={employeeId}
+          onClose={() => setIsNewRequestOpen(false)}
+          onCreated={() => {
+            setIsNewRequestOpen(false);
+            setRequestRefreshSignal((current) => current + 1);
+          }}
+        />
+      )}
+      {actionOverlays}
     </div>
   );
 };

@@ -5,6 +5,7 @@ import { Shift } from '../../lib/types';
 import { useI18n } from '../../lib/use-i18n';
 import { ChangeRequestForm } from './ChangeRequestForm';
 import { ShiftComments } from './ShiftComments';
+import { ModalShell } from '../ui/ModalShell';
 
 type DetailState =
   | { status: 'loading' }
@@ -28,6 +29,7 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
   const { t } = useI18n();
   const [state, setState] = useState<DetailState>({ status: 'loading' });
   const [acknowledgementAction, setAcknowledgementAction] = useState<AcknowledgementActionState>('idle');
+  const [isChangeRequestOpen, setIsChangeRequestOpen] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   const load = useCallback(async () => {
@@ -154,6 +156,12 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
                     ? t('employeeDetail.acknowledging')
                     : t('employeeDetail.acknowledge')}
               </button>
+              <button
+                type="button"
+                onClick={() => setIsChangeRequestOpen(true)}
+              >
+                {t('employeeDetail.changeRequest')}
+              </button>
             </div>
             {acknowledgementAction === 'success' && (
               <p className="employee-shift-detail__acknowledgement-feedback" role="status" aria-live="polite">
@@ -167,12 +175,20 @@ export function ShiftDetail({ shiftId, onBack }: ShiftDetailProps) {
             )}
           </div>
           <ShiftComments shiftId={state.shift.id} />
-          <ChangeRequestForm
-            key={state.shift.id}
-            shiftId={state.shift.id}
-            shiftStartTime={state.shift.startTime}
-            shiftEndTime={state.shift.endTime}
-          />
+          <ModalShell
+            isOpen={isChangeRequestOpen}
+            onClose={() => setIsChangeRequestOpen(false)}
+            title={t('employeeChangeRequest.title')}
+            closeAriaLabel={t('common.close')}
+            maxWidth="620px"
+          >
+            <ChangeRequestForm
+              key={state.shift.id}
+              shiftId={state.shift.id}
+              shiftStartTime={state.shift.startTime}
+              shiftEndTime={state.shift.endTime}
+            />
+          </ModalShell>
         </>
       )}
     </section>

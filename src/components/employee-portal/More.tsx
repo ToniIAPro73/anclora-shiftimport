@@ -1,4 +1,4 @@
-import { LogOut, UserRound } from 'lucide-react';
+import { CalendarPlus, FileUp, LogOut, UserRound } from 'lucide-react';
 import { SessionInfo } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { LanguageToggle } from '../ui/LanguageToggle';
@@ -12,10 +12,12 @@ interface MoreProps {
   organizationName: string;
   notificationsController: NotificationsController;
   onOpenShift: (shiftId: string) => void;
+  onOpenSelfImport: () => void;
+  onOpenHistoricalAdd: () => void;
   onLogout: () => void;
 }
 
-export function More({ session, identity, organizationName, notificationsController, onOpenShift, onLogout }: MoreProps) {
+export function More({ session, identity, organizationName, notificationsController, onOpenShift, onOpenSelfImport, onOpenHistoricalAdd, onLogout }: MoreProps) {
   const { t } = useI18n();
 
   return (
@@ -32,6 +34,17 @@ export function More({ session, identity, organizationName, notificationsControl
           <strong>{identity}</strong>
           <span>{organizationName || session.user.email}</span>
         </div>
+      </div>
+
+      <div className="employee-more__actions" aria-label={t('employeePortal.selfService')}>
+        <button type="button" onClick={onOpenSelfImport}>
+          <FileUp size={17} aria-hidden="true" />
+          <span>{t('employeePortal.importSelf')}</span>
+        </button>
+        <button type="button" onClick={onOpenHistoricalAdd}>
+          <CalendarPlus size={17} aria-hidden="true" />
+          <span>{t('employeePortal.addHistorical')}</span>
+        </button>
       </div>
 
       <div className="employee-more__preferences" aria-label={t('employeePortal.preferences')}>

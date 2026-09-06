@@ -15,11 +15,12 @@ interface ChangeRequestFormProps {
   shiftId: string;
   shiftStartTime: string;
   shiftEndTime: string;
+  onCreated?: (request: ChangeRequest) => void;
 }
 
 const MAX_REASON_LENGTH = 2000;
 
-export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime }: ChangeRequestFormProps) {
+export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime, onCreated }: ChangeRequestFormProps) {
   const { t } = useI18n();
   const [requestType, setRequestType] = useState<ChangeRequestType>('TIME_CHANGE');
   const [reason, setReason] = useState('');
@@ -68,6 +69,7 @@ export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime }: Cha
         requestType === 'TIME_CHANGE' ? requestedEndTime : undefined,
       );
       setRequest(created);
+      onCreated?.(created);
       setReason('');
       setActionState('idle');
       setFeedback(t('employeeChangeRequest.sent'));

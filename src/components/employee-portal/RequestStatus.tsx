@@ -12,11 +12,13 @@ type StatusFilter = 'ALL' | ChangeRequestStatus;
 
 interface RequestStatusProps {
   onSelectShift?: (shiftId: string) => void;
+  onNewRequest?: () => void;
+  refreshSignal?: number;
 }
 
 const STATUS_OPTIONS: StatusFilter[] = ['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
 
-export function RequestStatus({ onSelectShift }: RequestStatusProps) {
+export function RequestStatus({ onSelectShift, onNewRequest, refreshSignal = 0 }: RequestStatusProps) {
   const { t } = useI18n();
   const [filter, setFilter] = useState<StatusFilter>('ALL');
   const [state, setState] = useState<RequestStatusState>({ status: 'loading', requests: [] });
@@ -33,7 +35,7 @@ export function RequestStatus({ onSelectShift }: RequestStatusProps) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshSignal]);
 
   const visibleRequests = useMemo(
     () => filter === 'ALL' ? state.requests : state.requests.filter((request) => request.status === filter),
@@ -51,6 +53,11 @@ export function RequestStatus({ onSelectShift }: RequestStatusProps) {
         <p className="employee-request-status__eyebrow">{t('employeeRequestStatus.eyebrow')}</p>
         <h2 id="employee-request-status-title">{t('employeeRequestStatus.title')}</h2>
         <p>{t('employeeRequestStatus.description')}</p>
+        {onNewRequest && (
+          <button type="button" className="employee-request-status__new" onClick={onNewRequest}>
+            {t('employeeRequestStatus.newRequest')}
+          </button>
+        )}
       </div>
 
       <div className="employee-request-status__filter">
@@ -89,6 +96,11 @@ export function RequestStatus({ onSelectShift }: RequestStatusProps) {
         <div className="employee-request-status__state" data-testid="request-status-empty">
           <h3>{t('employeeRequestStatus.emptyTitle')}</h3>
           <p>{t('employeeRequestStatus.emptyDescription')}</p>
+          {onNewRequest && (
+            <button type="button" className="employee-request-status__new" onClick={onNewRequest}>
+              {t('employeeRequestStatus.newRequest')}
+            </button>
+          )}
         </div>
       )}
 

@@ -1,6 +1,6 @@
 # Employee self-import contract
 
-Estado: aprobado para P5 (D-03, D-04) · 2026-09-06
+Estado: implementado en P5.4; contrato aprobado para P5/P5.4 (D-03, D-04) · 2026-09-06
 
 ## Alcance
 
@@ -32,3 +32,18 @@ con recuento y explicación (`SELF_FUTURE_ROWS_EXCLUDED`); no crean `Shift`, `Sc
 - Un EMPLOYEE sin vínculo activo queda bloqueado con `SCOPE_UNAVAILABLE`.
 - La previsualización precede a la escritura; la idempotencia y la atomicidad existentes se conservan.
 - La UI muestra el desglose, pero no sustituye las comprobaciones de autorización del backend.
+
+## Portal de autoservicio (P5.4)
+
+El portal conserva su navegación `Hoy` / `Semana` / `Solicitudes` / `Más` y mantiene scope `SELF`.
+`Hoy` y `Semana` muestran únicamente turnos publicados del Employee vinculado. Desde el detalle de
+un turno y desde `Solicitudes`, el Employee puede crear una solicitud de cambio usando el dominio
+`ChangeRequest` existente; no puede editar el turno directamente ni aprobar solicitudes.
+
+`Más` expone `Importar mis turnos` y `Añadir turno pasado`. Ambas entradas reutilizan los flujos
+existentes: el import filtra filas propias y excluye futuro, y el alta manual sólo acepta `date <
+today` en `Europe/Madrid`. El backend sigue resolviendo identidad, organización, Employee activo,
+propiedad del turno y frontera temporal; la UI no es una autoridad de seguridad.
+
+Un Employee sin vínculo activo permanece en el estado contractual de cuenta no vinculada y no recibe
+acciones SELF ni acceso a datos.

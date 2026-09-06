@@ -12,7 +12,7 @@ repositorio. `docs/specs/` **no existía** y se ha creado para este documento, p
 transversal de release que abarca 8 fases. `sdd/` sigue siendo canónico para specs de feature; este
 documento es una spec de programa y queda subordinado a los contratos de `docs/standards/` y a AOS.
 
-**Estado**: P5.3 `PASS` (verificación local). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
+**Estado**: P5.4 `PASS_WITH_GAPS` (implementada localmente). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
 fuente CRC Tryp inaccesible.
 
 ---
@@ -45,7 +45,7 @@ Gate), sin línea `STATUS`, lo que deja al producto sin veredicto formal pese a 
 El cuaderno NotebookLM sobre CRC Tryp es **inaccesible** (redirección 302 a `accounts.google.com`).
 No se ha derivado ninguna idea de esa fuente y la fase correspondiente queda `BLOCKED`.
 
-El plan resultante son 11 fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2` y `P5.3`) con 110 microtareas, más una fase `P8`
+El plan resultante son 12 fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2`, `P5.3` y `P5.4`) con 123 microtareas, más una fase `P8`
 bloqueada. `P0` restaura la verdad documental y cierra el MVP Release Gate; `P1` convierte la
 importación en una operación que siempre deja rastro y siempre indica cómo recuperarse; `P2`
 adelanta el gating de plan; `P3` erradica los 18 diálogos nativos restantes; `P4` cierra los
@@ -79,6 +79,13 @@ P5.3 se añade después del cierre de P5.2 por un defecto reproducido al recrear
 un OWNER válido sin Employee, ADMIN ni áreas se mostraba como “Configuración incompleta”. La fase
 introduce un wizard plan-aware con submit único y transaccional. No implementa billing ni reabre P5,
 P5.1 o P5.2.
+
+P5.4 se añade después del cierre de P5.3 para completar el autoservicio operativo del Employee sin
+cambiar su IA móvil `Hoy / Semana / Solicitudes / Más`. Expone solicitudes de cambio, self-import y
+alta histórica mediante los contratos existentes, siempre bajo scope `SELF`. El intercambio de
+turnos se registra como P5.5 futura y no se implementa aquí. P5.4 queda en `PASS_WITH_GAPS`: la
+implementación y el smoke E2E pasan, pero la matriz de capturas visuales manuales queda pendiente
+de una sesión de QA visual con navegador interactivo.
 
 ---
 
@@ -811,7 +818,7 @@ Requisitos que ninguna fase puede degradar:
 
 ## 30. ROADMAP
 
-Once fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2` y `P5.3`) más una bloqueada. P5.2 contiene 15 microtareas
+Doce fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2`, `P5.3` y `P5.4`) más una bloqueada. P5.2 contiene 15 microtareas
 originales y 10 microtareas de remediación post-M15. Detalle completo en el documento de roadmap.
 
 | Fase | Nombre | Prioridad del encargo cubierta |
@@ -825,6 +832,7 @@ originales y 10 microtareas de remediación post-M15. Detalle completo en el doc
 | P5.1 | Premium Application Shell & Collapsible Sidebar | densidad de navegación post-P5; calendario-first; shell role-aware; (H) ampliado |
 | P5.2 | Operational Navigation & Time-Scope Consolidation + remediation | Importar/Añadir/Planificar; Approval Lite; shell, planner y acciones temporales |
 | P5.3 | Plan-Aware Organization Onboarding & Initial Governance | plan inicial; OWNER válido; áreas y ADMIN opcionales; User↔Employee explícito |
+| P5.4 | Employee Self-Service Completion | solicitudes de cambio, self-import y alta histórica bajo scope SELF |
 | P6 | Import History & Operational Traceability | (11) histórico; (F) |
 | P7 | Import vs Schedule Communication | (12) scheduling/approval — comunicación; (J) |
 | P8 | CRC Tryp Research | (13) mejoras CRC Tryp — **BLOCKED** |
@@ -850,14 +858,15 @@ documento para evitar dos autoridades divergentes.
 
 ## 32. MICROTASKS
 
-110 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
+123 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
 `FILES_LIKELY_AFFECTED`, impactos (`DATA_MODEL` / `API` / `UI` / `I18N` / `ACCESSIBILITY` /
 `SECURITY`), `TESTS_REQUIRED`, `E2E_REQUIRED`, `MANUAL_QA_REQUIRED`, `ACCEPTANCE_CRITERIA` en
 Given/When/Then, `DO_NOT_BREAK`, `DEPENDENCIES`, `RISK` y `ESTIMATED_COMPLEXITY`, en el documento
 de roadmap, sección `MICROTASKS` de cada fase.
 
 Distribución: P0 = 10, P1 = 10, P2 = 5, P3 = 9, P4 = 7, P5 = 6, P5.1 = 10, P5.2 = 25 (15 + 10 de
-remediación), P5.3 = 17, P6 = 6, P7 = 5, P8 = 0 (bloqueada).
+remediación), P5.3 = 17, P5.4 = 13, P6 = 6, P7 = 5, P8 = 0 (bloqueada). P5.5 queda diferida y no
+entra en el conteo ejecutable.
 
 Orden general aplicado, con las desviaciones justificadas en cada fase:
 

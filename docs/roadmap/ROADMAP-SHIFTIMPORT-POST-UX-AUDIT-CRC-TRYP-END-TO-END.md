@@ -55,7 +55,7 @@ Relación formal con la historia:
 ```
 R0 → R1 → R2 → R3 → R4 → R5 → [R5-M12 abierto]
                                    │
-                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P5.3 → P6 → P7
+                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P5.3 → P5.4 → P6 → P7
                                                                                                      P8 (BLOCKED)
 R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 ```
@@ -86,6 +86,8 @@ R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 | P6 ↔ P5.2 | NO | P6 consume la navegación y la frontera Import/Añadir/Planificar ya reconciliadas por P5.2. |
 | P5.3 ↔ P5.2 | NO | P5.3 consume la shell y el contrato temporal ya cerrados; sólo cambia el bootstrap inicial. |
 | P6 ↔ P5.3 | NO | P6 consume organizaciones nacidas con plan y OWNER válidos; no modifica el onboarding. |
+| P5.4 ↔ P5.3 | NO | P5.4 consume el portal y contratos SELF ya cerrados; completa sus entradas de autoservicio sin cambiar el bootstrap. |
+| P6 ↔ P5.4 | NO | P6 consume el histórico ya accesible al Employee; no modifica el portal ni sus mutaciones SELF. |
 | P8 ↔ todo | SÍ | Investigación externa; no toca código. |
 
 ---
@@ -1838,6 +1840,102 @@ development, con limpieza de fixture y del tenant sintético al terminar.
 
 ---
 
+## PHASE P5.4 — Employee Self-Service Completion
+
+**PHASE_ID**: P5.4
+**PHASE_NAME**: Employee Self-Service Completion
+**STATUS**: PASS_WITH_GAPS
+**GOAL**: Completar el autoservicio del Employee conservando la IA `Hoy / Semana / Solicitudes / Más`
+y el scope `SELF`.
+**WHY_NOW**: R4 ya permite consultar turnos y solicitudes existentes, pero el portal no ofrecía una
+entrada para crear solicitudes, importar los propios turnos ni añadir turnos históricos.
+**USER_VALUE**: El Employee puede resolver sus tareas operativas desde un portal móvil-first, sin entrar
+en la shell de gestión ni recibir capacidades de otros roles.
+**BUSINESS_VALUE**: Completar el journey Employee sobre los dominios ya validados de Import, Shift y
+ChangeRequest sin crear un segundo pipeline ni ampliar autorización.
+**SOURCE_DRIVERS**: prompt P5.4; `EMPLOYEE_SELF_SERVICE_CONTRACT.md`; R4 Employee Portal; contratos de
+Import SELF, histórico manual y Approval Lite.
+**SCOPE**: CTA `Nueva solicitud`, selección de turno propio y creación mediante ChangeRequest existente;
+entradas `Importar mis turnos` y `Añadir turno pasado`; ModalShell; tests y evidencia de scope.
+**OUT_OF_SCOPE**: P5.5 Shift Swap, planner, publicación, aprobación para Employee, nuevas notificaciones,
+nuevas categorías de solicitud, migraciones y billing.
+**DEPENDENCIES**: P5.3 Gate PASS; APIs `/api/me/*` y `/api/shifts`; `ModalShell`; `EMPLOYEE_SELF_SERVICE_CONTRACT.md`.
+**PREREQUISITES**: no tocar producción; reutilizar fixtures sintéticas y un smoke E2E compacto; conservar
+la navegación R4.
+**RISKS**: duplicar lógica de solicitud o permitir un turno ajeno desde el cliente; mitigado por un único
+formulario y validación server-side de `organization_id`, `employee_id` y rol.
+**DO_NOT_BREAK**: `SELF`, Employee `active`, tenant isolation, import preview/outcome, histórico manual,
+ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
+**MIGRATION_IMPACT**: N/A. No se introducen tablas, columnas ni endpoints nuevos.
+**ROLLBACK_STRATEGY**: revertir la superficie del portal y conservar los endpoints y contratos existentes.
+**DOCUMENTATION_UPDATES**: SPEC, contrato SELF, contrato futuro P5.5, este roadmap y Gate P5.4.
+
+### MICROTASKS — P5.4
+
+| ID | TITLE | ACCEPTANCE CRITERIA | E2E |
+|---|---|---|---|
+| P5.4-M01 | Auditoría de capacidades del portal | `Hoy`, `Semana`, `Solicitudes` y `Más` conservan su IA y se identifican los gaps funcionales. | No |
+| P5.4-M02 | Contrato de autoservicio Employee | El contrato declara SELF, acciones permitidas y prohibiciones. | No |
+| P5.4-M03 | Creación de solicitud | `Nueva solicitud` abre un ModalShell, usa un turno propio y crea ChangeRequest real. | Component |
+| P5.4-M04 | Historial y detalle de solicitudes | El listado mantiene filtros/estados reales y refresca tras crear. | Component |
+| P5.4-M05 | Entrada de self-import | `Más → Importar mis turnos` reutiliza ImportModal y el pipeline existente. | Compact |
+| P5.4-M06 | Entrada de alta histórica | `Más → Añadir turno pasado` reutiliza el editor histórico existente con fecha acotada. | Component |
+| P5.4-M07 | Consistencia de modales | Solicitud y detalle usan ModalShell con ESC, foco y responsive; no hay editor duplicado. | Component |
+| P5.4-M08 | Enforcement de rol y scope | Las acciones del portal siguen siendo SELF y el backend rechaza recursos ajenos/futuro. | API |
+| P5.4-M09 | Responsive, accesibilidad e i18n | Portal y subflujos funcionan en móvil/desktop, ES/EN y teclado. | No |
+| P5.4-M10 | Matriz browser/E2E compacta | Un smoke cubre navegación y entradas críticas; combinaciones contractuales quedan en unit/API. | Compact |
+| P5.4-M11 | Alcance futuro P5.5 | Shift Swap queda documentado como futuro diferido, sin código ni esquema. | No |
+| P5.4-M12 | Reconciliación documental | SPEC, contrato, roadmap y estado no contradicen la implementación. | No |
+| P5.4-M13 | Gate final | Tests, build, lint, typecheck, evidencia de portal y worktree cumplen el Gate. | Sí, mínimo |
+
+### PHASE_P5.4_GATE
+
+| CRITERION | RESULTADO | EVIDENCE_REQUIRED |
+|---|---|---|
+| FUNCTIONAL | PASS requerido | Hoy vacío/con turno, Semana propia, Nueva solicitud, Más con self-import y alta histórica. |
+| DATA_INTEGRITY | PASS requerido | Ninguna mutación SELF puede escribir Employee ajeno; futuro excluido en import/manual. |
+| AUTHORIZATION | PASS requerido | EMPLOYEE no ve ni ejecuta planner, aprobaciones o gestión; API 403 ante recursos ajenos. |
+| TENANT_ISOLATION | PASS requerido | Lecturas y mutaciones se mantienen en organización y Employee resueltos por sesión. |
+| SECURITY | PASS requerido | No se confía en employeeId/shiftId del cliente; endpoints existentes siguen siendo autoridad. |
+| REGRESSION | PASS requerido | P1–P5.3 y R3/R4/R5 relevantes verdes; no cambia ApprovalPolicy. |
+| ACCESSIBILITY | PASS requerido | Bottom nav y ModalShell operables con teclado, foco, ESC y labels. |
+| RESPONSIVE | PASS requerido | 390×844, 844×390, 768×1024, 1024×768, 1366×768 y 1440×900 sin recorte. |
+| I18N | PASS requerido | Claves ES/EN nuevas cubiertas por el test de paridad. |
+| UNIT_TESTS / INTEGRATION_TESTS | PASS requerido | Componentes portal y APIs existentes dirigidos en verde. |
+| E2E | PASS requerido | Smoke compacto del portal; no se añade una batería exhaustiva por variante. |
+| BUILD / LINT / TYPECHECK | PASS requerido | Comandos del repositorio. |
+| DOCUMENTATION | PASS requerido | Contrato SELF, P5.5 futuro, SPEC, roadmap y Gate alineados. |
+| AOS_COMPLIANCE | PASS requerido | Sin cambio de autoridad ni esquema; estado documental actualizado. |
+| WORKTREE_STATE | PASS requerido | Sólo cambios de P5.4, sin secretos ni artefactos de QA. |
+| EMPLOYEE_TODAY / EMPLOYEE_WEEK | PASS requerido | Sólo datos propios y acciones de consulta/acknowledge válidas. |
+| EMPLOYEE_CREATE_REQUEST / REQUEST_HISTORY | PASS requerido | Creación, listado, estados y cancelación usan ChangeRequest vigente. |
+| EMPLOYEE_SELF_IMPORT | PASS requerido | Single/multi/self-missing/future preservan D-03/D-04. |
+| EMPLOYEE_HISTORICAL_ADD | PASS requerido | Sólo `date < today` y Employee propio; backend continúa validando. |
+| EMPLOYEE_NO_FUTURE_ADD / NO_PLANNER / NO_APPROVAL | PASS requerido | UI y API no ofrecen capacidades prohibidas. |
+| MODAL_CONSISTENCY | PASS requerido | Nuevos subflujos usan ModalShell y un único formulario de solicitud. |
+| P5.5_DEFERRED_SCOPE | PASS requerido | Intención y preguntas abiertas documentadas; cero implementación. |
+
+`PHASE_P5.4_GATE`: `PASS_WITH_GAPS`. La implementación, tests dirigidos, suite completa, lint, build y
+smoke E2E compacto pasan; la evidencia está archivada en
+`docs/roadmap/P5.4-EMPLOYEE-SELF-SERVICE-GATE.md`. Gap no bloqueante: esta sesión no dispone de una superficie de navegador
+interactiva para producir la matriz de capturas visuales manuales; debe cubrirse antes del Gate final
+del programa. P6 permanece sin iniciar.
+
+---
+
+## FUTURE PHASE P5.5 — Shift Swap Workflow
+
+**PHASE_ID**: P5.5
+**STATUS**: DEFERRED / PLANNED FUTURE
+**SCOPE**: Employee A solicita intercambio de un turno propio publicado; se resuelven candidatos
+compatibles, Employee B acepta/rechaza, se evalúa `ApprovalPolicy` y el cambio se aplica de forma
+atómica con auditoría.
+**NOT_IMPLEMENTED_IN_P5.4**: no tablas, estados, endpoints, matching, selector de compañeros,
+notificaciones ni reglas de compatibilidad. Las preguntas abiertas están en
+`docs/product/EMPLOYEE_SHIFT_SWAP_DEFERRED.md`.
+
+---
+
 ## PHASE P6 — Import History & Operational Traceability
 
 **PHASE_ID**: P6
@@ -2180,7 +2278,9 @@ mientras la fuente no sea legible.
 | P5.1 | Premium Application Shell & Collapsible Sidebar | 10 | P5 | PASS |
 | P5.2 | Operational Navigation & Time-Scope Consolidation + remediation | 25 | P5.1 | PASS |
 | P5.3 | Plan-Aware Organization Onboarding & Initial Governance | 17 | P5.2 | PASS |
-| P6 | Import History & Traceability | 6 | P1, P5.3 | PLANNED |
+| P5.4 | Employee Self-Service Completion | 13 | P5.3 | PASS_WITH_GAPS |
+| P5.5 | Shift Swap Workflow | — | P5.4 | DEFERRED / PLANNED FUTURE |
+| P6 | Import History & Traceability | 6 | P1, P5.4 | PLANNED |
 | P7 | Import vs Schedule Communication | 5 | P1, P6 | PLANNED |
 | P8 | CRC Tryp Research | — | fuente accesible | **BLOCKED** |
-| **Total** | | **110** | | |
+| **Total executable** | | **123** | | |

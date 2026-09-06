@@ -9,14 +9,15 @@ setupLocalStorageMock();
 afterEach(cleanup);
 
 describe('ShiftModal close consistency', () => {
-  it('renders the close button outside the form (absolute, top-right of the card)', () => {
+  it('renders the close button in the shared dialog shell', () => {
     render(
       <I18nProvider>
         <ShiftModal isOpen editingShift={null} onClose={() => {}} onSave={() => {}} />
       </I18nProvider>,
     );
     const closeButton = screen.getByLabelText('Cerrar');
-    expect(closeButton.style.position).toBe('absolute');
+    expect(closeButton.closest('[role="dialog"]')).toBeTruthy();
+    expect(closeButton.closest('[role="dialog"]')?.getAttribute('aria-modal')).toBe('true');
   });
 
   it('closes on Escape', () => {
@@ -26,7 +27,7 @@ describe('ShiftModal close consistency', () => {
         <ShiftModal isOpen editingShift={null} onClose={onClose} onSave={() => {}} />
       </I18nProvider>,
     );
-    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

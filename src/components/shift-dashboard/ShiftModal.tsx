@@ -4,10 +4,10 @@ import { getShiftType, normalizeShiftTypeLabel } from '../../lib/shifts';
 import { getShiftTypes, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
-import { useEscapeClose } from '../../lib/use-escape-close';
-import { X, Trash2, Save, Calendar } from 'lucide-react';
+import { Trash2, Save } from 'lucide-react';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { getOperationalDate } from '../../lib/operational-date';
+import { ModalShell } from '../ui/ModalShell';
 
 interface ShiftModalProps {
   isOpen: boolean;
@@ -36,8 +36,6 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
     origin: 'MAN',
   });
 
-  useEscapeClose(isOpen && !isSaving, onClose);
-
   useEffect(() => {
     if (editingShift) {
       setFormData({
@@ -59,31 +57,14 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay">
-      <div
-        className="modal-content"
-        role="dialog"
-        aria-modal="true"
-        aria-label={editingShift ? t('shiftModal.titleEdit') : t('shiftModal.titleNew')}
-      >
-        <button
-          type="button"
-          className="theme-toggle"
-          onClick={() => { if (!isSaving) onClose(); }}
-          disabled={isSaving}
-          aria-label={t('common.close')}
-          style={{ position: 'absolute', top: 'var(--space-md)', right: 'var(--space-md)', cursor: isSaving ? 'wait' : 'pointer' }}
-        >
-          <X size={18} />
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-xl)' }}>
-          <Calendar className="text-gold" size={24} />
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
-            {editingShift ? t('shiftModal.titleEdit') : t('shiftModal.titleNew')}
-          </h2>
-        </div>
-
+    <ModalShell
+      isOpen={isOpen}
+      onClose={() => { if (!isSaving) onClose(); }}
+      title={editingShift ? t('shiftModal.titleEdit') : t('shiftModal.titleNew')}
+      closeAriaLabel={t('common.close')}
+      maxWidth="520px"
+      initialFocus="input[type='date']"
+    >
         <fieldset disabled={isSaving} style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
           <div>
@@ -188,7 +169,6 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
           </div>
         </div>
         </fieldset>
-      </div>
-    </div>
+    </ModalShell>
   );
 };

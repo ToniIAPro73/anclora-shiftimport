@@ -156,6 +156,67 @@ function describeShift(shift: Shift, locale: 'es' | 'en', t: (key: string) => st
   }
   return `${origin} ${type} ${shift.startTime}-${shift.endTime} ${on} ${shift.date}`;
 }
+
+type AppTranslate = (key: string, vars?: Record<string, string | number>) => string;
+
+function ImportResolutionDialog({
+  state,
+  t,
+  onResolve,
+}: {
+  state: ImportResolutionState;
+  t: AppTranslate;
+  onResolve: (confirmed: boolean) => void;
+}) {
+  return (
+    <ModalShell
+      isOpen
+      onClose={() => onResolve(false)}
+      title={state.title}
+      closeAriaLabel={t('importResult.close')}
+      footer={(
+        <>
+          <button className="btn-outline" type="button" onClick={() => onResolve(false)}>{state.cancelLabel}</button>
+          <button className="btn-gold" type="button" onClick={() => onResolve(true)}>{state.confirmLabel}</button>
+        </>
+      )}
+    >
+      <p style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>{state.description}</p>
+    </ModalShell>
+  );
+}
+
+function ImportConflictDialog({
+  state,
+  locale,
+  t,
+  onResolve,
+}: {
+  state: ImportConflictState;
+  locale: 'es' | 'en';
+  t: AppTranslate;
+  onResolve: (action: 'replace' | 'skip' | 'abort') => void;
+}) {
+  return (
+    <ModalShell isOpen onClose={() => onResolve('abort')} title={t('importConflict.title')} closeAriaLabel={t('importResult.close')} maxWidth="520px">
+      <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', lineHeight: 1.5 }}>{t('importConflict.description')}</p>
+      <div style={{ display: 'grid', gap: '10px', marginBottom: '16px' }}>
+        {[{ label: t('importConflict.existing'), shift: state.existing }, { label: t('importConflict.incoming'), shift: state.incoming }].map(({ label, shift }) => (
+          <div key={`${label}-${shift.id}`} style={{ border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '12px', background: 'var(--panel-muted-bg)' }}>
+            <div style={{ fontSize: '0.76rem', color: 'var(--text-subtle)', marginBottom: '4px' }}>{label}</div>
+            <div style={{ fontWeight: 700 }}>{describeShift(shift, locale, t)}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap' }}>
+        <button className="btn-outline" type="button" onClick={() => onResolve('skip')}>{t('importConflict.skip')}</button>
+        <button className="btn-outline" type="button" onClick={() => onResolve('abort')} style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}>{t('importConflict.abort')}</button>
+        <button className="btn-gold" type="button" onClick={() => onResolve('replace')}>{t('importConflict.replace')}</button>
+      </div>
+    </ModalShell>
+  );
+}
+
 function App() {
   const { locale, t, tl } = useI18n();
   const legalPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+/, '') : '';
@@ -1819,11 +1880,97 @@ function App() {
   // future employee screens can grow inside PortalShell.
   if (route === '/app' && authResolved && session?.role === 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete) {
     return (
-      <PortalShell
-        session={session}
-        employeeName={selfEmployee?.name}
-        onLogout={() => void handleLogout()}
-      />
+      <>
+        <PortalShell
+          session={session}
+          employeeName={selfEmployee?.name}
+          employeeId={session.employeeId}
+          onOpenSelfImport={() => { if (!isImporting) setIsImportOpen(true); }}
+          onOpenHistoricalAdd={() => {
+            if (isImporting) return;
+            setEditingShiftId(null);
+            setDraftShiftDate(getPreviousOperationalDate());
+            setIsModalOpen(true);
+          }}
+          onLogout={() => void handleLogout()}
+          actionOverlays={(
+            <>
+              <ShiftModal
+                isOpen={isModalOpen && !isImporting}
+                editingShift={editingShift}
+                defaultDate={draftShiftDate}
+                maxDate={getPreviousOperationalDate()}
+                isSaving={isSavingShift}
+                onClose={() => {
+                  if (isImporting || isSavingShift) return;
+                  setIsModalOpen(false);
+                  setDraftShiftDate(null);
+                }}
+                onSave={handleSaveShift}
+                onDelete={handleDeleteShift}
+              />
+              <ImportModal
+                isOpen={isImportOpen}
+                onClose={() => {
+                  if (isImporting) return;
+                  setIsImportOpen(false);
+                  setOnboardingFile(null);
+                }}
+                onConfirmImport={handleConfirmImport}
+                isImporting={isImporting}
+                onImportStateChange={(importing) => setAppOperation(importing ? 'importing' : 'idle')}
+                initialContext={{ month: currentMonth, year: currentYear }}
+                existingShifts={shifts}
+                employeePreset={selfEmployee ? { name: selfEmployee.name, externalId: selfEmployee.externalEmployeeId ?? '' } : null}
+                identityLocked
+                userId={session.user.id}
+                organizationId={session.organizationId}
+                isAuthenticated
+                areas={activeAreas}
+                currentAreaId={effectiveAreaId}
+                allowAreaChoice={false}
+              />
+              {importResult && (
+                <ImportResultModal
+                  isOpen
+                  onClose={() => {
+                    setImportResult(null);
+                    setPendingImportRetry(null);
+                  }}
+                  report={importResult}
+                  onRetry={pendingImportRetry ? () => {
+                    const retry = pendingImportRetry;
+                    setImportResult(null);
+                    setPendingImportRetry(null);
+                    void handleConfirmImport(retry.newShifts, retry.targetPeriod, retry.selector, retry.areaId, retry.fileName, retry.fileFingerprint);
+                  } : undefined}
+                />
+              )}
+              {importResolutionState && (
+                <ImportResolutionDialog
+                  state={importResolutionState}
+                  t={t}
+                  onResolve={(confirmed) => {
+                    importResolutionState.resolve(confirmed);
+                    setImportResolutionState(null);
+                  }}
+                />
+              )}
+              {importConflictState && (
+                <ImportConflictDialog
+                  state={importConflictState}
+                  locale={locale}
+                  t={t}
+                  onResolve={(action) => {
+                    importConflictState.resolve(action);
+                    setImportConflictState(null);
+                  }}
+                />
+              )}
+            </>
+          )}
+        />
+      </>
     );
   }
 

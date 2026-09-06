@@ -1,6 +1,6 @@
 # Progress Status — MVP v2 Roadmap Execution
 
-Última actualización: 2026-09-06, Gate P5.1 en `development`.
+Última actualización: 2026-09-06, Gate P5.4 en `development`.
 
 Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
 auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
@@ -91,7 +91,15 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - P5.1 — Premium Application Shell & Collapsible Sidebar: `PASS`; shell role-aware, topbar
   compacto, contexto y navegación mensual reubicados, drawer responsive y menú de cuenta. Gate,
   inventario y evidencia en `docs/roadmap/P5.1-PREMIUM-APPLICATION-SHELL-GATE.md` y
-  `P5.1-SHELL-NAVIGATION-INVENTORY.md`. P6 permanece sin iniciar.
+  `P5.1-SHELL-NAVIGATION-INVENTORY.md`.
+- P5.2 — Operational Navigation & Time-Scope Consolidation: `PASS`; Importar/Añadir/Planificar,
+  Approval Lite en navegación, shell y frontera temporal verificadas.
+- P5.3 — Plan-Aware Organization Onboarding & Initial Governance: `PASS`; plan, OWNER válido,
+  áreas y ADMIN opcionales, y separación User↔Employee preservados.
+- P5.4 — Employee Self-Service Completion: `PASS_WITH_GAPS`; `Hoy`/`Semana`/`Solicitudes`/`Más`
+  mantienen la IA del portal, con creación de ChangeRequest, self-import y alta histórica bajo
+  SELF. Tests, lint, build y smoke E2E compacto pasan; queda pendiente la matriz de capturas
+  visuales manuales para el Gate final del programa. P6 permanece sin iniciar.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
