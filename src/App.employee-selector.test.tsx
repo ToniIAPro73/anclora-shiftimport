@@ -17,7 +17,7 @@ vi.mock('./lib/session', async (importOriginal) => {
 
 vi.mock('./lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./lib/remote')>();
-  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn() };
+  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn(), listRemoteScheduleVersions: vi.fn() };
 });
 
 const mockedFetchResolvedSession = vi.mocked(session.fetchResolvedSession);
@@ -25,6 +25,7 @@ const mockedListRemoteEmployees = vi.mocked(remote.listRemoteEmployees);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 const mockedLoadRemoteTodayShifts = vi.mocked(remote.loadRemoteTodayShifts);
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
+const mockedListRemoteScheduleVersions = vi.mocked(remote.listRemoteScheduleVersions);
 
 setupLocalStorageMock();
 afterEach(cleanup);
@@ -38,6 +39,7 @@ beforeEach(() => {
     removeEventListener: () => {},
   }));
   mockedListRemoteAreas.mockResolvedValue([]);
+  mockedListRemoteScheduleVersions.mockResolvedValue([]);
 });
 
 const now = new Date();
@@ -81,7 +83,7 @@ function renderApp() {
 }
 
 function openContext() {
-  fireEvent.click(screen.getByTestId('app-shell-context-menu'));
+  expect(screen.getByTestId('app-shell-main-context')).toBeTruthy();
 }
 
 describe('App — Employee calendar selector (ADMIN)', () => {
@@ -92,7 +94,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
-    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
     openContext();
     await waitFor(() => expect(screen.getAllByText('Employee A · ID 1001').length).toBeGreaterThan(0));
     expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(1); // Employee A: 1 shift
@@ -115,7 +117,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     mockedLoadRemoteShifts.mockImplementation(shiftsFor);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
     openContext();
     await waitFor(() => expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(1));
 
@@ -158,11 +160,32 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
-    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
     openContext();
     await waitFor(() => expect(document.querySelector('.team-bar')).toBeTruthy());
     const teamBar = document.querySelector('.team-bar');
     expect(teamBar?.textContent).toContain('OrganizaciónAnclora Group');
     expect(teamBar?.textContent).not.toContain('Anclora Group — Anclora Group');
+  });
+
+  it('treats an owner-only organization as complete without an Employee', async () => {
+    const ownerOnlySession: SessionInfo = {
+      user: { id: 'user-owner', email: 'owner@test.com', displayName: 'Owner' },
+      organizationId: 'org-owner',
+      role: 'OWNER',
+      plan: 'team',
+      employeeId: null,
+      memberships: [{ organizationId: 'org-owner', organizationName: 'Owner Org', role: 'OWNER' }],
+    };
+    mockedFetchResolvedSession.mockResolvedValue({ session: ownerOnlySession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue([]);
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+
+    renderApp();
+
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
+    expect(screen.queryByText('Configuración incompleta')).toBeNull();
+    expect(screen.queryByText('Cuenta no vinculada')).toBeNull();
+    expect(screen.getAllByText('No vinculado').length).toBeGreaterThan(0);
   });
 });

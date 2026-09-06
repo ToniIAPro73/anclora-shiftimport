@@ -20,6 +20,7 @@ import {
   completeOnboarding,
   isAdminRole,
   ApiError,
+  OrganizationOnboardingInput,
   SessionInfo,
 } from './lib/session';
 import {
@@ -29,6 +30,7 @@ import {
   updateRemoteImportOutcome,
   listRemoteAreas,
   listRemoteEmployees,
+  listRemoteScheduleVersions,
   loadRemoteShifts,
   matchRemoteEmployee,
   RemoteArea,
@@ -78,7 +80,7 @@ import { loadFormatProfiles } from './lib/format-profiles';
 import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
-import { getOperationalDate, getPreviousOperationalDate, isHistoricalDate } from './lib/operational-date';
+import { getOperationalDate, getPreviousOperationalDate, isHistoricalDate, shiftOperationalDate } from './lib/operational-date';
 
 /** localStorage flag: local→org format-profile migration already resolved
  * (Format Memory v1). Separate from MIGRATION_DONE_KEY — shift data and
@@ -190,6 +192,7 @@ function App() {
   // areas (null = whole company); 0/1-area orgs derive their context instead.
   const [areas, setAreas] = useState<RemoteArea[]>([]);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [editableScheduleDates, setEditableScheduleDates] = useState<Set<string>>(() => new Set());
   const selectedAreaIdRef = useRef<string | null>(null);
   useEffect(() => {
     selectedAreaIdRef.current = selectedAreaId;
@@ -431,22 +434,24 @@ function App() {
     }
   }, [hydrateAuthenticated]);
 
-  // Unified onboarding: creates the organization and OWNER membership.
-  // Owner-to-Employee linking is an explicit onboarding choice.
-  const handleOnboarding = useCallback(async (
-    organizationName: string,
-    ownerIsEmployee: boolean,
-    employeeName?: string,
-  ) => {
+  // Unified onboarding: creates the selected organization and OWNER
+  // membership. Owner-to-Employee linking remains explicit and optional.
+  const handleOnboarding = useCallback(async (input: OrganizationOnboardingInput) => {
     try {
-      const nextSession = await completeOnboarding(organizationName, ownerIsEmployee, employeeName);
+      const result = await completeOnboarding(input);
       clearAnonymousShiftDraft();
-      setSession(nextSession);
+      setSession(result.session);
       setNeedsOrgChoice(false);
-      await hydrateAuthenticated(nextSession);
+      await hydrateAuthenticated(result.session);
+      if (result.adminCredentials) {
+        setAppFeedback({
+          kind: 'status',
+          message: `${t('onboardingChoice.adminCredentialsNotice')} ${result.adminCredentials.email} · ${result.adminCredentials.temporaryPassword}`,
+        });
+      }
     } catch (error) {
       console.error('Onboarding failed', error);
-      setAppFeedback({ kind: 'alert', message: t('onboardingChoice.failed') });
+      throw error;
     }
   }, [hydrateAuthenticated, t]);
 
@@ -562,6 +567,28 @@ function App() {
       : employees),
     [session, effectiveAreaId, employees],
   );
+
+  useEffect(() => {
+    if (!session || session.role === 'EMPLOYEE' || needsOrgChoice) {
+      setEditableScheduleDates(new Set());
+      return undefined;
+    }
+    let cancelled = false;
+    void listRemoteScheduleVersions(effectiveAreaId).then((versions) => {
+      if (cancelled) return;
+      const dates = new Set<string>();
+      for (const version of versions) {
+        if (version.status !== 'DRAFT') continue;
+        for (let cursor = version.periodStart; cursor <= version.periodEnd; cursor = shiftOperationalDate(cursor, 1)) {
+          if (cursor >= getOperationalDate()) dates.add(cursor);
+        }
+      }
+      setEditableScheduleDates(dates);
+    }).catch(() => {
+      if (!cancelled) setEditableScheduleDates(new Set());
+    });
+    return () => { cancelled = true; };
+  }, [effectiveAreaId, needsOrgChoice, session]);
 
   // Keep the working employee consistent with the area context: when the
   // area changes (or an area is deactivated), a selected employee outside
@@ -1525,16 +1552,11 @@ function App() {
 
   // EMPLOYEE without linked employee record: safe blocked state, no data.
   const unlinkedEmployee = session?.role === 'EMPLOYEE' && !session.employeeId;
-  // Fase 1.2C.5 "estados incompletos": a personal organization should always
-  // have its self-employee. Zero employees there means onboarding didn't
-  // finish (e.g. request interrupted between org+membership and employee
-  // creation) — never show an ambiguous empty calendar for that.
   const activeMembership = session?.memberships.find((m) => m.organizationId === session.organizationId);
-  const brokenPersonalOrg = Boolean(
-    session && session.role !== 'PLANNER' && session.role !== 'EMPLOYEE' && !needsOrgChoice && activeMembership
-      && !session.employeeId && employees.length === 0,
-  );
-  const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
+  // A valid organization does not require a linked Employee, an ADMIN, an
+  // Area, an import, or a schedule. Employee linkage is an explicit optional
+  // capability, so OWNER-only organizations must reach the dashboard.
+  const accountIncomplete = unlinkedEmployee;
   const plannerAreaId = session?.role === 'PLANNER'
     ? (activeMembership?.scopedAreaId ?? null)
     : effectiveAreaId;
@@ -1553,11 +1575,9 @@ function App() {
       <span className="app-shell__context-summary-item app-shell__context-summary-item--role">
         <small>{t('shell.role')}</small><strong>{session.role ? t(`role.${session.role.toLowerCase()}`) : ''}</strong>
       </span>
-      {viewedEmployee && (
-        <span className="app-shell__context-summary-item app-shell__context-summary-item--employee" title={viewedEmployee.name}>
-          <small>{t('shell.employeeContext')}</small><strong>{viewedEmployee.name}</strong>
-        </span>
-      )}
+      <span className="app-shell__context-summary-item app-shell__context-summary-item--employee" title={viewedEmployee?.name ?? t('shell.noEmployee')}>
+        <small>{t('shell.employee')}</small><strong>{viewedEmployee?.name ?? t('shell.noEmployee')}</strong>
+      </span>
     </>
   ) : null;
   const plannerInitialDate = typeof window !== 'undefined'
@@ -1707,6 +1727,8 @@ function App() {
             title={t('planner.title')}
             closeAriaLabel={t('planner.close')}
             workspace
+            fullscreen
+            hideHeader
             maxWidth="1440px"
           >
             <WeeklyPlanner
@@ -1714,6 +1736,8 @@ function App() {
               canEdit={session.role === 'OWNER' || session.role === 'ADMIN' || session.role === 'PLANNER'}
               embedded
               initialDate={plannerInitialDate}
+              modalHeader
+              onClose={() => navigate('/app')}
             />
           </ModalShell>
         </AppShell>
@@ -1796,9 +1820,9 @@ function App() {
               marginBottom: '12px',
             }}
           >
-            <strong>{t(brokenPersonalOrg ? 'brokenPersonalOrg.title' : 'unlinkedEmployee.title')}</strong>
+            <strong>{t('unlinkedEmployee.title')}</strong>
             <p style={{ margin: '8px 0 12px', color: 'var(--text-muted)' }}>
-              {t(brokenPersonalOrg ? 'brokenPersonalOrg.description' : 'unlinkedEmployee.description')}
+              {t('unlinkedEmployee.description')}
             </p>
             <button
               type="button"
@@ -1827,6 +1851,8 @@ function App() {
             shifts={currentMonthShifts}
             onEditShift={handleEditShift}
             onCreateShift={handleCreateShiftForDate}
+            role={session?.role ?? null}
+            editableScheduleDates={editableScheduleDates}
           />
         </section>
           </>
@@ -2097,6 +2123,8 @@ function App() {
       <OnboardingChoiceModal
         isOpen={Boolean(session) && needsOrgChoice && (session?.memberships.length ?? 0) === 0}
         onConfirm={handleOnboarding}
+        ownerDisplayName={session?.user.displayName ?? ''}
+        ownerEmail={session?.user.email ?? ''}
         onLogout={() => void handleLogout()}
       />
 

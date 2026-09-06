@@ -114,7 +114,7 @@ test('P4 compact planner responsive and accessible controls', async ({ page }, t
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Cuadrícula' }).click();
   await expect(grid).toBeVisible();
-  await expect(page.locator('.weekly-planner__mobile-editor-trigger')).toBeVisible();
+  await expect(page.locator('.weekly-planner__add-cell').first()).toBeVisible();
   await assertNoBodyHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('p4-planner-dark-mobile.png'), fullPage: false });
 

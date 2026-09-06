@@ -33,10 +33,26 @@ explícito con un Employee `active`; el rol por sí solo no crea identidad opera
 
 ## Navegación
 
-La shell de gestión usa Sidebar → navegación global, TopBar → preferencias e identidad, toolbar de
-página → filtros y navegación temporal, workspace → contenido. Approval Lite se abre desde
-**Aprobaciones** en la Sidebar y no ocupa permanentemente el calendario. EMPLOYEE conserva el Portal
-de R4.
+La shell de gestión usa Sidebar → navegación global y selectores de contexto, TopBar → preferencias e
+identidad operativa/autenticada, toolbar de página → filtros y navegación temporal, workspace →
+contenido. El TopBar muestra directamente Organización, Rol y Empleado, sin botón ni popover de
+contexto duplicado; User conectado y Employee visualizado siguen siendo identidades distintas.
+Approval Lite se abre desde **Aprobaciones** en la Sidebar y no ocupa permanentemente el calendario.
+EMPLOYEE conserva el Portal de R4.
+
+## Remediación visual y temporal P5.2
+
+La remediación post-M15 mantiene la shell y los dominios existentes, sin migración ni cambio de API:
+
+- el control de Sidebar expanded/collapsed es icon-only, con `aria-label` y tooltip accesible;
+- el Planificador semanal ocupa el viewport de la aplicación y su periodo vive en el header del modal;
+- el editor de turno del planner sólo aparece bajo demanda en un `ModalShell`, preservando foco, scroll y
+  estado del planner;
+- la política compartida `src/lib/calendar-actions.ts` deriva el `+` mensual desde rol, fecha, estado
+  del Employee y existencia de un draft editable;
+- pasado abre **Añadir turno** histórico; hoy/futuro abre **Planificar** sólo con contexto editable;
+- EMPLOYEE no puede usar `+` para hoy/futuro ni crear planificación, y los estados deshabilitados
+  explican el motivo en ES/EN.
 
 ## Zona temporal
 

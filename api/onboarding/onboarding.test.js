@@ -12,7 +12,7 @@ vi.mock('../_lib/auth.js', async (importOriginal) => {
 
 const { default: handler } = await import('./onboarding.js');
 
-function makeSql({ existingMembership = false } = {}) {
+function makeSql({ existingMembership = false, existingAdminId = null, failTransaction = false } = {}) {
   const queries = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
@@ -29,13 +29,19 @@ function makeSql({ existingMembership = false } = {}) {
         ? [{ organization_id: 'existing-org', role: 'OWNER' }]
         : []);
     }
+    if (text.includes('SELECT id FROM users')) {
+      return existingAdminId ? [{ id: existingAdminId }] : [];
+    }
     if (text.includes('FROM employees')) {
       return Promise.resolve([]);
     }
     queries.push({ text, values });
     return Promise.resolve([]);
   };
-  sql.transaction = async (batch) => Promise.all(batch);
+  sql.transaction = async (batch) => {
+    if (failTransaction) throw new Error('simulated onboarding failure');
+    return Promise.all(batch);
+  };
   sql.queries = queries;
   return sql;
 }
@@ -118,5 +124,70 @@ describe('POST /api/onboarding', () => {
 
     expect(res.statusCode).toBe(409);
     expect(state.sql.queries).toHaveLength(0);
+  });
+
+  it('persists the selected plan directly and provisions Team areas, OWNER Employee and ADMIN atomically', async () => {
+    state = { sql: makeSql() };
+    const res = await call({
+      plan: 'team',
+      organization: { name: 'Team Workspace' },
+      areas: [{ name: 'Operations', ref: 'area-0' }],
+      owner: { isEmployee: true, employeeName: 'Owner Employee', areaRef: 'area-0' },
+      admin: { name: 'Admin User', email: 'admin@example.com', isEmployee: true, employeeName: 'Admin Employee', areaRef: 'area-0' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const organizationInsert = state.sql.queries.find((query) => query.text.includes('INSERT INTO organizations'));
+    expect(organizationInsert?.text).toContain('plan');
+    expect(organizationInsert?.values).toContain('team');
+    expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO areas'))).toHaveLength(1);
+    expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO employees'))).toHaveLength(2);
+    expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO memberships'))).toHaveLength(2);
+    expect(res.body.adminCredentials.email).toBe('admin@example.com');
+    expect(res.body.adminCredentials.temporaryPassword).toEqual(expect.any(String));
+  });
+
+  it('allows Team with zero areas and no ADMIN as a complete bootstrap', async () => {
+    state = { sql: makeSql() };
+    const res = await call({
+      plan: 'team', organization: { name: 'Owner Only' }, areas: [],
+      owner: { isEmployee: false },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(state.sql.queries.some((query) => query.text.includes('INSERT INTO areas'))).toBe(false);
+    expect(state.sql.queries.some((query) => query.text.includes('INSERT INTO employees'))).toBe(false);
+  });
+
+  it('rejects invalid plans and Team-only data without creating an organization', async () => {
+    state = { sql: makeSql() };
+    const invalidPlan = await call({ plan: 'enterprise_unlimited_fake', organization: { name: 'Invalid' }, areas: [], owner: { isEmployee: false } });
+    expect(invalidPlan.statusCode).toBe(400);
+    expect(state.sql.queries.some((query) => query.text.includes('INSERT INTO organizations'))).toBe(false);
+
+    state = { sql: makeSql() };
+    const invalidPersonal = await call({ plan: 'personal', organization: { name: 'Personal' }, areas: [{ name: 'Operations' }], owner: { isEmployee: false } });
+    expect(invalidPersonal.statusCode).toBe(400);
+    expect(state.sql.queries.some((query) => query.text.includes('INSERT INTO organizations'))).toBe(false);
+  });
+
+  it('reuses an existing ADMIN User without creating a duplicate or changing credentials', async () => {
+    state = { sql: makeSql({ existingAdminId: 'existing-admin' }) };
+    const res = await call({
+      plan: 'team', organization: { name: 'Reuse User' }, areas: [], owner: { isEmployee: false },
+      admin: { name: 'Existing', email: 'existing@example.com', isEmployee: false },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(state.sql.queries.some((query) => query.text.includes('INSERT INTO users'))).toBe(false);
+    expect(res.body.adminCredentials).toBeUndefined();
+  });
+
+  it('returns an error from a failed transaction without presenting a successful organization', async () => {
+    state = { sql: makeSql({ failTransaction: true }) };
+    const res = await call({ plan: 'team', organization: { name: 'Rollback' }, areas: [], owner: { isEmployee: false } });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body.error).toBe('Unexpected API error');
   });
 });

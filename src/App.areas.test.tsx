@@ -17,7 +17,7 @@ vi.mock('./lib/session', async (importOriginal) => {
 
 vi.mock('./lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./lib/remote')>();
-  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn() };
+  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn(), listRemoteScheduleVersions: vi.fn() };
 });
 
 const mockedFetchResolvedSession = vi.mocked(session.fetchResolvedSession);
@@ -25,6 +25,7 @@ const mockedListRemoteEmployees = vi.mocked(remote.listRemoteEmployees);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 const mockedLoadRemoteTodayShifts = vi.mocked(remote.loadRemoteTodayShifts);
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
+const mockedListRemoteScheduleVersions = vi.mocked(remote.listRemoteScheduleVersions);
 
 setupLocalStorageMock();
 afterEach(cleanup);
@@ -37,6 +38,7 @@ beforeEach(() => {
     addEventListener: () => {},
     removeEventListener: () => {},
   }));
+  mockedListRemoteScheduleVersions.mockResolvedValue([]);
 });
 
 const adminSession: SessionInfo = {
@@ -74,8 +76,7 @@ function renderApp() {
 }
 
 async function openContext() {
-  await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
-  fireEvent.click(screen.getByTestId('app-shell-context-menu'));
+  await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
 }
 
 describe('App — area context (dashboard)', () => {

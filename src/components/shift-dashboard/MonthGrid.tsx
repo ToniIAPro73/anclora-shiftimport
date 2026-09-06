@@ -7,6 +7,8 @@ import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
 import { Plus } from 'lucide-react';
+import type { Role } from '../../lib/session';
+import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 
 interface MonthGridProps {
   year: number;
@@ -14,9 +16,11 @@ interface MonthGridProps {
   shifts: Shift[];
   onEditShift: (id: string) => void;
   onCreateShift: (date: string) => void;
+  role?: Role | null;
+  editableScheduleDates?: ReadonlySet<string>;
 }
 
-export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: MonthGridProps) => {
+export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, role = null, editableScheduleDates = new Set<string>() }: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
   const weekStartsOn = getWeekStartsOn(locale);
   const weekdayLabels = orderWeekdayLabels(tl('calendar.weekdays'), weekStartsOn);
@@ -144,6 +148,17 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
             const isWeekend = index % 7 >= 5;
             const hasVacationShift = visibleShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const isHistorical = isHistoricalDate(iso, todayISO);
+            const actionInput = { date: iso, today: todayISO, role, hasEditableSchedule: editableScheduleDates.has(iso), hasVacation: hasVacationShift };
+            const action = getCalendarAction(actionInput);
+            const reason = calendarActionReason(action, actionInput);
+            const actionDisabled = action === 'DISABLED';
+            const actionLabel = reason === 'employee_future'
+              ? t('calendar.employeeFutureBlocked')
+              : reason === 'no_schedule'
+                ? t('calendar.noEditableSchedule')
+                : hasVacationShift
+                  ? t('calendar.addShiftBlockedAria', { date: iso })
+                  : isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso });
 
             return (
               <div
@@ -174,17 +189,13 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift }: M
                       event.stopPropagation();
                       setExpandedShiftId(null);
 
-                      if (!hasVacationShift) {
+                      if (!actionDisabled) {
                         onCreateShift(iso);
                       }
                     }}
-                    disabled={hasVacationShift}
-                    aria-label={hasVacationShift
-                      ? t('calendar.addShiftBlockedAria', { date: iso })
-                      : isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso })}
-                    title={hasVacationShift
-                      ? t('calendar.addShiftBlockedTitle')
-                      : isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
+                    disabled={actionDisabled}
+                    aria-label={actionLabel}
+                    title={reason === 'employee_future' ? t('calendar.employeeFutureBlocked') : reason === 'no_schedule' ? t('calendar.noEditableSchedule') : hasVacationShift ? t('calendar.addShiftBlockedTitle') : isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
                   >
                     <Plus size={14} strokeWidth={2.2} />
                   </button>

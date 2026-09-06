@@ -214,11 +214,8 @@ export function AppShell({
     return window.localStorage.getItem(SIDEBAR_STATE_KEY) !== 'collapsed';
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [contextOpen, setContextOpen] = useState(false);
   const drawerRef = useRef<HTMLElement>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
-  const contextRef = useRef<HTMLDivElement>(null);
-  const contextTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, expanded ? 'expanded' : 'collapsed');
@@ -254,25 +251,6 @@ export function AppShell({
       previousFocus?.focus();
     };
   }, [drawerOpen]);
-
-  useEffect(() => {
-    if (!contextOpen) return undefined;
-    const onPointerDown = (event: MouseEvent) => {
-      if (!contextRef.current?.contains(event.target as Node)) setContextOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setContextOpen(false);
-        contextTriggerRef.current?.focus();
-      }
-    };
-    document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [contextOpen]);
 
   const closeDrawer = () => setDrawerOpen(false);
   const runAction = (action?: () => void) => {
@@ -333,7 +311,6 @@ export function AppShell({
             data-testid="sidebar-collapse"
           >
             {expanded ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
-            <span>{expanded ? t('shell.collapse') : t('shell.expand')}</span>
           </button>
         </aside>
       )}
@@ -351,31 +328,7 @@ export function AppShell({
           >
             <Menu size={20} aria-hidden="true" />
           </button>
-          {hasContext && (contextSummary || contextContent) && (
-            <div className="app-shell__context-topbar" ref={contextRef}>
-              <div className="app-shell__context-summary">{contextSummary}</div>
-              {contextContent && (
-                <button
-                  ref={contextTriggerRef}
-                  type="button"
-                  className="app-shell__context-trigger"
-                  aria-label={t('shell.openContext')}
-                  aria-expanded={contextOpen}
-                  aria-haspopup="dialog"
-                  onClick={() => setContextOpen((value) => !value)}
-                  data-testid="app-shell-context-menu"
-                >
-                  <UsersRound size={16} aria-hidden="true" />
-                  <span className="sr-only">{t('shell.openContext')}</span>
-                </button>
-              )}
-              {contextOpen && contextContent && (
-                <div className="app-shell__context-popover" role="dialog" aria-label={t('shell.openContext')}>
-                  {contextContent}
-                </div>
-              )}
-            </div>
-          )}
+          {hasContext && contextSummary && <div className="app-shell__context-topbar"><div className="app-shell__context-summary">{contextSummary}</div></div>}
           <div className="app-shell__topbar-spacer" />
           <div className="app-shell__topbar-controls">
             {themeControl}
@@ -386,6 +339,11 @@ export function AppShell({
         </header>
 
         <main id="main-content" className="app-shell__main" aria-label={t('shell.mainWorkspace')}>
+          {hasContext && contextContent && (
+            <section className="app-shell__main-context" aria-label={t('shell.context')} data-testid="app-shell-main-context">
+              {contextContent}
+            </section>
+          )}
           {children}
         </main>
       </div>

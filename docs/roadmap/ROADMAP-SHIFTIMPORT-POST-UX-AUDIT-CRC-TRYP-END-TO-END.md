@@ -5,7 +5,8 @@
 > Este documento contiene las FASES, las MICROTAREAS y los GATES. La SPEC contiene el modelo
 > de dominio, journeys objetivo, matrices de roles/planes y el Final Product Gate.
 >
-> **Estado**: P5 cerrado (PASS); P5.1 cerrado (PASS); P5.2 cerrado (PASS). P6/P7 no iniciadas.
+> **Estado**: P5 cerrado (PASS); P5.1 cerrado (PASS); P5.2 cerrado (PASS) y remediación post-M15
+> cerrada (PASS). P5.3 cerrado (PASS); P6/P7 no iniciadas.
 
 ---
 
@@ -54,7 +55,7 @@ Relación formal con la historia:
 ```
 R0 → R1 → R2 → R3 → R4 → R5 → [R5-M12 abierto]
                                    │
-                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P6 → P7
+                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P5.3 → P6 → P7
                                                                                                      P8 (BLOCKED)
 R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 ```
@@ -83,6 +84,8 @@ R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 | P6 ↔ P5.1 | NO | P6 consume el entry point y el contexto del histórico ya reubicados por P5.1. |
 | P5.2 ↔ P5.1 | NO | P5.2 consolida la shell ya cerrada y sólo reabre P5.1 ante una regresión causada por esa shell. |
 | P6 ↔ P5.2 | NO | P6 consume la navegación y la frontera Import/Añadir/Planificar ya reconciliadas por P5.2. |
+| P5.3 ↔ P5.2 | NO | P5.3 consume la shell y el contrato temporal ya cerrados; sólo cambia el bootstrap inicial. |
+| P6 ↔ P5.3 | NO | P6 consume organizaciones nacidas con plan y OWNER válidos; no modifica el onboarding. |
 | P8 ↔ todo | SÍ | Investigación externa; no toca código. |
 
 ---
@@ -1553,7 +1556,7 @@ P5.1 shell, R3 scheduling, R4 portal EMPLOYEE, R5 approval, tenant isolation e i
 **PURPOSE**: Distinguir User conectado, rol y Employee visualizado sin recuperar la densidad del header anterior.
 **PRECONDITIONS**: P5.2-M02.
 **FILES_LIKELY_AFFECTED**: `AppShell.tsx`, `App.tsx`, `AppShell.css`.
-**ACCEPTANCE_CRITERIA**: Given una sesión con o sin Employee vinculado, When se observa TopBar, Then User, rol y Employee context se distinguen; And los selectores siguen accesibles desde un popover.
+**ACCEPTANCE_CRITERIA**: Given una sesión con o sin Employee vinculado, When se observa TopBar y Sidebar, Then User, rol y Employee context se distinguen; And el contexto se puede cambiar desde Sidebar sin un popover duplicado en el header.
 **DO_NOT_BREAK**: User ≠ Employee y aislamiento de organización.
 **DEPENDENCIES**: P5.2-M02. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
 
@@ -1649,10 +1652,189 @@ P5.1 shell, R3 scheduling, R4 portal EMPLOYEE, R5 approval, tenant isolation e i
 **ACCEPTANCE_CRITERIA**: Given todos los criterios del Gate, When se ejecutan tests, lint, typecheck, build y smoke browser, Then el resultado es PASS o PASS_WITH_GAPS no bloqueante; And no se inicia P6 en este commit.
 **DEPENDENCIES**: P5.2-M14. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
 
+### REMEDIACIÓN POST-M15 — P5.2-R01..R10
+
+Estas microtareas se añaden después de P5.2-M15 sin renumerar ni reabrir las microtareas cerradas.
+Forman parte del re-Gate de P5.2 y no introducen cambios de datos, migraciones ni APIs nuevas.
+
+---
+**ID**: P5.2-R01
+**TITLE**: Deduplicación del contexto del Header
+**PURPOSE**: Dejar Organización, Rol y Empleado como información directa y eliminar el botón/popover redundante.
+**PRECONDITIONS**: P5.2-M15.
+**FILES_LIKELY_AFFECTED**: `AppShell.tsx`, `AppShell.css`, tests de shell.
+**ACCEPTANCE_CRITERIA**: Given la shell de gestión, When se observa el header, Then aparece `Empleado` y no existe un control de contexto duplicado.
+**DEPENDENCIES**: P5.2-M15. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-R02
+**TITLE**: Control mínimo icon-only del Sidebar
+**PURPOSE**: Mantener el collapse premium sin texto visible y con nombre accesible.
+**PRECONDITIONS**: P5.2-R01.
+**FILES_LIKELY_AFFECTED**: `AppShell.tsx`, `AppShell.css`, tests de shell.
+**ACCEPTANCE_CRITERIA**: Given Sidebar expanded o collapsed, When se enfoca el control, Then sólo se muestra el icono y el nombre accesible indica contraer/expandir navegación.
+**DEPENDENCIES**: P5.2-R01. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-R03
+**TITLE**: Planner de viewport completo
+**PURPOSE**: Maximizar la superficie del grid y subir el periodo al header del modal.
+**PRECONDITIONS**: P5.2-R02.
+**FILES_LIKELY_AFFECTED**: `ModalShell.tsx`, `WeeklyPlanner.tsx`, `index.css`.
+**ACCEPTANCE_CRITERIA**: Given el planner abierto, When se observa el modal, Then ocupa el viewport disponible sin márgenes excesivos y muestra título, periodo y cierre en el header superior.
+**DEPENDENCIES**: P5.2-R02. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-R04
+**TITLE**: Editor de turno bajo demanda
+**PURPOSE**: Eliminar el card permanente y usar un modal único para alta/edición.
+**PRECONDITIONS**: P5.2-R03.
+**FILES_LIKELY_AFFECTED**: `WeeklyPlanner.tsx`, `ScheduleAssignmentEditor.tsx`, tests de scheduling.
+**ACCEPTANCE_CRITERIA**: Given una celda planificable o assignment existente, When se activa, Then se abre un `ModalShell`, se preserva el planner y el foco vuelve a la celda al cerrar.
+**DEPENDENCIES**: P5.2-R03. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-R05
+**TITLE**: Política temporal única para acciones del calendario
+**PURPOSE**: Centralizar la decisión del `+` mensual por rol, fecha, vacaciones y draft editable.
+**PRECONDITIONS**: P5.2-R04.
+**FILES_LIKELY_AFFECTED**: `calendar-actions.ts`, `MonthGrid.tsx`, `App.tsx`, tests de contrato.
+**ACCEPTANCE_CRITERIA**: Given una fecha pasada, hoy o futura, When se calcula la acción, Then el resultado es histórico, planificación o bloqueado con una razón i18n coherente.
+**DEPENDENCIES**: P5.2-R04. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-R06
+**TITLE**: Guard de existencia de planificación editable
+**PURPOSE**: No habilitar el futuro si no existe un draft que cubra la fecha.
+**PRECONDITIONS**: P5.2-R05.
+**FILES_LIKELY_AFFECTED**: `App.tsx`, `remote.ts`, `MonthGrid.tsx`, tests de scheduling.
+**ACCEPTANCE_CRITERIA**: Given sólo una versión publicada o ninguna versión, When se muestra `+` futuro, Then permanece deshabilitado y no crea ScheduleVersion implícitamente.
+**DEPENDENCIES**: P5.2-R05. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-R07
+**TITLE**: Acciones de calendario conscientes de rol y scope
+**PURPOSE**: Reflejar en UI los límites ya impuestos por backend para OWNER/ADMIN/PLANNER/EMPLOYEE.
+**PRECONDITIONS**: P5.2-R05..R06.
+**FILES_LIKELY_AFFECTED**: `MonthGrid.tsx`, `App.tsx`, tests de roles.
+**ACCEPTANCE_CRITERIA**: Given un rol y un Employee visualizado, When se observa cada `+`, Then no se ofrece una acción fuera de su scope y las llamadas directas siguen sujetas a autorización server-side.
+**DEPENDENCIES**: P5.2-R06. **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-R08
+**TITLE**: Regresión browser, accesibilidad y responsive
+**PURPOSE**: Verificar la remediación en un smoke E2E compacto y observación real del navegador.
+**PRECONDITIONS**: P5.2-R01..R07.
+**FILES_LIKELY_AFFECTED**: `p5-2-operations.spec.ts`, tests de shell/planner, capturas de QA.
+**ACCEPTANCE_CRITERIA**: Given desktop y mobile, When se recorren shell, planner y `+`, Then focus/ESC/labels/disabled reasons funcionan sin overflow horizontal.
+**DEPENDENCIES**: P5.2-R07. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: M.
+
+---
+**ID**: P5.2-R09
+**TITLE**: Reconciliación documental de la remediación
+**PURPOSE**: Registrar finding, contrato, microtareas, dependencia y evidencia sin reescribir la historia.
+**PRECONDITIONS**: P5.2-R08.
+**FILES_LIKELY_AFFECTED**: SPEC, este roadmap, contrato temporal y Gate P5.2.
+**ACCEPTANCE_CRITERIA**: Given el resultado de QA, When se revisan los documentos, Then reflejan P5.2-R01..R10 y P6 sigue sin iniciarse.
+**DEPENDENCIES**: P5.2-R08. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
+---
+**ID**: P5.2-R10
+**TITLE**: Re-Gate final de P5.2
+**PURPOSE**: Cerrar el addendum sólo con evidencia funcional, de autorización, visual y de regresión.
+**PRECONDITIONS**: P5.2-R01..R09.
+**ACCEPTANCE_CRITERIA**: Given todos los criterios adicionales, When se ejecutan las verificaciones, Then `PHASE_P5.2_REMEDIATION_GATE = PASS` y no se inicia P6.
+**DEPENDENCIES**: P5.2-R09. **RISK**: BAJO. **ESTIMATED_COMPLEXITY**: S.
+
 ### PHASE_P5.2_GATE
 
 Consultar `docs/roadmap/P5.2-OPERATIONAL-NAVIGATION-TIME-SCOPE-GATE.md` para los criterios completos.
-`PHASE_P5.2_GATE = PASS`; P6 queda planificada y no se inicia en este commit.
+`PHASE_P5.2_GATE = PASS`; `PHASE_P5.2_REMEDIATION_GATE = PASS`; P6 queda planificada y no se inicia.
+
+---
+
+## PHASE P5.3 — Plan-Aware Organization Onboarding & Initial Governance
+
+**PHASE_ID**: P5.3
+**PHASE_NAME**: Plan-Aware Organization Onboarding & Initial Governance
+**STATUS**: PASS (local verification)
+**GOAL**: Que una organización nazca con un plan explícito y una configuración válida, sin exigir
+ADMIN, Employee ni áreas, y que el OWNER llegue siempre al dashboard de gestión.
+**WHY_NOW**: El flujo anterior infería la forma de la organización a partir del checkbox Employee y
+el dashboard confundía OWNER sin Employee con configuración incompleta.
+**USER_VALUE**: Alta comprensible, plan-aware y sin falsos bloqueos.
+**BUSINESS_VALUE**: Entitlements coherentes desde el primer request y gobernanza inicial segura.
+**SOURCE_DRIVERS**: prompt P5.3; `PLAN_AWARE_ORGANIZATION_ONBOARDING_CONTRACT.md`; root cause en `App.tsx`.
+**SCOPE**: wizard de plan/organización/áreas/OWNER/ADMIN/resumen, contrato API transaccional,
+validación de plan, vinculación explícita User↔Employee y contrato de configuración completa.
+**OUT_OF_SCOPE**: billing, pagos, trials, invitaciones por email nuevas, cambio de plan posterior,
+migraciones, P6 y P7.
+**DEPENDENCIES**: P5.2 Gate PASS; `api/_lib/plans.js`; esquema actual de organizaciones, áreas,
+memberships y employees.
+**PREREQUISITES**: no tocar producción; usar fixtures sintéticas y un solo smoke E2E compacto.
+**RISKS**: duplicación de bootstrap bajo retry concurrente; mitigado con identificadores deterministas,
+conflictos idempotentes y la transacción existente, sin alterar el modelo de datos.
+**DO_NOT_BREAK**: OWNER≠ADMIN≠Employee, plan server-side, aislamiento tenant, shell P5.1/P5.2,
+portal R4, scheduling R3 y approval R5.
+**MIGRATION_IMPACT**: N/A.
+**ROLLBACK_STRATEGY**: revertir código/documentación; no hay cambio de esquema ni datos correctivos.
+**DOCUMENTATION_UPDATES**: SPEC, contrato de producto, este roadmap y Gate P5.3.
+
+### MICROTASKS — P5.3
+
+Cada microtarea se valida con tests proporcionales; las combinaciones contractuales permanecen fuera
+del navegador para mantener E2E reducido.
+
+| ID | TITLE | ACCEPTANCE CRITERIA | E2E |
+|---|---|---|---|
+| P5.3-M01 | Auditoría de causa raíz | OWNER válido sin Employee deja de mostrar configuración incompleta. | No |
+| P5.3-M02 | Contrato de onboarding | El contrato distingue plan, organización, áreas, OWNER y ADMIN opcional. | No |
+| P5.3-M03 | Paso de selección de plan | Sólo aparecen `free`, `personal`, `team` derivados del modelo real. | No |
+| P5.3-M04 | Organización y áreas | Team permite cero o varias áreas; Personal/Free no aceptan áreas. | No |
+| P5.3-M05 | Identidad OWNER | El User autenticado es exactamente OWNER; Employee sólo por opt-in. | No |
+| P5.3-M06 | ADMIN opcional | Team puede crear o reutilizar un ADMIN sin sobrescribir credenciales. | No |
+| P5.3-M07 | API atómica | Plan, áreas, memberships y Employees opcionales se escriben en una transacción. | No |
+| P5.3-M08 | Configuración completa | Organization+plan+OWNER basta; no se exige Employee/ADMIN/Area/Shift. | No |
+| P5.3-M09 | Entitlement inmediato | La sesión posterior refleja el plan persistido sin logout/login. | No |
+| P5.3-M10 | Resumen y confirmación | El wizard conserva estado, no escribe antes del resumen y permite volver atrás. | No |
+| P5.3-M11 | Journey Personal | No muestra pasos Team-only y finaliza en dashboard válido. | API/component |
+| P5.3-M12 | Journey Team mínimo | Team sin áreas, sin ADMIN y sin Employee del OWNER es válido. | Compact |
+| P5.3-M13 | Journey Team completo | Áreas, OWNER Employee y ADMIN Employee se vinculan correctamente. | Compact |
+| P5.3-M14 | Accesibilidad/responsive/i18n | Progreso, foco, errores y copy ES/EN funcionan en viewport móvil y desktop. | No |
+| P5.3-M15 | Matriz rol/datos | OWNER/ADMIN/PLANNER/EMPLOYEE y planes tienen evidencia de no ensanchamiento. | API |
+| P5.3-M16 | Reconciliación documental | SPEC, contrato, roadmap y AOS/decisiones no contradicen el código. | No |
+| P5.3-M17 | Gate final | Suite, build, lint, typecheck, smoke E2E y worktree cumplen el Gate. | Sí, mínimo |
+
+### PHASE_P5.3_GATE
+
+| CRITERION | RESULTADO | EVIDENCE_REQUIRED |
+|---|---|---|
+| FUNCTIONAL | PASS requerido | Personal, Team mínimo y Team completo; dashboard OWNER válido. |
+| DATA_INTEGRITY | PASS requerido | Un OWNER; Employees sólo por opt-in; cero pseudo-áreas; transacción. |
+| AUTHORIZATION | PASS requerido | Plan/rol no confiados al cliente; ADMIN sólo Team. |
+| TENANT_ISOLATION | PASS requerido | Todas las filas nuevas llevan la misma organization_id por transaction. |
+| SECURITY | PASS requerido | Password temporal sólo server-side y una vez; sin billing ni secretos logueados. |
+| REGRESSION | PASS requerido | P1–P5.2 y R3/R4/R5 relevantes verdes. |
+| ACCESSIBILITY | PASS requerido | Labels, focus, progress, errores y ModalShell. |
+| RESPONSIVE | PASS requerido | 390, 834/1024 y desktop sin recorte del wizard. |
+| I18N | PASS requerido | Paridad ES/EN. |
+| UNIT_TESTS / INTEGRATION_TESTS | PASS requerido | Componentes, API y raíz de configuración completa. |
+| E2E | PASS requerido | Smoke compacto Team mínimo/OWNER-only: 1/1 PASS en 26,2 s, un worker; combinaciones restantes cubiertas por API/componentes. |
+| BUILD / LINT / TYPECHECK | PASS requerido | Comandos del repositorio. |
+| DOCUMENTATION | PASS requerido | Contrato, SPEC, roadmap y Gate. |
+| AOS_COMPLIANCE | PASS requerido | Decisiones PD registradas en `sdd/decisions/`. |
+| WORKTREE_STATE | PASS requerido | Sólo cambios P5.3 y baseline local previamente documentado. |
+| PLAN_SELECTION / PLAN_PERSISTENCE | PASS requerido | Plan permitido antes de crear y en el INSERT inicial. |
+| OWNER_NO_EMPLOYEE / OWNER_EMPLOYEE | PASS requerido | Ambos estados válidos y correctamente vinculados. |
+| ADMIN_OPTIONAL / ADMIN_EMPLOYEE_OPTIONAL | PASS requerido | Team sin/con ADMIN; vínculo opcional. |
+| AREAS_OPTIONAL | PASS requerido | Cero y múltiples áreas. |
+| ATOMIC_ONBOARDING | PASS requerido | Fallo simulado no deja organización parcial. |
+| CONFIGURATION_COMPLETE | PASS requerido | OWNER-only entra al dashboard; no aparece configuración incompleta. |
+| ENTITLEMENT_IMMEDIATE | PASS requerido | Session plan refleja selección. |
+
+`PHASE_P5.3_GATE = PASS` cierra esta fase. P6 no se inicia en este trabajo. Evidencia: `npm test` 143/1268,
+`npm run lint` PASS, `npm run build` PASS y `specs-local/p5-3-onboarding.spec.ts` 1/1 PASS contra Neon
+development, con limpieza de fixture y del tenant sintético al terminar.
 
 ---
 
@@ -1996,8 +2178,9 @@ mientras la fuente no sea legible.
 | P4 | Accessibility & Responsive | 7 | P0 (independiente de P1–P3) | PASS / PASS_WITH_GAPS |
 | P5 | Role Reality & Employee Self-Service | 6 | P0, P2 | PASS / PASS_WITH_GAPS / BLOCKED ante nuevo bloqueo |
 | P5.1 | Premium Application Shell & Collapsible Sidebar | 10 | P5 | PASS |
-| P5.2 | Operational Navigation & Time-Scope Consolidation | 15 | P5.1 | PASS |
-| P6 | Import History & Traceability | 6 | P1, P5.2 | PLANNED |
+| P5.2 | Operational Navigation & Time-Scope Consolidation + remediation | 25 | P5.1 | PASS |
+| P5.3 | Plan-Aware Organization Onboarding & Initial Governance | 17 | P5.2 | PASS |
+| P6 | Import History & Traceability | 6 | P1, P5.3 | PLANNED |
 | P7 | Import vs Schedule Communication | 5 | P1, P6 | PLANNED |
 | P8 | CRC Tryp Research | — | fuente accesible | **BLOCKED** |
-| **Total** | | **83** | | |
+| **Total** | | **110** | | |

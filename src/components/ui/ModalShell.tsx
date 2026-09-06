@@ -29,6 +29,10 @@ interface ModalShellProps {
    * inner regions the caller marks scrollable actually scroll. This kills the
    * intermittent outer scrollbar that appeared/disappeared with async loads. */
   workspace?: boolean;
+  /** Fill the application viewport, used by the planner workspace. */
+  fullscreen?: boolean;
+  /** Let the child provide a domain-specific header while retaining dialog semantics. */
+  hideHeader?: boolean;
   /** Additive role override for destructive confirmations. */
   dialogRole?: 'dialog' | 'alertdialog';
   /** Selector for the first focus target when the default is not suitable. */
@@ -46,6 +50,8 @@ export const ModalShell = ({
   blocking = false,
   suppressEscape = false,
   workspace = false,
+  fullscreen = false,
+  hideHeader = false,
   dialogRole = 'dialog',
   initialFocus,
 }: ModalShellProps) => {
@@ -72,6 +78,10 @@ export const ModalShell = ({
     initial?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      const nestedDialog = event.target instanceof Element
+        ? event.target.closest('[role="dialog"], [role="alertdialog"]')
+        : null;
+      if (nestedDialog && nestedDialog !== contentRef.current) return;
       if (event.key === 'Escape') {
         if (blocking || suppressEscape) {
           return;
@@ -111,7 +121,7 @@ export const ModalShell = ({
 
   return (
     <div
-      className="modal-overlay"
+      className={`modal-overlay${fullscreen ? ' modal-overlay--fullscreen' : ''}`}
       onMouseDown={(event) => {
         if (!blocking && event.target === event.currentTarget) {
           onClose();
@@ -120,25 +130,23 @@ export const ModalShell = ({
     >
       <div
         ref={contentRef}
-        className={workspace ? 'modal-content modal-content--workspace' : 'modal-content'}
+        className={`modal-content${workspace ? ' modal-content--workspace' : ''}${fullscreen ? ' modal-content--fullscreen' : ''}`}
         role={dialogRole}
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        style={workspace
+        style={fullscreen
+          ? { maxWidth: 'none', width: '100%', height: '100dvh', maxHeight: '100dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+          : workspace
           // Fixed-height shell: the card itself never scrolls, so open/load/
           // reopen all produce the same geometry regardless of async content.
           ? { maxWidth, height: 'min(86vh, 920px)', maxHeight: 'calc(100dvh - 24px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
           : { maxWidth, maxHeight: '90vh', overflowY: 'auto' }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexShrink: 0 }}>
+        {!hideHeader && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{title}</h2>
-          {!blocking && (
-            <button type="button" className="theme-toggle" onClick={onClose} aria-label={closeAriaLabel}>
-              <X size={18} aria-hidden="true" />
-            </button>
-          )}
-        </div>
+          {!blocking && <button type="button" className="theme-toggle" onClick={onClose} aria-label={closeAriaLabel}><X size={18} aria-hidden="true" /></button>}
+        </div>}
         <div style={workspace ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined}>{children}</div>
         {footer && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap', marginTop: '16px', flexShrink: 0 }}>

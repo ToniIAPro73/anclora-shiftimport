@@ -7,49 +7,65 @@ import { OnboardingChoiceModal } from './OnboardingChoiceModal';
 
 afterEach(cleanup);
 
-function renderModal(onConfirm: (organizationName: string, ownerIsEmployee: boolean, employeeName?: string) => Promise<void>) {
-  return render(
-    <I18nProvider>
-      <OnboardingChoiceModal isOpen onConfirm={onConfirm} onLogout={() => {}} />
-    </I18nProvider>,
-  );
+function renderModal(onConfirm = vi.fn().mockResolvedValue(undefined)) {
+  render(<I18nProvider><OnboardingChoiceModal isOpen onConfirm={onConfirm} onLogout={() => {}} ownerEmail="toni@example.com" /></I18nProvider>);
+  return onConfirm;
 }
 
-describe('OnboardingChoiceModal — owner/employee separation', () => {
-  it('defaults to owner-only and does not submit an Employee name', async () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    renderModal(onConfirm);
+async function completeTeamMinimal() {
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Acme' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
+}
 
-    fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Acme' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
-
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('Acme', false, undefined));
-    expect(screen.queryByLabelText('Nombre del empleado')).toBeNull();
+describe('OnboardingChoiceModal — plan-aware governance', () => {
+  it('creates a valid owner-only Team organization without an Employee, Admin or Areas', async () => {
+    const onConfirm = renderModal();
+    await completeTeamMinimal();
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+      plan: 'team',
+      organization: { name: 'Acme' },
+      areas: [],
+      owner: { isEmployee: false, employeeName: undefined, areaRef: null },
+    })));
+    expect(screen.queryByText('Configuración incompleta')).toBeNull();
   });
 
-  it('requires explicit opt-in and submits the Employee name only when selected', async () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    renderModal(onConfirm);
-
+  it('keeps the explicit owner-to-Employee opt-in and validates its name', async () => {
+    const onConfirm = renderModal();
+    fireEvent.click(screen.getByRole('radio', { name: /Personal/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Personal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /También trabajaré como empleado/ }));
     fireEvent.change(screen.getByLabelText('Nombre del empleado'), { target: { value: 'Sebastián' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
-
-    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith('Personal', true, 'Sebastián'));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({ owner: expect.objectContaining({ isEmployee: true, employeeName: 'Sebastián' }) })));
   });
 
-  it('shows inline validation and focuses the employee field when opt-in has no name', () => {
-    const onConfirm = vi.fn().mockResolvedValue(undefined);
-    renderModal(onConfirm);
-
+  it('shows inline validation and focuses the employee field', () => {
+    const onConfirm = renderModal();
+    fireEvent.click(screen.getByRole('radio', { name: /Personal/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Personal' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     fireEvent.click(screen.getByRole('checkbox', { name: /También trabajaré como empleado/ }));
-    const employeeName = screen.getByLabelText('Nombre del empleado');
-    fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
-
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Indica el nombre del empleado');
-    expect(employeeName).toHaveFocus();
+    expect(screen.getByLabelText('Nombre del empleado')).toHaveFocus();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('hides Team-only steps when Personal is selected', () => {
+    renderModal();
+    fireEvent.click(screen.getByRole('radio', { name: /Personal/ }));
+    expect(screen.getByText(/Organización/, { selector: 'li' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    expect(screen.queryByText('Áreas')).toBeNull();
   });
 });

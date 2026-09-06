@@ -23,7 +23,7 @@ vi.mock('./lib/session', async (importOriginal) => {
 
 vi.mock('./lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./lib/remote')>();
-  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn() };
+  return { ...actual, listRemoteEmployees: vi.fn(), loadRemoteShifts: vi.fn(), loadRemoteTodayShifts: vi.fn(), listRemoteAreas: vi.fn(), listRemoteScheduleVersions: vi.fn() };
 });
 
 const mockedFetchResolvedSession = vi.mocked(session.fetchResolvedSession);
@@ -34,6 +34,7 @@ const mockedListRemoteEmployees = vi.mocked(remote.listRemoteEmployees);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 const mockedLoadRemoteTodayShifts = vi.mocked(remote.loadRemoteTodayShifts);
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
+const mockedListRemoteScheduleVersions = vi.mocked(remote.listRemoteScheduleVersions);
 
 setupLocalStorageMock();
 afterEach(cleanup);
@@ -49,6 +50,7 @@ beforeEach(() => {
   }));
   mockedLogout.mockResolvedValue(undefined);
   mockedListRemoteAreas.mockResolvedValue([]);
+  mockedListRemoteScheduleVersions.mockResolvedValue([]);
 });
 
 const adminSession: SessionInfo = {
@@ -91,7 +93,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('app-shell-user-menu'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Salir' }));
@@ -100,7 +102,7 @@ describe('App — deterministic logout', () => {
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
     expect(window.location.pathname).toBe('/login');
     expect(screen.queryByRole('menuitem', { name: 'Salir' })).toBeNull();
-    expect(screen.queryByTestId('app-shell-context-menu')).toBeNull();
+    expect(screen.queryByTestId('app-shell-main-context')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Usuarios de la organización' })).toBeNull();
     expect(document.querySelector('.team-bar')).toBeNull();
     expect(mockedLogout).toHaveBeenCalledTimes(1);
@@ -160,7 +162,7 @@ describe('App — deterministic logout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continuar sin cuenta' }));
     await waitFor(() => expect(window.location.pathname).toBe('/app'));
     expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(0);
-    expect(screen.queryByTestId('app-shell-context-menu')).toBeNull();
+    expect(screen.queryByTestId('app-shell-main-context')).toBeNull();
   });
 
   it('a 401 from an authenticated API call transitions to the login screen', async () => {
@@ -169,7 +171,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
 
     // Session dies server-side (expired / invalidated in another tab): the
     // next data call answers 401 and the app must leave the partial-auth UI.
@@ -191,7 +193,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-main-context')).toBeTruthy());
 
     // Browser restores the page from bfcache after the cookie was invalidated.
     mockedFetchSession.mockResolvedValue(null);

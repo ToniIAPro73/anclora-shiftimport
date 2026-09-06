@@ -34,7 +34,20 @@ test('P5.2 compact owner smoke: operational navigation and temporal boundaries',
   await expect(page.getByTestId('sidebar-import')).toHaveAttribute('aria-label', 'Importar turnos');
   await expect(page.getByTestId('sidebar-add-shift')).toHaveAttribute('aria-label', 'Añadir turno');
   await expect(page.getByTestId('sidebar-approvals')).toBeVisible();
-  await expect(page.getByTestId('app-shell-context-menu')).toBeVisible();
+  await expect(page.getByTestId('app-shell-main-context')).toBeVisible();
+  await expect(page.getByTestId('app-shell-sidebar')).not.toContainText('Organización');
+  await expect(page.getByText('Empleado', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('app-shell-context-menu')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('p5-2-owner-expanded-dark.png'), fullPage: true });
+
+  const collapse = page.getByTestId('sidebar-collapse');
+  await expect(collapse).toHaveAttribute('aria-label', 'Contraer navegación');
+  await expect(collapse).toHaveText('');
+  await collapse.click();
+  await expect(collapse).toHaveAttribute('aria-label', 'Expandir navegación');
+  await expect(collapse).toHaveText('');
+  await page.screenshot({ path: testInfo.outputPath('p5-2-owner-collapsed-dark.png'), fullPage: true });
+  await collapse.click();
 
   const calendarBefore = await page.locator('.calendar-stage').boundingBox();
   await page.screenshot({ path: testInfo.outputPath('p5-2-owner-calendar.png'), fullPage: true });
@@ -57,16 +70,32 @@ test('P5.2 compact owner smoke: operational navigation and temporal boundaries',
   const plannerDialog = page.getByRole('dialog', { name: 'Planificador semanal' });
   await expect(plannerDialog).toBeVisible();
   await expect(plannerDialog.getByTestId('weekly-planner')).toBeVisible();
+  await expect(plannerDialog).toHaveClass(/modal-content--fullscreen/);
+  await expect(plannerDialog.getByTestId('weekly-planner')).not.toHaveAttribute('data-state', 'loading');
+  const plannerBox = await plannerDialog.boundingBox();
+  expect(plannerBox?.width ?? 0).toBeGreaterThanOrEqual(1300);
+  expect(plannerBox?.height ?? 0).toBeGreaterThanOrEqual(740);
+  await expect(plannerDialog.locator('.weekly-planner__editor')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('p5-2-planner-fullscreen-dark.png'), fullPage: true });
   await expect(plannerDialog.getByText('Volver al calendario')).toHaveCount(0);
   await expect(plannerDialog.getByRole('button', { name: 'Cerrar planificador' })).toBeVisible();
   await plannerDialog.getByRole('button', { name: 'Cerrar planificador' }).click();
   await expect(page).toHaveURL(/\/app$/);
 
+  const themeToggle = page.getByRole('button', { name: /Cambiar tema/ });
+  await themeToggle.click();
+  await page.getByRole('button', { name: /Cambiar tema/ }).click();
+  await page.screenshot({ path: testInfo.outputPath('p5-2-owner-light.png'), fullPage: true });
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByTestId('app-shell-mobile-menu').click();
   await expect(page.getByTestId('app-shell')).toHaveClass(/is-drawer-open/);
-  await expect(page.getByTestId('sidebar-planner')).toBeVisible();
+  const mobileSidebar = page.getByTestId('app-shell-sidebar');
+  await expect(mobileSidebar).toBeVisible();
+  await expect(mobileSidebar).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+  await expect(mobileSidebar).toContainText('Planificar');
+  await page.screenshot({ path: testInfo.outputPath('p5-2-mobile-drawer-light.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
 

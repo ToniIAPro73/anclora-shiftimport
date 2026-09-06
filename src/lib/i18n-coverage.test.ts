@@ -104,7 +104,7 @@ const T_KEYS = [
   'planner.openEditor', 'planner.scopeUnavailableTitle', 'planner.scopeUnavailableDescription',
   'approvalInbox.navLabel', 'calendar.shiftCount', 'planner.close', 'planner.previousWeekDisabled',
   'planner.pastDay', 'shiftModal.historicalOnly', 'shell.organization', 'shell.role',
-  'shell.employeeContext', 'shell.import', 'shell.addShift', 'shell.history',
+  'shell.employee', 'shell.import', 'shell.addShift', 'shell.history',
 ];
 
 // A subset of T_KEYS that are full words/sentences and must read differently

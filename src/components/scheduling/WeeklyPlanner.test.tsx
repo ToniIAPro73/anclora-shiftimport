@@ -223,6 +223,7 @@ describe('WeeklyPlanner', () => {
     const filter = screen.getByRole('button', { name: 'Empleado' });
     fireEvent.click(filter);
     fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner' }).find((option) => option.tagName === 'BUTTON')!);
+    fireEvent.click(screen.getAllByRole('button', { name: /Añadir turno para Luis Planner/ })[0]);
     const editorForm = screen.getByRole('form', { name: 'Añadir turno' });
     const editorEmployee = within(editorForm).getByLabelText('Empleado');
     fireEvent.change(editorEmployee, { target: { value: 'employee-2' } });
@@ -277,6 +278,7 @@ describe('WeeklyPlanner', () => {
     const addButton = screen.getByRole('button', { name: 'Añadir turno para Luis Planner el 2026-09-29' });
     fireEvent.click(addButton);
 
+    expect(screen.getByRole('dialog', { name: 'Añadir turno' })).toBeInTheDocument();
     const editorForm = screen.getByRole('form', { name: 'Añadir turno' });
     expect(within(editorForm).getByLabelText('Empleado')).toHaveValue('employee-2');
     expect(within(editorForm).getByLabelText('Fecha')).toHaveValue('2026-09-29');

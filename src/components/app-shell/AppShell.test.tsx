@@ -34,6 +34,7 @@ function renderShell(role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE' | null = '
         themeControl={<button type="button">Theme</button>}
         languageControl={<button type="button">Language</button>}
         contextContent={<div>Organization context</div>}
+        contextSummary={<span>Organization summary</span>}
         {...callbacks}
       >
         <h1>Calendar workspace</h1>
@@ -57,8 +58,12 @@ describe('AppShell', () => {
     expect(screen.getByTestId('sidebar-areas')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-formats')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-settings')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('app-shell-context-menu'));
-    expect(screen.getByText('Organization context')).toBeInTheDocument();
+    expect(screen.getByTestId('app-shell-main-context')).toHaveTextContent('Organization context');
+    const sidebar = screen.getByTestId('app-shell-sidebar');
+    expect(sidebar).not.toHaveTextContent('Organization context');
+    expect(sidebar.lastElementChild).toBe(screen.getByTestId('sidebar-collapse'));
+    expect(screen.getByText('Organization summary')).toBeInTheDocument();
+    expect(screen.queryByTestId('app-shell-context-menu')).not.toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Espacio de trabajo principal' })).toHaveTextContent('Calendar workspace');
   });
 
@@ -73,9 +78,15 @@ describe('AppShell', () => {
 
   it('persists collapsed state and keeps icon actions named', () => {
     const callbacks = renderShell('ADMIN');
-    fireEvent.click(screen.getByTestId('sidebar-collapse'));
+    const collapse = screen.getByTestId('sidebar-collapse');
+    expect(collapse).toHaveAttribute('aria-label', 'Contraer navegación');
+    expect(collapse).not.toHaveTextContent('Contraer');
+    fireEvent.click(collapse);
 
     expect(screen.getByTestId('app-shell')).toHaveClass('is-collapsed');
+    const expand = screen.getByTestId('sidebar-collapse');
+    expect(expand).toHaveAttribute('aria-label', 'Expandir navegación');
+    expect(expand).not.toHaveTextContent('Expandir');
     expect(screen.getByTestId('sidebar-import')).toHaveAttribute('title', 'Importar turnos');
     expect(window.localStorage.getItem('anclora_shiftimport_sidebar_v1')).toBe('collapsed');
     fireEvent.click(screen.getByTestId('sidebar-import'));

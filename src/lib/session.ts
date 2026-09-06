@@ -29,6 +29,33 @@ export interface SessionInfo {
   memberships: SessionMembership[];
 }
 
+export type OnboardingPlanId = NonNullable<SessionInfo['plan']>;
+
+export interface OrganizationOnboardingInput {
+  plan: OnboardingPlanId;
+  organization: { name: string };
+  areas: Array<{ name: string; ref?: string }>;
+  owner: {
+    isEmployee: boolean;
+    employeeName?: string;
+    externalEmployeeId?: string;
+    areaRef?: string | null;
+  };
+  admin?: {
+    name: string;
+    email: string;
+    isEmployee: boolean;
+    employeeName?: string;
+    externalEmployeeId?: string;
+    areaRef?: string | null;
+  };
+}
+
+export interface OnboardingResult {
+  session: SessionInfo;
+  adminCredentials?: { email: string; temporaryPassword: string };
+}
+
 export class ApiError extends Error {
   status: number;
   /** Machine-readable reason (e.g. 'PLAN_LIMIT') — see api/_lib/http.js. */
@@ -221,25 +248,18 @@ export async function register(email: string, password: string, displayName: str
  * Onboarding: creates the organization for the current (freshly registered, zero-membership) user
  * and re-resolves the session so the caller lands with an active organization.
  */
-export async function completeOnboarding(
-  organizationName: string,
-  ownerIsEmployee = false,
-  employeeName?: string,
-): Promise<SessionInfo> {
-  await apiFetch('/api/onboarding', {
+export async function completeOnboarding(input: OrganizationOnboardingInput): Promise<OnboardingResult> {
+  const result = await apiFetch('/api/onboarding', {
     method: 'POST',
-    body: JSON.stringify({
-      organizationName,
-      ownerIsEmployee,
-      employeeName: ownerIsEmployee ? employeeName : undefined,
-    }),
+    body: JSON.stringify(input),
   });
   const session = await fetchSession();
   if (!session) {
     throw new ApiError(401, 'Onboarding failed');
   }
   setRequestOrganizationId(resolveActiveOrganization(session.user.id, session.memberships));
-  return session;
+  const body = result as { adminCredentials?: { email: string; temporaryPassword: string } };
+  return { session, ...(body?.adminCredentials ? { adminCredentials: body.adminCredentials } : {}) };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Plus, Table2 } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Plus, Table2, X } from 'lucide-react';
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
@@ -31,6 +31,8 @@ interface WeeklyPlannerProps {
   embedded?: boolean;
   initialDate?: string;
   initialPeriodStart?: string;
+  modalHeader?: boolean;
+  onClose?: () => void;
 }
 
 const VIEW_PREFERENCE_KEY = 'anclora_shiftimport_planner_view_v1';
@@ -96,7 +98,7 @@ function errorCopy(error: unknown, t: (key: string) => string): string {
   return t('planner.errorGeneric');
 }
 
-export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false, initialDate, initialPeriodStart }: WeeklyPlannerProps) {
+export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false, initialDate, initialPeriodStart, modalHeader = false, onClose }: WeeklyPlannerProps) {
   const { locale, t } = useI18n();
   const today = getOperationalDate();
   const [weekStart, setWeekStart] = useState<WeekStart>(readWeekStart);
@@ -175,12 +177,6 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
       searchText: [employee.name, employee.externalEmployeeId ?? ''].filter(Boolean).join(' '),
     })),
   ], [snapshot, t]);
-  const defaultEditor = useMemo(() => {
-    const firstEmployee = snapshot?.employees[0];
-    const firstEditableDay = days.find((day) => day >= today);
-    return firstEmployee && firstEditableDay ? initialEditor(firstEmployee.id, firstEditableDay) : null;
-  }, [days, snapshot, today]);
-
   useEffect(() => {
     if (employeeFilter !== 'all' && !snapshot?.employees.some((employee) => employee.id === employeeFilter)) {
       setEmployeeFilter('all');
@@ -210,17 +206,6 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
       .find((element) => element.dataset.editorTarget === targetKey);
     target?.focus();
   }, [selectedCell]);
-
-  useEffect(() => {
-    if (!editable || isLoading || !defaultEditor) {
-      if (!editable) {
-        setEditor(null);
-        setSelectedCell(null);
-      }
-      return;
-    }
-    setEditor((current) => current ?? defaultEditor);
-  }, [defaultEditor, editable, isLoading]);
 
   const refresh = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -304,7 +289,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     }
     setSelectedCell(null);
     setMobileEditorOpen(false);
-    setEditor(defaultEditor);
+    setEditor(null);
   };
 
   const handleAdd = (employeeId: string, date: string) => {
@@ -487,8 +472,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
           {!embedded && onBack && <button type="button" className="weekly-planner__back" onClick={onBack}>
             <ChevronLeft size={16} aria-hidden="true" /> {t('planner.back')}
           </button>}
-          {!embedded && <p className="weekly-planner__eyebrow">{t('planner.eyebrow')}</p>}
-          {!embedded && <h1>{t('planner.title')}</h1>}
+          {(!embedded || modalHeader) && <p className="weekly-planner__eyebrow">{t('planner.eyebrow')}</p>}
+          {(!embedded || modalHeader) && <h1>{t('planner.title')}</h1>}
         </div>
         <div className="weekly-planner__header-tools">
           <div className="weekly-planner__week-control" role="group" aria-label={t('planner.weekNavigation')}>
@@ -500,6 +485,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
               <ChevronRight size={18} />
             </button>
           </div>
+          {modalHeader && onClose && <button type="button" className="weekly-planner__close" onClick={onClose} aria-label={t('planner.close')}><X size={20} aria-hidden="true" /></button>}
         </div>
       </header>
 
@@ -612,15 +598,6 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                 <span className="sr-only">{t('planner.tableView')}</span>
               </button>
             </div>
-            {editable && !mobileEditorOpen && (
-              <button
-                type="button"
-                className="btn-outline weekly-planner__mobile-editor-trigger"
-                onClick={() => { setMobileEditorOpen(true); setEditorFocusKey((current) => current + 1); }}
-              >
-                {t('planner.openEditor')}
-              </button>
-            )}
             <div className="weekly-planner__toolbar-actions">
               {!editable && <span className="weekly-planner__locked">{t('planner.locked')}</span>}
               {isViewingHistoricalVersion && <button type="button" className="btn-outline" onClick={() => void refresh()}>{t('planner.backToCurrent')}</button>}
@@ -642,7 +619,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
           ) : (
           <div
             className="weekly-planner__workspace"
-            data-editor-state={editor ? (mobileEditorOpen ? 'open' : 'collapsed') : 'closed'}
+            data-editor-state={editor ? 'open' : 'closed'}
           >
             <div className="weekly-planner__grid-region">
               {visibleEmployees.length === 0 ? (
@@ -724,25 +701,34 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
               )}
             </div>
 
-            {editor && (
-              <ScheduleAssignmentEditor
-                snapshot={snapshot}
-                editor={editor}
-                focusKey={editorFocusKey}
-                mobileOpen={mobileEditorOpen}
-                isSaving={isSaving}
-                operationError={operationError}
-                onChange={setEditor}
-                onClose={resetEditor}
-                onSave={handleSave}
-                onDelete={() => void handleDelete()}
-                minimumDate={today}
-              />
-            )}
           </div>
           )}
         </>
       )}
+
+      {editor && <ModalShell
+        isOpen={mobileEditorOpen}
+        onClose={resetEditor}
+        title={editor.id ? t('planner.editTitle') : t('planner.addTitle')}
+        closeAriaLabel={t('common.close')}
+        initialFocus="#planner-editor-employee"
+        maxWidth="640px"
+      >
+        {snapshot && <ScheduleAssignmentEditor
+          snapshot={snapshot}
+          editor={editor}
+          focusKey={editorFocusKey}
+          mobileOpen
+          modal
+          isSaving={isSaving}
+          operationError={operationError}
+          onChange={setEditor}
+          onClose={resetEditor}
+          onSave={handleSave}
+          onDelete={() => void handleDelete()}
+          minimumDate={today}
+        />}
+      </ModalShell>}
 
       {snapshot && editable && (
         <ModalShell

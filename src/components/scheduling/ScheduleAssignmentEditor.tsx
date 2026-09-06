@@ -24,6 +24,7 @@ interface ScheduleAssignmentEditorProps {
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onDelete: () => void;
   minimumDate?: string;
+  modal?: boolean;
 }
 
 export function ScheduleAssignmentEditor({
@@ -38,6 +39,7 @@ export function ScheduleAssignmentEditor({
   onSave,
   onDelete,
   minimumDate,
+  modal = false,
 }: ScheduleAssignmentEditorProps) {
   const { t } = useI18n();
   const employeeRef = useRef<HTMLSelectElement>(null);
@@ -48,12 +50,12 @@ export function ScheduleAssignmentEditor({
 
   return (
     <form
-      className={`weekly-planner__editor${mobileOpen ? ' weekly-planner__editor--mobile-open' : ' weekly-planner__editor--mobile-collapsed'}`}
+      className={`weekly-planner__editor${modal ? ' weekly-planner__editor--modal' : ''}${mobileOpen ? ' weekly-planner__editor--mobile-open' : ' weekly-planner__editor--mobile-collapsed'}`}
       onSubmit={onSave}
       aria-label={editor.id ? t('planner.editTitle') : t('planner.addTitle')}
       aria-describedby={operationError ? 'planner-editor-error' : undefined}
     >
-      <div className="weekly-planner__editor-heading">
+      {!modal && <div className="weekly-planner__editor-heading">
         <div>
           <p className="weekly-planner__eyebrow">{editor.id ? t('planner.editEyebrow') : t('planner.addEyebrow')}</p>
           <h2>{editor.id ? t('planner.editTitle') : t('planner.addTitle')}</h2>
@@ -61,7 +63,7 @@ export function ScheduleAssignmentEditor({
         <button type="button" className="theme-toggle" onClick={onClose} aria-label={t('common.close')} disabled={isSaving}>
           <span aria-hidden="true">×</span>
         </button>
-      </div>
+      </div>}
       <div className="weekly-planner__editor-fields">
         <label htmlFor="planner-editor-employee">{t('planner.employeeLabel')}
           <select

@@ -37,7 +37,7 @@ Anclora ShiftImport: importador inteligente de cuadrantes para trabajadores por 
 
 ## Política de decisiones locales
 
-Decisiones de producto (PD) se registran en `sdd/`. ED → AOS `MASTER_DECISIONS`; OD → mecanismo CHG de la vault (`00-governance/decisions/`); EX → esta declaración. Una decisión, una fuente canónica.
+Decisiones de producto (PD) se registran en `sdd/`. ED → AOS `MASTER_DECISIONS`; OD → mecanismo CHG de la vault (`00-governance/decisions/`); EX → esta declaración. Una decisión, una fuente canónica. Las decisiones P5.3 (OWNER sin ADMIN, Employee opcional, áreas opcionales, plan pre-billing y pasos Team-only) están registradas en `sdd/decisions/`.
 
 ## Excepciones y desviaciones
 
@@ -57,6 +57,7 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 | 2026-09-06 | 0.2.0 | Revisión P0 post-auditoría: documentación, evidencia E2E compacta y estado del MVP contrastados contra `development` | Codex |
 | 2026-09-06 | 0.2.0 | Revisión P5.1: shell de aplicación y navegación role-aware añadidas sin cambios de dominio, API o DB | Codex |
 | 2026-09-06 | 0.2.0 | Revisión P5.2: navegación operacional, frontera temporal Importar/Añadir/Planificar y Approval Lite integrados sin migración | Codex |
+| 2026-09-06 | 0.2.0 | Revisión P5.3: onboarding plan-aware, OWNER válido sin ADMIN/Employee/áreas y decisiones PD registradas | Codex |
 
 ## Documentos relacionados
 

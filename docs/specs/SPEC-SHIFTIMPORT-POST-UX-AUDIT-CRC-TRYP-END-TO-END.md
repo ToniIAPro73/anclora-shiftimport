@@ -12,7 +12,8 @@ repositorio. `docs/specs/` **no existía** y se ha creado para este documento, p
 transversal de release que abarca 8 fases. `sdd/` sigue siendo canónico para specs de feature; este
 documento es una spec de programa y queda subordinado a los contratos de `docs/standards/` y a AOS.
 
-**Estado**: PLANIFICACIÓN. Nada de lo aquí especificado ha sido implementado.
+**Estado**: P5.3 `PASS` (verificación local). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
+fuente CRC Tryp inaccesible.
 
 ---
 
@@ -44,13 +45,14 @@ Gate), sin línea `STATUS`, lo que deja al producto sin veredicto formal pese a 
 El cuaderno NotebookLM sobre CRC Tryp es **inaccesible** (redirección 302 a `accounts.google.com`).
 No se ha derivado ninguna idea de esa fuente y la fase correspondiente queda `BLOCKED`.
 
-El plan resultante son 10 fases ejecutables (`P0`–`P7`, `P5.1` y `P5.2`) con 83 microtareas, más una fase `P8`
+El plan resultante son 11 fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2` y `P5.3`) con 110 microtareas, más una fase `P8`
 bloqueada. `P0` restaura la verdad documental y cierra el MVP Release Gate; `P1` convierte la
 importación en una operación que siempre deja rastro y siempre indica cómo recuperarse; `P2`
 adelanta el gating de plan; `P3` erradica los 18 diálogos nativos restantes; `P4` cierra los
 defectos confirmados de accesibilidad y responsive; `P5` verifica en navegador real los tres roles
 nunca probados y define el autoservicio del empleado; `P5.2` consolida navegación operacional,
-Approval Lite y la frontera temporal Importar/Añadir/Planificar; `P6` hace legible el histórico; `P7` alinea
+Approval Lite y la frontera temporal Importar/Añadir/Planificar; `P5.3` hace que el onboarding persista el
+plan elegido y cree una organización válida sin exigir Employee, ADMIN ni áreas; `P6` hace legible el histórico; `P7` alinea
 la promesa comercial con el modelo Import↔Schedule.
 
 ### POST-P5 UX FINDING — DASHBOARD NAVIGATION DENSITY
@@ -65,6 +67,18 @@ entre P5 y P6, sin migración ni cambios de API.
 P5.2 se añade después del cierre de P5.1 por un hallazgo de consolidación operacional: integra
 Approval Lite en la navegación, retira densidad residual del dashboard y formaliza `PASADO →
 Importar/Añadir turno` y `HOY/FUTURO → Planificar`. No reescribe P5.1 ni cambia el modelo semanal.
+
+La remediación post-M15 de P5.2 se incorpora antes de su Gate final como `P5.2-R01..R10`, sin
+reabrir dominios cerrados: elimina el contexto duplicado del header, deja el control de Sidebar en
+icon-only, convierte el planner en modal de viewport completo con editor de turno bajo demanda y
+centraliza la política del `+` mensual en rol × fecha × draft editable. No introduce migración ni
+cambio de API; el futuro de EMPLOYEE permanece bloqueado y el futuro de roles operativos sólo es
+accionable con planificación editable válida.
+
+P5.3 se añade después del cierre de P5.2 por un defecto reproducido al recrear una organización:
+un OWNER válido sin Employee, ADMIN ni áreas se mostraba como “Configuración incompleta”. La fase
+introduce un wizard plan-aware con submit único y transaccional. No implementa billing ni reabre P5,
+P5.1 o P5.2.
 
 ---
 
@@ -797,7 +811,8 @@ Requisitos que ninguna fase puede degradar:
 
 ## 30. ROADMAP
 
-Diez fases ejecutables (`P0`–`P7`, `P5.1` y `P5.2`) más una bloqueada. Detalle completo en el documento de roadmap.
+Once fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2` y `P5.3`) más una bloqueada. P5.2 contiene 15 microtareas
+originales y 10 microtareas de remediación post-M15. Detalle completo en el documento de roadmap.
 
 | Fase | Nombre | Prioridad del encargo cubierta |
 |---|---|---|
@@ -808,7 +823,8 @@ Diez fases ejecutables (`P0`–`P7`, `P5.1` y `P5.2`) más una bloqueada. Detall
 | P4 | Accessibility & Responsive Hardening | (6) accesibilidad; (7) responsive; (H); (I) |
 | P5 | Role Reality & Employee Self-Service | (8) roles reales; (9) autoservicio; (10) multiempleado; (C); (D); (E) |
 | P5.1 | Premium Application Shell & Collapsible Sidebar | densidad de navegación post-P5; calendario-first; shell role-aware; (H) ampliado |
-| P5.2 | Operational Navigation & Time-Scope Consolidation | Importar/Añadir/Planificar; Approval Lite; densidad y frontera temporal |
+| P5.2 | Operational Navigation & Time-Scope Consolidation + remediation | Importar/Añadir/Planificar; Approval Lite; shell, planner y acciones temporales |
+| P5.3 | Plan-Aware Organization Onboarding & Initial Governance | plan inicial; OWNER válido; áreas y ADMIN opcionales; User↔Employee explícito |
 | P6 | Import History & Operational Traceability | (11) histórico; (F) |
 | P7 | Import vs Schedule Communication | (12) scheduling/approval — comunicación; (J) |
 | P8 | CRC Tryp Research | (13) mejoras CRC Tryp — **BLOCKED** |
@@ -834,13 +850,14 @@ documento para evitar dos autoridades divergentes.
 
 ## 32. MICROTASKS
 
-83 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
+110 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
 `FILES_LIKELY_AFFECTED`, impactos (`DATA_MODEL` / `API` / `UI` / `I18N` / `ACCESSIBILITY` /
 `SECURITY`), `TESTS_REQUIRED`, `E2E_REQUIRED`, `MANUAL_QA_REQUIRED`, `ACCEPTANCE_CRITERIA` en
 Given/When/Then, `DO_NOT_BREAK`, `DEPENDENCIES`, `RISK` y `ESTIMATED_COMPLEXITY`, en el documento
 de roadmap, sección `MICROTASKS` de cada fase.
 
-Distribución: P0 = 10, P1 = 10, P2 = 5, P3 = 9, P4 = 7, P5 = 6, P5.1 = 10, P5.2 = 15, P6 = 6, P7 = 5, P8 = 0 (bloqueada).
+Distribución: P0 = 10, P1 = 10, P2 = 5, P3 = 9, P4 = 7, P5 = 6, P5.1 = 10, P5.2 = 25 (15 + 10 de
+remediación), P5.3 = 17, P6 = 6, P7 = 5, P8 = 0 (bloqueada).
 
 Orden general aplicado, con las desviaciones justificadas en cada fase:
 
@@ -911,7 +928,8 @@ en `api/` ni `db/`), nunca omitirse.
 | Redirección de EMPLOYEE fuera de `/app/schedule` | SÍ (`867858d`) | P5 | MEDIO | `scheduling-authz.spec.ts` | Redirige al portal |
 | Estado "Cuenta no vinculada" | SÍ | P5 | MEDIO | `scope.test.js` | EMPLOYEE sin Employee ⇒ sin datos |
 | Application shell y navegación role-aware | NUEVO POST-P5 | P5.1 | MEDIO | `AppShell.test.tsx`, `p5-1-shell-smoke.spec.ts` | calendario, contexto, logout y Portal EMPLOYEE preservados |
-| Navegación operacional y frontera temporal | NUEVO POST-P5.1 | P5.2 | ALTO | tests de contrato, `p5-2-operations.spec.ts` | Approval Lite, Import/Añadir/Planificar, scopes y shell preservados |
+| Navegación operacional y frontera temporal | NUEVO POST-P5.1; remediación visual/temporal post-M15 | P5.2 | ALTO | tests de contrato, `p5-2-operations.spec.ts`, `calendar-actions.test.ts` | Approval Lite, Import/Añadir/Planificar, scopes, planner modal y shell preservados |
+| Onboarding plan-aware y gobernanza inicial | NUEVO POST-P5.2; defecto OWNER-only reproducido | P5.3 | ALTO | `OnboardingChoiceModal.test.tsx`, `api/onboarding/onboarding.test.js`, smoke compacto | OWNER válido sin Employee/ADMIN/Area; plan server-side; atomicidad y User↔Employee |
 | Modo invitado local-first | SÍ | P3 (LegalPage) | MEDIO | manual + `LandingPage.test.tsx` | Sin sesión, todo en `localStorage`; reset solo local |
 | Tema claro y oscuro | SÍ (browser) | P1, P3, P4, P7 | MEDIO | QA visual + capturas de Gate | Contraste correcto en ambas superficies |
 | `prefers-reduced-motion` | SÍ (R1-M14) | P1, P3, P4 | BAJO | `ImportModal.test.tsx` | Spinner y transiciones respetan la preferencia |
@@ -943,6 +961,9 @@ en `api/` ni `db/`), nunca omitirse.
 - Los 16 pasos del flujo completo se ejecutan en P0 y se re-ejecutan como smoke en el Gate final.
 - Determinismo: se prefiere una matriz compacta y determinista a una exhaustiva y lenta, siguiendo el criterio ya adoptado en R3-M16 (evitar que el Gate mida la latencia del harness en vez del producto).
 - Prohibido ejecutar E2E contra producción.
+- P5.3 aplica la reducción al mínimo: un único smoke de navegador Team mínimo/OWNER-only, un worker;
+  Personal, Team completo, plan inválido, ADMIN existente, cardinalidad de áreas y rollback quedan
+  cubiertos por tests unitarios, de componentes, integración y API.
 
 ---
 
@@ -988,6 +1009,7 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 | `docs/manual/manual-usuario.md` | Histórico y comunicación de futuros | P6, P7 |
 | `docs/roadmap/P5.1-SHELL-NAVIGATION-INVENTORY.md` y `P5.1-PREMIUM-APPLICATION-SHELL-GATE.md` | Inventario de acciones, contrato de navegación y evidencia del Gate | P5.1 |
 | `docs/product/OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT.md` y `docs/roadmap/P5.2-OPERATIONAL-NAVIGATION-TIME-SCOPE-GATE.md` | Contrato temporal, matriz operacional y evidencia del Gate | P5.2 |
+| `docs/product/PLAN_AWARE_ORGANIZATION_ONBOARDING_CONTRACT.md` y `docs/roadmap/P5.3-PLAN-AWARE-ORGANIZATION-ONBOARDING-GATE.md` | Contrato de bootstrap, plan, áreas, OWNER/ADMIN y evidencia del Gate | P5.3 |
 | `.anclora/AOS_ADOPTION.md` | `Last Reviewed` actualizado; `EX-SI-001` intacta | P0 |
 
 ---
@@ -997,7 +1019,7 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 - Adopción declarada: AOS 0.2.0, Governance Level 3 (autoridad local de producto), `.anclora/AOS_ADOPTION.md`.
 - Fuentes AOS de referencia: `anclora-governance/` (constitution, MASTER_DECISIONS, CURRENT_STATE, SOURCE_OF_TRUTH_REGISTRY, standards, playbooks) y `anclora-vault/00-governance/`.
 - Decisiones de producto (PD) se registran en `sdd/`; ED → `MASTER_DECISIONS`; OD → mecanismo CHG de la vault; EX → la propia declaración de adopción. **Una decisión, una fuente canónica.**
-- Las decisiones de §41 son **PD**: D-03, D-04 y D-05 están aprobadas y registradas en `sdd/decisions/`; las restantes conservan su estado histórico.
+- Las decisiones de §41 son **PD**: D-03, D-04 y D-05 están aprobadas y registradas en `sdd/decisions/`; las restantes conservan su estado histórico. Las decisiones D-P5.3-01..06 del onboarding están registradas en `sdd/decisions/` y gobiernan la fase P5.3.
 - Excepción vigente `EX-SI-001` (default branch `development`): `ACCEPTED`, se conserva sin modificación.
 - **Deuda AOS identificada**: `Last Reviewed: 2026-08-18` pese a haberse cerrado R1–R5 desde entonces; la política exige revisión al inicio de cada fase de producto. Se salda en P0.
 - Los contratos de `docs/standards/` son copia local; el canónico vive en la vault y no se modifica desde este repositorio.
@@ -1145,6 +1167,7 @@ la organización; el cliente no puede elegir el alcance.
 | G-16 | Posicionamiento B2C vs B2B contradictorio entre documentos vigentes | Análisis de repo | MEDIA | D-01 |
 | G-17 | Densidad de navegación: el header de gestión mezcla contexto, preferencias y operaciones y relega el calendario | Hallazgo post-P5 reproducido en navegador | MEDIA | P5.1 |
 | G-18 | Densidad residual y separación temporal: Approval Lite en calendario, count ausente y Añadir/Planificar ambiguos | Hallazgo post-P5.1 / contrato operacional | MEDIA | P5.2 |
+| G-19 | Remediación post-M15: contexto duplicado, control de collapse textual, planner con editor inline y `+` sin guardia única de draft | Addendum P5.2 reproducido en código | MEDIA | P5.2-R01..R10 |
 
 ---
 
@@ -1153,7 +1176,7 @@ la organización; el cliente no puede elegir el alcance.
 ### FINAL_PRODUCT_GATE
 
 Se ejecuta **una sola vez**, tras el cierre de P7. Absorbe además los gaps G-02, G-04, G-05 y G-06.
-Solo puede ejecutarse si P0–P5.2 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada gap nombrado y asignado.
+Solo puede ejecutarse si P0–P5.3 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada gap nombrado y asignado.
 
 | # | Pregunta | Criterio de aprobación | Evidencia exigida |
 |---|---|---|---|
@@ -1188,5 +1211,5 @@ Solo puede ejecutarse si P0–P5.2 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`
 - `BLOCKED` si alguna decisión requerida por P5 no está registrada o si no hay acceso a Neon development.
 - El Gate **no** puede declararse `PASS` sobre la base de `npm test` y `npm run build` en verde. Verifica comportamiento observado.
 
-**ESTADO ACTUAL DEL FINAL_PRODUCT_GATE**: **`BLOCKED`** — P5–P7 aún no ejecutadas; P8 bloqueada
+**ESTADO ACTUAL DEL FINAL_PRODUCT_GATE**: **`BLOCKED`** — P6–P7 aún no ejecutadas; P8 bloqueada
 por fuente inaccesible.
