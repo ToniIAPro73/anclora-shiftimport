@@ -19,6 +19,7 @@ import {
 import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv, UserCsvRow } from '../../lib/bulk-import-csv';
 import { findActiveArea } from '../../lib/areas';
 import { ModalShell } from '../ui/ModalShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { UpgradePrompt } from './UpgradePrompt';
 import { PlanGateNotice } from './UpgradePrompt';
 import { ApiError } from '../../lib/session';
@@ -187,6 +188,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const [members, setMembers] = useState<RemoteMember[]>([]);
   const [error, setError] = useState('');
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const teamManagementLocked = currentPlan !== null && !canUseFeature(currentPlan, 'teamManagement');
 
@@ -446,12 +453,17 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
 
   const handleDeactivateEmployee = (employee: RemoteEmployee) => {
     setOpenMenuId(null);
-    if (!window.confirm(t('members.deactivateConfirm', { name: employee.name }))) {
-      return;
-    }
-    // On 400 LAST_ADMIN (and any other rejection) run() surfaces the server
-    // message in the modal's error area.
-    void run(() => updateRemoteEmployee({ id: employee.id, status: 'inactive' }), employeesListRef.current);
+    setConfirmation({
+      title: t('members.deactivateAction'),
+      description: t('members.deactivateConfirm', { name: employee.name }),
+      confirmLabel: t('members.deactivateAction'),
+      onConfirm: () => {
+        setConfirmation(null);
+        // On 400 LAST_ADMIN (and any other rejection) run() surfaces the server
+        // message in the modal's error area.
+        return run(() => updateRemoteEmployee({ id: employee.id, status: 'inactive' }), employeesListRef.current);
+      },
+    });
   };
 
   const handleReactivateEmployee = (employee: RemoteEmployee) => {
@@ -477,11 +489,8 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
     }, employeesListRef.current);
   };
 
-  const handleDeleteEmployee = async (employee: RemoteEmployee) => {
+  const deleteEmployeeConfirmed = async (employee: RemoteEmployee) => {
     setOpenMenuId(null);
-    if (!window.confirm(t('members.deleteConfirm', { name: employee.name }))) {
-      return;
-    }
     captureScroll(employeesListRef.current);
     setBusy(true);
     setError('');
@@ -493,23 +502,39 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       if (err instanceof ApiError && err.code === 'EMPLOYEE_HAS_HISTORY') {
         // History is never destroyed: explain and offer deactivation instead.
         setError(err.message);
-        if (window.confirm(t('members.hasHistoryDeactivateOffer'))) {
-          try {
-            captureScroll(employeesListRef.current);
-            await updateRemoteEmployee({ id: employee.id, status: 'inactive' });
-            setError('');
-            await reload();
-            onChanged();
-          } catch (fallbackErr) {
-            setError(fallbackErr instanceof Error ? fallbackErr.message : t('members.actionFailed'));
-          }
-        }
+        setConfirmation({
+          title: t('members.deactivateAction'),
+          description: t('members.hasHistoryDeactivateOffer'),
+          confirmLabel: t('members.deactivateAction'),
+          onConfirm: async () => {
+            setConfirmation(null);
+            try {
+              captureScroll(employeesListRef.current);
+              await updateRemoteEmployee({ id: employee.id, status: 'inactive' });
+              setError('');
+              await reload();
+              onChanged();
+            } catch (fallbackErr) {
+              setError(fallbackErr instanceof Error ? fallbackErr.message : t('members.actionFailed'));
+            }
+          },
+        });
       } else {
         setError(err instanceof Error ? err.message : t('members.actionFailed'));
       }
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleDeleteEmployee = (employee: RemoteEmployee) => {
+    setOpenMenuId(null);
+    setConfirmation({
+      title: t('members.deleteAction'),
+      description: t('members.deleteConfirm', { name: employee.name }),
+      confirmLabel: t('members.deleteAction'),
+      onConfirm: () => { setConfirmation(null); return deleteEmployeeConfirmed(employee); },
+    });
   };
 
   const copyToClipboard = async (key: string, value: string) => {
@@ -1117,7 +1142,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   </div>
                 ))}
                 {visibleMembers.length === 0 && (
-                  <p style={{ margin: '8px 0', color: 'var(--text-subtle)', fontSize: '0.82rem' }}>{t('orgSelector.noResults')}</p>
+                  <p style={{ margin: '8px 0', color: 'var(--text-subtle)', fontSize: '0.82rem' }}>{t('members.noUsersFound')}</p>
                 )}
               </div>
             </section>
@@ -1393,7 +1418,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                       value={newEmployeeAreaId}
                       onChange={setNewEmployeeAreaId}
                       searchPlaceholder={t('members.searchPlaceholder')}
-                      emptyMessage={t('orgSelector.noResults')}
+                      emptyMessage={t('members.noEmployeesFound')}
                       ariaLabel={t('members.employeeAreaLabel')}
                       options={employeeAreaOptions}
                       style={{ minWidth: '180px' }}
@@ -1493,7 +1518,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                             value={editAreaId}
                             onChange={setEditAreaId}
                             searchPlaceholder={t('members.searchPlaceholder')}
-                            emptyMessage={t('orgSelector.noResults')}
+                            emptyMessage={t('members.noEmployeesFound')}
                             ariaLabel={t('members.employeeAreaLabel')}
                             options={employeeAreaOptions}
                             style={{ width: '180px' }}
@@ -1675,6 +1700,15 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       currentPlan={currentPlan}
       switchTarget={switchTarget}
       onSwitchOrg={onSwitchOrg}
+    />
+    <ConfirmDialog
+      isOpen={Boolean(confirmation)}
+      title={confirmation?.title ?? ''}
+      description={confirmation?.description ?? ''}
+      confirmLabel={confirmation?.confirmLabel ?? t('common.delete')}
+      cancelLabel={t('common.cancel')}
+      onCancel={() => setConfirmation(null)}
+      onConfirm={() => confirmation?.onConfirm()}
     />
     </>
   );

@@ -147,7 +147,6 @@ describe('ImportHistoryModal', () => {
   });
 
   it('deletes an import after confirmation and reports it via onDeleted', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onDeleted = vi.fn();
     mockedListRemoteImports.mockResolvedValueOnce(page([importRow()]));
     mockedDeleteRemoteImport.mockResolvedValue({ deleted: true, importId: 'import-1', deletedShiftCount: 246 });
@@ -157,26 +156,23 @@ describe('ImportHistoryModal', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Eliminar importación' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar importación' }));
 
-    expect(confirmSpy).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
     await waitFor(() => expect(mockedDeleteRemoteImport).toHaveBeenCalledWith('import-1'));
     await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('import-1'));
-    confirmSpy.mockRestore();
   });
 
   it('does not call the delete endpoint when the confirmation is cancelled', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     mockedListRemoteImports.mockResolvedValue(page([importRow()]));
     renderModal(adminSession());
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Eliminar importación' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar importación' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button#confirm-dialog-cancel') as HTMLButtonElement);
 
     expect(mockedDeleteRemoteImport).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it('shows an error message and never claims success when the delete request fails', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedListRemoteImports.mockResolvedValue(page([importRow()]));
     mockedDeleteRemoteImport.mockRejectedValue(new Error('boom'));
     const onDeleted = vi.fn();
@@ -184,10 +180,10 @@ describe('ImportHistoryModal', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Eliminar importación' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Eliminar importación' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(screen.getByText('Error al eliminar la importación.')).toBeTruthy());
     expect(onDeleted).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
   it('disables pagination controls appropriately and requests the next page', async () => {

@@ -29,6 +29,7 @@ import { Shift } from '../../lib/types';
 import { ApiError, isAdminRole, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
 import { PlanGateNotice } from './UpgradePrompt';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { canUseFeature } from '../../lib/plans';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { detectImportFlow } from '../../ingestion/import-dispatcher';
@@ -185,6 +186,12 @@ export const TeamImportModal = ({
   const [rowDiagnostics, setRowDiagnostics] = useState<RowDiagnostic[]>([]);
   const [importAreaId, setImportAreaId] = useState<string | null>(defaultImportAreaId);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
   const multiEmployeeImportLocked = currentPlan !== null && !canUseFeature(currentPlan, 'multiEmployeeImport');
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -489,10 +496,7 @@ export const TeamImportModal = ({
     )));
   };
 
-  const handleCreate = async (row: TeamRow) => {
-    if (!window.confirm(t('teamImport.createConfirm', { name: row.name }))) {
-      return;
-    }
+  const createEmployee = async (row: TeamRow) => {
     updateRow(row.key, { busy: true });
     try {
       const created = await createRemoteEmployee({
@@ -511,6 +515,15 @@ export const TeamImportModal = ({
     }
   };
 
+  const handleCreate = (row: TeamRow) => {
+    setConfirmation({
+      title: t('teamImport.create'),
+      description: t('teamImport.createConfirm', { name: row.name }),
+      confirmLabel: t('teamImport.create'),
+      onConfirm: () => { setConfirmation(null); return createEmployee(row); },
+    });
+  };
+
   const handleResolveAmbiguous = (row: TeamRow, employeeId: string) => {
     const candidate = row.candidates.find((entry) => entry.id === employeeId);
     if (candidate?.status === 'inactive') {
@@ -522,12 +535,9 @@ export const TeamImportModal = ({
 
   // Bloque E: reactivating an inactive match is explicit (confirm) and
   // ADMIN-only; the row becomes importable right away, never duplicated.
-  const handleReactivate = async (row: TeamRow) => {
+  const reactivateEmployee = async (row: TeamRow) => {
     const employee = row.candidates[0];
     if (!employee) {
-      return;
-    }
-    if (!window.confirm(t('teamImport.reactivateConfirm', { name: row.name }))) {
       return;
     }
     updateRow(row.key, { busy: true });
@@ -541,8 +551,17 @@ export const TeamImportModal = ({
     }
   };
 
+  const handleReactivate = (row: TeamRow) => {
+    setConfirmation({
+      title: t('teamImport.reactivate'),
+      description: t('teamImport.reactivateConfirm', { name: row.name }),
+      confirmLabel: t('teamImport.reactivate'),
+      onConfirm: () => { setConfirmation(null); return reactivateEmployee(row); },
+    });
+  };
+
   // "Crear todos los nuevos" — bulk-create every `new` row in one request
-  // instead of one window.confirm per row. The confirm panel below is a
+  // instead of one native confirmation per row. The confirm panel below is a
   // pure local render of rows already in state — nothing is created until
   // the user explicitly confirms.
   const newRows = rows.filter((row) => row.status === 'new');
@@ -1239,6 +1258,15 @@ export const TeamImportModal = ({
       currentPlan={currentPlan}
       switchTarget={switchTarget}
       onSwitchOrg={onSwitchOrg}
+    />
+    <ConfirmDialog
+      isOpen={Boolean(confirmation)}
+      title={confirmation?.title ?? ''}
+      description={confirmation?.description ?? ''}
+      confirmLabel={confirmation?.confirmLabel ?? t('common.confirm')}
+      cancelLabel={t('common.cancel')}
+      onCancel={() => setConfirmation(null)}
+      onConfirm={() => confirmation?.onConfirm()}
     />
     </>
   );

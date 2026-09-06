@@ -3,6 +3,7 @@ import { LegalFooter } from './LegalFooter';
 import { resetAllLocalData } from '../lib/privacy';
 import { Locale } from '../lib/i18n';
 import { useI18n } from '../lib/use-i18n';
+import { ConfirmDialog } from './ui/ConfirmDialog';
 
 type Kind = 'privacy' | 'terms' | 'legal';
 
@@ -705,12 +706,12 @@ function LegalSections({ locale }: { locale: Locale }) {
 function LocalDataReset() {
   const { t } = useI18n();
   const [status, setStatus] = useState<'idle' | 'done'>('idle');
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleReset = () => {
-    const confirmed = window.confirm(t('privacy.resetConfirm'));
-    if (!confirmed) return;
     resetAllLocalData();
     setStatus('done');
+    setConfirmOpen(false);
   };
 
   return (
@@ -729,7 +730,7 @@ function LocalDataReset() {
       </p>
       <button
         type="button"
-        onClick={handleReset}
+        onClick={() => setConfirmOpen(true)}
         style={{ padding: '10px 16px', fontWeight: 800, borderRadius: 12, border: '1px solid var(--danger-border)', color: 'var(--danger)', background: 'transparent', cursor: 'pointer' }}
       >
         {t('privacy.resetButton')}
@@ -739,6 +740,15 @@ function LocalDataReset() {
           {t('privacy.resetDone')}
         </p>
       )}
+      <ConfirmDialog
+        isOpen={confirmOpen}
+        title={t('privacy.resetTitle')}
+        description={t('privacy.resetConfirm')}
+        confirmLabel={t('privacy.resetButton')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={handleReset}
+      />
     </div>
   );
 }

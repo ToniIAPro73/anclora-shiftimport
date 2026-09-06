@@ -92,11 +92,11 @@ describe('AreasModal', () => {
     const onChanged = vi.fn();
     mockedListRemoteAreas.mockResolvedValue([area()]);
     mockedUpdateRemoteArea.mockResolvedValue(area({ active: false }));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderAreasModal(onChanged);
 
     await waitFor(() => expect(screen.getByText('Norte')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(mockedUpdateRemoteArea).toHaveBeenCalledWith({ id: 'area-1', deactivate: true }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
@@ -104,11 +104,11 @@ describe('AreasModal', () => {
 
   it('cancelling the confirmation deactivates nothing', async () => {
     mockedListRemoteAreas.mockResolvedValue([area()]);
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderAreasModal();
 
     await waitFor(() => expect(screen.getByText('Norte')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Desactivar' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button#confirm-dialog-cancel') as HTMLButtonElement);
 
     expect(mockedUpdateRemoteArea).not.toHaveBeenCalled();
   });

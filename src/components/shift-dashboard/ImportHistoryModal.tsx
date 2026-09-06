@@ -4,6 +4,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { deleteRemoteImport, listRemoteImports, RemoteImport } from '../../lib/remote';
 import { isAdminRole, SessionInfo } from '../../lib/session';
 import { ModalShell } from '../ui/ModalShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 
 interface ImportHistoryModalProps {
   isOpen: boolean;
@@ -72,6 +73,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ description: string; onConfirm: () => void } | null>(null);
 
   const [scopeFilter, setScopeFilter] = useState<'' | 'global' | 'area'>('');
   const [typeFilter, setTypeFilter] = useState<'' | 'individual' | 'team'>('');
@@ -166,12 +168,13 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
       t('imports.deleteConfirmProtected'),
       t('imports.deleteConfirmIrreversible'),
     ].join('\n');
-    if (!window.confirm(confirmText)) {
-      return;
-    }
-    setDeletingId(row.id);
-    setError('');
-    void deleteRemoteImport(row.id)
+    setConfirmation({
+      description: confirmText,
+      onConfirm: () => {
+        setConfirmation(null);
+        setDeletingId(row.id);
+        setError('');
+        return deleteRemoteImport(row.id)
       .then(() => {
         onDeleted(row.id);
         // A deletion can empty out the last row of the current page — step
@@ -185,9 +188,12 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
       .finally(() => {
         setDeletingId(null);
       });
+      },
+    });
   };
 
   return (
+    <>
     <ModalShell isOpen={isOpen} onClose={onClose} title={t('imports.historyTitle')} maxWidth="820px" workspace>
       {!canDelete && (
         <p style={{ margin: '0 0 12px', color: 'var(--text-subtle)', fontSize: '0.8rem', flexShrink: 0 }}>
@@ -368,5 +374,15 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
         </button>
       </div>
     </ModalShell>
+    <ConfirmDialog
+      isOpen={Boolean(confirmation)}
+      title={t('imports.deleteConfirmTitle')}
+      description={confirmation?.description ?? ''}
+      confirmLabel={t('imports.deleteAction')}
+      cancelLabel={t('common.cancel')}
+      onCancel={() => setConfirmation(null)}
+      onConfirm={() => confirmation?.onConfirm()}
+    />
+    </>
   );
 };

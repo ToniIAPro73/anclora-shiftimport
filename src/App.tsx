@@ -136,6 +136,11 @@ interface ImportResolutionState {
   resolve: (confirmed: boolean) => void;
 }
 
+interface AppFeedback {
+  kind: 'status' | 'alert';
+  message: string;
+}
+
 function describeShift(shift: Shift, locale: 'es' | 'en', t: (key: string) => string): string {
   const type = translateShiftTypeLabel(getShiftType(shift), locale, getShiftType(shift));
   const origin = getShiftOrigin(shift) === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
@@ -203,6 +208,7 @@ function App() {
   const [appOperation, setAppOperation] = useState<'idle' | 'importing' | 'saving-shift'>('idle');
   const [importResult, setImportResult] = useState<(ReconciliationReport | ImportOutcomeReport) | null>(null);
   const [importResolutionState, setImportResolutionState] = useState<ImportResolutionState | null>(null);
+  const [appFeedback, setAppFeedback] = useState<AppFeedback | null>(null);
   const [pendingImportRetry, setPendingImportRetry] = useState<PendingImportRetry | null>(null);
   const importFailureRef = useRef<ImportFailure | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -429,7 +435,7 @@ function App() {
       await hydrateAuthenticated(nextSession);
     } catch (error) {
       console.error('Onboarding failed', error);
-      window.alert(t('onboardingChoice.failed'));
+      setAppFeedback({ kind: 'alert', message: t('onboardingChoice.failed') });
     }
   }, [hydrateAuthenticated, t]);
 
@@ -648,7 +654,7 @@ function App() {
     }
     const conflict = findShiftConflict(shifts, shift, locale);
     if (conflict) {
-      window.alert(conflict);
+      setAppFeedback({ kind: 'alert', message: conflict });
       return;
     }
 
@@ -661,10 +667,10 @@ function App() {
       setIsModalOpen(false);
       setEditingShiftId(null);
       setDraftShiftDate(null);
-      window.alert(t('shiftModal.saveSuccess'));
+      setAppFeedback({ kind: 'status', message: t('shiftModal.saveSuccess') });
     } catch (error) {
       console.error('Failed to persist shift', error);
-      window.alert(t('importConflict.saveShiftFailed'));
+      setAppFeedback({ kind: 'alert', message: t('importConflict.saveShiftFailed') });
     } finally {
       setAppOperation('idle');
     }
@@ -684,7 +690,7 @@ function App() {
       setDraftShiftDate(null);
     } catch (error) {
       console.error('Failed to delete shift', error);
-      window.alert(t('importConflict.deleteShiftFailed'));
+      setAppFeedback({ kind: 'alert', message: t('importConflict.deleteShiftFailed') });
     }
   };
 
@@ -1068,7 +1074,7 @@ function App() {
     // This also protects the flow when a second import is started after the
     // first one has already finished.
     if (upserts.length === 0 && identicalCount > 0) {
-      window.alert(t('importModal.alreadyImported', { count: identicalCount }));
+      setAppFeedback({ kind: 'status', message: t('importModal.alreadyImported', { count: identicalCount }) });
       return false;
     }
 
@@ -1160,10 +1166,10 @@ function App() {
           const localHistoricalWorking = working.filter(
             (shift) => !futureUpserts.some((incoming) => incoming.id === shift.id),
           );
-          window.alert(t('importModal.futureImportConfirmed', {
+          setAppFeedback({ kind: 'status', message: t('importModal.futureImportConfirmed', {
             assignments: futureResult.future.submittedCount,
             drafts: futureResult.future.draftCount,
-          }));
+          }) });
           applySuccessTail(localHistoricalWorking);
           return true;
         }
@@ -1205,9 +1211,9 @@ function App() {
       console.error('Failed to persist imported shifts', error);
       if (requiresPlanningImport) {
         if (error instanceof ApiError && error.code === 'FUTURE_IMPORT_REQUIRES_PLANNING') {
-          window.alert(t('importConflict.futurePlanningRequired'));
+          setAppFeedback({ kind: 'alert', message: t('importConflict.futurePlanningRequired') });
         } else {
-          window.alert(t('importConflict.importSaveFailed'));
+          setAppFeedback({ kind: 'alert', message: t('importConflict.importSaveFailed') });
         }
         // The server endpoint is one transaction: an error means the
         // history, draft and assignments were all rolled back. Do not run
@@ -1252,10 +1258,10 @@ function App() {
           }
         } catch (verifyError) {
           console.error('Failed to verify partial import state after a save error', verifyError);
-          window.alert(t('importConflict.importSaveFailed'));
+          setAppFeedback({ kind: 'alert', message: t('importConflict.importSaveFailed') });
         }
       } else {
-        window.alert(t('importConflict.importSaveFailed'));
+        setAppFeedback({ kind: 'alert', message: t('importConflict.importSaveFailed') });
       }
       return false;
     }
@@ -1458,6 +1464,18 @@ function App() {
       />
 
       <main className="dashboard-body">
+        {appFeedback && (
+          <div
+            role={appFeedback.kind}
+            aria-live={appFeedback.kind === 'alert' ? 'assertive' : 'polite'}
+            style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', border: `1px solid ${appFeedback.kind === 'alert' ? 'var(--danger-border)' : 'var(--glass-border)'}`, background: appFeedback.kind === 'alert' ? 'var(--danger-bg)' : 'var(--panel-muted-bg)' }}
+          >
+            <span>{appFeedback.message}</span>
+            <button type="button" className="btn-outline" onClick={() => setAppFeedback(null)} aria-label={t('common.close')} style={{ padding: '3px 8px', minHeight: 'auto', flexShrink: 0 }}>
+              {t('common.close')}
+            </button>
+          </div>
+        )}
         {!session && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
             <button

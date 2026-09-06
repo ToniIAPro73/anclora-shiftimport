@@ -29,6 +29,10 @@ interface ModalShellProps {
    * inner regions the caller marks scrollable actually scroll. This kills the
    * intermittent outer scrollbar that appeared/disappeared with async loads. */
   workspace?: boolean;
+  /** Additive role override for destructive confirmations. */
+  dialogRole?: 'dialog' | 'alertdialog';
+  /** Selector for the first focus target when the default is not suitable. */
+  initialFocus?: string;
 }
 
 export const ModalShell = ({
@@ -42,6 +46,8 @@ export const ModalShell = ({
   blocking = false,
   suppressEscape = false,
   workspace = false,
+  dialogRole = 'dialog',
+  initialFocus,
 }: ModalShellProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -60,7 +66,9 @@ export const ModalShell = ({
     ).filter((element) => !element.hasAttribute('disabled'));
 
     // Initial focus: first focusable, falling back to the dialog itself.
-    const initial = focusables()[0] ?? contentRef.current;
+    const initial = (initialFocus ? contentRef.current?.querySelector<HTMLElement>(initialFocus) : null)
+      ?? focusables()[0]
+      ?? contentRef.current;
     initial?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -95,7 +103,7 @@ export const ModalShell = ({
       document.removeEventListener('keydown', handleKeyDown, true);
       previousFocusRef.current?.focus();
     };
-  }, [isOpen, onClose, blocking, suppressEscape]);
+  }, [initialFocus, isOpen, onClose, blocking, suppressEscape]);
 
   if (!isOpen) {
     return null;
@@ -113,7 +121,7 @@ export const ModalShell = ({
       <div
         ref={contentRef}
         className={workspace ? 'modal-content modal-content--workspace' : 'modal-content'}
-        role="dialog"
+        role={dialogRole}
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}

@@ -30,6 +30,11 @@ export default [
       ...tseslint.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'no-undef': 'off',
+      'no-restricted-properties': [
+        'error',
+        { object: 'window', property: 'alert', message: 'Use persistent in-app feedback instead of native dialogs.' },
+        { object: 'window', property: 'confirm', message: 'Use ConfirmDialog instead of native dialogs.' },
+      ],
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },

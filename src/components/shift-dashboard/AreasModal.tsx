@@ -13,6 +13,7 @@ import {
   updateRemoteArea,
 } from '../../lib/remote';
 import { ModalShell } from '../ui/ModalShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SearchableSelect } from '../ui/SearchableSelect';
 
 interface AreasModalProps {
@@ -35,6 +36,12 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
   const [responsibles, setResponsibles] = useState<Record<string, RemoteAreaResponsible[]>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  } | null>(null);
 
   // Create form.
   const [newName, setNewName] = useState('');
@@ -109,10 +116,12 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
   };
 
   const handleDeactivate = (area: RemoteArea) => {
-    if (!window.confirm(t('areas.deactivateConfirm', { name: area.name }))) {
-      return;
-    }
-    void run(() => updateRemoteArea({ id: area.id, deactivate: true }));
+    setConfirmation({
+      title: t('areas.deactivateTitle'),
+      description: t('areas.deactivateConfirm', { name: area.name }),
+      confirmLabel: t('areas.deactivateAction'),
+      onConfirm: () => { setConfirmation(null); return run(() => updateRemoteArea({ id: area.id, deactivate: true })); },
+    });
   };
 
   const handleAddResponsible = (areaId: string, userId: string) => {
@@ -121,13 +130,16 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
   };
 
   const handleRemoveResponsible = (areaId: string, responsible: RemoteAreaResponsible) => {
-    if (!window.confirm(t('areas.removeResponsibleConfirm', { name: responsible.displayName || responsible.email }))) {
-      return;
-    }
-    void run(() => removeRemoteAreaResponsible(areaId, responsible.userId));
+    setConfirmation({
+      title: t('areas.removeResponsibleTitle'),
+      description: t('areas.removeResponsibleConfirm', { name: responsible.displayName || responsible.email }),
+      confirmLabel: t('areas.removeResponsibleAction'),
+      onConfirm: () => { setConfirmation(null); return run(() => removeRemoteAreaResponsible(areaId, responsible.userId)); },
+    });
   };
 
   return (
+    <>
     <ModalShell isOpen={isOpen} onClose={onClose} title={t('areas.modalTitle')} maxWidth="560px">
       {areas.length === 0 && !error && (
         <p style={{ margin: '0 0 16px', color: 'var(--text-subtle)', fontSize: '0.85rem' }}>{t('areas.empty')}</p>
@@ -280,5 +292,15 @@ export const AreasModal = ({ isOpen, onClose, onChanged }: AreasModalProps) => {
         </button>
       </form>
     </ModalShell>
+    <ConfirmDialog
+      isOpen={Boolean(confirmation)}
+      title={confirmation?.title ?? ''}
+      description={confirmation?.description ?? ''}
+      confirmLabel={confirmation?.confirmLabel ?? t('common.confirm')}
+      cancelLabel={t('common.cancel')}
+      onCancel={() => setConfirmation(null)}
+      onConfirm={() => confirmation?.onConfirm()}
+    />
+    </>
   );
 };

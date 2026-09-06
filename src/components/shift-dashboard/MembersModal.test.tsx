@@ -425,12 +425,12 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
   it('Desactivar asks for confirmation and PATCHes status inactive', async () => {
     const onChanged = vi.fn();
     mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e1', status: 'inactive' }));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderMembersModal([remoteEmployee({ id: 'e1', name: 'Ana Activa', status: 'active' })], onChanged);
     await openEmployeesTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledTimes(1));
     expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'e1', status: 'inactive' });
@@ -438,7 +438,6 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
   });
 
   it('Reactivar PATCHes status active without confirmation', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e2', status: 'active' }));
     renderMembersModal([remoteEmployee({ id: 'e2', name: 'Bea Inactiva', status: 'inactive' })]);
     await openEmployeesTab();
@@ -447,18 +446,17 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reactivar' }));
 
     await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'e2', status: 'active' }));
-    expect(confirmSpy).not.toHaveBeenCalled();
   });
 
   it('Eliminar definitivamente deletes after explicit confirmation', async () => {
     const onChanged = vi.fn();
     mockedDeleteRemoteEmployee.mockResolvedValue(undefined);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderMembersModal([remoteEmployee({ id: 'e1', name: 'Ana Activa' })], onChanged);
     await openEmployeesTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Eliminar definitivamente' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(mockedDeleteRemoteEmployee).toHaveBeenCalledWith('e1'));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
@@ -469,27 +467,27 @@ describe('MembersModal — employee lifecycle (Bloque D)', () => {
     const { ApiError } = await import('../../lib/session');
     mockedDeleteRemoteEmployee.mockRejectedValue(new ApiError(409, 'El empleado tiene turnos registrados.', 'EMPLOYEE_HAS_HISTORY'));
     mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'e1', status: 'inactive' }));
-    // First confirm = delete, second = accept the deactivate offer.
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderMembersModal([remoteEmployee({ id: 'e1', name: 'Ana Activa' })]);
     await openEmployeesTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'Acciones de Ana Activa' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Eliminar definitivamente' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(screen.getByText('El empleado tiene turnos registrados.')).toBeTruthy());
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
     await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'e1', status: 'inactive' }));
   });
 
   it('on 400 LAST_ADMIN when deactivating, the server message is surfaced and nothing else happens', async () => {
     const { ApiError } = await import('../../lib/session');
     mockedUpdateRemoteEmployee.mockRejectedValue(new ApiError(400, 'No puedes desactivar al último administrador.', 'LAST_ADMIN'));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderMembersModal([remoteEmployee({ id: 'e1', name: 'Admin Vinculado', userId: 'user-admin' })]);
     await openEmployeesTab();
 
     fireEvent.click(screen.getByRole('button', { name: 'Acciones de Admin Vinculado' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(screen.getByText('No puedes desactivar al último administrador.')).toBeTruthy());
   });
@@ -708,6 +706,7 @@ describe('MembersModal — bulk access management (Fase 3/4/6/7/8)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Acciones de Persona 5' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Desactivar' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalled());
     expect(scrollContainer.scrollTop).toBe(420);

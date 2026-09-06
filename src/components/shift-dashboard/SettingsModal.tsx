@@ -15,6 +15,7 @@ import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { SearchableSelect } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { isAdminRole, SessionInfo } from '../../lib/session';
 import { ApprovalPolicy, RemoteEmployee } from '../../lib/remote';
 import { loadRemoteApprovalPolicy, resetOrganization, updateUserDisplayName, updateOwnEmployeeName, updateRemoteApprovalPolicy, updateRemoteOrganizationName } from '../../lib/remote';
@@ -624,6 +625,7 @@ function ShiftTypesSection() {
   const [types, setTypes] = useState<ShiftTypeDefinition[]>(() => getAllShiftTypesForManagement());
   const [draft, setDraft] = useState(NEW_TYPE_DRAFT);
   const [error, setError] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ label: string; id: string } | null>(null);
 
   const refresh = () => setTypes(getAllShiftTypesForManagement());
 
@@ -639,11 +641,7 @@ function ShiftTypesSection() {
 
   const handleDelete = (type: ShiftTypeDefinition) => {
     const displayLabel = translateShiftTypeLabel(type.id, locale, type.label);
-    if (!window.confirm(t('settings.deleteConfirm', { label: displayLabel }))) {
-      return;
-    }
-    deleteCustomShiftType(type.id);
-    refresh();
+    setDeleteConfirmation({ label: displayLabel, id: type.id });
   };
 
   const handleAdd = () => {
@@ -779,6 +777,21 @@ function ShiftTypesSection() {
         </div>
         {error && <p style={{ margin: '6px 0 0', fontSize: '0.75rem', color: 'var(--danger)' }}>{error}</p>}
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(deleteConfirmation)}
+        title={t('common.delete')}
+        description={deleteConfirmation ? t('settings.deleteConfirm', { label: deleteConfirmation.label }) : ''}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setDeleteConfirmation(null)}
+        onConfirm={() => {
+          if (deleteConfirmation) {
+            deleteCustomShiftType(deleteConfirmation.id);
+            refresh();
+          }
+          setDeleteConfirmation(null);
+        }}
+      />
     </div>
   );
 }

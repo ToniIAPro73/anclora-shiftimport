@@ -18,6 +18,7 @@ import {
 import { useI18n } from '../../lib/use-i18n';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { AccessibleScheduleTable } from './AccessibleScheduleTable';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
 import { ScheduleVersionHistory } from './ScheduleVersionHistory';
@@ -117,6 +118,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [activeDay, setActiveDay] = useState(periodStart);
   const [editorFocusKey, setEditorFocusKey] = useState(0);
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [view, setView] = useState<PlannerView>(() => {
     try {
       return window.localStorage.getItem(VIEW_PREFERENCE_KEY) === 'table' ? 'table' : 'grid';
@@ -401,9 +404,11 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     }
   };
 
-  const handleDelete = async (assignment?: ShiftAssignment) => {
-    const targetId = assignment?.id ?? editor?.id;
-    if (!targetId || !snapshot || !editable || !window.confirm(t('planner.deleteConfirm'))) return;
+  const performDelete = async () => {
+    const targetId = deleteTargetId;
+    if (!targetId || !snapshot || !editable) return;
+    setDeleteConfirmationOpen(false);
+    setDeleteTargetId(null);
     setIsSaving(true);
     setOperationError(null);
     try {
@@ -417,6 +422,13 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDelete = (assignment?: ShiftAssignment) => {
+    const targetId = assignment?.id ?? editor?.id;
+    if (!targetId || !snapshot || !editable) return;
+    setDeleteTargetId(targetId);
+    setDeleteConfirmationOpen(true);
   };
 
   const handlePublish = async () => {
@@ -722,6 +734,16 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
           </div>
         </ModalShell>
       )}
+
+      <ConfirmDialog
+        isOpen={deleteConfirmationOpen}
+        title={t('planner.deleteTitle')}
+        description={t('planner.deleteConfirm')}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setDeleteConfirmationOpen(false)}
+        onConfirm={performDelete}
+      />
 
       {snapshot && (
         <ModalShell

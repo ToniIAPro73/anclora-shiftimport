@@ -230,7 +230,6 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
     const { ApiError } = await import('../../lib/session');
     mockedCreateRemoteEmployee.mockRejectedValue(new ApiError(403, 'Plan limit reached', 'PLAN_LIMIT'));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     renderTeamImportModal();
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -238,6 +237,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
 
     await waitFor(() => expect(screen.getByText('Crear')).toBeTruthy());
     fireEvent.click(screen.getByText('Crear'));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(screen.getByText('Esta función está disponible en Team')).toBeTruthy());
   });
@@ -483,7 +483,6 @@ describe('TeamImportModal — inactive employee awareness (Bloque E)', () => {
     mockedDetectTeamRoster.mockReturnValue(inactiveRoster());
     mockedMatchRemoteEmployee.mockResolvedValue(inactiveMatch());
     mockedUpdateRemoteEmployee.mockResolvedValue(remoteEmployee({ id: 'emp-ana', status: 'active' }));
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     renderTeamImportModal(() => {}, 'ADMIN');
     await uploadRoster();
@@ -492,6 +491,7 @@ describe('TeamImportModal — inactive employee awareness (Bloque E)', () => {
     expect((screen.getByLabelText('Ana Inactiva') as HTMLInputElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Reactivar' }));
+    fireEvent.click(screen.getByRole('alertdialog').querySelector('button.btn-gold') as HTMLButtonElement);
 
     await waitFor(() => expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({ id: 'emp-ana', status: 'active' }));
     await waitFor(() => expect(screen.getByText('Reconocido')).toBeTruthy());
