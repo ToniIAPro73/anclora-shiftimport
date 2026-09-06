@@ -25,6 +25,16 @@ Configuración efectiva: Chromium, 1 worker, fixtures sintéticas con setup/tear
 
 Resultado: `2 passed`.
 
+Además, se añadió un runner específico de un solo test para las siguientes ejecuciones:
+
+```text
+npm run test:p5-role
+1 passed (47,4 s)
+```
+
+Este runner mantiene las variantes de scope del PLANNER en API dentro del mismo contexto y usa
+solo dos navegaciones browser para ADMIN y EMPLOYEE, reduciendo la repetición del runner histórico.
+
 Casos cubiertos:
 
 1. `EMPLOYEE UI does not expose planner and API rejects draft writes`: el EMPLOYEE no ve el
@@ -33,7 +43,7 @@ Casos cubiertos:
    muestra Employees activos, muestra el ADMIN que tiene Employee activo y excluye el ADMIN sin
    Employee en cuadrícula, filtro y selector de nuevo turno.
 
-La ejecución fue dirigida a esos dos riesgos; no se lanzó la batería histórica completa.
+Las dos ejecuciones fueron dirigidas a esos riesgos; no se lanzó la batería histórica completa.
 
 ## Cobertura aún pendiente
 
