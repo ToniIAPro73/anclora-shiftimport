@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { loadFormatProfiles } from '../../lib/format-profiles';
-import { resolveShiftTypeId } from '../../lib/shift-types';
+import { resolveShiftTypeId, setShiftTypeArchived, upsertShiftType } from '../../lib/shift-types';
 import { analyzeItemsForImport } from '../../ingestion/analysis';
 import { generateAssistantQuestions, AssistantQuestion } from '../../ingestion/assistant';
 import { EmployeeSelector } from '../../ingestion/core/row-detection';
@@ -109,6 +109,33 @@ describe('ProfileAssistantPanel', () => {
     expect(resolveShiftTypeId('AJ')).toBeNull();
     const result = onComplete.mock.calls[0][0] as AssistantCompletion;
     expect(result.shifts.some((shift) => shift.rawText.includes('AJ'))).toBe(false);
+  });
+
+  it('offers active custom shift types and excludes archived types', () => {
+    localStorage.clear();
+    upsertShiftType({
+      id: 'Guardia',
+      label: 'Guardia',
+      shortLabel: 'Guardia',
+      color: '#111111',
+      countsAsWork: true,
+    });
+    upsertShiftType({
+      id: 'Archivado',
+      label: 'Archivado',
+      shortLabel: 'Archivado',
+      color: '#222222',
+      countsAsWork: false,
+    });
+    setShiftTypeArchived('Archivado', true);
+
+    const { analysis, questions } = setup(TYPE_A_SELECTOR);
+    renderPanel(questions, analysis, TYPE_A_SELECTOR);
+
+    fireEvent.click(screen.getByText('Otro'));
+    fireEvent.click(screen.getByRole('button', { name: 'Elige el tipo' }));
+    expect(screen.getByText('Guardia')).toBeTruthy();
+    expect(screen.queryByText('Archivado')).toBeNull();
   });
 
   it('persists the format profile without any PII (no candidate labels, names or ids)', () => {

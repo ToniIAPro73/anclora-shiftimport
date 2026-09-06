@@ -894,20 +894,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     warningDates.has(shift.date)
     || unknownTokens.some((token) => shift.rawText.includes(token));
 
-  // The assistant opens whenever the diagnosis says so — diagnosis.recovery
-  // (src/ingestion/diagnostics.ts) is the single source of truth for
-  // recoverability; the UI never re-derives it from ImportState. BLOCKED is
-  // terminal by construction in this codebase (buildImportDiagnosis never
-  // returns BLOCKED with an actionable question — see
-  // fixtures/state-contract/README.md), so recovery.eligible already covers
-  // it without listing states here. 'choose-period' recovery (MONTH_MISMATCH)
-  // has its own banner further up, not this panel.
+  // Keep the existing assistant reachable whenever the import is in one of
+  // its answerable states. `diagnosis.recovery` still drives the primary
+  // recovery action, but it can legitimately be occupied by another
+  // diagnostic (for example MONTH_MISMATCH) while an unknown-code question
+  // remains in the same analysis. The assistant must not disappear in that
+  // case: it is the existing path that applies tokenAliases/offTokens/codeTimes.
   const showAssistant = !assistantDismissed
     && assistantSession !== null
     && analysis !== null
     && analysis.questions.length > 0
-    && diagnosis?.recovery.eligible === true
-    && diagnosis.recovery.strategy === 'answer-question';
+    && (diagnosis?.recovery.strategy === 'answer-question'
+      || diagnosis?.state === 'NEEDS_USER_INPUT'
+      || diagnosis?.state === 'BLOCKED'
+      || diagnosis?.state === 'UNSUPPORTED');
 
   // Warnings already surfaced as structured diagnostics are not repeated.
   const DIAGNOSTIC_COVERED_WARNINGS = new Set(['UNKNOWN_SHIFT_TOKEN', 'PARTIAL_EXTRACTION', 'MULTIPLE_EMPLOYEE_MATCHES', 'UNSUPPORTED_SECTION']);

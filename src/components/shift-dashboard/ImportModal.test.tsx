@@ -459,6 +459,50 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(screen.getByText(/La coincidencia con tu nombre es débil/)).toBeTruthy();
   });
 
+  it('keeps the existing code-classification assistant reachable when period recovery has priority', async () => {
+    const shifts = makeResult().shifts;
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts,
+      quality: {
+        shifts,
+        confidence: 0.7,
+        warnings: [{ code: 'UNKNOWN_SHIFT_TOKEN', context: { token: 'M' } }],
+        state: 'REVIEW',
+      },
+      structure: {
+        documentType: 'TYPE_A',
+        signature: makeProfile().signature,
+        dayHeaderCount: 31,
+        matchedProfile: null,
+        drift: null,
+        periodDetected: true,
+      },
+      questions: [{ kind: 'shift-code', code: 'M' }],
+      detectedContext: DOCUMENT_CONTEXT,
+    }));
+    mockedAnalyzeItemsForImport.mockReturnValue(makeItemAnalysis({
+      unknownTokens: ['M'],
+      totalTokens: 1,
+      recognizedTokens: 0,
+    }));
+
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText('¿Qué turno representa M?')).toBeTruthy());
+
+    // Select a different period after analysis: the period diagnostic becomes
+    // primary, but the existing shift-code assistant must remain available.
+    const periodTrigger = screen.getAllByRole('button').find((button) => button.textContent === 'Marzo');
+    expect(periodTrigger).toBeTruthy();
+    fireEvent.click(periodTrigger as HTMLButtonElement);
+    fireEvent.click(screen.getByRole('option', { name: 'Enero' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('import-quality-state').textContent).toBe('Necesita tu respuesta');
+      expect(screen.getByText('¿Qué turno representa M?')).toBeTruthy();
+    });
+  });
+
   it('incomplete times (??:??) are never "listos": PARTIAL state, excluded from confirm count', async () => {
     const shifts = [
       makeShift({ date: '2026-03-04', startTime: '10:00', endTime: '??:??', isValid: false, rawText: '10:00' }),
