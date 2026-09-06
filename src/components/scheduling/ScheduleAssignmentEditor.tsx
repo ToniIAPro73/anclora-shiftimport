@@ -23,6 +23,7 @@ interface ScheduleAssignmentEditorProps {
   onClose: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onDelete: () => void;
+  minimumDate?: string;
 }
 
 export function ScheduleAssignmentEditor({
@@ -36,6 +37,7 @@ export function ScheduleAssignmentEditor({
   onClose,
   onSave,
   onDelete,
+  minimumDate,
 }: ScheduleAssignmentEditorProps) {
   const { t } = useI18n();
   const employeeRef = useRef<HTMLSelectElement>(null);
@@ -75,7 +77,7 @@ export function ScheduleAssignmentEditor({
           </select>
         </label>
         <label htmlFor="planner-editor-date">{t('planner.dateLabel')}
-          <input id="planner-editor-date" name="date" type="date" autoComplete="off" value={editor.date} min={snapshot.version.periodStart} max={snapshot.version.periodEnd} onChange={(event) => onChange({ ...editor, date: event.target.value })} disabled={isSaving} required />
+            <input id="planner-editor-date" name="date" type="date" autoComplete="off" value={editor.date} min={minimumDate ?? snapshot.version.periodStart} max={snapshot.version.periodEnd} onChange={(event) => onChange({ ...editor, date: event.target.value })} disabled={isSaving} required />
         </label>
         <label htmlFor="planner-editor-start">{t('planner.startLabel')}
           <input id="planner-editor-start" name="startTime" type="time" autoComplete="off" value={editor.startTime} onChange={(event) => onChange({ ...editor, startTime: event.target.value })} disabled={isSaving} required />

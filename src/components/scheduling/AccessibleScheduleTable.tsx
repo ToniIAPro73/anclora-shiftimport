@@ -12,6 +12,7 @@ interface AccessibleScheduleTableProps {
   editorSnapshot?: ScheduleSnapshot;
   assignmentsByCell: Map<string, ShiftAssignment[]>;
   editable: boolean;
+  minimumDate?: string;
   editor: AssignmentEditorState | null;
   showEditor?: boolean;
   isSaving: boolean;
@@ -41,6 +42,7 @@ export function AccessibleScheduleTable({
   editorSnapshot = snapshot,
   assignmentsByCell,
   editable,
+  minimumDate,
   editor,
   showEditor = true,
   isSaving,
@@ -53,6 +55,7 @@ export function AccessibleScheduleTable({
   onDelete,
 }: AccessibleScheduleTableProps) {
   const { t } = useI18n();
+  const today = minimumDate ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
 
   return (
     <>
@@ -71,6 +74,7 @@ export function AccessibleScheduleTable({
           <tbody>
             {snapshot.employees.flatMap((employee) => days.flatMap((day) => {
               const cellAssignments = assignmentsByCell.get(`${employee.id}:${day}`) ?? [];
+              const dateEditable = editable && day >= today;
               const rows = cellAssignments.length > 0 ? cellAssignments : [undefined];
               return rows.map((assignment) => (
                 <tr key={rowKey(employee.id, day, assignment)}>
@@ -85,10 +89,10 @@ export function AccessibleScheduleTable({
                   <td>{assignment?.location || <span className="weekly-planner__table-muted">{t('planner.noLocation')}</span>}</td>
                   <td>
                     <div className="weekly-planner__table-actions">
-                      {assignment && <button type="button" className="btn-outline" onClick={() => onEdit(employee.id, day, assignment)} disabled={!editable} aria-label={t('planner.editAssignmentFor', { employee: employee.name, date: formatDay(day, locale) })} data-editor-target={`${employee.id}:${day}`}>
+                      {assignment && <button type="button" className="btn-outline" onClick={() => onEdit(employee.id, day, assignment)} disabled={!dateEditable} aria-label={t('planner.editAssignmentFor', { employee: employee.name, date: formatDay(day, locale) })} data-editor-target={`${employee.id}:${day}`}>
                         <Pencil size={15} aria-hidden="true" /> <span>{t('planner.editShort')}</span>
                       </button>}
-                      {editable && <button type="button" className="btn-outline weekly-planner__delete" onClick={() => assignment ? onEdit(employee.id, day, assignment) : onAdd(employee.id, day)} aria-label={assignment ? t('planner.deleteAssignmentFor', { employee: employee.name, date: formatDay(day, locale) }) : t('planner.addAssignment', { employee: employee.name, date: formatDay(day, locale) })} data-editor-target={`${employee.id}:${day}`}>
+                      {dateEditable && <button type="button" className="btn-outline weekly-planner__delete" onClick={() => assignment ? onEdit(employee.id, day, assignment) : onAdd(employee.id, day)} aria-label={assignment ? t('planner.deleteAssignmentFor', { employee: employee.name, date: formatDay(day, locale) }) : t('planner.addAssignment', { employee: employee.name, date: formatDay(day, locale) })} data-editor-target={`${employee.id}:${day}`}>
                         {assignment ? <><Trash2 size={15} aria-hidden="true" /> <span>{t('planner.deleteShort')}</span></> : <><Plus size={15} aria-hidden="true" /> <span>{t('planner.addShort')}</span></>}
                       </button>}
                     </div>
@@ -109,6 +113,7 @@ export function AccessibleScheduleTable({
           onClose={onCloseEditor}
           onSave={onSave}
           onDelete={onDelete}
+          minimumDate={minimumDate}
         />
       )}
     </>

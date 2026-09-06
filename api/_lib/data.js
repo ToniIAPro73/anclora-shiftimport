@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
+import { getOperationalDate, isHistoricalDate } from './operational-date.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -2582,22 +2583,24 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     if (scope.type === 'SELF' && shift.employeeId && shift.employeeId !== scope.employeeId) {
       throw scopeForbidden('Resource belongs to another employee');
     }
-    if (scope.type === 'SELF' && shift.origin === 'IMP' && shift.date > new Date().toISOString().slice(0, 10)) {
+    if (scope.type === 'SELF' && shift.origin === 'IMP' && shift.date > getOperationalDate()) {
       const error = new HttpError(403, 'Employees cannot import future planning rows');
       error.code = 'SELF_IMPORT_FUTURE_FORBIDDEN';
+      throw error;
+    }
+    if (shift.origin === 'MAN' && !isHistoricalDate(shift.date)) {
+      const error = new HttpError(400, 'Manual shifts must be historical');
+      error.code = 'MANUAL_SHIFT_HISTORICAL_ONLY';
       throw error;
     }
     const employeeId = scope.type === 'SELF' ? scope.employeeId : effectiveEmployeeId(ctx, shift.employeeId);
     const employee = await assertEmployeeInScope(sql, ctx, employeeId);
 
-    // Imported shifts (origin IMP) may only land on an ACTIVE employee — a
-    // pending_access row (detected in a file but not yet linked to a real
-    // user) or an inactive one is not a usable employee yet. Manual shifts
-    // (origin MAN) are untouched: an ADMIN adding one shift by hand for a
-    // pending_access employee is not the import-a-whole-file risk this
-    // guards against.
-    if (shift.origin === 'IMP' && employee.status !== 'active') {
-      const error = new HttpError(409, 'Cannot import shifts for an employee that is not active yet');
+    // Every persisted shift, including manually entered historical shifts,
+    // must target an ACTIVE Employee. User/Membership identity alone is not
+    // an operational scheduling identity.
+    if (employee.status !== 'active') {
+      const error = new HttpError(409, 'Cannot create shifts for an employee that is not active yet');
       error.code = 'EMPLOYEE_NOT_ACTIVE';
       throw error;
     }

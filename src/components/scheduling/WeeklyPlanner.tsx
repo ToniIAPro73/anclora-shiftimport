@@ -16,6 +16,7 @@ import {
   updateRemoteAssignment,
 } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
+import { getOperationalDate } from '../../lib/operational-date';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -26,7 +27,9 @@ import { ScheduleVersionHistory } from './ScheduleVersionHistory';
 interface WeeklyPlannerProps {
   areaId?: string | null;
   canEdit: boolean;
-  onBack: () => void;
+  onBack?: () => void;
+  embedded?: boolean;
+  initialDate?: string;
   initialPeriodStart?: string;
 }
 
@@ -86,16 +89,25 @@ function errorCopy(error: unknown, t: (key: string) => string): string {
     if (error.code === 'REST_RULE_VIOLATION') return t('planner.errorRest');
     if (error.code === 'VERSION_NOT_EDITABLE') return t('planner.errorVersion');
     if (error.code === 'SCOPE_FORBIDDEN') return t('planner.errorScope');
+    if (error.code === 'PAST_PLANNING_FORBIDDEN') return t('planner.pastDay');
     if (error.code === 'SCHEDULE_DRAFT_EXISTS') return t('planner.errorDraftExists');
     if (error.status === 403) return t('planner.errorPermission');
   }
   return t('planner.errorGeneric');
 }
 
-export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodStart }: WeeklyPlannerProps) {
+export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false, initialDate, initialPeriodStart }: WeeklyPlannerProps) {
   const { locale, t } = useI18n();
+  const today = getOperationalDate();
   const [weekStart, setWeekStart] = useState<WeekStart>(readWeekStart);
-  const [periodStart, setPeriodStart] = useState(() => initialPeriodStart ?? startOfWeek(new Date(), readWeekStart()));
+  const [periodStart, setPeriodStart] = useState(() => {
+    const preference = readWeekStart();
+    if (initialPeriodStart) return initialPeriodStart;
+    if (initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate)) {
+      return startOfWeek(new Date(`${initialDate}T00:00:00Z`), preference);
+    }
+    return startOfWeek(new Date(), preference);
+  });
   const [snapshot, setSnapshot] = useState<ScheduleSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -115,7 +127,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const [editor, setEditor] = useState<AssignmentEditorState | null>(null);
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [selectedCell, setSelectedCell] = useState<{ employeeId: string; date: string } | null>(null);
-  const [activeDay, setActiveDay] = useState(periodStart);
+  const [activeDay, setActiveDay] = useState(initialDate ?? periodStart);
   const [editorFocusKey, setEditorFocusKey] = useState(0);
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
@@ -144,6 +156,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
     return byCell;
   }, [snapshot]);
   const editable = canEdit && snapshot?.version.status === 'DRAFT' && !isViewingHistoricalVersion;
+  const previousWeekDisabled = addDays(periodStart, -1) < today;
 
   const visibleEmployees = useMemo(() => {
     if (!snapshot || employeeFilter === 'all') {
@@ -164,8 +177,9 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   ], [snapshot, t]);
   const defaultEditor = useMemo(() => {
     const firstEmployee = snapshot?.employees[0];
-    return firstEmployee && days[0] ? initialEditor(firstEmployee.id, days[0]) : null;
-  }, [days, snapshot]);
+    const firstEditableDay = days.find((day) => day >= today);
+    return firstEmployee && firstEditableDay ? initialEditor(firstEmployee.id, firstEditableDay) : null;
+  }, [days, snapshot, today]);
 
   useEffect(() => {
     if (employeeFilter !== 'all' && !snapshot?.employees.some((employee) => employee.id === employeeFilter)) {
@@ -261,6 +275,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   }, [weekStart]);
 
   const shiftWeek = (delta: number) => {
+    if (delta < 0 && previousWeekDisabled) return;
     setPeriodStart((current) => addDays(current, delta * 7));
     setActiveDay((current) => addDays(current, delta * 7));
   };
@@ -293,6 +308,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   };
 
   const handleAdd = (employeeId: string, date: string) => {
+    if (date < today) {
+      setOperationError(t('planner.pastDay'));
+      return;
+    }
     setSelectedCell({ employeeId, date });
     setMobileEditorOpen(true);
     setEditorFocusKey((current) => current + 1);
@@ -300,6 +319,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   };
 
   const handleEdit = (employeeId: string, date: string, assignment: ShiftAssignment) => {
+    if (date < today) {
+      setOperationError(t('planner.pastDay'));
+      return;
+    }
     setSelectedCell({ employeeId, date });
     setMobileEditorOpen(true);
     setEditorFocusKey((current) => current + 1);
@@ -314,6 +337,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   };
 
   const handleCreateDraft = async () => {
+    if (addDays(periodStart, 6) < today) {
+      setError(t('planner.pastDay'));
+      return;
+    }
     setIsCreating(true);
     setError(null);
     setOperationError(null);
@@ -384,6 +411,10 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   const handleSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editor || !snapshot || !editable) return;
+    if (editor.date < today) {
+      setOperationError(t('planner.pastDay'));
+      return;
+    }
     setIsSaving(true);
     setOperationError(null);
     setNotice(null);
@@ -450,18 +481,18 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
   };
 
   return (
-    <main className="weekly-planner" data-testid="weekly-planner" data-state={isLoading ? 'loading' : error ? 'error' : snapshot && !editable ? 'disabled' : snapshot ? 'ready' : 'empty'}>
+    <div className={`weekly-planner${embedded ? ' weekly-planner--embedded' : ''}`} data-testid="weekly-planner" data-state={isLoading ? 'loading' : error ? 'error' : snapshot && !editable ? 'disabled' : snapshot ? 'ready' : 'empty'}>
       <header className="weekly-planner__header">
         <div className="weekly-planner__heading">
-          <button type="button" className="weekly-planner__back" onClick={onBack}>
+          {!embedded && onBack && <button type="button" className="weekly-planner__back" onClick={onBack}>
             <ChevronLeft size={16} aria-hidden="true" /> {t('planner.back')}
-          </button>
-          <p className="weekly-planner__eyebrow">{t('planner.eyebrow')}</p>
-          <h1>{t('planner.title')}</h1>
+          </button>}
+          {!embedded && <p className="weekly-planner__eyebrow">{t('planner.eyebrow')}</p>}
+          {!embedded && <h1>{t('planner.title')}</h1>}
         </div>
         <div className="weekly-planner__header-tools">
           <div className="weekly-planner__week-control" role="group" aria-label={t('planner.weekNavigation')}>
-            <button type="button" className="weekly-planner__icon-button" onClick={() => shiftWeek(-1)} aria-label={t('planner.previousWeek')}>
+            <button type="button" className="weekly-planner__icon-button" onClick={() => shiftWeek(-1)} disabled={previousWeekDisabled} aria-label={t('planner.previousWeek')} title={previousWeekDisabled ? t('planner.previousWeekDisabled') : undefined}>
               <ChevronLeft size={18} />
             </button>
             <span>{formatDay(periodStart, locale)} – {formatDay(addDays(periodStart, 6), locale)}</span>
@@ -545,6 +576,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                     aria-pressed={activeDay === day}
                     aria-label={formatDay(day, locale)}
                     onClick={() => setActiveDay(day)}
+                    disabled={day < today}
                   >
                     {formatDay(day, locale).split(' ')[0]}
                   </button>
@@ -626,6 +658,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                   editorSnapshot={snapshot}
                   assignmentsByCell={assignmentsByCell}
                   editable={Boolean(editable)}
+                  minimumDate={today}
                   editor={editor}
                   showEditor={false}
                   isSaving={isSaving}
@@ -665,8 +698,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                                       type="button"
                                       className="weekly-planner__assignment"
                                       key={assignment.id}
-                                      onClick={() => { if (editable) handleEdit(employee.id, day, assignment); }}
-                                      disabled={!editable}
+                                      onClick={() => { if (editable && day >= today) handleEdit(employee.id, day, assignment); }}
+                                      disabled={!editable || day < today}
                                       data-editor-target={`${employee.id}:${day}`}
                                       title={editable ? t('planner.editAssignment') : t('planner.locked')}
                                     >
@@ -674,7 +707,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                                       {assignment.location && <span>{assignment.location}</span>}
                                     </button>
                                   ))}
-                                  {editable && (
+                                  {editable && day >= today && (
                                     <button type="button" className="weekly-planner__add-cell" onClick={() => handleAdd(employee.id, day)} aria-label={t('planner.addAssignment', { employee: employee.name, date: day })} data-editor-target={`${employee.id}:${day}`}>
                                       <Plus size={16} aria-hidden="true" />
                                     </button>
@@ -703,6 +736,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
                 onClose={resetEditor}
                 onSave={handleSave}
                 onDelete={() => void handleDelete()}
+                minimumDate={today}
               />
             )}
           </div>
@@ -763,6 +797,6 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, initialPeriodSta
           />
         </ModalShell>
       )}
-    </main>
+    </div>
   );
 }

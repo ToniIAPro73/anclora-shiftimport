@@ -78,6 +78,12 @@ describe('ShiftAssignment draft CRUD', () => {
     expect(assignment).toMatchObject({ scheduleVersionId: VERSION, employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk' });
   });
 
+  it('rejects an assignment dated before the operational date', async () => {
+    await expect(createAssignment(makeSql(), planner, SCHEDULE, VERSION, {
+      employeeId: EMPLOYEE, date: '2020-09-29', startTime: '09:00', endTime: '17:00',
+    })).rejects.toMatchObject({ status: 400, code: 'PAST_PLANNING_FORBIDDEN' });
+  });
+
   it('updates and deletes an existing assignment', async () => {
     const sql = makeSql();
     const updated = await updateAssignment(sql, planner, SCHEDULE, VERSION, ASSIGNMENT, { location: 'Lobby' });

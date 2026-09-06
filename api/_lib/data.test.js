@@ -457,10 +457,18 @@ describe('active-employee gate on import', () => {
       .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_NOT_ACTIVE' });
   });
 
-  it('allows a MAN (manual) shift for a pending_access employee', async () => {
+  it('rejects a MAN (manual) shift for a pending_access employee', async () => {
     const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'pending_access' })] });
-    const saved = await upsertShifts(sql, adminCtx, [shiftInput({ origin: 'MAN' })]);
-    expect(saved).toHaveLength(1);
+    await expect(upsertShifts(sql, adminCtx, [shiftInput({ origin: 'MAN' })]))
+      .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_NOT_ACTIVE' });
+  });
+
+  it('rejects a MAN shift on or after the operational date', async () => {
+    const { sql, calls, state } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })] });
+    await expect(upsertShifts(sql, adminCtx, [shiftInput({ origin: 'MAN', date: '2099-01-01' })]))
+      .rejects.toMatchObject({ status: 400, code: 'MANUAL_SHIFT_HISTORICAL_ONLY' });
+    expect(state.transactionUsed).toBe(false);
+    expect(calls.some((call) => call.text.startsWith('INSERT INTO shifts'))).toBe(false);
   });
 
   it('allows an IMP shift for an active employee', async () => {

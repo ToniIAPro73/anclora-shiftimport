@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { createShiftPublishedNotifications } from './data.js';
+import { getOperationalDate } from './operational-date.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -35,7 +36,21 @@ function normalizePeriodStart(value) {
 
   const periodEndDate = new Date(date.getTime());
   periodEndDate.setUTCDate(periodEndDate.getUTCDate() + 6);
-  return { periodStart, periodEnd: periodEndDate.toISOString().slice(0, 10) };
+  const periodEnd = periodEndDate.toISOString().slice(0, 10);
+  if (periodEnd < getOperationalDate()) {
+    const error = new HttpError(400, 'Planning weeks cannot be fully in the past');
+    error.code = 'PAST_PLANNING_FORBIDDEN';
+    throw error;
+  }
+  return { periodStart, periodEnd };
+}
+
+function assertPlanningDate(date) {
+  if (date < getOperationalDate()) {
+    const error = new HttpError(400, 'Planning dates cannot be before today');
+    error.code = 'PAST_PLANNING_FORBIDDEN';
+    throw error;
+  }
 }
 
 function normalizeAreaId(value) {
@@ -416,6 +431,7 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   const date = normalizeDate(input.date);
   const startTime = normalizeTime(input.startTime, 'startTime');
   const endTime = normalizeTime(input.endTime, 'endTime');
+  assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
   await assertNoAssignmentOverlap(sql, {
@@ -454,6 +470,7 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   const date = input.date === undefined ? databaseDateToIso(assignment.date) : normalizeDate(input.date);
   const startTime = input.startTime === undefined ? String(assignment.start_time).slice(0, 5) : normalizeTime(input.startTime, 'startTime');
   const endTime = input.endTime === undefined ? String(assignment.end_time).slice(0, 5) : normalizeTime(input.endTime, 'endTime');
+  assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
   await assertNoAssignmentOverlap(sql, {

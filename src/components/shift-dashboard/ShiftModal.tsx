@@ -7,6 +7,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { X, Trash2, Save, Calendar } from 'lucide-react';
 import { SearchableSelect } from '../ui/SearchableSelect';
+import { getOperationalDate } from '../../lib/operational-date';
 
 interface ShiftModalProps {
   isOpen: boolean;
@@ -19,14 +20,16 @@ interface ShiftModalProps {
    * working state — mirrors the import-confirm contract (cursor wait,
    * "Procesando…", no interaction until the operation settles). */
   isSaving?: boolean;
+  /** Manual shift entry is a historical-only operation in P5.2. */
+  maxDate?: string | null;
 }
 
-export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, onSave, onDelete, isSaving = false }: ShiftModalProps) => {
+export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, onSave, onDelete, isSaving = false, maxDate = null }: ShiftModalProps) => {
   const { locale, t } = useI18n();
   const shiftTypeOptions = getShiftTypes().map((type) => ({ value: type.label, label: translateShiftTypeLabel(type.id, locale, type.label) }));
   const [formData, setFormData] = useState<Shift>({
     id: '',
-    date: new Date().toISOString().split('T')[0],
+        date: maxDate ?? new Date().toISOString().split('T')[0],
     startTime: '08:00',
     endTime: '14:00',
     location: 'Regular',
@@ -44,20 +47,25 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
     } else {
       setFormData({
         id: crypto.randomUUID(),
-        date: defaultDate ?? new Date().toISOString().split('T')[0],
+        date: defaultDate ?? maxDate ?? getOperationalDate(),
         startTime: '08:00',
         endTime: '15:00',
         location: 'Regular',
         origin: 'MAN',
       });
     }
-  }, [defaultDate, editingShift, isOpen]);
+  }, [defaultDate, editingShift, isOpen, maxDate]);
 
   if (!isOpen) return null;
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content">
+      <div
+        className="modal-content"
+        role="dialog"
+        aria-modal="true"
+        aria-label={editingShift ? t('shiftModal.titleEdit') : t('shiftModal.titleNew')}
+      >
         <button
           type="button"
           className="theme-toggle"
@@ -86,8 +94,10 @@ export const ShiftModal = ({ isOpen, editingShift, defaultDate = null, onClose, 
               type="date"
               className="modal-input"
               value={formData.date}
+              max={maxDate ?? undefined}
               onChange={e => setFormData({...formData, date: e.target.value})}
             />
+            {maxDate && <p className="modal-field-hint" role="note">{t('shiftModal.historicalOnly')}</p>}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)' }}>
