@@ -4,7 +4,7 @@ import {
   mapImportRow,
   normalizeShiftInput,
 } from './data.js';
-import { HttpError, requireRole, resolveAccessScope } from './auth.js';
+import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -109,6 +109,14 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     throw requestError(409, 'Historical imports must use the Safe Import confirmation path', 'HISTORICAL_IMPORT_USE_SAFE_PATH');
   }
 
+  if (ctx.role === 'EMPLOYEE') {
+    throw requestError(
+      403,
+      'Employees cannot create future planning drafts through self-import',
+      'SELF_IMPORT_FUTURE_FORBIDDEN',
+    );
+  }
+
   // This is the canonical R2 capability mapping. It intentionally asks the
   // effective authorization model for the minimum PLANNER capability rather
   // than checking role === 'PLANNER'; OWNER/ADMIN behavior therefore remains
@@ -123,7 +131,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     );
   }
 
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   const requestedAreaId = String(input.areaId ?? '').trim() || null;
   if (requestedAreaId) validateUuid(requestedAreaId, 'areaId');
   if (scope.type === 'AREA' && requestedAreaId && requestedAreaId !== scope.areaId) {

@@ -207,3 +207,29 @@ export function resolveAccessScope(membership) {
   error.code = 'SCOPE_UNAVAILABLE';
   throw error;
 }
+
+/**
+ * Resolve the effective scope for data and scheduling endpoints. The base
+ * resolver remains pure for callers that already have all membership facts;
+ * this layer adds the one organization-state-dependent rule from PD D-05:
+ * an unassigned PLANNER is global only when the organization has no active
+ * areas. The client never supplies this decision.
+ */
+export async function resolveEffectiveAccessScope(sql, membership) {
+  const scope = resolveAccessScope(membership);
+  if (membership?.role !== 'PLANNER' || scope.type === 'AREA') {
+    return scope;
+  }
+  const rows = await sql`
+    SELECT COUNT(*)::int AS active_area_count
+    FROM areas
+    WHERE organization_id = ${membership.organizationId}
+      AND active = TRUE
+  `;
+  if (Number(rows[0]?.active_area_count ?? 0) > 0) {
+    const error = new HttpError(403, 'Planner area assignment is required for this organization');
+    error.code = 'SCOPE_UNAVAILABLE';
+    throw error;
+  }
+  return scope;
+}

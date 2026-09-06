@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { HttpError, requireRole, resolveAccessScope } from './auth.js';
+import { HttpError, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 
 /**
@@ -110,6 +110,7 @@ const IMPORT_OUTCOME_REASONS = new Set([
   'EMPLOYEE_AMBIGUOUS',
   'EMPLOYEE_UNKNOWN',
   'SELF_IDENTITY_NOT_FOUND',
+  'SELF_FUTURE_ROWS_EXCLUDED',
   'PLAN_LIMIT',
   'AREA_MISMATCH_DECLINED',
   'DOCUMENT_ERROR',
@@ -118,6 +119,7 @@ const IMPORT_OUTCOME_REASONS = new Set([
 const OUTCOME_DETAIL_KEYS = new Set([
   'attemptedCount', 'eligibleCount', 'persistedCount', 'createdShiftCount',
   'matchedCount', 'existingShiftCount', 'ignoredCount', 'employeeCount', 'shiftCount',
+  'totalRows', 'ownRows', 'ignoredRows', 'unidentifiedRows', 'futureOwnRows',
 ]);
 
 function sanitizeOutcomeDetail(raw) {
@@ -265,7 +267,7 @@ async function assertEmployeeInOrg(sql, ctx, employeeId) {
 
 async function assertEmployeeInScope(sql, ctx, employeeId) {
   const employee = await assertEmployeeInOrg(sql, ctx, employeeId);
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA') {
     const areaRows = await sql`
       SELECT area_id FROM employees
@@ -317,7 +319,7 @@ async function resolveAreaIdByName(sql, ctx, areaName) {
 // ---------------------------------------------------------------- employees
 
 export async function listEmployees(sql, ctx, { areaId = null } = {}) {
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'SELF') {
     const rows = await sql`
       SELECT * FROM employees
@@ -379,7 +381,7 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
   const normalizedName = String(name ?? '').trim().toLowerCase();
   const externalId = String(externalEmployeeId ?? '').trim();
 
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'SELF') {
     const rows = await sql`
       SELECT * FROM employees WHERE id = ${scope.employeeId} AND organization_id = ${ctx.organizationId}
@@ -1346,7 +1348,7 @@ export async function listAuditEvents(sql, ctx, {
   eventType = null, from = null, to = null, page = 1, pageSize = 50,
 } = {}) {
   requireRole(ctx, 'ADMIN');
-  if (resolveAccessScope(ctx).type !== 'ORGANIZATION') {
+  if ((await resolveEffectiveAccessScope(sql, ctx)).type !== 'ORGANIZATION') {
     throw scopeForbidden('Audit history requires organization scope');
   }
   const safePageSize = Math.min(Math.max(Number(pageSize) || 50, 1), 100);
@@ -1485,7 +1487,7 @@ export async function listImports(sql, ctx, {
   sourceFormat = null,
   status = null,
 } = {}) {
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA' && areaId && areaId !== scope.areaId) {
     throw scopeForbidden('Requested area is outside your assigned area');
   }
@@ -1555,7 +1557,7 @@ export async function listImports(sql, ctx, {
 }
 
 export async function createImport(sql, ctx, input) {
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   // areaId NULL = organization-scoped (global) import; set = area-scoped
   // import. The area must belong to the session org (403 otherwise, no
   // existence leak) — same assertAreaInOrg convention used everywhere else.
@@ -1606,9 +1608,12 @@ export async function createImport(sql, ctx, input) {
   // still write history rows without a key, but the actual authenticated
   // import flows always provide both values.
   const requestedEmployeeId = String(input?.employeeId ?? '').trim() || null;
-  const employeeId = requestedEmployeeId
-    ? effectiveEmployeeId(ctx, requestedEmployeeId)
-    : (ctx.role === 'EMPLOYEE' ? effectiveEmployeeId(ctx, null) : null);
+  if (scope.type === 'SELF' && requestedEmployeeId && requestedEmployeeId !== scope.employeeId) {
+    throw scopeForbidden('Resource belongs to another employee');
+  }
+  const employeeId = scope.type === 'SELF'
+    ? scope.employeeId
+    : (requestedEmployeeId ? effectiveEmployeeId(ctx, requestedEmployeeId) : null);
   if (employeeId) {
     await assertEmployeeInScope(sql, ctx, employeeId);
   } else if (scope.type === 'SELF') {
@@ -1769,7 +1774,7 @@ export async function updateImportOutcome(sql, ctx, rawImportId, input = {}) {
   const existing = rows[0];
   if (!existing) throw new HttpError(404, 'Import not found');
   if (existing.deleted_at) throw new HttpError(409, 'Import already deleted');
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA' || scope.type === 'SELF') {
     assertScopedResource(scope, { employeeId: existing.employee_id, areaId: existing.area_id });
   }
@@ -1869,7 +1874,7 @@ export async function deleteImport(sql, ctx, rawImportId) {
 // ------------------------------------------------------------------- shifts
 
 export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null } = {}) {
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA' && areaId && areaId !== scope.areaId) {
     throw scopeForbidden('Requested area is outside your assigned area');
   }
@@ -2559,7 +2564,7 @@ export async function markEmployeeNotificationRead(sql, ctx, rawNotificationId) 
  */
 export async function upsertShifts(sql, ctx, rawShifts) {
   const shifts = rawShifts.map(normalizeShiftInput);
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   // R1-M08 atomicity: every shift is validated (and its write parameters
   // computed) in this first pass, with NO write issued yet. Only once every
   // shift in the batch has passed validation does the second pass run the
@@ -2574,7 +2579,15 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     if (!shift.date || !shift.employeeId) {
       throw new HttpError(400, 'Shift requires date and employeeId');
     }
-    const employeeId = effectiveEmployeeId(ctx, shift.employeeId);
+    if (scope.type === 'SELF' && shift.employeeId && shift.employeeId !== scope.employeeId) {
+      throw scopeForbidden('Resource belongs to another employee');
+    }
+    if (scope.type === 'SELF' && shift.origin === 'IMP' && shift.date > new Date().toISOString().slice(0, 10)) {
+      const error = new HttpError(403, 'Employees cannot import future planning rows');
+      error.code = 'SELF_IMPORT_FUTURE_FORBIDDEN';
+      throw error;
+    }
+    const employeeId = scope.type === 'SELF' ? scope.employeeId : effectiveEmployeeId(ctx, shift.employeeId);
     const employee = await assertEmployeeInScope(sql, ctx, employeeId);
 
     // Imported shifts (origin IMP) may only land on an ACTIVE employee — a
@@ -2688,7 +2701,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
 }
 
 export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId) {
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   const employeeId = scope.type === 'SELF'
     ? scope.employeeId
     : effectiveEmployeeId(ctx, requestedEmployeeId);

@@ -85,9 +85,9 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - P4 — Accessibility & Responsive Hardening: `PASS_WITH_GAPS`, commit `cc767b9`; runner compacto
   `test:p4` 1/1, tests dirigidos 45/45, lint y build PASS. El gap restante es el archivado de
   capturas comparativas, documentado en `docs/roadmap/P4-ACCESSIBILITY-RESPONSIVE-GATE.md`.
-- P5: EN EJECUCIÓN; D-03, D-04 y D-05 están aprobadas y registradas en `sdd/decisions/`. Existe
-  evidencia browser parcial en `docs/roadmap/P5-ROLE-REALITY-PARTIAL-EVIDENCE.md` (`2/2 PASS`);
-  se están cerrando ADMIN, PLANNER, EMPLOYEE y self-import antes de iniciar P6.
+- P5 — Role Reality & Employee Self-Service: `PASS`; D-03, D-04 y D-05 están aprobadas y
+  registradas en `sdd/decisions/`. Gate y evidencia en
+  `docs/roadmap/P5-ROLE-REALITY-GATE.md`; smoke compacto `test:p5-role` 1/1 PASS.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
@@ -108,14 +108,14 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - La evidencia de esta reducción está archivada en
   `P0-POST-AUDIT-COMPACT-EVIDENCE.md`; el perfil compacto reduce esperas sin rebajar los criterios
   de aceptación del programa.
-- Gaps de auditoría aún abiertos para el programa: validación browser de roles ADMIN/PLANNER/
-  EMPLOYEE, formatos no CSV, import de equipo, modo invitado, OAuth y recuperación de contraseña.
+- Gaps de auditoría aún abiertos para el programa: formatos no CSV, import de equipo, modo
+  invitado, OAuth y recuperación de contraseña.
 - Se conservan como fuera de alcance: billing, verificación de email, infraestructura de correo,
   rate limit distribuido, integración del design system y refactor global de `src/App.tsx`.
 
 ## Decisiones pendientes
 
-- **D-03, D-04 y D-05**: aprobadas y registradas en `sdd/decisions/`; su implementación y evidencia
-  de P5 siguen pendientes de cierre.
+- **D-03, D-04 y D-05**: aprobadas, implementadas y cerradas con `PHASE_P5_GATE = PASS`; evidencia
+  en `docs/roadmap/P5-ROLE-REALITY-GATE.md`.
 - **D-07 / P8**: la fuente CRC Tryp sigue inaccesible; se requiere exportación, fuentes originales,
   acceso autenticado autorizado o cancelación explícita de P8.

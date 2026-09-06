@@ -101,7 +101,7 @@ const T_KEYS = [
   'assistant.vacationOption', 'assistant.otherOption', 'assistant.otherTypeLabel', 'assistant.timesRequired',
   'planner.employeeFilter', 'planner.allEmployees', 'planner.employeeSearchPlaceholder',
   'planner.employeeSearchEmpty', 'planner.employeeFilterEmptyTitle', 'planner.employeeFilterEmptyDescription',
-  'planner.openEditor',
+  'planner.openEditor', 'planner.scopeUnavailableTitle', 'planner.scopeUnavailableDescription',
 ];
 
 // A subset of T_KEYS that are full words/sentences and must read differently

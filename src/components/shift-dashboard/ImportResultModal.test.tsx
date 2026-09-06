@@ -85,4 +85,18 @@ describe('ImportResultModal', () => {
     expect(onCompleteEmployee).toHaveBeenCalledOnce();
     expect(onRetry).toHaveBeenCalledOnce();
   });
+
+  it('shows the self-import breakdown and future-row explanation', () => {
+    renderOutcome({
+      status: 'partial',
+      reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+      attemptedCount: 8,
+      createdShiftCount: 5,
+      existingShiftCount: 0,
+      outcomeDetail: { totalRows: 8, ownRows: 8, ignoredRows: 0, futureOwnRows: 3 },
+    });
+    const dialog = screen.getAllByRole('dialog').at(-1) as HTMLElement;
+    expect(within(dialog).getByText(/8 filas detectadas: 8 propias/)).toBeTruthy();
+    expect(within(dialog).getByText(/Las fechas futuras no se importan/)).toBeTruthy();
+  });
 });

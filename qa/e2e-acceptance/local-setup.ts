@@ -48,6 +48,9 @@ export default async function globalSetup() {
   const ownerId = await mkUser('owner@e2e.test', 'E2E Owner');
   const adminEmployeeId = await mkUser('admin-employee@e2e.test', 'E2E Admin Employee');
   const plannerId = await mkUser('planner@e2e.test', 'E2E Planner');
+  const plannerNoAreaId = await mkUser('planner-no-area@e2e.test', 'E2E Planner Without Area');
+  const plannerGlobalId = await mkUser('planner-global@e2e.test', 'E2E Global Planner');
+  const inactiveEmployeeUserId = await mkUser('inactive-employee@e2e.test', 'E2E Inactive Employee');
   const ownerBId = await mkUser('owner-b@e2e.test', 'E2E Owner B');
   const plannerBId = await mkUser('planner-b@e2e.test', 'E2E Planner B');
   const employeeBId = await mkUser('employee-b@e2e.test', 'E2E Employee B');
@@ -62,6 +65,9 @@ export default async function globalSetup() {
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${ownerId}, ${orgA}, 'OWNER')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${adminEmployeeId}, ${orgA}, 'ADMIN')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role, scoped_area_id) VALUES (${plannerId}, ${orgA}, 'PLANNER', ${areaA})`;
+  await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${plannerNoAreaId}, ${orgA}, 'PLANNER')`;
+  await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${plannerGlobalId}, ${orgFresh}, 'PLANNER')`;
+  await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${inactiveEmployeeUserId}, ${orgA}, 'EMPLOYEE')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${ownerBId}, ${orgB}, 'OWNER')`;
   await sql`INSERT INTO memberships (user_id, organization_id, role, scoped_area_id) VALUES (${plannerBId}, ${orgB}, 'PLANNER', ${areaB})`;
   await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${employeeBId}, ${orgB}, 'EMPLOYEE')`;
@@ -69,6 +75,7 @@ export default async function globalSetup() {
   const empA1 = (await sql`INSERT INTO employees (organization_id, name, user_id, external_employee_id, area_id) VALUES (${orgA}, 'E2E Uno', ${empId}, 'E001', ${areaA}) RETURNING id`)[0].id;
   const empA2 = (await sql`INSERT INTO employees (organization_id, name, user_id, external_employee_id, area_id) VALUES (${orgA}, 'E2E Dos', ${multiId}, 'E002', ${areaA}) RETURNING id`)[0].id;
   const empAdmin = (await sql`INSERT INTO employees (organization_id, name, user_id, external_employee_id, area_id) VALUES (${orgA}, 'E2E Z Admin Employee', ${adminEmployeeId}, 'E003', ${areaA}) RETURNING id`)[0].id;
+  const empInactive = (await sql`INSERT INTO employees (organization_id, name, user_id, status, external_employee_id, area_id) VALUES (${orgA}, 'E2E Inactive Employee', ${inactiveEmployeeUserId}, 'inactive', 'E004', ${areaA}) RETURNING id`)[0].id;
   const empFresh = (await sql`INSERT INTO employees (organization_id, name, user_id) VALUES (${orgFresh}, 'E2E Fresh', ${freshId}) RETURNING id`)[0].id;
   const empB1 = (await sql`INSERT INTO employees (organization_id, name, user_id, external_employee_id, area_id) VALUES (${orgB}, 'E2E B Employee', ${employeeBId}, 'B001', ${areaB}) RETURNING id`)[0].id;
 
@@ -128,8 +135,8 @@ export default async function globalSetup() {
   writeFileSync(FIXTURE_PATH, JSON.stringify({
     password: PASSWORD,
     orgA, orgB, orgFresh, approvalShift,
-    adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, adminEmployeeId, plannerId, ownerBId, plannerBId, employeeBId,
-    empA1, empA2, empAdmin, empFresh, empB1, areaA, areaB, importB, shiftB, shiftToday, shiftEnglish, shiftA2,
+    adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, adminEmployeeId, plannerId, plannerNoAreaId, plannerGlobalId, inactiveEmployeeUserId, ownerBId, plannerBId, employeeBId,
+    empA1, empA2, empAdmin, empInactive, empFresh, empB1, areaA, areaB, importB, shiftB, shiftToday, shiftEnglish, shiftA2,
     orgAName: 'E2E Org A',
     orgBName: 'E2E Org B',
     emails: {
@@ -142,6 +149,9 @@ export default async function globalSetup() {
       owner: 'owner@e2e.test',
       adminEmployee: 'admin-employee@e2e.test',
       planner: 'planner@e2e.test',
+      plannerNoArea: 'planner-no-area@e2e.test',
+      plannerGlobal: 'planner-global@e2e.test',
+      inactiveEmployee: 'inactive-employee@e2e.test',
       ownerB: 'owner-b@e2e.test',
       plannerB: 'planner-b@e2e.test',
       employeeB: 'employee-b@e2e.test',

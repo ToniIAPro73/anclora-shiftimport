@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { parseSessionToken, requireAuthenticatedContext, requireOrgContext, requireRole, resolveAccessScope, resolveContext, SESSION_COOKIE } from './auth.js';
+import { parseSessionToken, requireAuthenticatedContext, requireOrgContext, requireRole, resolveAccessScope, resolveContext, resolveEffectiveAccessScope, SESSION_COOKIE } from './auth.js';
 
 /**
  * Security-context tests (Fase 1.1): multi-org resolution must never pick
@@ -178,5 +178,28 @@ describe('resolveAccessScope — MVP scopes', () => {
       .toThrowError(expect.objectContaining({ status: 403, code: 'SCOPE_UNAVAILABLE' }));
     expect(() => resolveAccessScope({ role: 'AUDITOR' }))
       .toThrowError(expect.objectContaining({ status: 403, code: 'SCOPE_UNAVAILABLE' }));
+  });
+});
+
+describe('resolveEffectiveAccessScope — approved D-05 rule', () => {
+  const plannerWithoutArea = { role: 'PLANNER', organizationId: 'org-1', scopedAreaId: null };
+  const sqlWithActiveAreas = () => async () => [{ active_area_count: 1 }];
+  const sqlWithoutActiveAreas = () => async () => [{ active_area_count: 0 }];
+
+  it('blocks an unassigned planner when the organization has active areas', async () => {
+    await expect(resolveEffectiveAccessScope(sqlWithActiveAreas(), plannerWithoutArea))
+      .rejects.toMatchObject({ status: 403, code: 'SCOPE_UNAVAILABLE' });
+  });
+
+  it('keeps organization scope when the organization has no active areas', async () => {
+    await expect(resolveEffectiveAccessScope(sqlWithoutActiveAreas(), plannerWithoutArea))
+      .resolves.toEqual({ type: 'ORGANIZATION' });
+  });
+
+  it('does not query or alter an explicitly area-scoped planner', async () => {
+    const sql = vi.fn();
+    await expect(resolveEffectiveAccessScope(sql, { ...plannerWithoutArea, scopedAreaId: 'area-1' }))
+      .resolves.toEqual({ type: 'AREA', areaId: 'area-1' });
+    expect(sql).not.toHaveBeenCalled();
   });
 });

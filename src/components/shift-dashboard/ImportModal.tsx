@@ -32,6 +32,15 @@ import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { RemoteArea } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
 
+export interface SelfImportSummary {
+  totalRows: number;
+  ownRows: number;
+  ignoredRows: number;
+  unidentifiedRows: number;
+  futureOwnRows: number;
+  identityAmbiguous?: boolean;
+}
+
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -43,6 +52,7 @@ interface ImportModalProps {
     areaId?: string | null,
     fileName?: string,
     fileFingerprint?: string,
+    selfImportSummary?: SelfImportSummary,
   ) => Promise<boolean>;
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
@@ -320,6 +330,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   // identityLocked (EMPLOYEE) + a multi-person roster: true when the roster
   // was successfully detected but no row matched the account's own employee.
   const [selfNotFound, setSelfNotFound] = useState(false);
+  const [selfAmbiguous, setSelfAmbiguous] = useState(false);
+  const [selfImportSummary, setSelfImportSummary] = useState<SelfImportSummary | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialFileHandledRef = useRef<File | null>(null);
   const previewTrackedRef = useRef(false);
@@ -460,6 +472,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setErrorDiagnosis(null);
     setAuthError(false);
     setSelfNotFound(false);
+    setSelfAmbiguous(false);
     setScanTime(null);
     setAnalysis(null);
     setQualityOverride(null);
@@ -483,13 +496,32 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           : detectTeamRoster(await target.text());
         const employees = rosterDetection?.employees ?? [];
         if (employees.length > 1) {
+          const diagnostics = rosterDetection && 'diagnostics' in rosterDetection
+            ? rosterDetection.diagnostics ?? []
+            : [];
           const selfName = (employeePreset?.name ?? '').trim().toLowerCase();
           const selfExternalId = (employeePreset?.externalId ?? '').trim();
-          const selfRow = employees.find((employee) => (
+          const selfRows = employees.filter((employee) => (
             (selfExternalId && employee.externalEmployeeId === selfExternalId)
             || (selfName && employee.name.trim().toLowerCase() === selfName)
           ));
+          const selfRow = selfRows.length === 1 ? selfRows[0] : null;
+          const identifiableRows = employees.reduce((count, employee) => count + employee.shifts.length, 0);
+          const unidentifiedRows = diagnostics.filter((diagnostic) => !diagnostic.employeeKey).length;
+          setSelfImportSummary({
+            totalRows: identifiableRows + diagnostics.length,
+            ownRows: selfRow?.shifts.length ?? 0,
+            ignoredRows: Math.max(0, identifiableRows - (selfRow?.shifts.length ?? 0)),
+            unidentifiedRows,
+            futureOwnRows: selfRow?.shifts.filter((shift) => shift.date > new Date().toISOString().slice(0, 10)).length ?? 0,
+            identityAmbiguous: selfRows.length > 1,
+          });
           setDetectedFormat(getImportFormatLabel(isPdf ? 'pdf' : 'csv'));
+          if (selfRows.length > 1) {
+            setSelfAmbiguous(true);
+            setLoading(false);
+            return;
+          }
           if (!selfRow) {
             setSelfNotFound(true);
             setLoading(false);
@@ -640,6 +672,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setParsedShifts([]);
     setErrorDiagnosis(null);
     setSelfNotFound(false);
+    setSelfAmbiguous(false);
+    setSelfImportSummary(null);
     setPeriodConflictResolved(false);
     setScanTime(null);
     setDetectedFormat(null);
@@ -666,6 +700,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setErrorDiagnosis(null);
     setAuthError(false);
     setSelfNotFound(false);
+    setSelfImportSummary(null);
     setPeriodConflictResolved(false);
     setScanTime(null);
     setAnalysis(null);
@@ -818,6 +853,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         importAreaId,
         file?.name,
         file ? await fingerprintFile(file) : undefined,
+        selfImportSummary ?? undefined,
       );
       if (persisted) {
         onClose();
@@ -1237,6 +1273,34 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </ul>
             )}
 
+            {identityLocked && selfImportSummary && (
+              <div
+                data-testid="self-import-summary"
+                role="status"
+                style={{
+                  margin: '0 0 10px',
+                  padding: '10px 12px',
+                  border: '1px solid var(--glass-border)',
+                  borderRadius: 10,
+                  background: 'var(--panel-muted-bg)',
+                  fontSize: '0.78rem',
+                  lineHeight: 1.5,
+                }}
+              >
+                <div>{t('importModal.selfImportSummary', {
+                  totalRows: selfImportSummary.totalRows,
+                  ownRows: selfImportSummary.ownRows,
+                  ignoredRows: selfImportSummary.ignoredRows,
+                  unidentifiedRows: selfImportSummary.unidentifiedRows,
+                })}</div>
+                {selfImportSummary.futureOwnRows > 0 && (
+                  <div style={{ color: 'var(--color-gold)', marginTop: 3 }}>
+                    {t('importModal.selfImportFutureExcluded', { count: selfImportSummary.futureOwnRows })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {showAssistant && assistantSession && analysis && (
               <div style={{ overflowY: 'auto', minHeight: 0 }}>
                 <ProfileAssistantPanel
@@ -1336,7 +1400,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   {/* GN-06: zero importable shifts is an explicit state with a
                       reason — never a silent "Correcto" 0/0. */}
                   <p style={{ marginTop: '12px' }}>
-                    {selfNotFound
+                    {selfAmbiguous
+                      ? t('importModal.selfAmbiguous')
+                      : selfNotFound
                       ? t('importModal.selfNotFound')
                       : diagnosis?.diagnostics.some((diagnostic) => diagnostic.code === 'NO_SHIFTS_FOUND')
                         ? t('diagnosis.noShifts.title')
@@ -1344,9 +1410,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                           ? t(STATE_I18N_KEYS[diagnosis.state])
                           : t('importModal.emptyStateHint')}
                   </p>
-                  {selfNotFound && (
+                  {(selfNotFound || selfAmbiguous) && (
                     <p style={{ marginTop: '6px', fontSize: '0.8rem', opacity: 0.8 }}>
-                      {t('importModal.selfNotFoundHint')}
+                      {t(selfAmbiguous ? 'importModal.selfAmbiguousHint' : 'importModal.selfNotFoundHint')}
                     </p>
                   )}
                 </div>
@@ -1380,7 +1446,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           )}
           <button
             className="btn-gold import-process-button"
-            disabled={!isAuthenticated || readyShifts.length === 0 || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
+            disabled={!isAuthenticated || (readyShifts.length === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}

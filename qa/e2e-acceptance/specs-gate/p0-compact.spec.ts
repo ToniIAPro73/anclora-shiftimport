@@ -134,7 +134,7 @@ test('P0 compact import future, idempotency, scope, and fail-closed checks', asy
     headers, data: importPayload(futureDate(31), 'b'.repeat(63) + '2'),
   });
   expect(denied.status()).toBe(403);
-  expect(await denied.json()).toMatchObject({ code: 'FUTURE_IMPORT_REQUIRES_PLANNING' });
+  expect(await denied.json()).toMatchObject({ code: 'SELF_IMPORT_FUTURE_FORBIDDEN' });
   const after = await (await page.request.get('/api/imports?pageSize=50', { headers })).json();
   expect(after.total).toBe(before.total);
 

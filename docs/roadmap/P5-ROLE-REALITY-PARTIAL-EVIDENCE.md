@@ -2,7 +2,7 @@
 
 Fecha: 2026-09-06  
 Rama: `development`  
-Estado: `EN PROGRESO — decisiones D-03/D-04/D-05 aprobadas y registradas`
+Estado: `HISTÓRICO — superseded by PASS in [P5-ROLE-REALITY-GATE.md](./P5-ROLE-REALITY-GATE.md)`
 
 ## P5-M01 — Fixture de QA
 
@@ -53,7 +53,7 @@ Las dos ejecuciones fueron dirigidas a esos riesgos; no se lanzó la batería hi
 - P5-M05: self-import, filas ajenas, identidad ausente y fechas futuras.
 - P5-M06: matriz completa rol × capacidad × HTTP.
 
-## Bloqueo formal
+## Cierre histórico
 
 Las decisiones D-03, D-04 y D-05 ya están registradas. Este documento conserva la evidencia
-parcial histórica; la implementación y el cierre formal se documentan en el informe final de P5.
+parcial previa; la implementación y el cierre formal están en el informe final de P5.

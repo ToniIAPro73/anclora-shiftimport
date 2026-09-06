@@ -468,7 +468,7 @@ imports
   status          TEXT NOT NULL   -- CHECK ampliado: 'completed' | 'partial' | 'blocked' | 'failed'
   outcome_reason  TEXT NULL       -- EMPLOYEE_PENDING_ACCESS | EMPLOYEE_INACTIVE |
                                   -- EMPLOYEE_AMBIGUOUS | EMPLOYEE_UNKNOWN |
-                                  -- SELF_IDENTITY_NOT_FOUND | PLAN_LIMIT |
+                                  -- SELF_IDENTITY_NOT_FOUND | SELF_FUTURE_ROWS_EXCLUDED | PLAN_LIMIT |
                                   -- AREA_MISMATCH_DECLINED | DOCUMENT_ERROR | SYSTEM_ERROR
   outcome_detail  JSONB NULL      -- conteos y contexto; nunca contenido del fichero, nunca PII nueva
   blocking_employee_id UUID NULL REFERENCES employees(id) ON DELETE SET NULL
@@ -645,6 +645,7 @@ Correspondencia motivo → acción de desbloqueo:
 | `EMPLOYEE_INACTIVE` | "Reactivar {empleado}" (solo ADMIN+) o "Cancelar" |
 | `EMPLOYEE_AMBIGUOUS` | "Elegir identidad" (desambiguación), no "Reintentar" |
 | `SELF_IDENTITY_NOT_FOUND` | "Indicar cuál de estas filas eres tú" |
+| `SELF_FUTURE_ROWS_EXCLUDED` | "Continuar sin las fechas futuras" |
 | `PLAN_LIMIT` | "Actualizar a Team" (informativo, sin checkout) |
 | `AREA_MISMATCH_DECLINED` | "Importar igualmente" o "Cambiar el área del import" |
 | `DOCUMENT_ERROR` | "Ver detalle del formato" → asistente de formato |

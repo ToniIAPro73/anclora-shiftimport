@@ -147,12 +147,12 @@ test.describe('R3-M14 future import integration', () => {
     const before = await (await page.request.get('/api/imports?pageSize=50', { headers: { 'x-organization-id': fixture.orgA } })).json();
     const denied = await confirm(page.request, [shift(futureDate(22))], 'e'.repeat(64));
     expect(denied.status()).toBe(403);
-    expect((await denied.json()).code).toBe('FUTURE_IMPORT_REQUIRES_PLANNING');
+    expect((await denied.json()).code).toBe('SELF_IMPORT_FUTURE_FORBIDDEN');
     const after = await (await page.request.get('/api/imports?pageSize=50', { headers: { 'x-organization-id': fixture.orgA } })).json();
     expect(after.total).toBe(before.total);
     const mixedDenied = await confirm(page.request, [shift(pastDate()), shift(futureDate(22))], 'd'.repeat(64));
     expect(mixedDenied.status()).toBe(403);
-    expect((await mixedDenied.json()).code).toBe('FUTURE_IMPORT_REQUIRES_PLANNING');
+    expect((await mixedDenied.json()).code).toBe('SELF_IMPORT_FUTURE_FORBIDDEN');
 
     await login(page.request, fixture.emails.planner, fixture.orgA);
     const crossTenant = await confirm(page.request, [shift(futureDate(23), fixture.empB1)], 'f'.repeat(64), fixture.empB1, { areaId: fixture.areaA });

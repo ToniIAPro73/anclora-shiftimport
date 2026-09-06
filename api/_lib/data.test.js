@@ -107,6 +107,10 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       const distinct = [...new Set(shifts.filter((s) => s.organization_id === values[0]).map((s) => s.employee_id))];
       return Promise.resolve(distinct.map((employee_id) => ({ employee_id })));
     }
+    // D-05: effective scope checks whether the organization has active areas.
+    if (text.startsWith('SELECT COUNT(*)::int AS active_area_count FROM areas')) {
+      return Promise.resolve([{ active_area_count: areas.filter((a) => a.organization_id === values[0] && a.active !== false).length }]);
+    }
     // createEmployee plan-limit check (values: [organizationId])
     if (text.startsWith('SELECT count(*) AS count FROM employees')) {
       return Promise.resolve([{
@@ -499,11 +503,12 @@ describe('employee isolation', () => {
     expect(select.values).not.toContain(EMP_A2);
   });
 
-  it('EMPLOYEE role cannot write shifts for another employee', async () => {
+  it('EMPLOYEE role rejects a write addressed to another employee', async () => {
     const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
-    await upsertShifts(sql, employeeCtx, [shiftInput({ employeeId: EMP_A2 })]);
+    await expect(upsertShifts(sql, employeeCtx, [shiftInput({ employeeId: EMP_A2 })]))
+      .rejects.toMatchObject({ status: 403, code: 'SCOPE_FORBIDDEN' });
     const insert = calls.find((call) => call.text.startsWith('INSERT INTO shifts'));
-    expect(insert.values[2]).toBe(EMP_A1);
+    expect(insert).toBeUndefined();
   });
 
   it('EMPLOYEE without linked employee record is rejected', async () => {
@@ -827,14 +832,23 @@ describe('role vs plan separation (multi-employee import)', () => {
     expect(saved).toHaveLength(1);
   });
 
-  it('spoofed employeeId in an EMPLOYEE-role write is silently overridden, never a cross-employee write', async () => {
+  it('spoofed employeeId in an EMPLOYEE-role write is rejected before mutation', async () => {
     const { sql, calls } = makeFakeSql({
       employees: [employeeRow(EMP_A1, ORG_A), employeeRow(EMP_A2, ORG_A)],
       shifts: [{ organization_id: ORG_A, employee_id: EMP_A2 }],
     });
-    await upsertShifts(sql, employeeCtx, [shiftInput({ employeeId: EMP_A2 })]);
+    await expect(upsertShifts(sql, employeeCtx, [shiftInput({ employeeId: EMP_A2 })]))
+      .rejects.toMatchObject({ status: 403, code: 'SCOPE_FORBIDDEN' });
     const insert = calls.find((call) => call.text.startsWith('INSERT INTO shifts'));
-    expect(insert.values[2]).toBe(EMP_A1);
+    expect(insert).toBeUndefined();
+  });
+
+  it('rejects future self-import writes before opening a transaction', async () => {
+    const { sql, calls, state } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    await expect(upsertShifts(sql, employeeCtx, [shiftInput({ date: '2099-01-01' })]))
+      .rejects.toMatchObject({ status: 403, code: 'SELF_IMPORT_FUTURE_FORBIDDEN' });
+    expect(state.transactionUsed).toBe(false);
+    expect(calls.some((call) => call.text.startsWith('INSERT INTO shifts'))).toBe(false);
   });
 });
 
@@ -1037,6 +1051,21 @@ describe('import persistence', () => {
     });
     expect(calls.filter((call) => call.text.startsWith('INSERT INTO imports'))).toHaveLength(1);
     expect(calls.find((call) => call.text.startsWith('INSERT INTO organization_audit_events'))).toBeTruthy();
+  });
+
+  it('preserves the self-import breakdown counters in the persistent outcome', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    const result = await createImport(sql, employeeCtx, {
+      fileName: 'self-roster.csv',
+      sourceFormat: 'csv',
+      employeeId: EMP_A1,
+      outcome: {
+        status: 'blocked',
+        reason: 'SELF_IDENTITY_NOT_FOUND',
+        detail: { totalRows: 8, ownRows: 0, ignoredRows: 6, unidentifiedRows: 2, futureOwnRows: 0 },
+      },
+    });
+    expect(result.outcomeDetail).toEqual({ totalRows: 8, ownRows: 0, ignoredRows: 6, unidentifiedRows: 2, futureOwnRows: 0 });
   });
 
   it('does not consume a fingerprint for blocked outcomes, so retry can create a new row', async () => {

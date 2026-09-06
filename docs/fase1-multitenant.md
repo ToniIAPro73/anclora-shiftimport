@@ -59,11 +59,11 @@ Solución propia mínima (sin dependencias externas):
 
 Ciclo de estado auth (frontend): UNAUTHENTICATED → AUTHENTICATING (pantalla login, `aria-busy`) → sesión creada → resolución memberships → org activa (única o selección explícita persistida por usuario en `anclora_shiftimport_active_org_v1`) → role → vínculo User↔Employee → AUTHORIZED. Casos explícitos: sesión expirada/inválida (401 → invitado), multi-org sin selección (modal bloqueante), EMPLOYEE sin empleado vinculado (estado bloqueado "Cuenta no vinculada", sin datos), logout (limpia contexto cliente + token servidor).
 
-Permisos mínimos (el diseño canónico completo está en [`RBAC-MODEL.md`](./roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md)):
+Permisos mínimos verificados en P5 (el diseño canónico completo está en [`RBAC-MODEL.md`](./roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md)):
 
 | Capacidad | OWNER | ADMIN | PLANNER | EMPLOYEE | Scope efectivo |
 |---|---|---|---|---|---|
-| Ver datos y calendarios de la organización | ✔ | ✔ | ✔ | — | ORGANIZATION / AREA / SELF |
+| Ver datos y calendarios de la organización | ✔ | ✔ | ✔ (su área; global solo sin áreas activas) | — | ORGANIZATION / AREA / SELF |
 | Crear/revisar/confirmar imports | ✔ | ✔ | ✔ | ✔ (solo propios) | ORGANIZATION / AREA / SELF |
 | Crear y editar borradores de planificación | ✔ | ✔ | ✔ | — | ORGANIZATION / AREA |
 | Publicar una planificación | ✔ | ✔ | ✔ | — | ORGANIZATION / AREA |
@@ -71,7 +71,7 @@ Permisos mínimos (el diseño canónico completo está en [`RBAC-MODEL.md`](./ro
 | Listar/añadir/cambiar rol/eliminar memberships | ✔ | ✔ | — | — | ORGANIZATION |
 | Acciones reservadas de propietario | ✔ | — | — | — | ORGANIZATION |
 
-Scopes efectivos: `OWNER` y `ADMIN` operan a nivel `ORGANIZATION`; `PLANNER` opera a nivel `AREA` cuando tiene `scoped_area_id` y a nivel `ORGANIZATION` si no lo tiene; `EMPLOYEE` opera únicamente a nivel `SELF` mediante su Employee vinculado. Gestión B2B mínima (`api/memberships`, OWNER/ADMIN): añadir usuario existente por email o crear uno nuevo con contraseña inicial entregada fuera de banda (sin infra de email — limitación documentada), asignar/cambiar roles de la whitelist `OWNER`/`ADMIN`/`PLANNER`/`EMPLOYEE`, vincular User↔Employee al alta y eliminar membership. Protecciones: único OWNER, último ADMIN protegido, prohibido auto-eliminarse; el empleado vinculado queda con `user_id NULL` al remover. PLANNER y EMPLOYEE no gestionan roles ni usuarios (403).
+Scopes efectivos: `OWNER` y `ADMIN` operan a nivel `ORGANIZATION`; `PLANNER` opera a nivel `AREA` cuando tiene `scoped_area_id`, queda bloqueado con `SCOPE_UNAVAILABLE` si hay áreas activas y no tiene área, y solo opera a nivel `ORGANIZATION` cuando la organización no tiene áreas activas; `EMPLOYEE` opera únicamente a nivel `SELF` mediante su Employee vinculado. Gestión B2B mínima (`api/memberships`, OWNER/ADMIN): añadir usuario existente por email o crear uno nuevo con contraseña inicial entregada fuera de banda (sin infra de email — limitación documentada), asignar/cambiar roles de la whitelist `OWNER`/`ADMIN`/`PLANNER`/`EMPLOYEE`, vincular User↔Employee al alta y eliminar membership. Protecciones: único OWNER, último ADMIN protegido, prohibido auto-eliminarse; el empleado vinculado queda con `user_id NULL` al remover. PLANNER y EMPLOYEE no gestionan roles ni usuarios (403).
 
 ## Contratos Anclora aplicados (Fase 1.1)
 

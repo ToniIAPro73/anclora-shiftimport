@@ -10,6 +10,7 @@ export interface ImportOutcomeReport {
   attemptedCount: number;
   createdShiftCount: number;
   existingShiftCount: number;
+  outcomeDetail?: Record<string, unknown> | null;
 }
 
 interface ImportResultModalProps {
@@ -42,6 +43,7 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
       EMPLOYEE_AMBIGUOUS: 'importResult.reasonEmployeeAmbiguous',
       EMPLOYEE_UNKNOWN: 'importResult.reasonEmployeeUnknown',
       SELF_IDENTITY_NOT_FOUND: 'importResult.reasonSelfIdentity',
+      SELF_FUTURE_ROWS_EXCLUDED: 'importResult.reasonSelfFutureExcluded',
       PLAN_LIMIT: 'importResult.reasonPlanLimit',
       AREA_MISMATCH_DECLINED: 'importResult.reasonAreaMismatch',
       DOCUMENT_ERROR: 'importResult.reasonDocument',
@@ -66,6 +68,16 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
               existing: outcomeReport.existingShiftCount,
             })}
           </p>
+          {outcomeReport.outcomeDetail && (
+            <p style={{ lineHeight: 1.5 }}>
+              {t('importResult.selfImportBreakdown', {
+                totalRows: Number(outcomeReport.outcomeDetail.totalRows ?? outcomeReport.attemptedCount),
+                ownRows: Number(outcomeReport.outcomeDetail.ownRows ?? outcomeReport.attemptedCount),
+                ignoredRows: Number(outcomeReport.outcomeDetail.ignoredRows ?? 0),
+                futureRows: Number(outcomeReport.outcomeDetail.futureOwnRows ?? 0),
+              })}
+            </p>
+          )}
           {outcomeReport.blockingEmployeeName ? (
             <p style={{ lineHeight: 1.5 }}>
               <strong>{outcomeReport.blockingEmployeeName}</strong>

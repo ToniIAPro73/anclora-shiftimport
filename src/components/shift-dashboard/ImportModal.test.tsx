@@ -567,6 +567,10 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
     renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, initialFile: csvFile() });
 
     await waitFor(() => expect(screen.getByText('1 encontrados')).toBeTruthy());
+    const summary = screen.getByTestId('self-import-summary');
+    expect(summary.textContent).toContain('3 filas detectadas');
+    expect(summary.textContent).toContain('1 propias');
+    expect(summary.textContent).toContain('2 ajenas');
     expect(screen.queryByText('Alguien Mas')).toBeNull();
     expect(screen.queryByText('Otra Persona')).toBeNull();
     // Roster self-filter is a full bypass: the single-employee analysis
@@ -582,6 +586,15 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
     expect(screen.getByText('Comprueba que has seleccionado el cuadrante correcto.')).toBeTruthy();
     expect(screen.queryByText('Alguien Mas')).toBeNull();
     expect(screen.queryByText('Otra Persona')).toBeNull();
+  });
+
+  it('multi-employee CSV roster with multiple self matches blocks without choosing silently', async () => {
+    mockedDetectTeamRoster.mockReturnValue(roster([SELF.name, SELF.name, 'Otra Persona']));
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText('Hemos encontrado varias coincidencias posibles para tus turnos.')).toBeTruthy());
+    expect(screen.getByTestId('self-import-summary').textContent).toContain('3 ajenas');
+    expect((screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('single-employee (non-roster) CSV: falls through to the normal single-employee pipeline unchanged', async () => {

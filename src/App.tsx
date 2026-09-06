@@ -42,7 +42,7 @@ import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthHeader } from './components/shift-dashboard/MonthHeader';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
-import { ImportModal } from './components/shift-dashboard/ImportModal';
+import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
@@ -126,6 +126,7 @@ interface PendingImportRetry {
   areaId?: string | null;
   fileName?: string;
   fileFingerprint?: string;
+  selfImportSummary?: SelfImportSummary;
 }
 
 interface ImportResolutionState {
@@ -255,10 +256,16 @@ function App() {
   // when crossing into an authenticated context.
   const hydrateAuthenticated = useCallback(async (nextSession: SessionInfo): Promise<void> => {
     const epoch = authEpochRef.current;
-    const [orgEmployees, orgAreas] = await Promise.all([
-      listRemoteEmployees(),
-      listRemoteAreas(),
-    ]);
+    // D-05 is a server-derived scope rule. Load areas first so an unassigned
+    // PLANNER in an organization with active areas can render the explicit
+    // blocked state instead of treating the expected employee-list 403 as a
+    // dead session.
+    const orgAreas = await listRemoteAreas();
+    const plannerNeedsArea = nextSession.role === 'PLANNER'
+      && !nextSession.memberships.find((membership) => membership.organizationId === nextSession.organizationId)?.scopedAreaId
+      && orgAreas.some((area) => area.active);
+    const employeeUnlinked = nextSession.role === 'EMPLOYEE' && !nextSession.employeeId;
+    const orgEmployees = plannerNeedsArea || employeeUnlinked ? [] : await listRemoteEmployees();
     if (epoch !== authEpochRef.current) {
       return; // logged out (or session invalidated) while this was in flight
     }
@@ -932,11 +939,50 @@ function App() {
     areaId?: string | null,
     fileName?: string,
     fileFingerprint?: string,
+    selfImportSummary?: SelfImportSummary,
   ): Promise<boolean> => {
     // Defense in depth: the modal disables guest confirmation, and the
     // controller also fails closed so a stale event cannot write locally.
     if (!session) {
       clearAnonymousShiftDraft();
+      return false;
+    }
+    const selfImportDetail = selfImportSummary ? {
+      totalRows: selfImportSummary.totalRows,
+      ownRows: selfImportSummary.ownRows,
+      ignoredRows: selfImportSummary.ignoredRows,
+      unidentifiedRows: selfImportSummary.unidentifiedRows,
+      futureOwnRows: selfImportSummary.futureOwnRows,
+    } : null;
+    if (session.role === 'EMPLOYEE' && selfImportSummary && selfImportSummary.ownRows === 0) {
+      const outcome: ImportOutcomeReport = {
+        status: 'blocked',
+        reason: selfImportSummary.identityAmbiguous ? 'EMPLOYEE_AMBIGUOUS' : 'SELF_IDENTITY_NOT_FOUND',
+        attemptedCount: selfImportSummary.totalRows,
+        createdShiftCount: 0,
+        existingShiftCount: 0,
+        outcomeDetail: selfImportDetail,
+      };
+      setImportResult(outcome);
+      try {
+        await createRemoteImport({
+          fileName: fileName ?? '',
+          sourceFormat: newShifts[0]?.sourceFormat ?? 'csv',
+          fileFingerprint,
+          employeeId: session.employeeId,
+          periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
+          periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
+          employeeCount: 0,
+          shiftCount: selfImportSummary.totalRows,
+          outcome: {
+            status: 'blocked',
+            reason: selfImportSummary.identityAmbiguous ? 'EMPLOYEE_AMBIGUOUS' : 'SELF_IDENTITY_NOT_FOUND',
+            detail: selfImportDetail ?? undefined,
+          },
+        });
+      } catch (error) {
+        console.error('Failed to persist self-import identity outcome', error);
+      }
       return false;
     }
     // Authenticated mode: resolve the target employee first; switching the
@@ -1018,13 +1064,20 @@ function App() {
       ? [...shifts]
       : await loadRemoteShifts(targetEmployeeId ?? '').catch(() => [] as Shift[]);
     const normalizedIncoming = newShifts.map(normalizeShift);
+    const selfImportCutoff = new Date().toISOString().slice(0, 10);
+    const selfFutureCount = session.role === 'EMPLOYEE'
+      ? normalizedIncoming.filter((shift) => shift.date > selfImportCutoff).length
+      : 0;
+    const eligibleIncoming = session.role === 'EMPLOYEE'
+      ? normalizedIncoming.filter((shift) => shift.date <= selfImportCutoff)
+      : normalizedIncoming;
     let working = [...snapshot];
     const pendingImportedByDate = new Map<string, Shift[]>();
     const upserts: Shift[] = [];
     const deleteIds: string[] = [];
     let identicalCount = 0;
 
-    for (const shift of normalizedIncoming) {
+    for (const shift of eligibleIncoming) {
       const existingImportedShifts = pendingImportedByDate.get(shift.date)
         ?? snapshot.filter((existing) => existing.date === shift.date && getShiftOrigin(existing) === 'IMP');
 
@@ -1074,14 +1127,65 @@ function App() {
     // This also protects the flow when a second import is started after the
     // first one has already finished.
     if (upserts.length === 0 && identicalCount > 0) {
+      if (session.role === 'EMPLOYEE' && selfFutureCount > 0) {
+        const outcome: ImportOutcomeReport = {
+          status: 'partial',
+          reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+          attemptedCount: normalizedIncoming.length,
+          createdShiftCount: 0,
+          existingShiftCount: identicalCount,
+          outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: selfFutureCount },
+        };
+        setImportResult(outcome);
+        await createRemoteImport({
+          fileName: fileName ?? '',
+          sourceFormat: newShifts[0]?.sourceFormat ?? 'csv',
+          fileFingerprint,
+          employeeId: targetEmployeeId,
+          periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
+          periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
+          shiftCount: normalizedIncoming.length,
+          createdShiftCount: 0,
+          existingShiftCount: identicalCount,
+          outcome: { status: 'partial', reason: 'SELF_FUTURE_ROWS_EXCLUDED', detail: outcome.outcomeDetail ?? undefined },
+        }).catch((error) => console.error('Failed to persist self-import future outcome', error));
+        return false;
+      }
       setAppFeedback({ kind: 'status', message: t('importModal.alreadyImported', { count: identicalCount }) });
       return false;
     }
 
     const todayIso = new Date().toISOString().slice(0, 10);
-    const futureUpserts = upserts.filter((shift) => shift.date > todayIso);
+    const futureUpserts = session.role === 'EMPLOYEE'
+      ? normalizedIncoming.filter((shift) => shift.date > todayIso)
+      : upserts.filter((shift) => shift.date > todayIso);
     const historicalUpserts = upserts.filter((shift) => shift.date <= todayIso);
-    const requiresPlanningImport = futureUpserts.length > 0;
+    const requiresPlanningImport = session.role !== 'EMPLOYEE' && futureUpserts.length > 0;
+
+    if (session.role === 'EMPLOYEE' && futureUpserts.length > 0 && upserts.length === 0) {
+      const outcome: ImportOutcomeReport = {
+        status: 'partial',
+        reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+        attemptedCount: normalizedIncoming.length,
+        createdShiftCount: 0,
+        existingShiftCount: 0,
+        outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: futureUpserts.length },
+      };
+      setImportResult(outcome);
+      await createRemoteImport({
+        fileName: fileName ?? '',
+        sourceFormat: newShifts[0]?.sourceFormat ?? 'csv',
+        fileFingerprint,
+        employeeId: targetEmployeeId,
+        periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
+        periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
+        shiftCount: normalizedIncoming.length,
+        createdShiftCount: 0,
+        existingShiftCount: 0,
+        outcome: { status: 'partial', reason: 'SELF_FUTURE_ROWS_EXCLUDED', detail: outcome.outcomeDetail ?? undefined },
+      }).catch((error) => console.error('Failed to persist self-import future outcome', error));
+      return false;
+    }
 
     // The import record represents a write, so register it only after the
     // duplicate/conflict reconciliation has produced actual upserts.
@@ -1104,6 +1208,13 @@ function App() {
           shiftCount: normalizedIncoming.length,
           createdShiftCount: upserts.length,
           existingShiftCount: identicalCount,
+          outcome: session.role === 'EMPLOYEE' && selfFutureCount > 0
+            ? {
+              status: 'partial',
+              reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+              detail: { ...(selfImportDetail ?? {}), futureOwnRows: selfFutureCount },
+            }
+            : undefined,
         });
         importId = created.id;
       } catch (error) {
@@ -1196,7 +1307,18 @@ function App() {
           return false;
         }
         if (upserts.length > 0) {
-          setImportResult(reconciliation);
+          if (session.role === 'EMPLOYEE' && selfFutureCount > 0) {
+            setImportResult({
+              status: 'partial',
+              reason: 'SELF_FUTURE_ROWS_EXCLUDED',
+              attemptedCount: normalizedIncoming.length,
+              createdShiftCount: reconciliation.matchedCount,
+              existingShiftCount: identicalCount,
+              outcomeDetail: { ...(selfImportDetail ?? {}), futureOwnRows: selfFutureCount },
+            });
+          } else {
+            setImportResult(reconciliation);
+          }
         }
         if (targetEmployeeId !== selectedEmployeeId) {
           setSelectedEmployeeId(targetEmployeeId);
@@ -1397,13 +1519,30 @@ function App() {
   // creation) — never show an ambiguous empty calendar for that.
   const activeMembership = session?.memberships.find((m) => m.organizationId === session.organizationId);
   const brokenPersonalOrg = Boolean(
-    session && !needsOrgChoice && activeMembership
+    session && session.role !== 'PLANNER' && session.role !== 'EMPLOYEE' && !needsOrgChoice && activeMembership
       && !session.employeeId && employees.length === 0,
   );
   const accountIncomplete = unlinkedEmployee || brokenPersonalOrg;
   const plannerAreaId = session?.role === 'PLANNER'
     ? (activeMembership?.scopedAreaId ?? null)
     : effectiveAreaId;
+  const plannerNeedsArea = session?.role === 'PLANNER'
+    && !activeMembership?.scopedAreaId
+    && activeAreas.length > 0;
+
+  if (route === '/app/schedule' && authResolved && session && session.role !== 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete && plannerNeedsArea) {
+    return (
+      <>
+        <main className="container" data-testid="planner-scope-unavailable" role="alert" style={{ padding: '48px 16px' }}>
+          <section className="card" style={{ maxWidth: 680, margin: '0 auto', padding: 32 }}>
+            <h1>{t('planner.scopeUnavailableTitle')}</h1>
+            <p style={{ color: 'var(--text-muted)' }}>{t('planner.scopeUnavailableDescription')}</p>
+          </section>
+        </main>
+        <CookieConsent />
+      </>
+    );
+  }
 
   if (route === '/app/schedule' && authResolved && session && session.role !== 'EMPLOYEE' && !needsOrgChoice && !accountIncomplete) {
     return (

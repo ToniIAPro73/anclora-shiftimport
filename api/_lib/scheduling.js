@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { HttpError, requireRole, resolveAccessScope } from './auth.js';
+import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { createShiftPublishedNotifications } from './data.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -127,7 +127,7 @@ async function loadScheduleVersion(sql, ctx, scheduleId, versionId) {
     period_start: databaseDateToIso(rows[0].period_start),
     period_end: databaseDateToIso(rows[0].period_end),
   };
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA' && schedule.area_id !== scope.areaId) throw scheduleScopeError();
   if (schedule.status !== 'DRAFT') {
     const error = new HttpError(409, 'Schedule version is not editable');
@@ -273,8 +273,8 @@ function mapSchedulingEmployee(row) {
   };
 }
 
-function schedulingScopeAreaId(ctx, requestedAreaId = null) {
-  const scope = resolveAccessScope(ctx);
+async function schedulingScopeAreaId(sql, ctx, requestedAreaId = null) {
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA') {
     if (requestedAreaId && requestedAreaId !== scope.areaId) {
       throw scheduleScopeError();
@@ -287,7 +287,7 @@ function schedulingScopeAreaId(ctx, requestedAreaId = null) {
 /** Lists the latest version for each tenant-scoped schedule for draft discovery. */
 export async function listScheduleVersions(sql, ctx, { areaId = null } = {}) {
   requireRole(ctx, 'PLANNER');
-  const scopedAreaId = schedulingScopeAreaId(ctx, areaId);
+  const scopedAreaId = await schedulingScopeAreaId(sql, ctx, areaId);
   const rows = scopedAreaId
     ? await sql`
       SELECT s.id AS schedule_id, s.area_id, s.period_start, s.period_end,
@@ -342,7 +342,7 @@ export async function listScheduleVersionHistory(sql, ctx, scheduleId) {
     ORDER BY sv.version_number DESC
   `;
   if (rows.length === 0) throw new HttpError(404, 'Schedule not found');
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA' && rows[0].area_id !== scope.areaId) throw scheduleScopeError();
   return rows.map(mapScheduleVersionHistory);
 }
@@ -362,7 +362,7 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
   `;
   if (rows.length === 0) throw new HttpError(404, 'Schedule version not found');
   const schedule = rows[0];
-  const scopedAreaId = schedulingScopeAreaId(ctx, schedule.area_id ?? null);
+  const scopedAreaId = await schedulingScopeAreaId(sql, ctx, schedule.area_id ?? null);
   const employeeQuery = scopedAreaId
     ? sql`
       SELECT id, name, external_employee_id, area_id
@@ -500,7 +500,7 @@ async function assertScheduleArea(sql, ctx, areaId) {
 /** Creates/reuses a weekly Schedule and creates its next DRAFT version. */
 export async function createScheduleDraft(sql, ctx, input = {}) {
   requireRole(ctx, 'PLANNER');
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   const areaId = normalizeAreaId(input.areaId);
   if (scope.type === 'AREA' && areaId !== scope.areaId) {
     const error = new HttpError(403, 'Schedule area is outside your assigned area');
@@ -578,7 +578,7 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
   if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
     throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
   }
-  const scope = resolveAccessScope(ctx);
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
   const newVersionId = randomUUID();
   const isAreaScoped = scope.type === 'AREA';
   const scopedAreaId = isAreaScoped ? scope.areaId : null;

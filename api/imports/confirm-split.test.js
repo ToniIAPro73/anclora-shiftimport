@@ -34,7 +34,7 @@ describe('R3-M14 future import contract', () => {
 
     await expect(confirmFutureImport(sql, ctx, request(FUTURE_DATE))).rejects.toMatchObject({
       status: 403,
-      code: 'FUTURE_IMPORT_REQUIRES_PLANNING',
+      code: 'SELF_IMPORT_FUTURE_FORBIDDEN',
     });
     expect(transaction).not.toHaveBeenCalled();
   });
