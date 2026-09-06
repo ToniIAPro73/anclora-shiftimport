@@ -1,5 +1,5 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { createImport, deleteImport, listImports } from '../_lib/data.js';
+import { createImport, deleteImport, listImports, updateImportOutcome } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -10,7 +10,7 @@ import { handleError, sendJson } from '../_lib/http.js';
  *                                       ?page=, ?pageSize=, ?userId=,
  *                                       ?importMode=, ?scopeType=,
  *                                       ?sourceFormat=, ?status=.
- * POST   /api/imports                — register a completed import document;
+ * POST   /api/imports                — register an import outcome;
  *                                       optional areaId makes it area-scoped
  *                                       (validated against the session org).
  * DELETE /api/imports  { id }        — delete exactly one import (ADMIN):
@@ -40,8 +40,11 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
       const payload = req.body ?? {};
-      if (!String(payload.employeeId ?? '').trim() || !/^[0-9a-f]{64}$/i.test(String(payload.fileFingerprint ?? '').trim())) {
-        return sendJson(res, 400, { error: 'employeeId and a SHA-256 fileFingerprint are required' });
+      const outcomeStatus = String(payload.outcome?.status ?? 'completed').trim().toLowerCase();
+      const employeeRequired = outcomeStatus === 'completed' || outcomeStatus === 'partial' || outcomeStatus === 'pending';
+      if ((employeeRequired && !String(payload.employeeId ?? '').trim())
+        || !/^[0-9a-f]{64}$/i.test(String(payload.fileFingerprint ?? '').trim())) {
+        return sendJson(res, 400, { error: 'A SHA-256 fileFingerprint is required; this outcome also requires employeeId' });
       }
       const created = await createImport(sql, ctx, payload);
       return sendJson(res, created.deduplicated ? 200 : 201, { import: created });
@@ -52,7 +55,13 @@ export default async function handler(req, res) {
       return sendJson(res, 200, result);
     }
 
-    res.setHeader('Allow', 'GET, POST, DELETE');
+    if (req.method === 'PATCH') {
+      const payload = req.body ?? {};
+      const updated = await updateImportOutcome(sql, ctx, payload.id, payload.outcome ?? payload);
+      return sendJson(res, 200, { import: updated });
+    }
+
+    res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
     return sendJson(res, 405, { error: 'Method not allowed' });
   } catch (error) {
     return handleError(res, error);

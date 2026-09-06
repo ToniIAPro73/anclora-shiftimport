@@ -26,7 +26,11 @@ export interface RemoteImport {
   periodKind?: 'single' | 'multi';
   periodLabel?: string;
   importMode?: 'individual' | 'team';
-  status: string;
+  status: 'pending' | 'completed' | 'partial' | 'blocked' | 'failed' | 'deleted' | string;
+  outcomeReason?: string | null;
+  outcomeDetail?: Record<string, unknown> | null;
+  blockingEmployeeId?: string | null;
+  blockingEmployeeName?: string | null;
   areaId?: string | null;
   areaNameSnapshot?: string | null;
   scopeType?: 'global' | 'area';
@@ -670,10 +674,32 @@ export async function createRemoteImport(input: {
   shiftCount?: number;
   createdShiftCount?: number;
   existingShiftCount?: number;
+  outcome?: {
+    status: 'pending' | 'completed' | 'partial' | 'blocked' | 'failed';
+    reason?: string;
+    detail?: Record<string, unknown>;
+    blockingEmployeeId?: string | null;
+  };
 }): Promise<RemoteImport> {
   const payload = await apiFetch<{ import: RemoteImport }>('/api/imports', {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+  return payload.import;
+}
+
+export async function updateRemoteImportOutcome(input: {
+  id: string;
+  status: 'partial' | 'blocked' | 'failed' | 'completed';
+  reason: string;
+  detail?: Record<string, unknown>;
+  blockingEmployeeId?: string | null;
+  createdShiftCount?: number;
+  existingShiftCount?: number;
+}): Promise<RemoteImport> {
+  const payload = await apiFetch<{ import: RemoteImport }>('/api/imports', {
+    method: 'PATCH',
+    body: JSON.stringify({ id: input.id, outcome: input }),
   });
   return payload.import;
 }

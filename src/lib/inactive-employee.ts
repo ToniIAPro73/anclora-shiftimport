@@ -15,12 +15,12 @@ export type InactiveMatchResolution =
 export async function resolveInactiveEmployeeMatch(input: {
   employee: RemoteEmployee;
   role: Role | null;
-  confirmReactivate: () => boolean;
+  confirmReactivate: () => boolean | Promise<boolean>;
 }): Promise<InactiveMatchResolution> {
   if (!isAdminRole(input.role)) {
     return { kind: 'not_admin' };
   }
-  if (!input.confirmReactivate()) {
+  if (!(await input.confirmReactivate())) {
     return { kind: 'kept_inactive' };
   }
   const employee = await updateRemoteEmployee({ id: input.employee.id, status: 'active' });

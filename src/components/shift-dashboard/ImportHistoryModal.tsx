@@ -76,7 +76,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
   const [scopeFilter, setScopeFilter] = useState<'' | 'global' | 'area'>('');
   const [typeFilter, setTypeFilter] = useState<'' | 'individual' | 'team'>('');
   const [formatFilter, setFormatFilter] = useState<SourceFormatFilter>('');
-  const [statusFilter, setStatusFilter] = useState<'' | 'completed' | 'deleted'>('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'completed' | 'partial' | 'blocked' | 'failed' | 'deleted'>('');
 
   // Filter/page changes can fire overlapping requests (e.g. two selects
   // changed in quick succession); a slower, now-stale response must never
@@ -143,6 +143,8 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
   const statusLabel = (row: RemoteImport): string => {
     if (row.status === 'deleted') return t('imports.statusDeleted');
     if (row.status === 'pending') return t('imports.statusPending');
+    if (row.status === 'partial') return t('imports.statusPartial');
+    if (row.status === 'blocked') return t('imports.statusBlocked');
     if (row.status === 'failed') return t('imports.statusFailed');
     return t('imports.statusCompleted');
   };
@@ -237,6 +239,9 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
         >
           <option value="">{t('imports.filterAllStatuses')}</option>
           <option value="completed">{t('imports.statusCompleted')}</option>
+          <option value="partial">{t('imports.statusPartial')}</option>
+          <option value="blocked">{t('imports.statusBlocked')}</option>
+          <option value="failed">{t('imports.statusFailed')}</option>
           <option value="deleted">{t('imports.statusDeleted')}</option>
         </select>
       </div>
@@ -261,6 +266,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
           {rows.map((row) => {
             const isDeleting = deletingId === row.id;
             const isDeleted = row.status === 'deleted';
+            const isNonTerminal = row.status === 'blocked' || row.status === 'failed' || row.status === 'partial';
             return (
               <div
                 key={row.id}
@@ -276,7 +282,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
                   <strong style={{ fontSize: '0.88rem' }}>{formatDateTime(row.createdAt, locale)}</strong>
-                  <span className={`status-badge ${isDeleted ? 'status-badge--inactive' : 'status-badge--active'}`}>
+                  <span className={`status-badge ${isDeleted || isNonTerminal ? 'status-badge--inactive' : 'status-badge--active'}`}>
                     {statusLabel(row)}
                   </span>
                   <span style={{ marginLeft: 'auto' }}>
@@ -320,6 +326,12 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
                   <span>· {t('imports.columnFormat')}: {(row.sourceFormat || '—').toUpperCase()}</span>
                   <span>· {t('imports.columnScope')}: {scopeLabel(row)}</span>
                 </div>
+                {row.outcomeReason && (
+                  <div role="note" style={{ color: 'var(--text-subtle)', marginTop: '2px', wordBreak: 'break-word' }}>
+                    {t('imports.outcomeReason')}: {row.outcomeReason}
+                    {row.blockingEmployeeName ? ` · ${row.blockingEmployeeName}` : ''}
+                  </div>
+                )}
                 {row.fileName && (
                   <div style={{ color: 'var(--text-subtle)', marginTop: '2px', wordBreak: 'break-word' }}>
                     {t('imports.columnFile')}: {row.fileName}

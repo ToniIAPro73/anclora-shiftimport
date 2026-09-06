@@ -47,7 +47,7 @@
 - Multi-tenant: toda operación de datos pasa por `api/_lib/data.js` con contexto de sesión; prohibido confiar en IDs de organización/empleado enviados por el cliente sin validar pertenencia. Ningún Shift sin `organization_id` + `employee_id`. Conflicto de re-importación = organization + employee + fingerprint, nunca solo fecha.
 - Nada de PII hardcodeada: identidad de usuario vive en `UserProfile` configurable (Phase 0).
 - Tipos de turno configurables vía `ShiftTypeDefinition`; JT no es feature especial.
-- La importación nunca falla en silencio: estados canónicos + diagnósticos estructurados en `src/ingestion/diagnostics.ts` (Phase 1B). Cero turnos nunca es "Correcto"; un código de turno desconocido nunca se descarta sin avisar; el mes/año seleccionado por el usuario es autoritativo (conflicto = `MONTH_MISMATCH` bloqueante con elección explícita).
+- La importación nunca falla en silencio ni desaparece en silencio: el análisis usa estados canónicos + diagnósticos estructurados en `src/ingestion/diagnostics.ts` (Phase 1B), y la escritura registra el resultado superior (`completed`/`partial`/`blocked`/`failed`) en el histórico. Cero turnos nunca es "Correcto"; un código de turno desconocido nunca se descarta sin avisar; el mes/año seleccionado por el usuario es autoritativo (conflicto = `MONTH_MISMATCH` bloqueante con elección explícita).
 
 ## Tipos de turno configurables
 - El registro efectivo es `DEFAULT_SHIFT_TYPES` (neutro: Regular, Libre, Vacaciones, Extras) + overrides del usuario en localStorage (`anclora_shiftimport_shift_types_v1`).

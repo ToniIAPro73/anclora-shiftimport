@@ -39,6 +39,8 @@ interface MembersModalProps {
   currentUserId: string;
   onChanged: () => void;
   currentPlan?: PlanId | null;
+  /** Optional employee id to focus when the modal is opened from recovery. */
+  initialEmployeeId?: string | null;
   switchTarget?: { id: string; name: string } | null;
   onSwitchOrg?: (organizationId: string) => void;
   /** Active organization's display name — used only for the client-side
@@ -177,7 +179,7 @@ function classifyUserRow(
  * returns it once — shown here for the ADMIN to hand over out-of-band.
  * Never logged, never persisted in plaintext, never re-fetchable.
  */
-export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUserId, onChanged, currentPlan = null, switchTarget = null, onSwitchOrg, organizationName = '' }: MembersModalProps) => {
+export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUserId, onChanged, currentPlan = null, initialEmployeeId = null, switchTarget = null, onSwitchOrg, organizationName = '' }: MembersModalProps) => {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<Tab>('users');
   const [members, setMembers] = useState<RemoteMember[]>([]);
@@ -317,6 +319,21 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setAddEmployeeOpen(false);
     }
   }, [isOpen, reload]);
+
+  // Recovery from a blocked import opens the employee directory already on
+  // the relevant tab and narrows its list to the blocking employee. The
+  // employee remains an ordinary directory row; no edit action is implied.
+  useEffect(() => {
+    if (!isOpen || !initialEmployeeId) {
+      return;
+    }
+    setTab('employees');
+    setEmployeeFilter('all');
+    const employee = employees.find((candidate) => candidate.id === initialEmployeeId);
+    if (employee) {
+      setMemberSearch(employee.name);
+    }
+  }, [isOpen, initialEmployeeId, employees]);
 
   // Contextual employee menu: closes on ESC or any pointer-down outside it.
   useEffect(() => {

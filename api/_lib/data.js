@@ -71,6 +71,34 @@ export function normalizeShiftInput(raw) {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const IMPORT_OUTCOME_STATUSES = new Set(['pending', 'completed', 'partial', 'blocked', 'failed']);
+const IMPORT_OUTCOME_REASONS = new Set([
+  'EMPLOYEE_PENDING_ACCESS',
+  'EMPLOYEE_INACTIVE',
+  'EMPLOYEE_AMBIGUOUS',
+  'EMPLOYEE_UNKNOWN',
+  'SELF_IDENTITY_NOT_FOUND',
+  'PLAN_LIMIT',
+  'AREA_MISMATCH_DECLINED',
+  'DOCUMENT_ERROR',
+  'SYSTEM_ERROR',
+]);
+const OUTCOME_DETAIL_KEYS = new Set([
+  'attemptedCount', 'eligibleCount', 'persistedCount', 'createdShiftCount',
+  'matchedCount', 'existingShiftCount', 'ignoredCount', 'employeeCount', 'shiftCount',
+]);
+
+function sanitizeOutcomeDetail(raw) {
+  const sanitized = {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw)) {
+      if (OUTCOME_DETAIL_KEYS.has(key) && Number.isFinite(Number(value))) {
+        sanitized[key] = Math.max(0, Math.min(Math.trunc(Number(value)), 1_000_000));
+      }
+    }
+  }
+  return Object.keys(sanitized).length > 0 ? JSON.stringify(sanitized) : null;
+}
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -97,6 +125,14 @@ function mapEmployeeRow(row) {
 }
 
 export function mapImportRow(row) {
+  let outcomeDetail = row.outcome_detail ?? null;
+  if (typeof outcomeDetail === 'string') {
+    try {
+      outcomeDetail = JSON.parse(outcomeDetail);
+    } catch {
+      outcomeDetail = null;
+    }
+  }
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -117,6 +153,10 @@ export function mapImportRow(row) {
     createdShiftCount: row.created_shift_count ?? 0,
     existingShiftCount: row.existing_shift_count ?? 0,
     status: row.deleted_at ? 'deleted' : row.status,
+    outcomeReason: row.outcome_reason ?? null,
+    outcomeDetail,
+    blockingEmployeeId: row.blocking_employee_id ?? null,
+    blockingEmployeeName: row.blocking_employee_name ?? null,
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
   };
@@ -1412,35 +1452,43 @@ export async function listImports(sql, ctx, {
 
   const rows = scope.type === 'SELF'
     ? await sql`
-        SELECT i.*, u.display_name AS imported_by_user_name
+        SELECT i.*, u.display_name AS imported_by_user_name,
+               be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
           AND i.employee_id = ${scope.employeeId}
         ORDER BY i.created_at DESC
       `
     : scope.type === 'AREA'
       ? await sql`
-        SELECT i.*, u.display_name AS imported_by_user_name
+        SELECT i.*, u.display_name AS imported_by_user_name,
+               be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
           AND i.area_id = ${scope.areaId}
         ORDER BY i.created_at DESC
       `
       : areaId
         ? await sql`
-        SELECT i.*, u.display_name AS imported_by_user_name
+        SELECT i.*, u.display_name AS imported_by_user_name,
+               be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
           AND i.area_id = ${areaId}
         ORDER BY i.created_at DESC
       `
         : await sql`
-        SELECT i.*, u.display_name AS imported_by_user_name
+        SELECT i.*, u.display_name AS imported_by_user_name,
+               be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
         ORDER BY i.created_at DESC
       `;
@@ -1483,7 +1531,18 @@ export async function createImport(sql, ctx, input) {
     areaNameSnapshot = nameRows[0]?.name ?? null;
   }
 
-  const status = 'completed';
+  const requestedOutcome = input?.outcome ?? {};
+  const status = String(requestedOutcome.status ?? 'completed').trim().toLowerCase();
+  if (!IMPORT_OUTCOME_STATUSES.has(status)) {
+    throw new HttpError(400, 'Invalid import outcome status');
+  }
+  const outcomeReason = String(requestedOutcome.reason ?? '').trim().toUpperCase() || null;
+  if (status !== 'completed' && status !== 'pending' && !outcomeReason) {
+    throw new HttpError(400, 'A reason is required for a non-completed import outcome');
+  }
+  if (outcomeReason && !IMPORT_OUTCOME_REASONS.has(outcomeReason)) {
+    throw new HttpError(400, 'Invalid import outcome reason');
+  }
   const importMode = input?.importMode === 'team' ? 'team' : 'individual';
   const periodKind = input?.periodKind === 'multi' ? 'multi' : 'single';
   const periodLabel = String(input?.periodLabel ?? '').trim();
@@ -1492,6 +1551,15 @@ export async function createImport(sql, ctx, input) {
   const shiftCount = Math.max(0, Math.trunc(Number(input?.shiftCount) || 0));
   const createdShiftCount = Math.max(0, Math.trunc(Number(input?.createdShiftCount) || 0));
   const existingShiftCount = Math.max(0, Math.trunc(Number(input?.existingShiftCount) || 0));
+  if (status === 'completed' && createdShiftCount === 0 && existingShiftCount === 0) {
+    throw new HttpError(400, 'A completed import must contain created or existing shifts');
+  }
+  if ((status === 'blocked' || status === 'failed') && createdShiftCount > 0) {
+    throw new HttpError(400, `${status} imports cannot contain created shifts`);
+  }
+  const rawOutcomeDetail = requestedOutcome.detail;
+  const outcomeDetail = sanitizeOutcomeDetail(rawOutcomeDetail);
+  const blockingEmployeeId = String(requestedOutcome.blockingEmployeeId ?? '').trim() || null;
 
   // Idempotency is opt-in for new clients and deliberately requires the
   // server-resolved employee plus a content fingerprint. Legacy callers may
@@ -1512,8 +1580,12 @@ export async function createImport(sql, ctx, input) {
   if (scope.type === 'SELF') {
     assertScopedResource(scope, { employeeId });
   }
+  if (blockingEmployeeId) {
+    await assertEmployeeInScope(sql, ctx, blockingEmployeeId);
+  }
   const fileFingerprint = String(input?.fileFingerprint ?? '').trim().toLowerCase();
-  const hasIdempotencyKey = Boolean(employeeId && /^[0-9a-f]{64}$/.test(fileFingerprint));
+  const consumesIdempotencyKey = status !== 'blocked' && status !== 'failed';
+  const hasIdempotencyKey = Boolean(consumesIdempotencyKey && employeeId && /^[0-9a-f]{64}$/.test(fileFingerprint));
   const contextFingerprint = hasIdempotencyKey
     ? importContextFingerprint({
       sourceFormat: String(input?.sourceFormat ?? ''),
@@ -1525,19 +1597,39 @@ export async function createImport(sql, ctx, input) {
     })
     : null;
 
+  const finish = async (row, deduplicated) => {
+    const mapped = mapImportRow(row);
+    if (!deduplicated && (status === 'blocked' || status === 'failed')) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: status === 'blocked' ? 'IMPORT_BLOCKED' : 'IMPORT_FAILED',
+        targetType: 'IMPORT',
+        targetId: mapped.id,
+        metadata: {
+          reason: outcomeReason,
+          ...(blockingEmployeeId ? { blockingEmployeeId } : {}),
+          createdShiftCount,
+          existingShiftCount,
+        },
+      });
+    }
+    return { ...mapped, deduplicated };
+  };
+
   if (hasIdempotencyKey) {
     const rows = areaId
       ? await sql`
           INSERT INTO imports (
             organization_id, imported_by_user_id, employee_id, file_name, source_format,
-            period_year, period_month, status, area_id, import_mode, period_kind,
+            period_year, period_month, status, outcome_reason, outcome_detail, blocking_employee_id,
+            area_id, import_mode, period_kind,
             period_label, scope_type, area_name_snapshot, employee_count, shift_count,
             created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint
           )
           VALUES (
             ${ctx.organizationId}, ${ctx.user.id}, ${employeeId}, ${String(input?.fileName ?? '')},
             ${String(input?.sourceFormat ?? '')}, ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-            ${status}, ${areaId}, ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
+            ${status}, ${outcomeReason}, ${outcomeDetail}::jsonb, ${blockingEmployeeId},
+            ${areaId}, ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
             ${areaNameSnapshot}, ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount},
             ${fileFingerprint}, ${contextFingerprint}
           )
@@ -1549,14 +1641,16 @@ export async function createImport(sql, ctx, input) {
       : await sql`
           INSERT INTO imports (
             organization_id, imported_by_user_id, employee_id, file_name, source_format,
-            period_year, period_month, status, area_id, import_mode, period_kind,
+            period_year, period_month, status, outcome_reason, outcome_detail, blocking_employee_id,
+            area_id, import_mode, period_kind,
             period_label, scope_type, area_name_snapshot, employee_count, shift_count,
             created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint
           )
           VALUES (
             ${ctx.organizationId}, ${ctx.user.id}, ${employeeId}, ${String(input?.fileName ?? '')},
             ${String(input?.sourceFormat ?? '')}, ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-            ${status}, ${areaId}, ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
+            ${status}, ${outcomeReason}, ${outcomeDetail}::jsonb, ${blockingEmployeeId},
+            ${areaId}, ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
             ${areaNameSnapshot}, ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount},
             ${fileFingerprint}, ${contextFingerprint}
           )
@@ -1566,7 +1660,7 @@ export async function createImport(sql, ctx, input) {
           RETURNING *
         `;
     if (rows.length > 0) {
-      return { ...mapImportRow(rows[0]), deduplicated: false };
+      return finish(rows[0], false);
     }
     const existingRows = await sql`
       SELECT * FROM imports
@@ -1580,45 +1674,98 @@ export async function createImport(sql, ctx, input) {
     if (existingRows.length === 0) {
       throw new HttpError(409, 'Import idempotency key could not be resolved');
     }
-    return { ...mapImportRow(existingRows[0]), deduplicated: true };
+    return finish(existingRows[0], true);
   }
 
   const rows = areaId
     ? await sql`
         INSERT INTO imports (
-          organization_id, imported_by_user_id, file_name, source_format,
-          period_year, period_month, status, area_id,
+          organization_id, imported_by_user_id, employee_id, file_name, source_format,
+          period_year, period_month, status, outcome_reason, outcome_detail, blocking_employee_id, area_id,
           import_mode, period_kind, period_label, scope_type, area_name_snapshot,
-          employee_count, shift_count, created_shift_count, existing_shift_count
+          employee_count, shift_count, created_shift_count, existing_shift_count, file_fingerprint
         )
         VALUES (
-          ${ctx.organizationId}, ${ctx.user.id},
+          ${ctx.organizationId}, ${ctx.user.id}, ${employeeId},
           ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
           ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-          ${status}, ${areaId},
+          ${status}, ${outcomeReason}, ${outcomeDetail}::jsonb, ${blockingEmployeeId}, ${areaId},
           ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType}, ${areaNameSnapshot},
-          ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount}
+          ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount}, ${fileFingerprint || null}
         )
         RETURNING *
       `
     : await sql`
         INSERT INTO imports (
-          organization_id, imported_by_user_id, file_name, source_format,
-          period_year, period_month, status,
+          organization_id, imported_by_user_id, employee_id, file_name, source_format,
+          period_year, period_month, status, outcome_reason, outcome_detail, blocking_employee_id,
           import_mode, period_kind, period_label, scope_type,
-          employee_count, shift_count, created_shift_count, existing_shift_count
+          employee_count, shift_count, created_shift_count, existing_shift_count, file_fingerprint
         )
         VALUES (
-          ${ctx.organizationId}, ${ctx.user.id},
+          ${ctx.organizationId}, ${ctx.user.id}, ${employeeId},
           ${String(input?.fileName ?? '')}, ${String(input?.sourceFormat ?? '')},
           ${input?.periodYear ?? null}, ${input?.periodMonth ?? null},
-          ${status},
+          ${status}, ${outcomeReason}, ${outcomeDetail}::jsonb, ${blockingEmployeeId},
           ${importMode}, ${periodKind}, ${periodLabel}, ${scopeType},
-          ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount}
+          ${employeeCount}, ${shiftCount}, ${createdShiftCount}, ${existingShiftCount}, ${fileFingerprint || null}
         )
         RETURNING *
       `;
-  return mapImportRow(rows[0]);
+  return finish(rows[0], false);
+}
+
+/** Update the outcome of a row created before its shift write completed. */
+export async function updateImportOutcome(sql, ctx, rawImportId, input = {}) {
+  const id = String(rawImportId ?? '').trim();
+  if (!UUID_RE.test(id)) {
+    throw new HttpError(400, 'Import id is required');
+  }
+  const rows = await sql`
+    SELECT id, employee_id, area_id, deleted_at
+    FROM imports
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+  `;
+  const existing = rows[0];
+  if (!existing) throw new HttpError(404, 'Import not found');
+  if (existing.deleted_at) throw new HttpError(409, 'Import already deleted');
+  const scope = resolveAccessScope(ctx);
+  if (scope.type === 'AREA' || scope.type === 'SELF') {
+    assertScopedResource(scope, { employeeId: existing.employee_id, areaId: existing.area_id });
+  }
+
+  const status = String(input.status ?? '').trim().toLowerCase();
+  if (!IMPORT_OUTCOME_STATUSES.has(status) || status === 'pending') {
+    throw new HttpError(400, 'Invalid terminal import outcome status');
+  }
+  const reason = String(input.reason ?? '').trim().toUpperCase() || null;
+  if (!reason || !IMPORT_OUTCOME_REASONS.has(reason)) {
+    throw new HttpError(400, 'A valid import outcome reason is required');
+  }
+  const blockingEmployeeId = String(input.blockingEmployeeId ?? '').trim() || null;
+  if (blockingEmployeeId) await assertEmployeeInScope(sql, ctx, blockingEmployeeId);
+  const detail = sanitizeOutcomeDetail(input.detail);
+  const createdShiftCount = Math.max(0, Math.trunc(Number(input.createdShiftCount) || 0));
+  const existingShiftCount = Math.max(0, Math.trunc(Number(input.existingShiftCount) || 0));
+  const updated = await sql`
+    UPDATE imports
+    SET status = ${status}, outcome_reason = ${reason}, outcome_detail = ${detail}::jsonb,
+        blocking_employee_id = ${blockingEmployeeId},
+        created_shift_count = ${createdShiftCount}, existing_shift_count = ${existingShiftCount},
+        updated_at = NOW()
+    WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND deleted_at IS NULL
+    RETURNING *
+  `;
+  if (updated.length === 0) throw new HttpError(409, 'Import outcome could not be updated');
+  if (status === 'blocked' || status === 'failed') {
+    await recordAuditEvent(sql, ctx, {
+      eventType: status === 'blocked' ? 'IMPORT_BLOCKED' : 'IMPORT_FAILED',
+      targetType: 'IMPORT',
+      targetId: id,
+      metadata: { reason, ...(blockingEmployeeId ? { blockingEmployeeId } : {}), createdShiftCount, existingShiftCount },
+    });
+  }
+  return mapImportRow(updated[0]);
 }
 
 /**

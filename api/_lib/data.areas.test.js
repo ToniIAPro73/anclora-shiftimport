@@ -137,6 +137,7 @@ function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [], us
       return Promise.resolve(scoped.map((row) => ({
         ...row,
         imported_by_user_name: users.find((u) => u.id === row.imported_by_user_id)?.display_name ?? null,
+        blocking_employee_name: employees.find((employee) => employee.id === row.blocking_employee_id)?.name ?? null,
       })));
     }
     if (text.startsWith('INSERT INTO imports')) {
@@ -149,6 +150,7 @@ function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [], us
         id: `import-${imports.length}`,
         organization_id: record.organization_id,
         imported_by_user_id: record.imported_by_user_id,
+        employee_id: record.employee_id ?? null,
         file_name: record.file_name,
         source_format: record.source_format,
         period_year: record.period_year,
@@ -164,6 +166,11 @@ function makeFakeSql({ employees = [], imports = [], shifts = [], areas = [], us
         shift_count: record.shift_count ?? 0,
         created_shift_count: record.created_shift_count ?? 0,
         existing_shift_count: record.existing_shift_count ?? 0,
+        file_fingerprint: record.file_fingerprint ?? null,
+        context_fingerprint: record.context_fingerprint ?? null,
+        outcome_reason: record.outcome_reason ?? null,
+        outcome_detail: record.outcome_detail ?? null,
+        blocking_employee_id: record.blocking_employee_id ?? null,
         deleted_at: null,
         deleted_by_user_id: null,
         created_at: new Date(),
@@ -237,7 +244,7 @@ describe('areas: no-area organization (0 areas)', () => {
 
   it('import with areaId null is organization-scoped', async () => {
     const { sql } = makeFakeSql();
-    const created = await createImport(sql, adminCtx, { fileName: 'a.csv', sourceFormat: 'csv' });
+    const created = await createImport(sql, adminCtx, { fileName: 'a.csv', sourceFormat: 'csv', createdShiftCount: 1 });
     expect(created.areaId).toBeNull();
   });
 
@@ -346,7 +353,7 @@ describe('areas: area-scoped imports + shift snapshot', () => {
 
   it('createImport with org area stores areaId (area-scoped import)', async () => {
     const { sql } = makeFakeSql({ areas });
-    const created = await createImport(sql, adminCtx, { fileName: 'a.csv', sourceFormat: 'csv', areaId: AREA_OPS });
+    const created = await createImport(sql, adminCtx, { fileName: 'a.csv', sourceFormat: 'csv', areaId: AREA_OPS, createdShiftCount: 1 });
     expect(created.areaId).toBe(AREA_OPS);
   });
 

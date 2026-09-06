@@ -16,6 +16,7 @@ import {
   resetOrganization,
   updateOrganizationName,
   updateEmployee,
+  updateImportOutcome,
   updateMemberRole,
   upsertShifts,
 } from './data.js';
@@ -236,6 +237,7 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         id: `import-${calls.length}`,
         organization_id: record.organization_id,
         imported_by_user_id: record.imported_by_user_id,
+        employee_id: record.employee_id ?? null,
         file_name: record.file_name,
         source_format: record.source_format,
         period_year: record.period_year,
@@ -251,6 +253,11 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
         shift_count: record.shift_count ?? 0,
         created_shift_count: record.created_shift_count ?? 0,
         existing_shift_count: record.existing_shift_count ?? 0,
+        file_fingerprint: record.file_fingerprint ?? null,
+        context_fingerprint: record.context_fingerprint ?? null,
+        outcome_reason: record.outcome_reason ?? null,
+        outcome_detail: record.outcome_detail ?? null,
+        blocking_employee_id: record.blocking_employee_id ?? null,
         deleted_at: null,
         deleted_by_user_id: null,
         created_at: new Date(),
@@ -265,7 +272,33 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
           .map((i) => ({ id: i.id, organization_id: i.organization_id, deleted_at: i.deleted_at ?? null })),
       );
     }
+    if (text.startsWith('SELECT * FROM imports') && text.includes('file_fingerprint')) {
+      return Promise.resolve(imports.filter((i) => (
+        i.organization_id === values[0]
+        && i.employee_id === values[1]
+        && i.file_fingerprint === values[2]
+        && i.context_fingerprint === values[3]
+      )));
+    }
+    if (text.startsWith('SELECT id, employee_id, area_id, deleted_at FROM imports')) {
+      return Promise.resolve(imports.filter((i) => i.id === values[0] && i.organization_id === values[1])
+        .map((i) => ({ id: i.id, employee_id: i.employee_id, area_id: i.area_id ?? null, deleted_at: i.deleted_at ?? null })));
+    }
     // deleteImport soft-delete (values: [deletedByUserId, id, organizationId])
+    if (text.startsWith('UPDATE imports SET status')) {
+      const [status, reason, detail, blockingEmployeeId, createdShiftCount, existingShiftCount, id, organizationId] = values;
+      const target = imports.find((i) => i.id === id && i.organization_id === organizationId && !i.deleted_at);
+      if (!target) return Promise.resolve([]);
+      Object.assign(target, {
+        status,
+        outcome_reason: reason,
+        outcome_detail: detail,
+        blocking_employee_id: blockingEmployeeId,
+        created_shift_count: createdShiftCount,
+        existing_shift_count: existingShiftCount,
+      });
+      return Promise.resolve([target]);
+    }
     if (text.startsWith('UPDATE imports')) {
       const [deletedByUserId, id, organizationId] = values;
       const target = imports.find((i) => i.id === id && i.organization_id === organizationId && !i.deleted_at);
@@ -292,6 +325,7 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve(scoped.map((row) => ({
         ...row,
         imported_by_user_name: users.find((u) => u.id === row.imported_by_user_id)?.display_name ?? null,
+        blocking_employee_name: employees.find((employee) => employee.id === row.blocking_employee_id)?.name ?? null,
       })));
     }
     if (text.includes('FROM imports')) {
@@ -891,8 +925,8 @@ describe('bulk employee creation ("Crear todos los nuevos")', () => {
 describe('import persistence', () => {
   it('multiple imports coexist inside the same organization', async () => {
     const { sql } = makeFakeSql();
-    const first = await createImport(sql, adminCtx, { fileName: 'a.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8 });
-    const second = await createImport(sql, adminCtx, { fileName: 'b.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 9 });
+    const first = await createImport(sql, adminCtx, { fileName: 'a.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8, createdShiftCount: 1 });
+    const second = await createImport(sql, adminCtx, { fileName: 'b.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 9, createdShiftCount: 1 });
     expect(first.id).not.toBe(second.id);
     const { imports: all, total } = await listImports(sql, adminCtx);
     expect(total).toBe(2);
@@ -902,7 +936,7 @@ describe('import persistence', () => {
 
   it('import listings never leak across organizations', async () => {
     const { sql } = makeFakeSql();
-    await createImport(sql, adminCtx, { fileName: 'a.pdf' });
+    await createImport(sql, adminCtx, { fileName: 'a.pdf', createdShiftCount: 1 });
     const { imports: leaked, total } = await listImports(sql, orgBCtx);
     expect(leaked).toHaveLength(0);
     expect(total).toBe(0);
@@ -939,7 +973,7 @@ describe('import persistence', () => {
 
   it('defaults to individual/single/global when no area or mode is given', async () => {
     const { sql } = makeFakeSql();
-    const created = await createImport(sql, adminCtx, { fileName: 'a.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8 });
+    const created = await createImport(sql, adminCtx, { fileName: 'a.pdf', sourceFormat: 'pdf', periodYear: 2026, periodMonth: 8, createdShiftCount: 1 });
     expect(created.importMode).toBe('individual');
     expect(created.periodKind).toBe('single');
     expect(created.scopeType).toBe('global');
@@ -960,6 +994,7 @@ describe('import persistence', () => {
         fileName: `f${i}.csv`,
         sourceFormat: i % 2 === 0 ? 'csv' : 'xlsx',
         importMode: i < 3 ? 'team' : 'individual',
+        createdShiftCount: 1,
       });
     }
     const page1 = await listImports(sql, adminCtx, { page: 1, pageSize: 5 });
@@ -974,6 +1009,93 @@ describe('import persistence', () => {
 
     const csvOnly = await listImports(sql, adminCtx, { sourceFormat: 'csv' });
     expect(csvOnly.total).toBe(4);
+  });
+
+  it('persists blocked outcomes with bounded detail and no idempotency key', async () => {
+    const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'pending_access' })] });
+    const result = await createImport(sql, adminCtx, {
+      fileName: 'blocked.csv',
+      sourceFormat: 'csv',
+      employeeId: EMP_A1,
+      fileFingerprint: 'a'.repeat(64),
+      employeeCount: 1,
+      shiftCount: 4,
+      outcome: {
+        status: 'blocked',
+        reason: 'EMPLOYEE_PENDING_ACCESS',
+        blockingEmployeeId: EMP_A1,
+        detail: { attemptedCount: 4, unsafe: 'must not persist' },
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      outcomeReason: 'EMPLOYEE_PENDING_ACCESS',
+      blockingEmployeeId: EMP_A1,
+      outcomeDetail: { attemptedCount: 4 },
+      deduplicated: false,
+    });
+    expect(calls.filter((call) => call.text.startsWith('INSERT INTO imports'))).toHaveLength(1);
+    expect(calls.find((call) => call.text.startsWith('INSERT INTO organization_audit_events'))).toBeTruthy();
+  });
+
+  it('does not consume a fingerprint for blocked outcomes, so retry can create a new row', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
+    const input = {
+      fileName: 'retry.csv',
+      sourceFormat: 'csv',
+      employeeId: EMP_A1,
+      fileFingerprint: 'b'.repeat(64),
+      outcome: { status: 'blocked', reason: 'EMPLOYEE_UNKNOWN', detail: { attempted: 2 } },
+    };
+    const first = await createImport(sql, adminCtx, input);
+    const second = await createImport(sql, adminCtx, input);
+    expect(first.deduplicated).toBe(false);
+    expect(second.deduplicated).toBe(false);
+    expect((await listImports(sql, adminCtx)).total).toBe(2);
+  });
+
+  it('updates a pre-created import to a scoped failed outcome after persistence mismatch', async () => {
+    const importId = '44444444-4444-4444-8444-444444444444';
+    const { sql } = makeFakeSql({
+      imports: [{
+        id: importId,
+        organization_id: ORG_A,
+        employee_id: EMP_A1,
+        area_id: null,
+        deleted_at: null,
+        status: 'completed',
+        outcome_reason: null,
+        outcome_detail: null,
+        blocking_employee_id: null,
+        created_shift_count: 2,
+        existing_shift_count: 0,
+      }],
+      employees: [employeeRow(EMP_A1, ORG_A)],
+    });
+    const updated = await updateImportOutcome(sql, adminCtx, importId, {
+      status: 'failed',
+      reason: 'SYSTEM_ERROR',
+      detail: { attemptedCount: 2, persistedCount: 1, matchedCount: 1, secret: 'discarded' },
+      createdShiftCount: 1,
+      existingShiftCount: 0,
+    });
+    expect(updated).toMatchObject({
+      id: importId,
+      status: 'failed',
+      outcomeReason: 'SYSTEM_ERROR',
+      createdShiftCount: 1,
+    });
+    expect(updated.outcomeDetail).toEqual({ attemptedCount: 2, persistedCount: 1, matchedCount: 1 });
+  });
+
+  it('rejects a completed outcome with no persisted or existing shifts', async () => {
+    const { sql } = makeFakeSql();
+    await expect(createImport(sql, adminCtx, {
+      fileName: 'empty.csv',
+      sourceFormat: 'csv',
+      outcome: { status: 'completed' },
+    })).rejects.toMatchObject({ status: 400 });
   });
 });
 

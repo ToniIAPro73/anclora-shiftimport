@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ImportResultModal } from './ImportResultModal';
+import { ImportOutcomeReport, ImportResultModal } from './ImportResultModal';
 import { ReconciliationReport } from '../../lib/import-reconciliation';
 import { I18nProvider } from '../../lib/i18n-react';
 
@@ -9,6 +9,20 @@ function renderModal(report: ReconciliationReport) {
   return render(
     <I18nProvider>
       <ImportResultModal isOpen onClose={vi.fn()} report={report} />
+    </I18nProvider>,
+  );
+}
+
+function renderOutcome(report: ImportOutcomeReport, actions: { onCompleteEmployee?: () => void; onRetry?: () => void } = {}) {
+  return render(
+    <I18nProvider>
+      <ImportResultModal
+        isOpen
+        onClose={vi.fn()}
+        report={report}
+        onCompleteEmployee={actions.onCompleteEmployee ? () => actions.onCompleteEmployee?.() : undefined}
+        onRetry={actions.onRetry}
+      />
     </I18nProvider>,
   );
 }
@@ -48,5 +62,27 @@ describe('ImportResultModal', () => {
     const alerts = screen.getAllByRole('alert');
     expect(alerts).toHaveLength(1);
     expect(alerts[0].textContent).toContain('2026-09-07');
+  });
+
+  it('blocked outcome stays in the application modal and exposes recovery actions', () => {
+    const onCompleteEmployee = vi.fn();
+    const onRetry = vi.fn();
+    renderOutcome({
+      status: 'blocked',
+      reason: 'EMPLOYEE_PENDING_ACCESS',
+      blockingEmployeeId: 'employee-1',
+      blockingEmployeeName: 'Ana Soler',
+      attemptedCount: 4,
+      createdShiftCount: 0,
+      existingShiftCount: 0,
+    }, { onCompleteEmployee, onRetry });
+
+    const dialog = screen.getAllByRole('dialog').at(-1);
+    expect(dialog).toBeTruthy();
+    expect(within(dialog as HTMLElement).getByRole('alert').textContent).toContain('Ana Soler');
+    within(dialog as HTMLElement).getByRole('button', { name: 'Completar alta' }).click();
+    within(dialog as HTMLElement).getByRole('button', { name: 'Reintentar importación' }).click();
+    expect(onCompleteEmployee).toHaveBeenCalledOnce();
+    expect(onRetry).toHaveBeenCalledOnce();
   });
 });

@@ -22,6 +22,7 @@ const approvalDecisionMigrationPath = resolve(dirname(fileURLToPath(import.meta.
 const approvalRejectionMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0030_approval_rejection_metadata.sql');
 const approvalAuditMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0031_approval_audit_event_types.sql');
 const changeRequestApplicationMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0032_change_request_application.sql');
+const importOutcomeMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0033_import_outcome.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -342,5 +343,26 @@ describe('0032 change request application migration contract', () => {
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS requested_end_time TIME');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS resulting_schedule_version_id UUID');
+  });
+});
+
+describe('0033 import outcome migration contract', () => {
+  it('extends import statuses without removing the legacy pending value', async () => {
+    const sql = await readFile(importOutcomeMigrationPath, 'utf8');
+    expect(sql).toContain('DROP CONSTRAINT IF EXISTS imports_status_check');
+    expect(sql).toContain("CHECK (status IN ('pending', 'completed', 'partial', 'blocked', 'failed'))");
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS outcome_reason TEXT');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS outcome_detail JSONB');
+    expect(sql).toContain('blocking_employee_id UUID');
+  });
+
+  it('keeps the migration additive and extends the existing audit vocabulary', async () => {
+    const sql = await readFile(importOutcomeMigrationPath, 'utf8');
+    expect(sql).toContain('REFERENCES employees (id) ON DELETE SET NULL');
+    expect(sql).toContain('imports_outcome_status_idx');
+    expect(sql).toContain("'IMPORT_BLOCKED'");
+    expect(sql).toContain("'IMPORT_FAILED'");
+    expect(sql).toContain("'PLAN_LIMIT_REJECTED'");
+    expect(sql).not.toContain('DROP TABLE');
   });
 });

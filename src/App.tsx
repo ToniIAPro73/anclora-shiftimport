@@ -26,6 +26,7 @@ import {
   createRemoteEmployee,
   confirmRemoteFutureImport,
   createRemoteImport,
+  updateRemoteImportOutcome,
   listRemoteAreas,
   listRemoteEmployees,
   loadRemoteShifts,
@@ -52,7 +53,8 @@ import { AreasModal } from './components/shift-dashboard/AreasModal';
 import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryModal';
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
-import { ImportResultModal } from './components/shift-dashboard/ImportResultModal';
+import { ImportResultModal, ImportOutcomeReport } from './components/shift-dashboard/ImportResultModal';
+import { ModalShell } from './components/ui/ModalShell';
 import { ApprovalInbox } from './components/shift-dashboard/ApprovalInbox';
 import { PortalShell } from './components/employee-portal/PortalShell';
 import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
@@ -110,6 +112,30 @@ interface ImportConflictState {
   resolve: (action: 'replace' | 'skip' | 'abort') => void;
 }
 
+interface ImportFailure {
+  status: 'blocked' | 'failed' | 'partial';
+  reason: string;
+  blockingEmployeeId?: string | null;
+  blockingEmployeeName?: string | null;
+}
+
+interface PendingImportRetry {
+  newShifts: Shift[];
+  targetPeriod: ImportPeriod;
+  selector?: { name: string; externalId: string };
+  areaId?: string | null;
+  fileName?: string;
+  fileFingerprint?: string;
+}
+
+interface ImportResolutionState {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  resolve: (confirmed: boolean) => void;
+}
+
 function describeShift(shift: Shift, locale: 'es' | 'en', t: (key: string) => string): string {
   const type = translateShiftTypeLabel(getShiftType(shift), locale, getShiftType(shift));
   const origin = getShiftOrigin(shift) === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
@@ -164,6 +190,8 @@ function App() {
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
   const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
+  const [membersInitialEmployeeId, setMembersInitialEmployeeId] = useState<string | null>(null);
+  const [membersRecoveryResult, setMembersRecoveryResult] = useState<ImportOutcomeReport | null>(null);
   const [isAreasOpen, setIsAreasOpen] = useState(false);
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
@@ -173,7 +201,10 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [appOperation, setAppOperation] = useState<'idle' | 'importing' | 'saving-shift'>('idle');
-  const [importResult, setImportResult] = useState<ReconciliationReport | null>(null);
+  const [importResult, setImportResult] = useState<(ReconciliationReport | ImportOutcomeReport) | null>(null);
+  const [importResolutionState, setImportResolutionState] = useState<ImportResolutionState | null>(null);
+  const [pendingImportRetry, setPendingImportRetry] = useState<PendingImportRetry | null>(null);
+  const importFailureRef = useRef<ImportFailure | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingFile, setOnboardingFile] = useState<File | null>(null);
@@ -680,6 +711,56 @@ function App() {
       setImportConflictState({ existing, incoming, resolve });
     });
 
+  const requestImportResolution = (input: Omit<ImportResolutionState, 'resolve'>) =>
+    new Promise<boolean>((resolve) => {
+      setImportResolutionState({ ...input, resolve });
+    });
+
+  const markImportFailure = (failure: ImportFailure) => {
+    importFailureRef.current = failure;
+  };
+
+  const persistImportFailure = async (failure: ImportFailure, retry: PendingImportRetry) => {
+    setPendingImportRetry(retry);
+    const attemptedCount = retry.newShifts.length;
+    const outcome: ImportOutcomeReport = {
+      ...failure,
+      attemptedCount,
+      createdShiftCount: 0,
+      existingShiftCount: 0,
+    };
+    setImportResult(outcome);
+    try {
+      await createRemoteImport({
+        fileName: retry.fileName ?? '',
+        sourceFormat: retry.newShifts[0]?.sourceFormat ?? '',
+        fileFingerprint: retry.fileFingerprint,
+        employeeId: failure.blockingEmployeeId ?? null,
+        periodYear: retry.targetPeriod.kind === 'single' ? retry.targetPeriod.year : null,
+        periodMonth: retry.targetPeriod.kind === 'single' ? retry.targetPeriod.month : null,
+        areaId: retry.areaId ?? null,
+        importMode: 'individual',
+        periodKind: retry.targetPeriod.kind,
+        periodLabel: formatImportPeriodLabel(retry.targetPeriod, tl('calendar.months')),
+        employeeCount: 1,
+        shiftCount: attemptedCount,
+        createdShiftCount: 0,
+        existingShiftCount: 0,
+        outcome: {
+          status: failure.status,
+          reason: failure.reason,
+          blockingEmployeeId: failure.blockingEmployeeId ?? null,
+          detail: { attemptedCount },
+        },
+      });
+    } catch (error) {
+      // The local result remains visible even if the history write itself is
+      // unavailable; the failure is logged for later recovery rather than
+      // replacing the useful, specific outcome with a generic alert.
+      console.error('Failed to persist import outcome', error);
+    }
+  };
+
   /**
    * Authenticated import: resolves the parse identity against the org
    * employee directory (external id first, then normalized name).
@@ -716,8 +797,21 @@ function App() {
     // blocked/offered for inline registration there, never silently reused.
     if (adminIndividualImport) {
       if (adminIndividualImport.employeeId) {
-        const matched = employees.find((employee) => employee.id === adminIndividualImport.employeeId) ?? null;
+        // Recovery may return from MembersModal immediately after its link
+        // request while the parent hydration is still in flight. Re-read the
+        // authoritative employee row so a just-linked employee is not
+        // mistaken for the previous pending_access snapshot.
+        const currentEmployees = await listRemoteEmployees().catch(() => employees);
+        const matched = currentEmployees.find((employee) => employee.id === adminIndividualImport.employeeId) ?? null;
         if (matched) {
+          if (matched.status === 'pending_access') {
+            markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_PENDING_ACCESS', blockingEmployeeId: matched.id, blockingEmployeeName: matched.name });
+            return null;
+          }
+          if (matched.status === 'inactive') {
+            markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_INACTIVE', blockingEmployeeId: matched.id, blockingEmployeeName: matched.name });
+            return null;
+          }
           return matched;
         }
       }
@@ -741,14 +835,19 @@ function App() {
       const resolution = await resolveInactiveEmployeeMatch({
         employee: matched,
         role: session.role,
-        confirmReactivate: () => window.confirm(t('team.reactivateEmployeeConfirm', { name: matched.name })),
+        confirmReactivate: () => requestImportResolution({
+          title: t('team.reactivateEmployeeTitle'),
+          description: t('team.reactivateEmployeeConfirm', { name: matched.name }),
+          confirmLabel: t('team.reactivateEmployeeAction'),
+          cancelLabel: t('importResult.close'),
+        }),
       });
       if (resolution.kind === 'not_admin') {
-        window.alert(t('team.inactiveEmployeeBlocked', { name: matched.name }));
+        markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_INACTIVE', blockingEmployeeId: matched.id, blockingEmployeeName: matched.name });
         return null;
       }
       if (resolution.kind === 'kept_inactive') {
-        window.alert(t('team.keepInactiveAbort', { name: matched.name }));
+        markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_INACTIVE', blockingEmployeeId: matched.id, blockingEmployeeName: matched.name });
         return null;
       }
       setEmployees((current) => current.map((employee) => (employee.id === resolution.employee.id ? resolution.employee : employee)));
@@ -761,12 +860,13 @@ function App() {
     // real access details in "Usuarios de la organización" — so this always
     // blocks the import rather than offering an inline resolution.
     if (match.kind === 'recognized_pending') {
-      window.alert(t('team.pendingEmployeeBlocked', { name: match.employees[0]?.name ?? name }));
+      const matched = match.employees[0];
+      markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_PENDING_ACCESS', blockingEmployeeId: matched?.id, blockingEmployeeName: matched?.name ?? name });
       return null;
     }
 
     if (match.kind === 'ambiguous') {
-      window.alert(t('team.ambiguousEmployee', { name }));
+      markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_AMBIGUOUS', blockingEmployeeName: name });
       return null;
     }
 
@@ -785,19 +885,33 @@ function App() {
     // completes the registration in "Usuarios de la organización" and
     // re-runs the import.
     if (adminIndividualImport) {
-      if (window.confirm(t('team.createEmployeePartialConfirm', { employee: label }))) {
+      const shouldCreate = await requestImportResolution({
+        title: t('team.createEmployeePartialTitle'),
+        description: t('team.createEmployeePartialConfirm', { employee: label }),
+        confirmLabel: t('team.createEmployeePartialAction'),
+        cancelLabel: t('importResult.close'),
+      });
+      markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_UNKNOWN', blockingEmployeeName: label });
+      if (shouldCreate) {
         try {
           const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined, areaId: areaId ?? undefined });
           setEmployees((current) => [...current, created]);
-          window.alert(t('team.employeeCreatedPendingActivation', { employee: label }));
+          markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_PENDING_ACCESS', blockingEmployeeId: created.id, blockingEmployeeName: label });
         } catch (error) {
           console.error('Failed to create partial employee from single-import flow', error);
-          window.alert(t('team.resolveEmployeeFailed'));
+          markImportFailure({ status: 'failed', reason: 'SYSTEM_ERROR', blockingEmployeeName: label });
         }
       }
       return null;
     }
-    if (!window.confirm(t('team.createEmployeeConfirm', { employee: label }))) {
+    const shouldCreate = await requestImportResolution({
+      title: t('team.createEmployeeTitle'),
+      description: t('team.createEmployeeConfirm', { employee: label }),
+      confirmLabel: t('team.createEmployeeAction'),
+      cancelLabel: t('importResult.close'),
+    });
+    if (!shouldCreate) {
+      markImportFailure({ status: 'blocked', reason: 'EMPLOYEE_UNKNOWN', blockingEmployeeName: label });
       return null;
     }
     const created = await createRemoteEmployee({ name, externalEmployeeId: externalId || undefined, areaId: areaId ?? undefined });
@@ -824,15 +938,35 @@ function App() {
     let importId: string | undefined;
     let targetEmployeeId = selectedEmployeeId;
     if (session) {
+      importFailureRef.current = null;
       let targetEmployee: RemoteEmployee | null;
       try {
         targetEmployee = await resolveImportEmployee(selector, areaId);
       } catch (error) {
         console.error('Failed to resolve import employee', error);
-        window.alert(t('team.resolveEmployeeFailed'));
+        markImportFailure({ status: 'failed', reason: 'SYSTEM_ERROR' });
+        const failure = importFailureRef.current;
+        if (failure) await persistImportFailure(failure, {
+          newShifts,
+          targetPeriod,
+          selector,
+          areaId,
+          fileName,
+          fileFingerprint,
+        });
         return false;
       }
       if (!targetEmployee) {
+        if (importFailureRef.current) {
+          await persistImportFailure(importFailureRef.current, {
+            newShifts,
+            targetPeriod,
+            selector,
+            areaId,
+            fileName,
+            fileFingerprint,
+          });
+        }
         return false;
       }
 
@@ -840,12 +974,34 @@ function App() {
       // is never imported silently — explicit "import anyway" or cancel.
       // Org-scoped imports (no area selected) never mismatch.
       const mismatch = findAreaMismatch(targetEmployee, areaId, areas);
-      if (mismatch && !window.confirm(t('team.areaMismatchConfirm', {
-        name: mismatch.employeeName,
-        employeeArea: mismatch.employeeAreaName,
-        targetArea: mismatch.targetAreaName,
-      }))) {
-        return false;
+      if (mismatch) {
+        const importAnyway = await requestImportResolution({
+          title: t('team.areaMismatchTitle'),
+          description: t('team.areaMismatchConfirm', {
+            name: mismatch.employeeName,
+            employeeArea: mismatch.employeeAreaName,
+            targetArea: mismatch.targetAreaName,
+          }),
+          confirmLabel: t('team.areaMismatchAction'),
+          cancelLabel: t('importResult.close'),
+        });
+        if (!importAnyway) {
+          const failure = {
+            status: 'blocked' as const,
+            reason: 'AREA_MISMATCH_DECLINED',
+            blockingEmployeeId: targetEmployee.id,
+            blockingEmployeeName: targetEmployee.name,
+          };
+          await persistImportFailure(failure, {
+            newShifts,
+            targetPeriod,
+            selector,
+            areaId,
+            fileName,
+            fileFingerprint,
+          });
+          return false;
+        }
       }
 
       targetEmployeeId = targetEmployee.id;
@@ -1016,6 +1172,20 @@ function App() {
         const reconciliation = reconcileImport(upserts, saved);
         if (reconciliation.status === 'FAIL') {
           console.error('Import reconciliation FAILED: expected != persisted', { importId, employeeId: targetEmployeeId, ...reconciliation });
+          if (importId) {
+            await updateRemoteImportOutcome({
+              id: importId,
+              status: reconciliation.matchedCount > 0 ? 'partial' : 'failed',
+              reason: 'SYSTEM_ERROR',
+              detail: {
+                attemptedCount: reconciliation.expectedCount,
+                persistedCount: reconciliation.persistedCount,
+                matchedCount: reconciliation.matchedCount,
+              },
+              createdShiftCount: reconciliation.matchedCount,
+              existingShiftCount: identicalCount,
+            }).catch((outcomeError) => console.error('Failed to update import outcome', outcomeError));
+          }
           setImportResult(reconciliation);
           return false;
         }
@@ -1054,6 +1224,20 @@ function App() {
         try {
           const persistedNow = await loadRemoteShifts(targetEmployeeId);
           const reconciliation = reconcileImport(upserts, persistedNow);
+          if (importId && reconciliation.status === 'FAIL') {
+            await updateRemoteImportOutcome({
+              id: importId,
+              status: reconciliation.matchedCount > 0 ? 'partial' : 'failed',
+              reason: 'SYSTEM_ERROR',
+              detail: {
+                attemptedCount: reconciliation.expectedCount,
+                persistedCount: reconciliation.persistedCount,
+                matchedCount: reconciliation.matchedCount,
+              },
+              createdShiftCount: reconciliation.matchedCount,
+              existingShiftCount: identicalCount,
+            }).catch((outcomeError) => console.error('Failed to update import outcome', outcomeError));
+          }
           setImportResult(reconciliation);
           if (reconciliation.status === 'PASS') {
             // The request that "failed" actually landed everything server-side
@@ -1673,9 +1857,74 @@ function App() {
       {importResult ? (
         <ImportResultModal
           isOpen
-          onClose={() => setImportResult(null)}
+          onClose={() => {
+            setImportResult(null);
+            setPendingImportRetry(null);
+            setMembersRecoveryResult(null);
+          }}
           report={importResult}
+          onCompleteEmployee={(employeeId) => {
+            if (importResult && 'status' in importResult && importResult.status !== 'PASS' && importResult.status !== 'FAIL') {
+              setMembersRecoveryResult(importResult as ImportOutcomeReport);
+            }
+            setImportResult(null);
+            setMembersInitialEmployeeId(employeeId);
+            setIsMembersOpen(true);
+          }}
+          onRetry={pendingImportRetry ? () => {
+            const retry = pendingImportRetry;
+            setImportResult(null);
+            setPendingImportRetry(null);
+            void handleConfirmImport(
+              retry.newShifts,
+              retry.targetPeriod,
+              retry.selector,
+              retry.areaId,
+              retry.fileName,
+              retry.fileFingerprint,
+            );
+          } : undefined}
         />
+      ) : null}
+
+      {importResolutionState ? (
+        <ModalShell
+          isOpen
+          onClose={() => {
+            importResolutionState.resolve(false);
+            setImportResolutionState(null);
+          }}
+          title={importResolutionState.title}
+          closeAriaLabel={t('importResult.close')}
+          footer={(
+            <>
+              <button
+                className="btn-outline"
+                type="button"
+                onClick={() => {
+                  importResolutionState.resolve(false);
+                  setImportResolutionState(null);
+                }}
+              >
+                {importResolutionState.cancelLabel}
+              </button>
+              <button
+                className="btn-gold"
+                type="button"
+                onClick={() => {
+                  importResolutionState.resolve(true);
+                  setImportResolutionState(null);
+                }}
+              >
+                {importResolutionState.confirmLabel}
+              </button>
+            </>
+          )}
+        >
+          <p style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
+            {importResolutionState.description}
+          </p>
+        </ModalShell>
       ) : null}
 
       <OrgSelectorModal
@@ -1708,10 +1957,18 @@ function App() {
 
       <MembersModal
         isOpen={isMembersOpen && !isImporting}
-        onClose={() => setIsMembersOpen(false)}
+        onClose={() => {
+          setIsMembersOpen(false);
+          setMembersInitialEmployeeId(null);
+          if (membersRecoveryResult) {
+            setImportResult(membersRecoveryResult);
+            setMembersRecoveryResult(null);
+          }
+        }}
         employees={employees}
         areas={activeAreas}
         currentUserId={session?.user.id ?? ''}
+        initialEmployeeId={membersInitialEmployeeId}
         organizationName={session?.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
         onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
         onChanged={() => {
