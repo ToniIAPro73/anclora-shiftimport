@@ -298,9 +298,14 @@ function App() {
       : (selectedAreaIdRef.current && activeAreas.some((area) => area.id === selectedAreaIdRef.current)
         ? selectedAreaIdRef.current
         : null);
+    const operationalEmployees = orgEmployees.filter((employee) => {
+      if (!employee.areaId) return true;
+      const area = orgAreas.find((candidate) => candidate.id === employee.areaId);
+      return !area || area.active;
+    });
     const areaEmployees = nextSession.role === 'EMPLOYEE' || effectiveAreaId === null
-      ? orgEmployees
-      : orgEmployees.filter((employee) => employee.areaId === effectiveAreaId);
+      ? operationalEmployees
+      : operationalEmployees.filter((employee) => employee.areaId === effectiveAreaId);
     const activeIds = new Set(areaEmployees.filter((employee) => employee.status === 'active').map((employee) => employee.id));
     const previousSelection = selectedEmployeeIdRef.current;
     const initialEmployeeId = nextSession.role === 'EMPLOYEE'
@@ -562,23 +567,41 @@ function App() {
   const selfEmployee = session?.role === 'EMPLOYEE'
     ? employees.find((employee) => employee.id === session.employeeId) ?? null
     : null;
+  const plannerScopedAreaId = session?.role === 'PLANNER'
+    ? session.memberships.find((membership) => membership.organizationId === session.organizationId)?.scopedAreaId ?? null
+    : null;
   const effectiveAreaId = session?.role === 'EMPLOYEE'
-    ? (selfEmployee?.areaId ?? null)
+    ? (selfEmployee?.areaId && activeAreas.some((area) => area.id === selfEmployee.areaId) ? selfEmployee.areaId : null)
+    : (session?.role === 'PLANNER' && plannerScopedAreaId && activeAreas.some((area) => area.id === plannerScopedAreaId)
+      ? plannerScopedAreaId
     : (activeAreas.length === 1
       ? activeAreas[0].id
-      : (selectedAreaId && activeAreas.some((area) => area.id === selectedAreaId) ? selectedAreaId : null));
+      : (selectedAreaId && activeAreas.some((area) => area.id === selectedAreaId) ? selectedAreaId : null)));
   // Roster offered in the team-bar selector (ADMIN): narrowed to the area
   // when one is in context; the full org roster otherwise.
   const visibleEmployees = useMemo(
-    () => (session && session.role !== 'EMPLOYEE' && effectiveAreaId !== null
-      ? employees.filter((employee) => employee.areaId === effectiveAreaId)
-      : employees),
-    [session, effectiveAreaId, employees],
+    () => {
+      const operationalEmployees = employees.filter((employee) => {
+        if (!employee.areaId) return true;
+        const area = areas.find((candidate) => candidate.id === employee.areaId);
+        return !area || area.active;
+      });
+      return session && session.role !== 'EMPLOYEE' && effectiveAreaId !== null
+        ? operationalEmployees.filter((employee) => employee.areaId === effectiveAreaId)
+        : operationalEmployees;
+    },
+    [session, effectiveAreaId, employees, areas],
   );
   const activeVisibleEmployees = useMemo(
     () => visibleEmployees.filter((employee) => employee.status === 'active'),
     [visibleEmployees],
   );
+
+  useEffect(() => {
+    if (selectedAreaId && !activeAreas.some((area) => area.id === selectedAreaId)) {
+      setSelectedAreaId(null);
+    }
+  }, [activeAreas, selectedAreaId]);
 
   useEffect(() => {
     if (!session || session.role === 'EMPLOYEE' || needsOrgChoice) {
@@ -1598,6 +1621,14 @@ function App() {
   const viewedEmployee = session?.role === 'EMPLOYEE'
     ? selfEmployee
     : employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
+  const viewedEmployeeArea = viewedEmployee?.areaId
+    ? activeAreas.find((area) => area.id === viewedEmployee.areaId) ?? null
+    : null;
+  const effectiveAreaContext = activeAreas.length === 0
+    ? null
+    : (effectiveAreaId
+      ? activeAreas.find((area) => area.id === effectiveAreaId) ?? null
+      : (viewedEmployeeArea ?? (activeAreas.length >= 2 ? { name: t('areas.allCompany') } : activeAreas[0])));
   const calendarEmployeeControl = session && !needsOrgChoice && !accountIncomplete ? (
     session.role === 'EMPLOYEE' ? (
       <div className="calendar-toolbar__employee-readonly" data-testid="calendar-employee-readonly">
@@ -1629,35 +1660,27 @@ function App() {
       </div>
     )
   ) : null;
-  const calendarAreaContext = session && !needsOrgChoice && !accountIncomplete && session.role !== 'EMPLOYEE' && activeAreas.length > 0 ? (
-    <div className="team-bar" data-testid="app-shell-calendar-area-context">
-      {activeAreas.length === 1 ? (
-        <label>
-          {t('areas.contextLabel')}
-          <strong>{activeAreas[0].name}</strong>
-        </label>
-      ) : (
-        <label>
-          {t('areas.contextLabel')}
-          <SearchableSelect
-            label=""
-            value={selectedAreaId ?? ''}
-            onChange={(value) => setSelectedAreaId(value || null)}
-            searchPlaceholder={t('orgSelector.searchPlaceholder')}
-            emptyMessage={t('orgSelector.noResults')}
-            ariaLabel={t('areas.contextLabel')}
-            options={[
-              { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
-              ...activeAreas.map((area) => ({
-                value: area.id,
-                label: area.name,
-                searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
-              })),
-            ]}
-            style={{ width: '100%' }}
-          />
-        </label>
-      )}
+  const canSelectCalendarArea = session?.role === 'OWNER' || session?.role === 'ADMIN';
+  const calendarAreaControl = session && !needsOrgChoice && !accountIncomplete && activeAreas.length >= 2 && canSelectCalendarArea ? (
+    <div className="calendar-toolbar__area-filter" data-testid="calendar-area-filter">
+      <SearchableSelect
+        label={t('areas.contextLabel')}
+        value={selectedAreaId ?? ''}
+        onChange={(value) => setSelectedAreaId(value || null)}
+        placeholder={t('areas.allCompany')}
+        searchPlaceholder={t('orgSelector.searchPlaceholder')}
+        emptyMessage={t('orgSelector.noResults')}
+        ariaLabel={t('areas.contextLabel')}
+        options={[
+          { value: '', label: t('areas.allCompany'), searchText: t('areas.allCompany').toLowerCase() },
+          ...activeAreas.map((area) => ({
+            value: area.id,
+            label: area.name,
+            searchText: `${area.name} ${area.code ?? ''}`.toLowerCase(),
+          })),
+        ]}
+        style={{ width: '100%' }}
+      />
     </div>
   ) : null;
   const contextSummary = session && !needsOrgChoice && !accountIncomplete ? (
@@ -1671,6 +1694,11 @@ function App() {
       <span className="app-shell__context-summary-item app-shell__context-summary-item--employee" title={viewedEmployee?.name ?? t('shell.noEmployee')}>
         <small>{t('shell.employee')}</small><strong>{viewedEmployee?.name ?? t('shell.noEmployee')}</strong>
       </span>
+      {effectiveAreaContext && (
+        <span className="app-shell__context-summary-item app-shell__context-summary-item--area" data-testid="app-shell-context-area" title={effectiveAreaContext.name}>
+          <small>{t('areas.contextLabel')}</small><strong>{effectiveAreaContext.name}</strong>
+        </span>
+      )}
     </>
   ) : null;
   const plannerInitialDate = typeof window !== 'undefined'
@@ -1775,7 +1803,7 @@ function App() {
           themeControl={<ThemeToggle />}
           languageControl={<LanguageToggle />}
           contextContent={contextContent}
-          contextSummary={contextSummary}
+      contextSummary={contextSummary}
           onImport={() => { if (!isImporting) setIsImportOpen(true); }}
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
@@ -1856,8 +1884,7 @@ function App() {
       activeSection="calendar"
       themeControl={<ThemeToggle />}
       languageControl={<LanguageToggle />}
-      contextContent={calendarAreaContext}
-      contextSummary={contextSummary}
+          contextSummary={contextSummary}
       onSignIn={!session ? () => { if (!isImporting) setIsAuthOpen(true); } : undefined}
       onImport={() => { if (!isImporting && authResolved) setIsImportOpen(true); }}
       onAddShift={() => {
@@ -1892,6 +1919,7 @@ function App() {
           year={currentYear}
           month={currentMonth}
           shiftCount={currentMonthShifts.length}
+          areaControl={calendarAreaControl}
           employeeControl={calendarEmployeeControl}
           onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
         />

@@ -138,7 +138,8 @@
 .calendar-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex: 0 0 auto; min-height: 56px; margin-bottom: 10px; padding: 0 2px; }
 .calendar-toolbar__heading { min-width: 0; }
 .calendar-toolbar__controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: 10px; min-width: 0; flex: 1 1 auto; }
-.calendar-toolbar__employee-filter { min-width: min(240px, 28vw); max-width: 280px; }
+.calendar-toolbar__area-filter,
+.calendar-toolbar__employee-filter { min-width: min(200px, 24vw); max-width: 280px; }
 .calendar-toolbar__employee-readonly,
 .calendar-toolbar__employee-placeholder { display: grid; min-width: min(150px, 24vw); max-width: 240px; gap: 3px; padding: 0 2px; }
 .calendar-toolbar__employee-label { color: var(--text-subtle); font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -182,6 +183,7 @@
   .app-shell__main-context .team-bar { grid-template-columns: 1fr; gap: 8px; padding-bottom: 8px; }
   .calendar-toolbar { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 8px; }
   .calendar-toolbar__controls { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+  .calendar-toolbar__area-filter,
   .calendar-toolbar__employee-filter { min-width: 0; max-width: none; flex: 1 1 170px; }
   .calendar-toolbar__employee-readonly,
   .calendar-toolbar__employee-placeholder { min-width: 0; max-width: none; flex: 1 1 140px; }

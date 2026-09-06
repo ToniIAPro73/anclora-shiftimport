@@ -10,7 +10,14 @@ const fixture = JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'loca
 };
 
 function mondayOfCurrentWeek(): string {
-  const date = new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const date = new Date(`${values.year}-${values.month}-${values.day}T12:00:00Z`);
   const day = date.getUTCDay();
   date.setUTCDate(date.getUTCDate() + (day === 0 ? -6 : 1 - day));
   return date.toISOString().slice(0, 10);
@@ -63,7 +70,8 @@ test('P5.2 compact owner smoke: operational navigation and temporal boundaries',
   await expect(page.getByTestId('sidebar-import')).toHaveAttribute('aria-label', 'Importar turnos');
   await expect(page.getByTestId('sidebar-add-shift')).toHaveAttribute('aria-label', 'Añadir turno');
   await expect(page.getByTestId('sidebar-approvals')).toBeVisible();
-  await expect(page.getByTestId('app-shell-main-context')).toBeVisible();
+  await expect(page.getByTestId('app-shell-main-context')).toHaveCount(0);
+  await expect(page.getByTestId('calendar-area-filter')).toHaveCount(0);
   await expect(page.getByTestId('app-shell-sidebar')).not.toContainText('Organización');
   await expect(page.getByText('Empleado', { exact: true })).toBeVisible();
   await expect(page.getByTestId('app-shell-context-menu')).toHaveCount(0);

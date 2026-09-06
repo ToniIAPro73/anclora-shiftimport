@@ -26,7 +26,7 @@ const SIDEBAR_STATE_KEY = 'anclora_shiftimport_sidebar_v1';
 
 export type ShellSection = 'calendar' | 'planner';
 
-export function CalendarToolbar({ year, month, shiftCount, employeeControl, onNavigate }: { year: number; month: number; shiftCount?: number; employeeControl?: ReactNode; onNavigate: (delta: number) => void }) {
+export function CalendarToolbar({ year, month, shiftCount, areaControl, employeeControl, onNavigate }: { year: number; month: number; shiftCount?: number; areaControl?: ReactNode; employeeControl?: ReactNode; onNavigate: (delta: number) => void }) {
   const { t, tl } = useI18n();
   const monthNames = tl('calendar.months');
   return (
@@ -36,6 +36,7 @@ export function CalendarToolbar({ year, month, shiftCount, employeeControl, onNa
         <h1 className="calendar-toolbar__title">{monthNames[month]} {year}</h1>
       </div>
       <div className="calendar-toolbar__controls">
+        {areaControl}
         {employeeControl}
         {typeof shiftCount === 'number' && (
           <span className="calendar-toolbar__count" role="status" aria-live="polite">

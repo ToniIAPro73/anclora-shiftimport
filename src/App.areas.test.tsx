@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { setupLocalStorageMock } from './test-utils/local-storage';
 import { I18nProvider } from './lib/i18n-react';
 import { ThemeProvider } from './lib/theme-react';
@@ -106,10 +107,11 @@ describe('App — area context (dashboard)', () => {
     renderApp();
 
     await openContext();
-    await waitFor(() => expect(screen.getByText('Norte')).toBeTruthy());
-    expect(screen.getByText('Área')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-area')).toBeTruthy());
+    expect(screen.getByTestId('app-shell-context-area')).toHaveTextContent('Norte');
     // No area dropdown — the only combobox trigger is the employee selector.
     expect(screen.queryByRole('button', { name: 'Área' })).toBeNull();
+    expect(screen.queryByTestId('app-shell-main-context')).toBeNull();
 
     // Only the area's employees are offered (Employee B/C are out of scope).
     fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
@@ -126,7 +128,7 @@ describe('App — area context (dashboard)', () => {
     renderApp();
 
     await openContext();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Área' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('calendar-area-filter')).toBeTruthy());
     // Default: whole company (null aggregates everything).
     expect(screen.getByRole('button', { name: 'Área' }).textContent).toContain('Toda la empresa');
 
@@ -179,6 +181,60 @@ describe('App — area context (dashboard)', () => {
     await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy());
     expect(screen.getByTestId('calendar-employee-readonly')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Área' })).toBeNull();
-    expect(screen.queryByText('Norte')).toBeNull();
+    expect(screen.getByTestId('app-shell-context-area')).toHaveTextContent('Norte');
+    expect(screen.queryByTestId('calendar-area-filter')).toBeNull();
+  });
+
+  it('OWNER has the multi-area filter while preserving the effective area in the TopBar', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({
+      session: { ...adminSession, role: 'OWNER', memberships: [{ ...adminSession.memberships[0], role: 'OWNER' }] },
+      needsOrgChoice: false,
+    });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedListRemoteAreas.mockResolvedValue([area(), area({ id: 'area-s', name: 'Sur' })]);
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+
+    renderApp();
+
+    await waitFor(() => expect(screen.getByTestId('calendar-area-filter')).toBeTruthy());
+    expect(screen.getByTestId('app-shell-context-area')).toHaveTextContent('Norte');
+  });
+
+  it('PLANNER is limited to its scoped active area and cannot choose another area', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({
+      session: {
+        ...adminSession,
+        role: 'PLANNER',
+        employeeId: null,
+        memberships: [{ ...adminSession.memberships[0], role: 'PLANNER', scopedAreaId: 'area-n' }],
+      },
+      needsOrgChoice: false,
+    });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedListRemoteAreas.mockResolvedValue([area(), area({ id: 'area-s', name: 'Sur' })]);
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+
+    renderApp();
+
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
+    expect(screen.getByTestId('app-shell-context-area')).toHaveTextContent('Norte');
+    expect(screen.queryByTestId('calendar-area-filter')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Employee A']);
+  });
+
+  it('excludes Employees assigned to an inactive area from operational filters', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedListRemoteAreas.mockResolvedValue([area(), area({ id: 'area-s', name: 'Sur', active: false })]);
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+
+    renderApp();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Empleado:' })).toBeTruthy());
+    expect(screen.queryByText('Sur')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+    expect(screen.queryByRole('option', { name: 'Employee B' })).toBeNull();
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Employee A']);
   });
 });
