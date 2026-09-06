@@ -85,8 +85,9 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - P4 — Accessibility & Responsive Hardening: `PASS_WITH_GAPS`, commit `cc767b9`; runner compacto
   `test:p4` 1/1, tests dirigidos 45/45, lint y build PASS. El gap restante es el archivado de
   capturas comparativas, documentado en `docs/roadmap/P4-ACCESSIBILITY-RESPONSIVE-GATE.md`.
-- P5: BLOCKED por las decisiones de producto D-03, D-04 y D-05; P6 depende de P5 y P7 depende
-  de P6.
+- P5: BLOCKED por las decisiones de producto D-03, D-04 y D-05; existe evidencia browser parcial
+  en `docs/roadmap/P5-ROLE-REALITY-PARTIAL-EVIDENCE.md` (`2/2 PASS`), pero P6 depende de P5 y
+  P7 depende de P6.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
