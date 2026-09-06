@@ -83,6 +83,42 @@ function normalizeTime(value, field) {
   return time;
 }
 
+function normalizeOptionalTime(value, field) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  return normalizeTime(value, field);
+}
+
+const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
+
+function resolveAssignmentSemantics(input = {}, existing = null) {
+  const shiftType = input.shiftType === undefined
+    ? (existing?.shift_type ?? 'Regular')
+    : String(input.shiftType ?? '').trim() || 'Regular';
+  const countsAsWork = typeof input.countsAsWork === 'boolean'
+    ? input.countsAsWork
+    : typeof existing?.counts_as_work === 'boolean'
+      ? existing.counts_as_work
+      : !LEGACY_NON_WORKING_TYPES.has(shiftType.toLowerCase());
+  const startTime = input.startTime === undefined
+    ? normalizeOptionalTime(existing?.start_time, 'startTime')
+    : normalizeOptionalTime(input.startTime, 'startTime');
+  const endTime = input.endTime === undefined
+    ? normalizeOptionalTime(existing?.end_time, 'endTime')
+    : normalizeOptionalTime(input.endTime, 'endTime');
+
+  if ((startTime === null) !== (endTime === null)) {
+    const error = new HttpError(400, 'A shift must contain both startTime and endTime, or neither');
+    error.code = 'SHIFT_TIMES_INCOMPLETE';
+    throw error;
+  }
+  if (countsAsWork && (startTime === null || endTime === null)) {
+    const error = new HttpError(400, 'Working shift types require startTime and endTime');
+    error.code = 'SHIFT_TIMES_REQUIRED';
+    throw error;
+  }
+  return { shiftType, countsAsWork, startTime, endTime };
+}
+
 function timeToMinutes(value) {
   const [hours, minutes] = String(value).slice(0, 5).split(':').map(Number);
   return hours * 60 + minutes;
@@ -98,6 +134,10 @@ function dateToDayNumber(value) {
 }
 
 function assignmentInterval(assignment) {
+  if (assignment.start_time === null || assignment.end_time === null
+    || assignment.start_time === undefined || assignment.end_time === undefined) {
+    return null;
+  }
   const start = dateToDayNumber(assignment.date) * 1440 + timeToMinutes(assignment.start_time);
   let end = dateToDayNumber(assignment.date) * 1440 + timeToMinutes(assignment.end_time);
   // Preserve the existing shift convention: an end time at or before the
@@ -109,6 +149,7 @@ function assignmentInterval(assignment) {
 export function calculateRestGapMinutes(first, second) {
   const a = assignmentInterval(first);
   const b = assignmentInterval(second);
+  if (!a || !b) return null;
   if (a.end <= b.start) return b.start - a.end;
   if (b.end <= a.start) return a.start - b.end;
   return null;
@@ -171,6 +212,7 @@ async function assertEmployeeForSchedule(sql, ctx, schedule, employeeId) {
 }
 
 async function assertNoAssignmentOverlap(sql, { scheduleVersionId, employeeId, date, startTime, endTime, excludeId = null }) {
+  if (startTime === null || endTime === null) return;
   const rows = excludeId
     ? await sql`
       SELECT id, start_time, end_time
@@ -242,9 +284,11 @@ function mapAssignment(row) {
     employeeId: row.employee_id,
     importId: row.import_id ?? null,
     date: databaseDateToIso(row.date),
-    startTime: String(row.start_time).slice(0, 5),
-    endTime: String(row.end_time).slice(0, 5),
+    startTime: row.start_time === null || row.start_time === undefined ? null : String(row.start_time).slice(0, 5),
+    endTime: row.end_time === null || row.end_time === undefined ? null : String(row.end_time).slice(0, 5),
     location: row.location,
+    shiftType: row.shift_type ?? 'Regular',
+    countsAsWork: row.counts_as_work !== false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -397,7 +441,8 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
   const assignmentQuery = scopedAreaId
     ? sql`
       SELECT sa.id, sa.schedule_version_id, sa.import_id, sa.employee_id, sa.date,
-             sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
+             sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
+             sa.created_at, sa.updated_at
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
       WHERE sa.schedule_version_id = ${versionId}
@@ -408,7 +453,8 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
     `
     : sql`
       SELECT sa.id, sa.schedule_version_id, sa.import_id, sa.employee_id, sa.date,
-             sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
+             sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
+             sa.created_at, sa.updated_at
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
       WHERE sa.schedule_version_id = ${versionId}
@@ -429,8 +475,8 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   const schedule = await loadScheduleVersion(sql, ctx, scheduleId, versionId);
   const employeeId = String(input.employeeId ?? '').trim();
   const date = normalizeDate(input.date);
-  const startTime = normalizeTime(input.startTime, 'startTime');
-  const endTime = normalizeTime(input.endTime, 'endTime');
+  const semantics = resolveAssignmentSemantics(input);
+  const { startTime, endTime, shiftType, countsAsWork } = semantics;
   assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
@@ -443,10 +489,10 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   const location = input.location === undefined || input.location === null ? null : String(input.location).trim() || null;
   const rows = await sql`
     INSERT INTO shift_assignments
-      (schedule_version_id, employee_id, date, start_time, end_time, location)
-    VALUES (${versionId}, ${employeeId}, ${date}, ${startTime}, ${endTime}, ${location})
+      (schedule_version_id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work)
+    VALUES (${versionId}, ${employeeId}, ${date}, ${startTime}, ${endTime}, ${location}, ${shiftType}, ${countsAsWork})
     RETURNING id, schedule_version_id, employee_id, date, start_time, end_time,
-              location, created_at, updated_at
+              location, shift_type, counts_as_work, created_at, updated_at
   `;
   return mapAssignment(rows[0]);
 }
@@ -455,7 +501,8 @@ async function loadAssignment(sql, ctx, scheduleId, versionId, assignmentId) {
   const schedule = await loadScheduleVersion(sql, ctx, scheduleId, versionId);
   const rows = await sql`
     SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
-           sa.start_time, sa.end_time, sa.location, sa.created_at, sa.updated_at
+           sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
+           sa.created_at, sa.updated_at
     FROM shift_assignments sa
     WHERE sa.id = ${assignmentId} AND sa.schedule_version_id = ${versionId}
   `;
@@ -468,8 +515,8 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   const { schedule, assignment } = await loadAssignment(sql, ctx, scheduleId, versionId, assignmentId);
   const employeeId = input.employeeId === undefined ? assignment.employee_id : String(input.employeeId).trim();
   const date = input.date === undefined ? databaseDateToIso(assignment.date) : normalizeDate(input.date);
-  const startTime = input.startTime === undefined ? String(assignment.start_time).slice(0, 5) : normalizeTime(input.startTime, 'startTime');
-  const endTime = input.endTime === undefined ? String(assignment.end_time).slice(0, 5) : normalizeTime(input.endTime, 'endTime');
+  const semantics = resolveAssignmentSemantics(input, assignment);
+  const { startTime, endTime, shiftType, countsAsWork } = semantics;
   assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
@@ -483,10 +530,11 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   const rows = await sql`
     UPDATE shift_assignments
     SET employee_id = ${employeeId}, date = ${date}, start_time = ${startTime},
-        end_time = ${endTime}, location = ${location}, updated_at = NOW()
+        end_time = ${endTime}, location = ${location}, shift_type = ${shiftType},
+        counts_as_work = ${countsAsWork}, updated_at = NOW()
     WHERE id = ${assignmentId} AND schedule_version_id = ${versionId}
     RETURNING id, schedule_version_id, employee_id, date, start_time, end_time,
-              location, created_at, updated_at
+              location, shift_type, counts_as_work, created_at, updated_at
   `;
   if (rows.length === 0) throw new HttpError(404, 'Assignment not found');
   return mapAssignment(rows[0]);
@@ -641,8 +689,9 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
       ),
       copied AS (
         INSERT INTO shift_assignments
-          (schedule_version_id, employee_id, date, start_time, end_time, location)
-        SELECT c.id, sa.employee_id, sa.date, sa.start_time, sa.end_time, sa.location
+          (schedule_version_id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work)
+        SELECT c.id, sa.employee_id, sa.date, sa.start_time, sa.end_time, sa.location,
+               sa.shift_type, sa.counts_as_work
         FROM shift_assignments sa
         JOIN target t ON t.version_id = sa.schedule_version_id
         JOIN created c ON TRUE
@@ -724,7 +773,8 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
     ),
     all_assignments AS MATERIALIZED (
       SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
-             sa.start_time, sa.end_time, sa.location, e.status AS employee_status
+             sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
+             e.status AS employee_status
       FROM shift_assignments sa
       JOIN target t ON t.version_id = sa.schedule_version_id
       JOIN employees e ON e.id = sa.employee_id
@@ -740,6 +790,9 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
                + CASE WHEN a.end_time <= a.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END
              ) AS end_at
       FROM active_assignments a
+      WHERE a.counts_as_work = TRUE
+        AND a.start_time IS NOT NULL
+        AND a.end_time IS NOT NULL
     ),
     overlap_conflicts AS (
       SELECT a.id AS conflicting_assignment_id
@@ -803,11 +856,12 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
     materialized AS (
       INSERT INTO shifts (
         organization_id, employee_id, import_id, area_id, date,
-        start_time, end_time, location, origin, schedule_version_id
+        start_time, end_time, location, origin, schedule_version_id, shift_type, counts_as_work
       )
       SELECT t.organization_id, a.employee_id, NULL, t.area_id, a.date,
              TO_CHAR(a.start_time, 'HH24:MI'), TO_CHAR(a.end_time, 'HH24:MI'),
-             COALESCE(a.location, ''), 'schedule', a.schedule_version_id
+             COALESCE(a.location, ''), 'schedule', a.schedule_version_id,
+             a.shift_type, a.counts_as_work
       FROM active_assignments a
       JOIN target t ON TRUE
       JOIN updated u ON u.id = t.version_id

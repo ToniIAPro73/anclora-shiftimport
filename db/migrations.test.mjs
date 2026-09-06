@@ -23,6 +23,7 @@ const approvalRejectionMigrationPath = resolve(dirname(fileURLToPath(import.meta
 const approvalAuditMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0031_approval_audit_event_types.sql');
 const changeRequestApplicationMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0032_change_request_application.sql');
 const importOutcomeMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0033_import_outcome.sql');
+const shiftTypeSemanticsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0034_shift_type_semantics.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -142,6 +143,21 @@ describe('0019 shift assignments migration contract', () => {
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_version_employee_date_idx');
     expect(sql).toContain('CREATE INDEX IF NOT EXISTS shift_assignments_employee_idx');
     expect(sql).toContain('Overlap/rest validation is intentionally handled');
+  });
+});
+
+describe('0034 shift type semantics migration contract', () => {
+  it('stores configured type semantics and permits NULL times for non-working assignments', async () => {
+    const sql = await readFile(shiftTypeSemanticsMigrationPath, 'utf8');
+    expect(sql).toContain('ALTER TABLE shifts ADD COLUMN IF NOT EXISTS shift_type TEXT');
+    expect(sql).toContain('ALTER TABLE shifts ADD COLUMN IF NOT EXISTS counts_as_work BOOLEAN');
+    expect(sql).toContain('ALTER TABLE shifts ALTER COLUMN start_time DROP NOT NULL');
+    expect(sql).toContain('ALTER TABLE shifts ALTER COLUMN end_time DROP NOT NULL');
+    expect(sql).toContain("shift_type TEXT NOT NULL DEFAULT 'Regular'");
+    expect(sql).toContain('counts_as_work BOOLEAN NOT NULL DEFAULT TRUE');
+    expect(sql).toContain('ALTER TABLE shift_assignments ALTER COLUMN start_time DROP NOT NULL');
+    expect(sql).toContain('ALTER TABLE shift_assignments ALTER COLUMN end_time DROP NOT NULL');
+    expect(sql).toContain('shift_assignments_time_semantics_check');
   });
 });
 

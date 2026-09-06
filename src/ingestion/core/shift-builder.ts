@@ -14,6 +14,7 @@ import { isTimeToken, normalizeTimeToken } from './normalize';
 import { resolveCode, ShiftCodeMapping } from './shift-code-profile';
 import { expandShiftTokens, isOffToken } from './tokens';
 import { isExplicitlyIgnoredCode } from './ignored-codes';
+import { resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 
 function buildAbsenceShift(date: string, rawText: string, shiftTypeId: string): ParsedCalendarShift {
   return {
@@ -32,8 +33,11 @@ function buildAbsenceShift(date: string, rawText: string, shiftTypeId: string): 
   };
 }
 
-function buildLibreShift(date: string, rawText: string): ParsedCalendarShift {
-  return buildAbsenceShift(date, rawText, 'Libre');
+function nonWorkingTypeFromTokens(tokens: string[]): string {
+  return tokens
+    .map((token) => resolveShiftTypeId(token))
+    .find((typeId): typeId is string => typeId !== null && !shiftTypeCountsAsWork(typeId))
+    ?? 'Libre';
 }
 
 /**
@@ -91,13 +95,18 @@ export function buildShiftEntriesForDay(
     }
   }
 
+  const directNonWorkingType = effectiveTokens.length === 1 ? nonWorkingTypeFromTokens(effectiveTokens) : null;
+  if (directNonWorkingType && directNonWorkingType !== 'Libre') {
+    return [buildAbsenceShift(date, effectiveTokens[0], directNonWorkingType)];
+  }
+
   const meaningful = effectiveTokens.flatMap((token) => expandShiftTokens(token, codeProfile)).map((token) => token.trim()).filter(Boolean);
   if (meaningful.length === 0) {
     return [];
   }
 
   if (meaningful.every(isOffToken)) {
-    return [buildLibreShift(date, meaningful.join(' '))];
+    return [buildAbsenceShift(date, meaningful.join(' '), nonWorkingTypeFromTokens(effectiveTokens))];
   }
 
   const shifts: ParsedCalendarShift[] = [];
@@ -122,7 +131,7 @@ export function buildShiftEntriesForDay(
   const effectiveSegments = segments.length > 0 ? segments : [meaningful];
   for (const segment of effectiveSegments) {
     if (segment.every(isOffToken)) {
-      shifts.push(buildLibreShift(date, segment.join(' ')));
+      shifts.push(buildAbsenceShift(date, segment.join(' '), nonWorkingTypeFromTokens(segment)));
       continue;
     }
 

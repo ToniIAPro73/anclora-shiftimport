@@ -139,11 +139,11 @@ export default async function handler(req, res) {
         RETURNING id, schedule_id
       ), copied_assignments AS (
         INSERT INTO shift_assignments
-          (schedule_version_id, employee_id, import_id, date, start_time, end_time, location)
+          (schedule_version_id, employee_id, import_id, date, start_time, end_time, location, shift_type, counts_as_work)
         SELECT cv.id, sa.employee_id, sa.import_id, sa.date,
                CASE WHEN sa.id = source.source_assignment_id THEN source.requested_start_time ELSE sa.start_time END,
                CASE WHEN sa.id = source.source_assignment_id THEN source.requested_end_time ELSE sa.end_time END,
-               sa.location
+               sa.location, sa.shift_type, sa.counts_as_work
         FROM shift_assignments sa
         JOIN source_assignment source ON source.source_version_id = sa.schedule_version_id
         JOIN created_version cv ON cv.schedule_id = source.source_schedule_id

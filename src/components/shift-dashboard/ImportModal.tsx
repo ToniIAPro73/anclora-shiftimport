@@ -24,6 +24,7 @@ import { ImportResult, ImportWarningCode } from '../../lib/import-quality';
 import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
+import { shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
@@ -107,8 +108,9 @@ interface ModalSelectOption {
   label: string;
 }
 
-function isFreeShift(shift: Pick<ParsedCalendarShift, 'shiftType'>): boolean {
-  return (shift.shiftType ?? '').trim().toLowerCase() === 'libre';
+function isNonWorkingShift(shift: Pick<ParsedCalendarShift, 'shiftType'>): boolean {
+  const typeId = normalizeShiftTypeLabel(shift.shiftType ?? '');
+  return Boolean(typeId) && !shiftTypeCountsAsWork(typeId);
 }
 
 const isMissingTime = (value: string): boolean => value.trim() === '' || value === '??:??';
@@ -122,8 +124,9 @@ const isMissingTime = (value: string): boolean => value.trim() === '' || value =
 function hasImportableShiftData(shift: ParsedCalendarShift): boolean {
   const startMissing = isMissingTime(shift.startTime);
   const endMissing = isMissingTime(shift.endTime);
-  if (Boolean((shift.shiftType ?? '').trim()) && startMissing && endMissing) {
-    return true;
+  const typeId = normalizeShiftTypeLabel(shift.shiftType ?? '');
+  if (typeId && !shiftTypeCountsAsWork(typeId)) {
+    return startMissing === endMissing;
   }
   return !startMissing && !endMissing;
 }
@@ -136,7 +139,9 @@ function toDomainShift(shift: ParsedCalendarShift): Shift {
     date: shift.date,
     startTime: shift.startTime === '??:??' ? '' : shift.startTime,
     endTime: shift.endTime === '??:??' ? '' : shift.endTime,
-    location: normalizedType === 'Vacaciones' ? 'Regular' : (normalizedType || 'Regular'),
+    shiftType: normalizedType || 'Regular',
+    countsAsWork: shiftTypeCountsAsWork(normalizedType || 'Regular'),
+    location: normalizedType || 'Regular',
     origin: 'IMP',
     sourceFormat: shift.sourceFormat ?? undefined,
   };
@@ -1351,8 +1356,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   </thead>
                   <tbody>
                     {parsedShifts.map((shift, index) => {
-                      const isLibre = isFreeShift(shift);
-                      const incomplete = !isLibre && (shift.startTime === '??:??' || shift.endTime === '??:??');
+                      const isNonWorking = isNonWorkingShift(shift);
+                      const incomplete = !isNonWorking && (shift.startTime === '??:??' || shift.endTime === '??:??');
                       // Under REVIEW, also highlight rows tied to a warning
                       // (warning date context / unknown token in the raw cell).
                       const needsAttention = incomplete || (quality?.state === 'REVIEW' && isWarningLinkedRow(shift));
@@ -1377,18 +1382,18 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                             <input
                               type="text"
                               className="modal-input"
-                              value={isLibre && shift.startTime === '??:??' ? '' : shift.startTime}
+                              value={isNonWorking && shift.startTime === '??:??' ? '' : shift.startTime}
                               onChange={(event) => handleUpdateShift(index, 'startTime', event.target.value)}
-                              style={{ padding: '6px', fontSize: '0.8rem', color: !isLibre && shift.startTime === '??:??' ? 'var(--danger)' : 'inherit' }}
+                              style={{ padding: '6px', fontSize: '0.8rem', color: !isNonWorking && shift.startTime === '??:??' ? 'var(--danger)' : 'inherit' }}
                             />
                           </td>
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
                               className="modal-input"
-                              value={isLibre && shift.endTime === '??:??' ? '' : shift.endTime}
+                              value={isNonWorking && shift.endTime === '??:??' ? '' : shift.endTime}
                               onChange={(event) => handleUpdateShift(index, 'endTime', event.target.value)}
-                              style={{ padding: '6px', fontSize: '0.8rem', color: !isLibre && shift.endTime === '??:??' ? 'var(--danger)' : 'inherit' }}
+                              style={{ padding: '6px', fontSize: '0.8rem', color: !isNonWorking && shift.endTime === '??:??' ? 'var(--danger)' : 'inherit' }}
                             />
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>

@@ -1,5 +1,7 @@
 import { Shift } from './types';
 import { apiFetch } from './session';
+import { getShiftType } from './shifts';
+import { shiftTypeCountsAsWork } from './shift-types';
 
 /**
  * Remote, tenant-scoped persistence (Fase 1). All queries run inside the
@@ -70,8 +72,10 @@ export interface ShiftAssignment {
   importId?: string | null;
   employeeId: string;
   date: string;
-  startTime: string;
-  endTime: string;
+  startTime: string | null;
+  endTime: string | null;
+  shiftType?: string | null;
+  countsAsWork?: boolean;
   location: string | null;
 }
 
@@ -255,10 +259,12 @@ interface RemoteShiftRow {
   id: string;
   employeeId: string;
   date: string;
-  startTime: string;
-  endTime: string;
+  startTime: string | null;
+  endTime: string | null;
   location: string;
   origin: 'MAN' | 'IMP';
+  shiftType?: string | null;
+  countsAsWork?: boolean | null;
   acknowledgementStatus?: 'PENDING' | 'ACKNOWLEDGED';
   acknowledgedAt?: string | null;
 }
@@ -266,8 +272,10 @@ interface RemoteShiftRow {
 const toShift = (row: RemoteShiftRow): Shift => ({
   id: row.id,
   date: row.date,
-  startTime: row.startTime,
-  endTime: row.endTime,
+  startTime: row.startTime ?? '',
+  endTime: row.endTime ?? '',
+  shiftType: row.shiftType ?? null,
+  countsAsWork: row.countsAsWork ?? null,
   location: row.location,
   origin: row.origin === 'MAN' ? 'MAN' : 'IMP',
 });
@@ -421,7 +429,7 @@ export async function loadRemoteScheduleSnapshot(
 export async function createRemoteAssignment(
   scheduleId: string,
   versionId: string,
-  input: Pick<ShiftAssignment, 'employeeId' | 'date' | 'startTime' | 'endTime' | 'location'>,
+  input: Pick<ShiftAssignment, 'employeeId' | 'date' | 'startTime' | 'endTime' | 'location' | 'shiftType' | 'countsAsWork'>,
 ): Promise<ShiftAssignment> {
   const payload = await apiFetch<{ assignment: ShiftAssignment }>(
     `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/assignments`,
@@ -434,7 +442,7 @@ export async function updateRemoteAssignment(
   scheduleId: string,
   versionId: string,
   assignmentId: string,
-  input: Partial<Pick<ShiftAssignment, 'employeeId' | 'date' | 'startTime' | 'endTime' | 'location'>>,
+  input: Partial<Pick<ShiftAssignment, 'employeeId' | 'date' | 'startTime' | 'endTime' | 'location' | 'shiftType' | 'countsAsWork'>>,
 ): Promise<ShiftAssignment> {
   const payload = await apiFetch<{ assignment: ShiftAssignment }>(
     `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/assignments/${encodeURIComponent(assignmentId)}`,
@@ -500,6 +508,8 @@ export async function syncRemoteShifts(
         date: shift.date,
         startTime: shift.startTime,
         endTime: shift.endTime,
+        shiftType: shift.shiftType ?? getShiftType(shift),
+        countsAsWork: shift.countsAsWork ?? shiftTypeCountsAsWork(getShiftType(shift)),
         location: shift.location,
         origin: shift.origin === 'MAN' ? 'MAN' : 'IMP',
       })),

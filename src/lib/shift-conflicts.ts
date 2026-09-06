@@ -65,12 +65,10 @@ export function findShiftConflict(current: Shift[], incoming: Shift, locale: Loc
     return translate(locale, 'conflicts.duplicateType', { type: incomingType, date: normalizedIncoming.date });
   }
 
-  if (incomingType === 'Libre') {
+  if (!shiftTypeCountsAsWork(incomingType)) {
     const incompatible = comparable.find((shift) => {
       const existingType = getShiftType(shift);
-      // Generic: Libre conflicts with any type that counts as work plus
-      // explicit Libre entries. No company-specific type is hardcoded.
-      return shiftTypeCountsAsWork(existingType) || existingType === 'Libre';
+      return shiftTypeCountsAsWork(existingType);
     });
 
     if (incompatible) {
@@ -79,7 +77,7 @@ export function findShiftConflict(current: Shift[], incoming: Shift, locale: Loc
   }
 
   if (shiftTypeCountsAsWork(incomingType) && incomingType !== 'Extras') {
-    const incompatible = comparable.find((shift) => getShiftType(shift) === 'Libre');
+    const incompatible = comparable.find((shift) => !shiftTypeCountsAsWork(getShiftType(shift)));
 
     if (incompatible) {
       return translate(locale, 'conflicts.workConflictsWithLibre', { type: incomingType, date: normalizedIncoming.date });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addMember,
+  assertShiftTimeSemantics,
   bulkAddMembers,
   bulkCreateEmployees,
   createEmployee,
@@ -20,6 +21,26 @@ import {
   updateMemberRole,
   upsertShifts,
 } from './data.js';
+
+describe('configured shift time semantics', () => {
+  it.each([
+    ['Regular', true, '08:00', '16:00'],
+    ['Extras', true, '18:00', '22:00'],
+  ])('%s requires both times', (shiftType, countsAsWork, startTime, endTime) => {
+    expect(() => assertShiftTimeSemantics({ shiftType, countsAsWork, startTime, endTime })).not.toThrow();
+    expect(() => assertShiftTimeSemantics({ shiftType, countsAsWork, startTime: '', endTime: '' }))
+      .toThrow(expect.objectContaining({ code: 'SHIFT_TIMES_REQUIRED' }));
+  });
+
+  it.each(['Libre', 'Vacaciones', 'Festivo'])('%s permits NULL times when configured non-working', (shiftType) => {
+    expect(() => assertShiftTimeSemantics({ shiftType, countsAsWork: false, startTime: '', endTime: '' })).not.toThrow();
+  });
+
+  it('rejects a partial pair instead of fabricating a duration', () => {
+    expect(() => assertShiftTimeSemantics({ shiftType: 'Libre', countsAsWork: false, startTime: '08:00', endTime: '' }))
+      .toThrow(expect.objectContaining({ code: 'SHIFT_TIMES_INCOMPLETE' }));
+  });
+});
 
 /**
  * Invariant tests for the multi-tenant data layer (Fase 1, PASO 12).

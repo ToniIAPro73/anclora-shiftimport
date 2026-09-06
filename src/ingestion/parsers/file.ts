@@ -18,6 +18,7 @@ import { IngestionError, VlmErrorCode } from '../../lib/ingestion-errors';
 import { computeImportResult, ImportResult, QualitySignals } from '../../lib/import-quality';
 import { UserFormatProfile } from '../../lib/format-profiles';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
+import { shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
 import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
@@ -420,13 +421,13 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
       continue;
     }
 
-    const isAbsence = typeId === 'Libre' || typeId === 'Vacaciones';
+    const isAbsence = typeId ? !shiftTypeCountsAsWork(typeId) : !hasTime;
     shifts.push({
       date: rowDate,
       startTime: isAbsence && !hasTime ? '' : startTime,
       endTime: isAbsence && !hasTime ? '' : endTime,
       origin: 'IMP',
-      isValid: true,
+      isValid: isAbsence || hasTime,
       confidence: hasTime ? 1.0 : 0.8,
       // For value-based rows the rawText is the value cell itself so callers
       // can classify VAC/BAJA/AUS/L/XYZ codes without scanning the line.
@@ -594,13 +595,18 @@ function mapVlmRecordsToShifts(records: VlmRecords, sourceFormat: string): { shi
     const startTime = VLM_TIME_RE.test(rawStart) ? rawStart : '';
     const endTime = VLM_TIME_RE.test(rawEnd) ? rawEnd : '';
     const rawType = entry.shiftType?.trim() ?? '';
+    if (isExplicitlyIgnoredCode(rawType)) {
+      continue;
+    }
     const shiftType = rawType ? (resolveShiftTypeId(rawType) ?? rawType) : null;
     const notes = entry.notes?.trim() || null;
     if (!shiftType && !startTime && !endTime && !notes) {
       continue;
     }
-    // Complete = typed absence row (no times) or fully timed work row.
-    const isValid = Boolean(shiftType && !startTime && !endTime) || Boolean(startTime && endTime);
+    // Complete = configured non-working type without times or fully timed
+    // working row. A configured working type without times stays incomplete.
+    const isNonWorking = Boolean(shiftType && !shiftTypeCountsAsWork(shiftType));
+    const isValid = isNonWorking ? !startTime && !endTime : Boolean(startTime && endTime);
     const label = [rawType || null, startTime && endTime ? `${startTime}-${endTime}` : null].filter(Boolean).join(' ');
     shifts.push({
       date: entry.date,

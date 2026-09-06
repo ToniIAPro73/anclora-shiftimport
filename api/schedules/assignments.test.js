@@ -27,13 +27,13 @@ function makeSql({ status = 'DRAFT' } = {}) {
       return Promise.resolve([{ version_id: VERSION, schedule_id: SCHEDULE, status: state.status, organization_id: ORG, area_id: AREA, period_start: '2026-09-28', period_end: '2026-10-04' }]);
     }
     if (text.startsWith('SELECT sa.id')) {
-      return Promise.resolve([{ id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: '2026-09-29', start_time: '09:00', end_time: '17:00', location: 'Original', created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' }]);
+      return Promise.resolve([{ id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: '2026-09-29', start_time: '09:00', end_time: '17:00', location: 'Original', shift_type: 'Regular', counts_as_work: true, created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' }]);
     }
     if (text.startsWith('SELECT id, area_id, status')) {
       return Promise.resolve([{ id: EMPLOYEE, area_id: AREA, status: 'active' }]);
     }
     if (text.startsWith('INSERT INTO shift_assignments')) {
-      const row = { id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: values[2], start_time: values[3], end_time: values[4], location: values[5], created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' };
+      const row = { id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: values[2], start_time: values[3], end_time: values[4], location: values[5], shift_type: values[6], counts_as_work: values[7], created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' };
       state.assignments.push(row);
       return Promise.resolve([row]);
     }
@@ -76,6 +76,29 @@ describe('ShiftAssignment draft CRUD', () => {
       employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk',
     });
     expect(assignment).toMatchObject({ scheduleVersionId: VERSION, employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk' });
+  });
+
+  it('allows a configured non-working assignment without times', async () => {
+    const result = await createAssignment(makeSql(), planner, SCHEDULE, VERSION, {
+      employeeId: EMPLOYEE,
+      date: '2026-09-29',
+      shiftType: 'Libre',
+      countsAsWork: false,
+      startTime: null,
+      endTime: null,
+    });
+    expect(result).toMatchObject({ shiftType: 'Libre', countsAsWork: false, startTime: null, endTime: null });
+  });
+
+  it('requires both times for a configured working assignment', async () => {
+    await expect(createAssignment(makeSql(), planner, SCHEDULE, VERSION, {
+      employeeId: EMPLOYEE,
+      date: '2026-09-29',
+      shiftType: 'Extras',
+      countsAsWork: true,
+      startTime: null,
+      endTime: null,
+    })).rejects.toMatchObject({ status: 400, code: 'SHIFT_TIMES_REQUIRED' });
   });
 
   it('rejects an assignment dated before the operational date', async () => {

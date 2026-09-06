@@ -84,7 +84,9 @@ export function AccessibleScheduleTable({
                   </th>
                   <td><time dateTime={day}>{formatDay(day, locale)}</time></td>
                   <td>
-                    {assignment ? <strong>{assignment.startTime.slice(0, 5)}–{assignment.endTime.slice(0, 5)}</strong> : <span className="weekly-planner__table-muted">{t('planner.noAssignment')}</span>}
+                    {assignment ? <strong>{assignment.startTime && assignment.endTime
+                      ? `${assignment.startTime.slice(0, 5)}–${assignment.endTime.slice(0, 5)}`
+                      : assignment.shiftType ?? t('planner.nonWorkingAssignment')}</strong> : <span className="weekly-planner__table-muted">{t('planner.noAssignment')}</span>}
                   </td>
                   <td>{assignment?.location || <span className="weekly-planner__table-muted">{t('planner.noLocation')}</span>}</td>
                   <td>

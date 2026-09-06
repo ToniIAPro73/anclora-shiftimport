@@ -97,10 +97,42 @@ export function normalizeShiftInput(raw) {
     date: normalizeShiftDate(raw?.date ?? ''),
     startTime: String(raw?.startTime ?? '').trim(),
     endTime: String(raw?.endTime ?? '').trim(),
+    shiftType: String(raw?.shiftType ?? '').trim() || null,
+    countsAsWork: typeof raw?.countsAsWork === 'boolean' ? raw.countsAsWork : null,
     location: String(raw?.location ?? '').trim(),
     origin: raw?.origin === 'MAN' ? 'MAN' : 'IMP',
     areaId: raw?.areaId ? String(raw.areaId).trim() || null : null,
   };
+}
+
+const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
+const HHMM_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function shiftRequiresTimes(shift) {
+  if (typeof shift.countsAsWork === 'boolean') return shift.countsAsWork;
+  const type = String(shift.shiftType ?? shift.location ?? '').trim().toLowerCase();
+  return !LEGACY_NON_WORKING_TYPES.has(type);
+}
+
+export function assertShiftTimeSemantics(shift) {
+  const hasStart = Boolean(shift.startTime);
+  const hasEnd = Boolean(shift.endTime);
+  if (hasStart !== hasEnd) {
+    const error = new HttpError(400, 'A shift must contain both startTime and endTime, or neither');
+    error.code = 'SHIFT_TIMES_INCOMPLETE';
+    throw error;
+  }
+  if (shiftRequiresTimes(shift) && (!hasStart || !hasEnd)) {
+    const error = new HttpError(400, 'Working shift types require startTime and endTime');
+    error.code = 'SHIFT_TIMES_REQUIRED';
+    throw error;
+  }
+  if (hasStart && !HHMM_RE.test(shift.startTime)) {
+    throw new HttpError(400, 'startTime must use HH:mm format');
+  }
+  if (hasEnd && !HHMM_RE.test(shift.endTime)) {
+    throw new HttpError(400, 'endTime must use HH:mm format');
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -206,8 +238,10 @@ export function mapShiftRow(row) {
     importId: row.import_id,
     areaId: row.area_id ?? null,
     date: row.date,
-    startTime: row.start_time,
-    endTime: row.end_time,
+    startTime: row.start_time ?? '',
+    endTime: row.end_time ?? '',
+    shiftType: row.shift_type ?? null,
+    countsAsWork: row.counts_as_work ?? null,
     location: row.location,
     origin: row.origin,
     acknowledgementStatus: row.acknowledgement_status ?? 'PENDING',
@@ -1890,7 +1924,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
       ? await sql`
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                 start_time, end_time, location, origin
+                 start_time, end_time, location, origin, shift_type, counts_as_work
           FROM shifts
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
             AND area_id = ${effectiveAreaId}
@@ -1899,7 +1933,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
       : await sql`
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                 start_time, end_time, location, origin
+                 start_time, end_time, location, origin, shift_type, counts_as_work
           FROM shifts
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
           ORDER BY date ASC, start_time ASC, id ASC
@@ -1912,7 +1946,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
     ? await sql`
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
-               start_time, end_time, location, origin
+               start_time, end_time, location, origin, shift_type, counts_as_work
         FROM shifts
         WHERE organization_id = ${ctx.organizationId}
           AND area_id = ${effectiveAreaId}
@@ -1921,7 +1955,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
     : await sql`
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
-               start_time, end_time, location, origin
+               start_time, end_time, location, origin, shift_type, counts_as_work
         FROM shifts
         WHERE organization_id = ${ctx.organizationId}
         ORDER BY date ASC, start_time ASC, id ASC
@@ -1948,7 +1982,7 @@ export async function listTodayShifts(sql, ctx) {
     SELECT id, organization_id, employee_id, import_id, area_id,
            TO_CHAR(date, 'YYYY-MM-DD') AS date,
            start_time, end_time,
-           location, origin
+           location, origin, shift_type, counts_as_work
     FROM shifts
     WHERE organization_id = ${ctx.organizationId}
       AND employee_id = ${ctx.employeeId}
@@ -1975,7 +2009,7 @@ export async function listWeekShifts(sql, ctx, weekStart) {
     SELECT id, organization_id, employee_id, import_id, area_id,
            TO_CHAR(date, 'YYYY-MM-DD') AS date,
            start_time, end_time,
-           location, origin
+           location, origin, shift_type, counts_as_work
     FROM shifts
     WHERE organization_id = ${ctx.organizationId}
       AND employee_id = ${ctx.employeeId}
@@ -1999,7 +2033,7 @@ export async function getEmployeeShift(sql, ctx, rawShiftId) {
     SELECT s.id, s.organization_id, s.employee_id, s.import_id, s.area_id,
            TO_CHAR(s.date, 'YYYY-MM-DD') AS date,
            s.start_time, s.end_time,
-           s.location, s.origin, a.name AS area_name,
+           s.location, s.origin, s.shift_type, s.counts_as_work, a.name AS area_name,
            sa.status AS acknowledgement_status, sa.acknowledged_at
     FROM shifts s
     LEFT JOIN areas a ON a.id = s.area_id AND a.organization_id = s.organization_id
@@ -2357,13 +2391,13 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
       RETURNING target.id
     ), auto_copied_assignments AS (
       INSERT INTO shift_assignments
-        (schedule_version_id, employee_id, date, start_time, end_time, location)
+        (schedule_version_id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work)
       SELECT target_version.draft_version_id, sa.employee_id, sa.date,
              CASE WHEN sa.id = source.source_assignment_id
                THEN source.requested_start_time ELSE sa.start_time END,
              CASE WHEN sa.id = source.source_assignment_id
                THEN source.requested_end_time ELSE sa.end_time END,
-             sa.location
+             sa.location, sa.shift_type, sa.counts_as_work
       FROM shift_assignments sa
       JOIN auto_source_assignment source
         ON source.source_version_id = sa.schedule_version_id
@@ -2581,6 +2615,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     if (!shift.date || !shift.employeeId) {
       throw new HttpError(400, 'Shift requires date and employeeId');
     }
+    assertShiftTimeSemantics(shift);
     if (scope.type === 'SELF' && shift.employeeId && shift.employeeId !== scope.employeeId) {
       throw scopeForbidden('Resource belongs to another employee');
     }
@@ -2648,7 +2683,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
 
     const id = shift.id && UUID_RE.test(shift.id) ? shift.id : randomUUID();
     const semanticFingerprint = shift.origin === 'IMP'
-      ? sha256([employeeId, shift.date, shift.startTime, shift.endTime, shift.location].join('\u001f'))
+      ? sha256([employeeId, shift.date, shift.shiftType ?? '', shift.countsAsWork ?? '', shift.startTime, shift.endTime, shift.location].join('\u001f'))
       : null;
     prepared.push({ shift, id, employeeId, shiftAreaId, semanticFingerprint });
   }
@@ -2661,36 +2696,40 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     semanticFingerprint
       ? txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
-                          start_time, end_time, location, origin, updated_at, semantic_fingerprint)
+                          start_time, end_time, location, origin, shift_type, counts_as_work,
+                          updated_at, semantic_fingerprint)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
-              ${shiftAreaId}, ${shift.date}, ${shift.startTime}, ${shift.endTime},
-              ${shift.location}, ${shift.origin}, NOW(), ${semanticFingerprint})
+              ${shiftAreaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null},
+              ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork},
+              NOW(), ${semanticFingerprint})
       ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
       WHERE semantic_fingerprint IS NOT NULL
       DO UPDATE SET updated_at = NOW()
       RETURNING id, organization_id, employee_id, import_id, area_id,
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                start_time, end_time, location, origin
+                start_time, end_time, location, origin, shift_type, counts_as_work
     `
       : txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
-                          start_time, end_time, location, origin, updated_at)
+                          start_time, end_time, location, origin, shift_type, counts_as_work, updated_at)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
-              ${shiftAreaId}, ${shift.date}, ${shift.startTime}, ${shift.endTime},
-              ${shift.location}, ${shift.origin}, NOW())
+              ${shiftAreaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null},
+              ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         date = EXCLUDED.date,
         start_time = EXCLUDED.start_time,
         end_time = EXCLUDED.end_time,
         location = EXCLUDED.location,
         origin = EXCLUDED.origin,
+        shift_type = EXCLUDED.shift_type,
+        counts_as_work = EXCLUDED.counts_as_work,
         area_id = EXCLUDED.area_id,
         updated_at = NOW()
       WHERE shifts.organization_id = ${ctx.organizationId}
         AND shifts.employee_id = ${employeeId}
       RETURNING id, organization_id, employee_id, import_id, area_id,
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                start_time, end_time, location, origin
+                start_time, end_time, location, origin, shift_type, counts_as_work
     `
   )));
 

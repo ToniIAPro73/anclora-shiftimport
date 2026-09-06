@@ -18,6 +18,7 @@ import {
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference, PLANNER_WEEK_START_PREFERENCE_KEY } from '../../lib/week';
+import { shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -71,8 +72,10 @@ function initialEditor(employeeId: string, date: string, assignment?: ShiftAssig
     id: assignment?.id ?? null,
     employeeId: assignment?.employeeId ?? employeeId,
     date: assignment?.date ?? date,
-    startTime: assignment?.startTime.slice(0, 5) ?? '09:00',
-    endTime: assignment?.endTime.slice(0, 5) ?? '17:00',
+    shiftType: assignment?.shiftType ?? 'Regular',
+    countsAsWork: assignment?.countsAsWork ?? shiftTypeCountsAsWork(assignment?.shiftType ?? 'Regular'),
+    startTime: (assignment?.startTime ?? '09:00').slice(0, 5),
+    endTime: (assignment?.endTime ?? '17:00').slice(0, 5),
     location: assignment?.location ?? '',
   };
 }
@@ -672,7 +675,9 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                       data-editor-target={`${employee.id}:${day}`}
                                       title={editable ? t('planner.editAssignment') : t('planner.locked')}
                                     >
-                                      <strong>{assignment.startTime.slice(0, 5)}–{assignment.endTime.slice(0, 5)}</strong>
+                                      <strong>{assignment.startTime && assignment.endTime
+                                        ? `${assignment.startTime.slice(0, 5)}–${assignment.endTime.slice(0, 5)}`
+                                        : assignment.shiftType ?? t('planner.nonWorkingAssignment')}</strong>
                                       {assignment.location && <span>{assignment.location}</span>}
                                     </button>
                                   ))}

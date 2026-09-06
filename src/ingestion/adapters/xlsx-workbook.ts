@@ -24,7 +24,7 @@ import { normalizeStructuredRows, RowDiagnostic, StructuredShiftRow } from './st
 import { DetectedTeamEmployee, TeamRosterDetection } from '../team-roster';
 import { normalizeTimeToken } from '../core/normalize';
 import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
-import { resolveShiftTypeId } from '../../lib/shift-types';
+import { resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import JSZip from 'jszip';
 
 export type SheetStatus = 'processed' | 'empty' | 'ignored';
@@ -159,7 +159,7 @@ function positionalCalendarFromSheet(sheet: XlsxWorksheet): { employee: Detected
         // family. Keep the product registry authoritative, with the
         // documented DL compatibility fallback when no user alias exists.
         const type = resolveShiftTypeId(raw) ?? (/^DL$/i.test(raw) ? 'Libre' : null);
-        if (type) {
+        if (type && !shiftTypeCountsAsWork(type)) {
           shifts.push({ date, startTime: '', endTime: '', origin: 'IMP', isValid: true, confidence: 0.95, rawText: raw, shiftType: type, notes: null, color: null });
           monthHasData = true;
         }

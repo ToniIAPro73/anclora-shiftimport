@@ -14,6 +14,10 @@ export interface Shift {
   date: string; // ISO YYYY-MM-DD
   startTime: string; // HH:mm
   endTime: string; // HH:mm
+  /** Effective configured type; legacy rows may omit it and use location. */
+  shiftType?: string | null;
+  /** Persisted semantic snapshot when the backend has it. */
+  countsAsWork?: boolean | null;
   location: string;
   origin: ShiftOrigin;
   sourceFormat?: ShiftSourceFormat;

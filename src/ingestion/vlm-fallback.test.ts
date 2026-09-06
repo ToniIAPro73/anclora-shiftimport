@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { jsPDF } from 'jspdf';
 import { setupLocalStorageMock } from '../test-utils/local-storage';
+import { saveShiftTypeOverrides } from '../lib/shift-types';
 import { analyzeDocumentFile } from './parsers/file';
 import { buildImportDiagnosis } from './diagnostics';
 import { analyzeWithVlmFallback, isVlmFallbackAvailable, VlmRecords } from './vlm-client';
@@ -106,6 +107,34 @@ describe('VLM fallback integration in analyzeDocumentFile', () => {
     expect(result.questions).toEqual([]);
     expect(result.detectedContext).toEqual({ month: 7, year: 2026 });
     expect(result.vlmError).toBeUndefined();
+  });
+
+  it('applies configured working semantics to VLM rows and ignores AJ', async () => {
+    saveShiftTypeOverrides({
+      types: [{ id: 'Festivo', label: 'Festivo', shortLabel: 'Festivo', color: '#111111', countsAsWork: false }],
+      aliases: {},
+    });
+    mockedVlm.mockResolvedValue({
+      ok: true,
+      records: {
+        ...VLM_RECORDS,
+        entries: [
+          { date: '2026-08-01', shiftType: 'Festivo', startTime: null, endTime: null, notes: null },
+          { date: '2026-08-02', shiftType: 'Regular', startTime: null, endTime: null, notes: null },
+          { date: '2026-08-03', shiftType: 'AJ', startTime: null, endTime: null, notes: null },
+        ],
+      },
+    });
+
+    try {
+      const result = await analyzeDocumentFile(buildEmptyPdf(), SELECTOR, undefined, CONTEXT);
+
+      expect(result.shifts).toHaveLength(2);
+      expect(result.shifts[0]).toMatchObject({ shiftType: 'Festivo', startTime: '', endTime: '', isValid: true });
+      expect(result.shifts[1]).toMatchObject({ shiftType: 'Regular', startTime: '', endTime: '', isValid: false });
+    } finally {
+      saveShiftTypeOverrides({ types: [], aliases: {} });
+    }
   });
 
   it('a null employeeName preserves the ambiguity (employeeMatch none → UNRECOGNIZED)', async () => {

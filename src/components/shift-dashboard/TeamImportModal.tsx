@@ -25,6 +25,7 @@ import {
 } from '../../lib/remote';
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
+import { shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { Shift } from '../../lib/types';
 import { ApiError, isAdminRole, Role } from '../../lib/session';
 import { UpgradePrompt } from './UpgradePrompt';
@@ -110,10 +111,19 @@ function toDomainShift(shift: DetectedTeamEmployee['shifts'][number], sourceForm
     date: shift.date,
     startTime: shift.startTime,
     endTime: shift.endTime,
+    shiftType: type,
+    countsAsWork: shiftTypeCountsAsWork(type),
     location: type,
     origin: 'IMP',
     sourceFormat,
   };
+}
+
+function isImportableTeamShift(shift: Shift, includeFuture: boolean, cutoff: string): boolean {
+  if (shift.date < cutoff) return true;
+  if (!includeFuture) return false;
+  const requiresTimes = shiftTypeCountsAsWork(shift.shiftType ?? 'Regular');
+  return !requiresTimes || Boolean(shift.startTime && shift.endTime);
 }
 
 function periodOf(dateIso: string): { year: number; month: number } {
@@ -704,7 +714,7 @@ export const TeamImportModal = ({
     }, { historical: 0, future: 0 });
     const hasFutureData = temporalCounts.future > 0;
     const submitted = preview.flatMap((entry) => entry.newShifts
-      .filter((shift) => shift.date < cutoff || (futureImportDecision === 'draft' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.startTime) && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(shift.endTime)))
+      .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'draft', cutoff))
       .map((shift) => ({
         ...shift,
         employeeId: entry.row.resolvedEmployeeId as string,
@@ -718,9 +728,8 @@ export const TeamImportModal = ({
       // A team file containing any future row is one atomic import. The
       // backend classifies every row and rejects the whole request when the
       // effective planning capability/scope is insufficient.
-      // A future day without actual times (e.g. a LIBRE marker) has no
-      // schedulable assignment representation. Historical rows retain the
-      // legacy blank-time behavior; future timed rows go to the draft.
+      // Non-working configured types intentionally carry NULL times in the
+      // draft; working types were validated before submission.
       const firstPeriod = periodOf(submitted[0].date);
       const periodKeys = new Set(submitted.map((shift) => {
         const period = periodOf(shift.date);

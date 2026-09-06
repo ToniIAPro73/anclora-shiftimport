@@ -30,6 +30,7 @@ import { computeImportResult, ImportResult, QualitySignals } from '../lib/import
 import { resolveShiftTypeId } from '../lib/shift-types';
 import { getDaysInMonth } from '../lib/week';
 import { normalizeText, normalizeTimeToken } from './core/normalize';
+import { shiftTypeCountsAsWork } from '../lib/shift-types';
 import { isExplicitlyIgnoredCode } from './core/ignored-codes';
 import { EmployeeSelector, matchesNameTokens } from './core/row-detection';
 import {
@@ -620,7 +621,7 @@ function buildTabularCellShifts(
     if (!typeId) {
       continue;
     }
-    if (typeId === 'Libre' || typeId === 'Vacaciones') {
+    if (!shiftTypeCountsAsWork(typeId)) {
       shifts.push(untimedShift(date, typeId, cell));
     } else {
       typedWork ??= { typeId, raw: cell };
@@ -643,9 +644,10 @@ function buildTabularCellShifts(
       color: null,
     });
   }
-  if (workTimes.length === 0 && typedWork) {
-    shifts.push(untimedShift(date, typedWork.typeId, typedWork.raw));
-  }
+  // A configured working type without times is incomplete, never an
+  // untimed shift. The shared structured-row normalizer emits the canonical
+  // diagnostic for tabular row sources; this assistant must not fabricate a
+  // zero-duration working record here.
 
   return shifts;
 }

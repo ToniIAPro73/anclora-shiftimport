@@ -3,6 +3,7 @@ import {
   importContextFingerprint,
   mapImportRow,
   normalizeShiftInput,
+  assertShiftTimeSemantics,
 } from './data.js';
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
@@ -24,7 +25,12 @@ export function classifyImportDates(rawShifts, now = new Date()) {
     const shift = normalizeShiftInput(raw);
     if (!ISO_DATE_RE.test(shift.date)) throw requestError(400, 'Every imported shift needs a valid ISO date');
     const temporalClass = shift.date >= cutoff ? 'FUTURE' : 'HISTORICAL';
-    if (temporalClass === 'FUTURE' && (!TIME_RE.test(shift.startTime) || !TIME_RE.test(shift.endTime))) {
+    try {
+      assertShiftTimeSemantics(shift);
+    } catch (error) {
+      throw requestError(400, error.message, error.code);
+    }
+    if (temporalClass === 'FUTURE' && shift.startTime && !TIME_RE.test(shift.startTime)) {
       throw requestError(400, 'Every imported shift needs valid HH:mm times');
     }
     return { ...shift, temporalClass };
@@ -74,7 +80,7 @@ function importLookup(sql, {
 }
 
 function assignmentIdentity(shift) {
-  return [shift.employeeId, shift.date, shift.startTime, shift.endTime, shift.location].join('\u001f');
+  return [shift.employeeId, shift.date, shift.shiftType ?? '', shift.countsAsWork ?? '', shift.startTime, shift.endTime, shift.location].join('\u001f');
 }
 
 function semanticFingerprint(shift) {
@@ -351,7 +357,8 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     queries.push((txn) => txn`
       INSERT INTO shifts (
         id, organization_id, employee_id, import_id, area_id, date,
-        start_time, end_time, location, origin, semantic_fingerprint, updated_at
+        start_time, end_time, location, origin, shift_type, counts_as_work,
+        semantic_fingerprint, updated_at
       )
       SELECT ${id}, ${ctx.organizationId}, ${shift.employeeId},
              (SELECT id FROM imports WHERE organization_id = ${importIdSql.organizationId}
@@ -359,7 +366,8 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
                AND file_fingerprint = ${importIdSql.fileFingerprint}
                AND context_fingerprint = ${importIdSql.contextFingerprint}
                ORDER BY created_at ASC LIMIT 1),
-             ${shift.areaId}, ${shift.date}, ${shift.startTime}, ${shift.endTime}, ${shift.location}, 'IMP',
+             ${shift.areaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null}, ${shift.location}, 'IMP',
+             ${shift.shiftType}, ${shift.countsAsWork},
              ${semanticFingerprint(shift)}, NOW()
       ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
       WHERE semantic_fingerprint IS NOT NULL
@@ -383,7 +391,8 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       labels.push(`future:${assignmentIdentity(shift)}`);
       queries.push((txn) => txn`
         INSERT INTO shift_assignments (
-          schedule_version_id, import_id, employee_id, date, start_time, end_time, location, updated_at
+          schedule_version_id, import_id, employee_id, date, start_time, end_time, location,
+          shift_type, counts_as_work, updated_at
         )
         SELECT sv.id,
                (SELECT id FROM imports WHERE organization_id = ${importIdSql.organizationId}
@@ -391,7 +400,8 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
                  AND file_fingerprint = ${importIdSql.fileFingerprint}
                  AND context_fingerprint = ${importIdSql.contextFingerprint}
                  ORDER BY created_at ASC LIMIT 1),
-               ${shift.employeeId}, ${shift.date}, ${shift.startTime}::time, ${shift.endTime}::time, ${shift.location}, NOW()
+               ${shift.employeeId}, ${shift.date}, ${shift.startTime}, ${shift.endTime}, ${shift.location},
+               ${shift.shiftType}, ${shift.countsAsWork}, NOW()
         FROM schedule_versions sv
         JOIN schedules s ON s.id = sv.schedule_id
         WHERE sv.id = COALESCE(
@@ -411,8 +421,10 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
           WHERE existing.schedule_version_id = sv.id
             AND existing.employee_id = ${shift.employeeId}
             AND existing.date = ${shift.date}
-            AND existing.start_time = ${shift.startTime}::time
-            AND existing.end_time = ${shift.endTime}::time
+            AND existing.start_time IS NOT DISTINCT FROM ${shift.startTime}
+            AND existing.end_time IS NOT DISTINCT FROM ${shift.endTime}
+            AND existing.shift_type IS NOT DISTINCT FROM ${shift.shiftType}
+            AND existing.counts_as_work IS NOT DISTINCT FROM ${shift.countsAsWork}
             AND existing.location IS NOT DISTINCT FROM ${shift.location}
         )
         RETURNING id, schedule_version_id

@@ -14,7 +14,7 @@
  */
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { IngestionErrorCode } from '../../lib/ingestion-errors';
-import { resolveShiftTypeId } from '../../lib/shift-types';
+import { resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { normalizeTimeToken } from '../core/normalize';
 import { parseTableDate } from '../tabular-assistant';
 import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
@@ -96,11 +96,21 @@ export function normalizeStructuredRows(rows: StructuredShiftRow[]): StructuredN
     const hasStart = startRaw.length > 0;
     const hasEnd = endRaw.length > 0;
 
-    if (hasStart !== hasEnd) {
+    const rawType = (row.shiftType ?? '').trim();
+    if (isExplicitlyIgnoredCode(rawType)) {
+      continue;
+    }
+    const resolvedType = rawType ? resolveShiftTypeId(rawType) : null;
+    const shiftType = resolvedType || rawType || (hasStart && hasEnd ? 'Regular' : 'Libre');
+    const requiresTimes = shiftTypeCountsAsWork(shiftType);
+
+    if (hasStart !== hasEnd || (requiresTimes && !hasStart && !hasEnd)) {
       diagnostics.push({
         code: 'INCOMPLETE_SHIFT',
         severity: 'warning',
-        message: `Row has only one of start/end time (${hasStart ? startRaw : endRaw}).`,
+        message: hasStart !== hasEnd
+          ? `Row has only one of start/end time (${hasStart ? startRaw : endRaw}).`
+          : `Working shift type ${shiftType} requires start and end times.`,
         sourceRef: row.sourceRef,
         employeeKey: key,
         date,
@@ -128,24 +138,16 @@ export function normalizeStructuredRows(rows: StructuredShiftRow[]): StructuredN
 
     const startTime = hasStart ? normalizeTimeToken(startRaw) : '';
     const endTime = hasEnd ? normalizeTimeToken(endRaw) : '';
-    const isWork = hasStart && hasEnd;
-    const rawType = (row.shiftType ?? '').trim();
-    if (isExplicitlyIgnoredCode(rawType)) {
-      continue;
-    }
     // Only registry-known codes (Regular/Libre/Vacaciones/Extras/custom
     // org aliases) are resolved; an org-specific work-shift label (M, T,
     // X1, ...) that isn't in the registry is NOT flagged as "unknown" here
     // — times are authoritative for a work row, and the raw label is kept
     // verbatim so it stays visible in preview/notes instead of being
     // collapsed into a generic "Regular".
-    const resolvedType = rawType ? resolveShiftTypeId(rawType) : null;
-    const shiftType = isWork ? (resolvedType || rawType || 'Regular') : (resolvedType || rawType || 'Libre');
-
     const shift: ParsedCalendarShift = {
       date,
-      startTime: isWork ? startTime : '',
-      endTime: isWork ? endTime : '',
+      startTime: hasStart ? startTime : '',
+      endTime: hasEnd ? endTime : '',
       origin: 'IMP',
       isValid: true,
       confidence: 0.9,

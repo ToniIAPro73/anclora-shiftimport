@@ -9,7 +9,7 @@ import {
   hasShiftTimes,
   isZeroDurationShift,
 } from './shifts';
-import { mergeShiftTypeOverrides, SHIFT_TYPE_PRESET_EXAMPLE } from './shift-types';
+import { mergeShiftTypeOverrides, SHIFT_TYPE_PRESET_EXAMPLE, upsertShiftType } from './shift-types';
 import { normalizeShift } from './storage';
 import { Shift } from './types';
 
@@ -43,6 +43,15 @@ describe('getShiftType', () => {
     expect(getShiftType(shift({ location: 'JT' }))).toBe('Regular');
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
     expect(getShiftType(shift({ location: 'JT' }))).toBe('JT');
+  });
+
+  it('uses an explicit configured shift type independently from location', () => {
+    expect(getShiftType(shift({ shiftType: 'Vacaciones', location: 'Hotel' }))).toBe('Vacaciones');
+  });
+
+  it('uses countsAsWork for custom non-working types without special-casing their label', () => {
+    upsertShiftType({ id: 'Festivo', label: 'Festivo', shortLabel: 'Festivo', color: '#111111', countsAsWork: false });
+    expect(isZeroDurationShift(shift({ shiftType: 'Festivo', startTime: '', endTime: '', location: 'Festivo' }))).toBe(true);
   });
 });
 

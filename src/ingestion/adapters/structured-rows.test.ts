@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { setupLocalStorageMock } from '../../test-utils/local-storage';
+import { upsertShiftType } from '../../lib/shift-types';
 import { normalizeStructuredRows, StructuredShiftRow } from './structured-rows';
+
+setupLocalStorageMock();
 
 function row(partial: Partial<StructuredShiftRow>): StructuredShiftRow {
   return {
@@ -43,6 +47,20 @@ describe('normalizeStructuredRows', () => {
   it('treats a row with neither start nor end as a Libre/absence row', () => {
     const result = normalizeStructuredRows([row({ startTime: '', endTime: '', shiftType: 'LIBRE' })]);
     expect(result.employees[0].shifts[0]).toMatchObject({ shiftType: 'Libre', startTime: '', endTime: '' });
+  });
+
+  it('requires times for a configured working type even when the type is custom', () => {
+    upsertShiftType({ id: 'Guardia', label: 'Guardia', shortLabel: 'Guardia', color: '#111111', countsAsWork: true });
+    const result = normalizeStructuredRows([row({ startTime: '', endTime: '', shiftType: 'Guardia' })]);
+    expect(result.employees).toHaveLength(0);
+    expect(result.diagnostics[0]).toMatchObject({ code: 'INCOMPLETE_SHIFT' });
+  });
+
+  it('allows a configured non-working type without times', () => {
+    upsertShiftType({ id: 'Festivo', label: 'Festivo', shortLabel: 'Festivo', color: '#111111', countsAsWork: false });
+    const result = normalizeStructuredRows([row({ startTime: '', endTime: '', shiftType: 'Festivo' })]);
+    expect(result.employees[0].shifts[0]).toMatchObject({ shiftType: 'Festivo', startTime: '', endTime: '' });
+    expect(result.diagnostics).toHaveLength(0);
   });
 
   it('flags a same-employee same-date duplicate and keeps only the first', () => {

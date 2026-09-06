@@ -17,6 +17,11 @@ export const normalizeShiftTypeLabel = (value: string): string => {
 };
 
 export const getShiftType = (shift: Shift): string => {
+  const explicitType = shift.shiftType?.trim();
+  if (explicitType) {
+    return normalizeShiftTypeLabel(explicitType);
+  }
+
   const normalizedFromLocation = normalizeShiftTypeLabel(shift.location);
   if (normalizedFromLocation) {
     return normalizedFromLocation;
@@ -32,7 +37,7 @@ export const getShiftType = (shift: Shift): string => {
 export const hasShiftTimes = (shift: Shift): boolean =>
   !isEmptyTime(shift.startTime) && !isEmptyTime(shift.endTime);
 
-export const isFreeShift = (shift: Shift): boolean => getShiftType(shift) === 'Libre';
+export const isFreeShift = (shift: Shift): boolean => !shiftTypeCountsAsWork(getShiftType(shift));
 export const isZeroDurationShift = (shift: Shift): boolean => !shiftTypeCountsAsWork(getShiftType(shift));
 export const getShiftOrigin = (shift: Shift): ShiftOrigin => shift.origin === 'MAN' ? 'MAN' : 'IMP';
 

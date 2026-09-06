@@ -7,13 +7,14 @@
  * when the corresponding alias set is loaded. AJ is explicitly ignored by
  * product decision and is filtered before any alias can resolve it.
  */
-import { resolveShiftTypeId } from '../../lib/shift-types';
+import { resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { isExplicitlyIgnoredCode } from './ignored-codes';
 import { isSeparatorToken, isTimeToken, normalizeText, normalizeTimeToken } from './normalize';
 import { resolveCode, ShiftCodeMapping } from './shift-code-profile';
 
 export function isOffToken(value: string): boolean {
-  return resolveShiftTypeId(value) === 'Libre';
+  const typeId = resolveShiftTypeId(value);
+  return typeId !== null && !shiftTypeCountsAsWork(typeId);
 }
 
 /**

@@ -2,11 +2,15 @@ import { FormEvent, useEffect, useRef } from 'react';
 import { Loader2, Save, Trash2 } from 'lucide-react';
 import { ScheduleSnapshot } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
+import { getShiftTypes, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { SearchableSelect } from '../ui/SearchableSelect';
 
 export interface AssignmentEditorState {
   id: string | null;
   employeeId: string;
   date: string;
+  shiftType: string;
+  countsAsWork: boolean;
   startTime: string;
   endTime: string;
   location: string;
@@ -43,6 +47,7 @@ export function ScheduleAssignmentEditor({
 }: ScheduleAssignmentEditorProps) {
   const { t } = useI18n();
   const employeeRef = useRef<HTMLSelectElement>(null);
+  const shiftTypes = getShiftTypes();
 
   useEffect(() => {
     employeeRef.current?.focus();
@@ -81,11 +86,29 @@ export function ScheduleAssignmentEditor({
         <label htmlFor="planner-editor-date">{t('planner.dateLabel')}
             <input id="planner-editor-date" name="date" type="date" autoComplete="off" value={editor.date} min={minimumDate ?? snapshot.version.periodStart} max={snapshot.version.periodEnd} onChange={(event) => onChange({ ...editor, date: event.target.value })} disabled={isSaving} required />
         </label>
+        <SearchableSelect
+          label={t('assistant.shiftTypeLabel')}
+          value={editor.shiftType}
+          options={shiftTypes.map((type) => ({ value: type.id, label: type.label }))}
+          onChange={(shiftType) => {
+            const countsAsWork = shiftTypeCountsAsWork(shiftType);
+            onChange({
+              ...editor,
+              shiftType,
+              countsAsWork,
+              startTime: countsAsWork ? (editor.startTime || '09:00') : '',
+              endTime: countsAsWork ? (editor.endTime || '17:00') : '',
+            });
+          }}
+          searchPlaceholder={t('assistant.searchPlaceholder')}
+          emptyMessage={t('assistant.noShiftTypes')}
+          disabled={isSaving}
+        />
         <label htmlFor="planner-editor-start">{t('planner.startLabel')}
-          <input id="planner-editor-start" name="startTime" type="time" autoComplete="off" value={editor.startTime} onChange={(event) => onChange({ ...editor, startTime: event.target.value })} disabled={isSaving} required />
+          <input id="planner-editor-start" name="startTime" type="time" autoComplete="off" value={editor.startTime} onChange={(event) => onChange({ ...editor, startTime: event.target.value })} disabled={isSaving || !editor.countsAsWork} required={editor.countsAsWork} />
         </label>
         <label htmlFor="planner-editor-end">{t('planner.endLabel')}
-          <input id="planner-editor-end" name="endTime" type="time" autoComplete="off" value={editor.endTime} onChange={(event) => onChange({ ...editor, endTime: event.target.value })} disabled={isSaving} required />
+          <input id="planner-editor-end" name="endTime" type="time" autoComplete="off" value={editor.endTime} onChange={(event) => onChange({ ...editor, endTime: event.target.value })} disabled={isSaving || !editor.countsAsWork} required={editor.countsAsWork} />
         </label>
         <label htmlFor="planner-editor-location">{t('planner.locationLabel')}
           <input id="planner-editor-location" name="location" autoComplete="off" value={editor.location} onChange={(event) => onChange({ ...editor, location: event.target.value })} placeholder={t('planner.locationPlaceholder')} disabled={isSaving} />

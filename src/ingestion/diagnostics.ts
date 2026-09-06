@@ -23,6 +23,8 @@ import { CalendarImportContext } from '../lib/import-types';
 import { ImportResult } from '../lib/import-quality';
 import { ItemAnalysis } from './analysis';
 import { DocumentAnalysisResult } from './parsers/file';
+import { normalizeShiftTypeLabel } from '../lib/shifts';
+import { shiftTypeCountsAsWork } from '../lib/shift-types';
 
 export type ImportState =
   | 'READY'
@@ -192,8 +194,9 @@ const isMissingTime = (value: string): boolean => value.trim() === '' || value =
 const isIncompleteWorkShift = (shift: { startTime: string; endTime: string; shiftType?: string | null }): boolean => {
   const startMissing = isMissingTime(shift.startTime);
   const endMissing = isMissingTime(shift.endTime);
-  if (shift.shiftType?.trim() && startMissing && endMissing) {
-    return false;
+  const typeId = normalizeShiftTypeLabel(shift.shiftType ?? '');
+  if (typeId && !shiftTypeCountsAsWork(typeId)) {
+    return startMissing !== endMissing;
   }
   return startMissing || endMissing;
 };
