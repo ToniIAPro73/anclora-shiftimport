@@ -12,7 +12,7 @@ repositorio. `docs/specs/` **no existía** y se ha creado para este documento, p
 transversal de release que abarca 8 fases. `sdd/` sigue siendo canónico para specs de feature; este
 documento es una spec de programa y queda subordinado a los contratos de `docs/standards/` y a AOS.
 
-**Estado**: P5.4 `PASS_WITH_GAPS` (implementada localmente). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
+**Estado**: P5.5 `PASS_WITH_GAPS`; P5.4 `PASS_WITH_GAPS` (implementada localmente). P6 y P7 no iniciadas; P8 continúa `BLOCKED` por la
 fuente CRC Tryp inaccesible.
 
 ---
@@ -45,7 +45,7 @@ Gate), sin línea `STATUS`, lo que deja al producto sin veredicto formal pese a 
 El cuaderno NotebookLM sobre CRC Tryp es **inaccesible** (redirección 302 a `accounts.google.com`).
 No se ha derivado ninguna idea de esa fuente y la fase correspondiente queda `BLOCKED`.
 
-El plan resultante son 12 fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2`, `P5.3` y `P5.4`) con 123 microtareas, más una fase `P8`
+El plan resultante son 13 fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2`, `P5.3`, `P5.4` y `P5.5`) con 138 microtareas, más las fases `P5.6` y `P8`
 bloqueada. `P0` restaura la verdad documental y cierra el MVP Release Gate; `P1` convierte la
 importación en una operación que siempre deja rastro y siempre indica cómo recuperarse; `P2`
 adelanta el gating de plan; `P3` erradica los 18 diálogos nativos restantes; `P4` cierra los
@@ -83,9 +83,15 @@ P5.1 o P5.2.
 P5.4 se añade después del cierre de P5.3 para completar el autoservicio operativo del Employee sin
 cambiar su IA móvil `Hoy / Semana / Solicitudes / Más`. Expone solicitudes de cambio, self-import y
 alta histórica mediante los contratos existentes, siempre bajo scope `SELF`. El intercambio de
-turnos se registra como P5.5 futura y no se implementa aquí. P5.4 queda en `PASS_WITH_GAPS`: la
+turnos se registra como P5.6 futura y no se implementa aquí. P5.4 queda en `PASS_WITH_GAPS`: la
 implementación y el smoke E2E pasan, pero la matriz de capturas visuales manuales queda pendiente
 de una sesión de QA visual con navegador interactivo.
+
+P5.5 se añade después de P5.4 para cerrar la separación temporal de importación mixta: `date < today`
+persiste como histórico y `date >= today` se añade a planificación `DRAFT` solo para OWNER/ADMIN/PLANNER
+con consentimiento explícito por operación. La importación nunca publica; el calendario operativo muestra
+solo realidad publicada y Planner muestra los borradores. EMPLOYEE conserva la exclusión de futuro de P5.
+P5.6 conserva, como intención futura, el workflow de intercambio de turnos previamente documentado.
 
 ---
 
@@ -818,7 +824,7 @@ Requisitos que ninguna fase puede degradar:
 
 ## 30. ROADMAP
 
-Doce fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2`, `P5.3` y `P5.4`) más una bloqueada. P5.2 contiene 15 microtareas
+Trece fases ejecutables (`P0`–`P7`, `P5.1`, `P5.2`, `P5.3`, `P5.4` y `P5.5`) más P5.6 futura y P8 bloqueada. P5.2 contiene 15 microtareas
 originales y 10 microtareas de remediación post-M15. Detalle completo en el documento de roadmap.
 
 | Fase | Nombre | Prioridad del encargo cubierta |
@@ -833,6 +839,8 @@ originales y 10 microtareas de remediación post-M15. Detalle completo en el doc
 | P5.2 | Operational Navigation & Time-Scope Consolidation + remediation | Importar/Añadir/Planificar; Approval Lite; shell, planner y acciones temporales |
 | P5.3 | Plan-Aware Organization Onboarding & Initial Governance | plan inicial; OWNER válido; áreas y ADMIN opcionales; User↔Employee explícito |
 | P5.4 | Employee Self-Service Completion | solicitudes de cambio, self-import y alta histórica bajo scope SELF |
+| P5.5 | Future Import to Draft Scheduling | separación temporal, consentimiento y borradores de Scheduling sin publicación automática |
+| P5.6 | Shift Swap Workflow | intención futura diferida; no implementada |
 | P6 | Import History & Operational Traceability | (11) histórico; (F) |
 | P7 | Import vs Schedule Communication | (12) scheduling/approval — comunicación; (J) |
 | P8 | CRC Tryp Research | (13) mejoras CRC Tryp — **BLOCKED** |
@@ -858,15 +866,14 @@ documento para evitar dos autoridades divergentes.
 
 ## 32. MICROTASKS
 
-123 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
+138 microtareas, todas con `ID`, `TITLE`, `PURPOSE`, `SOURCE`, `PRECONDITIONS`,
 `FILES_LIKELY_AFFECTED`, impactos (`DATA_MODEL` / `API` / `UI` / `I18N` / `ACCESSIBILITY` /
 `SECURITY`), `TESTS_REQUIRED`, `E2E_REQUIRED`, `MANUAL_QA_REQUIRED`, `ACCEPTANCE_CRITERIA` en
 Given/When/Then, `DO_NOT_BREAK`, `DEPENDENCIES`, `RISK` y `ESTIMATED_COMPLEXITY`, en el documento
 de roadmap, sección `MICROTASKS` de cada fase.
 
 Distribución: P0 = 10, P1 = 10, P2 = 5, P3 = 9, P4 = 7, P5 = 6, P5.1 = 10, P5.2 = 25 (15 + 10 de
-remediación), P5.3 = 17, P5.4 = 13, P6 = 6, P7 = 5, P8 = 0 (bloqueada). P5.5 queda diferida y no
-entra en el conteo ejecutable.
+remediación), P5.3 = 17, P5.4 = 13, P5.5 = 15, P6 = 6, P7 = 5, P5.6 = 0 y P8 = 0 (bloqueadas/diferidas).
 
 Orden general aplicado, con las desviaciones justificadas en cada fase:
 
@@ -939,6 +946,7 @@ en `api/` ni `db/`), nunca omitirse.
 | Application shell y navegación role-aware | NUEVO POST-P5 | P5.1 | MEDIO | `AppShell.test.tsx`, `p5-1-shell-smoke.spec.ts` | calendario, contexto, logout y Portal EMPLOYEE preservados |
 | Navegación operacional y frontera temporal | NUEVO POST-P5.1; remediación visual/temporal post-M15 | P5.2 | ALTO | tests de contrato, `p5-2-operations.spec.ts`, `calendar-actions.test.ts` | Approval Lite, Import/Añadir/Planificar, scopes, planner modal y shell preservados |
 | Onboarding plan-aware y gobernanza inicial | NUEVO POST-P5.2; defecto OWNER-only reproducido | P5.3 | ALTO | `OnboardingChoiceModal.test.tsx`, `api/onboarding/onboarding.test.js`, smoke compacto | OWNER válido sin Employee/ADMIN/Area; plan server-side; atomicidad y User↔Employee |
+| Importación temporal mixta y drafts | NUEVO POST-P5.4; hoy/futuro se enviaban sin consentimiento | P5.5 | ALTO | `confirm-split.test.js`, `future-import.spec.ts`, `ImportModal.test.tsx` | `date < today` histórico; `date >= today` DRAFT; no auto-publish; EMPLOYEE sin futuro |
 | Modo invitado local-first | SÍ | P3 (LegalPage) | MEDIO | manual + `LandingPage.test.tsx` | Sin sesión, todo en `localStorage`; reset solo local |
 | Tema claro y oscuro | SÍ (browser) | P1, P3, P4, P7 | MEDIO | QA visual + capturas de Gate | Contraste correcto en ambas superficies |
 | `prefers-reduced-motion` | SÍ (R1-M14) | P1, P3, P4 | BAJO | `ImportModal.test.tsx` | Spinner y transiciones respetan la preferencia |
@@ -965,7 +973,7 @@ en `api/` ni `db/`), nunca omitirse.
 ## 36. E2E STRATEGY
 
 - Base: `qa/e2e-acceptance/playwright.local.config.ts` contra `vercel dev` + Neon **development**, con seed/teardown automáticos.
-- Specs nuevas previstas: `import-recovery.spec.ts` (P1), `plan-entitlement.spec.ts` (P2), `role-matrix.spec.ts` (P5), ampliación de `specs-responsive/` (P4), ampliación del histórico (P6), recorrido import→borrador→publicación (P7).
+- Specs nuevas previstas: `import-recovery.spec.ts` (P1), `plan-entitlement.spec.ts` (P2), `role-matrix.spec.ts` (P5), `future-import.spec.ts` (P5.5), ampliación de `specs-responsive/` (P4), ampliación del histórico (P6), recorrido import→borrador→publicación (P7).
 - **Guardia obligatoria**: en todo spec de journey de negocio, un handler `page.on('dialog')` que haga **fallar** el test si aparece un diálogo nativo.
 - Los 16 pasos del flujo completo se ejecutan en P0 y se re-ejecutan como smoke en el Gate final.
 - Determinismo: se prefiere una matriz compacta y determinista a una exhaustiva y lenta, siguiendo el criterio ya adoptado en R3-M16 (evitar que el Gate mida la latencia del harness en vez del producto).
@@ -1016,6 +1024,7 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 | `docs/standards/MODAL_CONTRACT.md` | Nota de confirmación destructiva | P3 |
 | `docs/roadmap/shiftimport-mvp-v2/R0/DOMAIN-GLOSSARY.md` | Anexo de glosario de UI | P7-M01 |
 | `docs/manual/manual-usuario.md` | Histórico y comunicación de futuros | P6, P7 |
+| `docs/product/FUTURE_IMPORT_DRAFT_CONTRACT.md` | Contrato temporal: histórico frente a borrador futuro | P5.5 |
 | `docs/roadmap/P5.1-SHELL-NAVIGATION-INVENTORY.md` y `P5.1-PREMIUM-APPLICATION-SHELL-GATE.md` | Inventario de acciones, contrato de navegación y evidencia del Gate | P5.1 |
 | `docs/product/OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT.md` y `docs/roadmap/P5.2-OPERATIONAL-NAVIGATION-TIME-SCOPE-GATE.md` | Contrato temporal, matriz operacional y evidencia del Gate | P5.2 |
 | `docs/product/PLAN_AWARE_ORGANIZATION_ONBOARDING_CONTRACT.md` y `docs/roadmap/P5.3-PLAN-AWARE-ORGANIZATION-ONBOARDING-GATE.md` | Contrato de bootstrap, plan, áreas, OWNER/ADMIN y evidencia del Gate | P5.3 |
@@ -1154,6 +1163,17 @@ la organización; el cliente no puede elegir el alcance.
 
 ---
 
+### APPROVED DECISIONS — P5.5
+
+**D-P5.5-01** — Future import creates draft scheduling and never publishes automatically.
+**D-P5.5-02** — OWNER/ADMIN/PLANNER must explicitly consent per import before today/future rows create drafts; the safe default is historical-only.
+**D-P5.5-03** — The operational calendar shows published reality only; imported future drafts appear in Planner.
+**D-P5.5-04** — Future imports resolve the canonical weekly Schedule/DRAFT, reuse editable drafts and preserve published-version immutability.
+**D-P5.5-05** — EMPLOYEE future import remains excluded; only its historical SELF rows may persist in this phase.
+
+These decisions are approved for P5.5 and do not implement Shift Swap. The deferred intention and
+open questions remain under P5.6 in the roadmap and `docs/product/EMPLOYEE_SHIFT_SWAP_DEFERRED.md`.
+
 ## 42. KNOWN GAPS
 
 | # | Gap | Origen | Severidad | Absorbe |
@@ -1177,6 +1197,7 @@ la organización; el cliente no puede elegir el alcance.
 | G-17 | Densidad de navegación: el header de gestión mezcla contexto, preferencias y operaciones y relega el calendario | Hallazgo post-P5 reproducido en navegador | MEDIA | P5.1 |
 | G-18 | Densidad residual y separación temporal: Approval Lite en calendario, count ausente y Añadir/Planificar ambiguos | Hallazgo post-P5.1 / contrato operacional | MEDIA | P5.2 |
 | G-19 | Remediación post-M15: contexto duplicado, control de collapse textual, planner con editor inline y `+` sin guardia única de draft | Addendum P5.2 reproducido en código | MEDIA | P5.2-R01..R10 |
+| G-20 | Ficheros PDF/XLSX reales del caso P5.5 no están disponibles en el workspace verificado | Prompt P5.5 | MEDIA | Gate P5.5 / QA con artefactos aportados |
 
 ---
 
@@ -1185,7 +1206,7 @@ la organización; el cliente no puede elegir el alcance.
 ### FINAL_PRODUCT_GATE
 
 Se ejecuta **una sola vez**, tras el cierre de P7. Absorbe además los gaps G-02, G-04, G-05 y G-06.
-Solo puede ejecutarse si P0–P5.3 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada gap nombrado y asignado.
+Solo puede ejecutarse si P0–P5.5 y P6–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada gap nombrado y asignado.
 
 | # | Pregunta | Criterio de aprobación | Evidencia exigida |
 |---|---|---|---|

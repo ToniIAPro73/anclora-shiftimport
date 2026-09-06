@@ -6,7 +6,7 @@
 > de dominio, journeys objetivo, matrices de roles/planes y el Final Product Gate.
 >
 > **Estado**: P5 cerrado (PASS); P5.1 cerrado (PASS); P5.2 cerrado (PASS) y remediación post-M15
-> cerrada (PASS). P5.3 cerrado (PASS); P6/P7 no iniciadas.
+> cerrada (PASS). P5.3 cerrado (PASS); P5.4 `PASS_WITH_GAPS`; P5.5 cerrado (`PASS_WITH_GAPS`); P6/P7 no iniciadas.
 
 ---
 
@@ -55,7 +55,8 @@ Relación formal con la historia:
 ```
 R0 → R1 → R2 → R3 → R4 → R5 → [R5-M12 abierto]
                                    │
-                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P5.3 → P5.4 → P6 → P7
+                                   └── P0 (absorbe y ejecuta R5-M12) → P1 → P2 → P3 → P4 → P5 → P5.1 → P5.2 → P5.3 → P5.4 → P5.5 → P6 → P7
+                                                                                                                     └── P5.6 (futuro diferido, no bloquea P6)
                                                                                                      P8 (BLOCKED)
 R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 ```
@@ -88,6 +89,8 @@ R6–R9 POST-MVP permanecen intactos y posteriores a P7.
 | P6 ↔ P5.3 | NO | P6 consume organizaciones nacidas con plan y OWNER válidos; no modifica el onboarding. |
 | P5.4 ↔ P5.3 | NO | P5.4 consume el portal y contratos SELF ya cerrados; completa sus entradas de autoservicio sin cambiar el bootstrap. |
 | P6 ↔ P5.4 | NO | P6 consume el histórico ya accesible al Employee; no modifica el portal ni sus mutaciones SELF. |
+| P5.5 ↔ P5.4 | NO | P5.5 consume la importación SELF y la frontera temporal cerradas; amplía futuro solo para OWNER/ADMIN/PLANNER. |
+| P6 ↔ P5.5 | NO | P6 consume los resultados mixtos y sus conteos; P5.5 no cambia el contrato de histórico, solo añade trazabilidad de drafts. |
 | P8 ↔ todo | SÍ | Investigación externa; no toca código. |
 
 ---
@@ -1857,7 +1860,7 @@ ChangeRequest sin crear un segundo pipeline ni ampliar autorización.
 Import SELF, histórico manual y Approval Lite.
 **SCOPE**: CTA `Nueva solicitud`, selección de turno propio y creación mediante ChangeRequest existente;
 entradas `Importar mis turnos` y `Añadir turno pasado`; ModalShell; tests y evidencia de scope.
-**OUT_OF_SCOPE**: P5.5 Shift Swap, planner, publicación, aprobación para Employee, nuevas notificaciones,
+**OUT_OF_SCOPE**: P5.6 Shift Swap, planner, publicación, aprobación para Employee, nuevas notificaciones,
 nuevas categorías de solicitud, migraciones y billing.
 **DEPENDENCIES**: P5.3 Gate PASS; APIs `/api/me/*` y `/api/shifts`; `ModalShell`; `EMPLOYEE_SELF_SERVICE_CONTRACT.md`.
 **PREREQUISITES**: no tocar producción; reutilizar fixtures sintéticas y un smoke E2E compacto; conservar
@@ -1868,7 +1871,7 @@ formulario y validación server-side de `organization_id`, `employee_id` y rol.
 ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 **MIGRATION_IMPACT**: N/A. No se introducen tablas, columnas ni endpoints nuevos.
 **ROLLBACK_STRATEGY**: revertir la superficie del portal y conservar los endpoints y contratos existentes.
-**DOCUMENTATION_UPDATES**: SPEC, contrato SELF, contrato futuro P5.5, este roadmap y Gate P5.4.
+**DOCUMENTATION_UPDATES**: SPEC, contrato SELF, contrato futuro P5.6, este roadmap y Gate P5.4.
 
 ### MICROTASKS — P5.4
 
@@ -1884,7 +1887,7 @@ ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 | P5.4-M08 | Enforcement de rol y scope | Las acciones del portal siguen siendo SELF y el backend rechaza recursos ajenos/futuro. | API |
 | P5.4-M09 | Responsive, accesibilidad e i18n | Portal y subflujos funcionan en móvil/desktop, ES/EN y teclado. | No |
 | P5.4-M10 | Matriz browser/E2E compacta | Un smoke cubre navegación y entradas críticas; combinaciones contractuales quedan en unit/API. | Compact |
-| P5.4-M11 | Alcance futuro P5.5 | Shift Swap queda documentado como futuro diferido, sin código ni esquema. | No |
+| P5.4-M11 | Alcance futuro P5.6 | Shift Swap queda documentado como futuro diferido, sin código ni esquema. | No |
 | P5.4-M12 | Reconciliación documental | SPEC, contrato, roadmap y estado no contradicen la implementación. | No |
 | P5.4-M13 | Gate final | Tests, build, lint, typecheck, evidencia de portal y worktree cumplen el Gate. | Sí, mínimo |
 
@@ -1904,7 +1907,7 @@ ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 | UNIT_TESTS / INTEGRATION_TESTS | PASS requerido | Componentes portal y APIs existentes dirigidos en verde. |
 | E2E | PASS requerido | Smoke compacto del portal; no se añade una batería exhaustiva por variante. |
 | BUILD / LINT / TYPECHECK | PASS requerido | Comandos del repositorio. |
-| DOCUMENTATION | PASS requerido | Contrato SELF, P5.5 futuro, SPEC, roadmap y Gate alineados. |
+| DOCUMENTATION | PASS requerido | Contrato SELF, P5.6 futuro, SPEC, roadmap y Gate alineados. |
 | AOS_COMPLIANCE | PASS requerido | Sin cambio de autoridad ni esquema; estado documental actualizado. |
 | WORKTREE_STATE | PASS requerido | Sólo cambios de P5.4, sin secretos ni artefactos de QA. |
 | EMPLOYEE_TODAY / EMPLOYEE_WEEK | PASS requerido | Sólo datos propios y acciones de consulta/acknowledge válidas. |
@@ -1913,7 +1916,7 @@ ChangeRequest/Approval Lite, portal mobile-first y User≠Employee.
 | EMPLOYEE_HISTORICAL_ADD | PASS requerido | Sólo `date < today` y Employee propio; backend continúa validando. |
 | EMPLOYEE_NO_FUTURE_ADD / NO_PLANNER / NO_APPROVAL | PASS requerido | UI y API no ofrecen capacidades prohibidas. |
 | MODAL_CONSISTENCY | PASS requerido | Nuevos subflujos usan ModalShell y un único formulario de solicitud. |
-| P5.5_DEFERRED_SCOPE | PASS requerido | Intención y preguntas abiertas documentadas; cero implementación. |
+| P5.6_DEFERRED_SCOPE | PASS requerido | Intención y preguntas abiertas documentadas; cero implementación. |
 
 `PHASE_P5.4_GATE`: `PASS_WITH_GAPS`. La implementación, tests dirigidos, suite completa, lint, build y
 smoke E2E compacto pasan; la evidencia está archivada en
@@ -1923,14 +1926,99 @@ del programa. P6 permanece sin iniciar.
 
 ---
 
-## FUTURE PHASE P5.5 — Shift Swap Workflow
+## PHASE P5.5 — Future Import to Draft Scheduling
 
 **PHASE_ID**: P5.5
+**PHASE_NAME**: Importación futura a planificación en borrador
+**STATUS**: PASS_WITH_GAPS
+**GOAL**: Separar de forma explícita los turnos históricos (`date < today`) de los turnos de hoy/futuros
+(`date >= today`) y enviar estos últimos a `ScheduleVersion` `DRAFT` sin publicación automática.
+**WHY_NOW**: El endpoint de futuro ya existía, pero la UI enviaba un archivo mixto sin consentimiento
+explícito y trataba hoy como histórico. Eso hacía ambiguo el resultado y podía ocultar que el calendario
+operativo solo representa versiones publicadas.
+**USER_VALUE**: El usuario sabe cuántos turnos históricos se guardaron, cuántos futuros quedaron en borrador
+y dónde revisarlos antes de publicar.
+**BUSINESS_VALUE**: Mantiene la frontera Import ≠ Publish y hace usable la planificación multi-semana.
+**SOURCE_DRIVERS**: prompt P5.5; `FUTURE_IMPORT_DRAFT_CONTRACT.md`; R3-M14; P5.2 temporal contract.
+**SCOPE**: preview temporal, consentimiento por operación, resolución/reutilización de drafts, assignments
+idempotentes, resultado separado, enlace a Planner, autorización por rol/scope y regresión con ficheros reales
+si están disponibles.
+**OUT_OF_SCOPE**: futuro desde EMPLOYEE, publicación automática, Shift Swap (P5.6), migraciones, billing y
+rediseño del dominio Scheduling.
+**DEPENDENCIES**: P5.4; `api/_lib/future-import.js`; `Schedule`/`ScheduleVersion`/`ShiftAssignment` existentes.
+**PREREQUISITES**: Neon development para E2E; nunca producción; fixtures sintéticas por defecto.
+**RISKS**: medio — archivos mixtos y conteos de deduplicación; alto si se modifica una versión publicada.
+**DO_NOT_BREAK**: `getOperationalDate`, import preview, atomicidad, idempotencia, SELF Employee, tenant
+isolation, scope PLANNER, publicación inmutable y calendario publicado.
+**AFFECTED_FILES**: `src/App.tsx`, `ImportModal.tsx`, `TeamImportModal.tsx`, `ImportResultModal.tsx`,
+`src/lib/remote.ts`, `src/lib/week.ts`, `api/_lib/future-import.js`, i18n, tests y QA E2E.
+**MIGRATION_IMPACT**: N/A; se reutilizan las migraciones 0017–0021 y 0033 ya aplicadas.
+**ROLLBACK_STRATEGY**: revertir commits de P5.5; no borrar drafts ni filas históricas. La capa de UI vuelve a
+ocultar el detalle nuevo sin reinterpretar datos existentes.
+**OBSERVABILITY**: resultado temporal persistente, `imports` existente, conteos de assignments y reportes E2E.
+**DOCUMENTATION_UPDATES**: SPEC, contrato de producto, este roadmap, progreso y contrato futuro P5.6.
+
+### MICROTASKS — P5.5
+
+| ID | TITLE | PURPOSE | E2E |
+|---|---|---|---|
+| P5.5-M01 | Auditoría temporal mixta | Confirmar el flujo actual y la frontera operativa única. | No |
+| P5.5-M02 | Contrato de futuro en borrador | Formalizar Import ≠ Publish y roles autorizados. | No |
+| P5.5-M03 | Split temporal en preview | Mostrar históricos y hoy/futuro con conteos calculados. | Component |
+| P5.5-M04 | Consentimiento explícito | Exigir elección por operación; default histórico-only. | Compact |
+| P5.5-M05 | Resolución de semana | Agrupar por preferencia Monday/Sunday y scope real. | API |
+| P5.5-M06 | Crear/reutilizar draft | No duplicar Schedule ni DRAFT editable. | API |
+| P5.5-M07 | Persistir assignments futuros | Insertar assignments idempotentes sin tocar PUBLISHED. | API |
+| P5.5-M08 | Resultado mixto | Separar conteos históricos, futuros, existentes y semanas. | Component |
+| P5.5-M09 | Deep link a Planner | Abrir la primera semana afectada con `Ver planificación`. | Compact |
+| P5.5-M10 | Calendario publicado vs draft | Mantener drafts fuera del calendario operativo. | No |
+| P5.5-M11 | Matriz autorización/scope | Revalidar OWNER/ADMIN/PLANNER y excluir EMPLOYEE futuro. | API |
+| P5.5-M12 | Regresión PDF/XLSX | Ejecutar ficheros reales solo si están disponibles; no hardcodear identidad. | Compact |
+| P5.5-M13 | Accesibilidad/i18n/responsive | Modal, radios, resultado y Planner en ES/EN y viewports críticos. | No |
+| P5.5-M14 | Reconciliación documental | Actualizar SPEC, P6 dependency, progreso y mover swap a P5.6. | No |
+| P5.5-M15 | Gate final | Verificar todos los criterios y archivar evidencia. | Sí, mínimo |
+
+### PHASE_P5.5_GATE
+
+| CRITERION | RESULTADO EXIGIDO | EVIDENCE_REQUIRED |
+|---|---|---|
+| FUNCTIONAL | PASS | Past-only, future-only y mixed con resultado separado. |
+| DATA_INTEGRITY | PASS | Histórico solo en `shifts`; futuro solo en DRAFT assignments. |
+| AUTHORIZATION | PASS | Backend exige rol, scope, Employee activo y consentimiento. |
+| TENANT_ISOLATION | PASS | Fila de otra organización rechazada sin mutación. |
+| SECURITY | PASS | EMPLOYEE no crea futuro; no auto-publish; no secretos. |
+| REGRESSION | PASS | P1–P5.4 y R3/R4/R5 relevantes verdes. |
+| ACCESSIBILITY | PASS | Radios, resultado y CTAs nombrados y navegables. |
+| RESPONSIVE | PASS | Preview/resultado usable en mobile y desktop. |
+| I18N | PASS | Claves ES/EN en el mismo cambio. |
+| UNIT_TESTS | PASS | Split temporal, consentimiento y reportes. |
+| INTEGRATION_TESTS | PASS | Endpoint, transaction, idempotencia y scope. |
+| E2E | PASS | Runner compacto; past/future/mixed, publish boundary y employee denial. |
+| BUILD | PASS | `npm run build`. |
+| LINT | PASS | `npm run lint`. |
+| TYPECHECK | PASS | Incluido en build. |
+| DOCUMENTATION | PASS | SPEC, contrato y roadmap reconciliados. |
+| AOS_COMPLIANCE | PASS | Sin migración ni excepción nueva. |
+| WORKTREE_STATE | PASS | Cambios de P5.5 explícitos, sin artefactos/secretos. |
+| TEMPORAL_SPLIT | PASS | `date < today` vs `date >= today` verificado con Europe/Madrid. |
+| FUTURE_CONSENT | PASS | Sin `futureConsent: draft` no hay transacción. |
+| NO_AUTO_PUBLISH | PASS | Publicación separada e inmutable. |
+| PLANNER_VISIBILITY | PASS | Draft aparece en Planner y CTA apunta a la primera semana. |
+| EMPLOYEE_FUTURE_EXCLUDED | PASS | Cero ScheduleVersion/assignment futuro en SELF. |
+| IDEMPOTENCY | PASS | Reimport no duplica filas ni versiones. |
+| REAL_FILE_REGRESSION | PASS_WITH_GAPS | PASS con PDF/XLSX reales o gap explícito si no están disponibles. |
+
+`PHASE_P5.5_GATE` no puede ser PASS si falla la frontera temporal, el consentimiento, la autorización,
+la idempotencia o la separación published/draft. P6 no comienza hasta PASS o PASS_WITH_GAPS no bloqueante.
+
+## FUTURE PHASE P5.6 — Shift Swap Workflow
+
+**PHASE_ID**: P5.6
 **STATUS**: DEFERRED / PLANNED FUTURE
 **SCOPE**: Employee A solicita intercambio de un turno propio publicado; se resuelven candidatos
 compatibles, Employee B acepta/rechaza, se evalúa `ApprovalPolicy` y el cambio se aplica de forma
 atómica con auditoría.
-**NOT_IMPLEMENTED_IN_P5.4**: no tablas, estados, endpoints, matching, selector de compañeros,
+**NOT_IMPLEMENTED_IN_P5.4/P5.5**: no tablas, estados, endpoints, matching, selector de compañeros,
 notificaciones ni reglas de compatibilidad. Las preguntas abiertas están en
 `docs/product/EMPLOYEE_SHIFT_SWAP_DEFERRED.md`.
 
@@ -2279,8 +2367,9 @@ mientras la fuente no sea legible.
 | P5.2 | Operational Navigation & Time-Scope Consolidation + remediation | 25 | P5.1 | PASS |
 | P5.3 | Plan-Aware Organization Onboarding & Initial Governance | 17 | P5.2 | PASS |
 | P5.4 | Employee Self-Service Completion | 13 | P5.3 | PASS_WITH_GAPS |
-| P5.5 | Shift Swap Workflow | — | P5.4 | DEFERRED / PLANNED FUTURE |
-| P6 | Import History & Traceability | 6 | P1, P5.4 | PLANNED |
+| P5.5 | Future Import to Draft Scheduling | 15 | P5.4 | PASS_WITH_GAPS |
+| P5.6 | Shift Swap Workflow | — | P5.5 | DEFERRED / PLANNED FUTURE |
+| P6 | Import History & Traceability | 6 | P1, P5.5 | PLANNED |
 | P7 | Import vs Schedule Communication | 5 | P1, P6 | PLANNED |
 | P8 | CRC Tryp Research | — | fuente accesible | **BLOCKED** |
-| **Total executable** | | **123** | | |
+| **Total executable** | | **138** | | |

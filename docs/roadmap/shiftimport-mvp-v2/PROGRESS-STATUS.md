@@ -1,6 +1,6 @@
 # Progress Status — MVP v2 Roadmap Execution
 
-Última actualización: 2026-09-06, Gate P5.4 en `development`.
+Última actualización: 2026-09-06, Gate P5.5 en `development`.
 
 Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
 auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
@@ -100,6 +100,11 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
   mantienen la IA del portal, con creación de ChangeRequest, self-import y alta histórica bajo
   SELF. Tests, lint, build y smoke E2E compacto pasan; queda pendiente la matriz de capturas
   visuales manuales para el Gate final del programa. P6 permanece sin iniciar.
+- P5.5 — Future Import to Draft Scheduling: `PASS_WITH_GAPS`; la frontera `date < today` persiste
+  histórico y `date >= today` enruta a Scheduling en borrador para OWNER/ADMIN/PLANNER con consentimiento
+  explícito. El calendario conserva únicamente realidad publicada y EMPLOYEE no crea futuro. Suite completa,
+  lint, build y E2E compacto pasan; queda G-20 abierto porque los PDF/XLSX reales del caso no están en el
+  workspace, sin bloquear P6.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
