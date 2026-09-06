@@ -127,7 +127,7 @@ usa en absoluto.
 | Approval workflow | Preservar lo validado en R5 | `api/approval-requests/` + migraciones `0027`–`0032`; R5-M11 PASS | Roadmap R5 completo | BLOCKED | **Implementado y validado** | NO | No duplicar en el nuevo roadmap | `R5-M11-r5-final-gate.md` §21 |
 | Comportamiento del histórico | Histórico vacío tras intento real (F1) | `createImport` fija `status='completed'`; no hay path para `failed`/`blocked` | `R1-M09` documenta el hallazgo y lo deja abierto | BLOCKED | **Los intentos no completados no se registran** | SÍ (producto vs expectativa) | P1-M02, P1-M03, P6 | `api/_lib/data.js:1486`; `R1-M09-import-history.md` |
 | Turnos futuros | Ruta a borrador comunicada en una línea pequeña (F8) | `future-import.js`; `shift_assignments`; publicación explícita | `SCHEDULING_DOMAIN.md` correcto | BLOCKED | **Ruta a borrador real e intencionada** | NO (solo comunicación) | P7 | `api/_lib/future-import.js` |
-| Self-import de EMPLOYEE | No verificado (PLAN_BLOCKED) | `createImport` acepta scope `SELF` y fuerza `employeeId` propio; `upsertShifts` idem | Ninguna doc lo especifica | BLOCKED | **Técnicamente posible; contractualmente indefinido** | **SÍ — UNRESOLVED hasta D-04** | Decisión D-04 → P5-M05 | `api/_lib/data.js:1500-1513`, `:1686-1700` |
+| Self-import de EMPLOYEE | No verificado (PLAN_BLOCKED) | `createImport` acepta scope `SELF` y fuerza `employeeId` propio; `upsertShifts` idem | PD D-03/D-04 aprobadas | **Contrato aprobado; implementación/verificación en P5** | **SELF propio, filas ajenas excluidas con recuento; futuros excluidos** | NO — decisiones aprobadas | P5-M05 | `api/_lib/data.js:1500-1513`, `:1686-1700`; `sdd/decisions/PD-2026-09-06-D03-employee-self-import.md`; `PD-2026-09-06-D04-employee-multiemployee-import.md` |
 | Limitaciones de plan | Reveladas tarde (F2) | `requireFeature`/`requireWithinLimit` server-side reales | `pricing-hypothesis.md` marca precios como hipótesis | BLOCKED | **Enforcement real, señalización tardía** | SÍ (UX) | P2 | `api/_lib/plans.js`; auditoría F2 |
 | Alcance implementado | R3/R4/R5 existen y funcionan | `src/components/scheduling/`, `employee-portal/`, `api/approval-requests/` | `README.md` dice "no están implementadas todavía" | BLOCKED | **Implementadas** | SÍ | P0-M04 | `README.md`; árbol de `src/` |
 | Progreso del roadmap | N/A | R0–R5 cerrados; solo R5-M12 abierto | `PROGRESS-STATUS.md` dice "R2, 3 de 13", HEAD `2a64852` | BLOCKED | **R0–R5 cerrados en `36e7857`** | SÍ | P0-M05 | `grep '^STATUS' docs/roadmap/…` |
@@ -143,9 +143,9 @@ usa en absoluto.
 | Formatos de importación | Solo CSV verificado en navegador | PDF/XLSX/CSV/JSON/XML/imagen + fallback VLM; corpus GS-01..10 + GN-01..07 | `AGENTS.md` correcto | BLOCKED | **6 formatos implementados; 1 verificado en navegador** | NO, **NEEDS_VALIDATION** | Cobertura en el Gate final | `src/ingestion/`; `R1-M03` |
 | CRC Tryp | N/A | N/A | N/A | **INACCESIBLE** | **Sin información** | N/A | `NOTEBOOKLM_BLOCKED` — P8 | WebFetch → 302 `accounts.google.com` |
 
-**UNRESOLVED declarados**: exactamente uno — el contrato de self-import del EMPLOYEE (fila
-"Self-import de EMPLOYEE"). Se resuelve con la decisión **D-04**. Ninguna otra contradicción
-material queda sin acción asignada.
+**UNRESOLVED declarados**: ninguno entre D-03, D-04 y D-05; las tres decisiones de P5 están
+aprobadas y registradas en `sdd/decisions/`. D-07 sigue manteniendo P8 bloqueada por la fuente
+CRC Tryp inaccesible. Ninguna otra contradicción material queda sin acción asignada.
 
 ### Reconciliación de los ítems del roadmap histórico
 
@@ -213,10 +213,10 @@ Para cada área: `WHAT_EXISTS` / `WHAT_WORKS` / `WHAT_IS_PARTIAL` / `WHAT_IS_OUT
 ### ROLE_MODEL
 - **EXISTS**: OWNER > ADMIN > PLANNER > EMPLOYEE (`requireRole`); scopes ORGANIZATION / AREA / SELF (`resolveAccessScope`).
 - **WORKS**: el cliente no puede ensanchar el scope; EMPLOYEE sin employee vinculado → `SCOPE_UNAVAILABLE`.
-- **PARTIAL**: PLANNER sin `scoped_area_id` cae a scope ORGANIZATION — comportamiento correcto en código, no declarado en ningún documento de producto.
+- **WORKS_TO_VERIFY**: el scope de PLANNER sin `scoped_area_id` se deriva server-side:
+  `ORGANIZATION` sólo sin áreas activas; con áreas activas queda en `SCOPE_UNAVAILABLE` (D-05).
 - **OUTDATED**: toda la documentación de roles (P0).
-- **MISSING**: verificación en navegador de ADMIN, PLANNER, EMPLOYEE.
-- **UNCERTAIN**: si el fallback de PLANNER a ORGANIZATION es intencionado (decisión D-05).
+- **MISSING**: cierre de la verificación en navegador de ADMIN, PLANNER y EMPLOYEE.
 
 ### PLAN_MODEL
 - **EXISTS**: `free` / `personal` / `team` en `organizations.plan` con `CHECK`; `plans.js` como única autoridad; espejo de display en `src/lib/plans.ts`.
@@ -237,7 +237,8 @@ Para cada área: `WHAT_EXISTS` / `WHAT_WORKS` / `WHAT_IS_PARTIAL` / `WHAT_IS_OUT
 - **WORKS**: feedback ejemplar al crear borrador (fortaleza señalada por la auditoría); solo Employees activos son asignables (`36e7857`).
 - **PARTIAL**: responsive de la tabla accesible a 390px (F6).
 - **MISSING**: nada material dentro del alcance MVP.
-- **UNCERTAIN**: alcance efectivo de PLANNER sin área (D-05).
+- **WORKS_TO_VERIFY**: el alcance de PLANNER sin área debe derivarse de la existencia de áreas
+  activas, conforme a D-05.
 
 ### APPROVAL_MODEL
 - **EXISTS**: ApprovalPolicy (`NO_APPROVAL` / `ORGANIZATION_ADMIN` / `AREA_RESPONSIBLE`), routing de ChangeRequest, inbox de aprobador, aprobar/rechazar con motivo obligatorio, aplicación del cambio aprobado, auditoría, control de concurrencia.
@@ -247,9 +248,9 @@ Para cada área: `WHAT_EXISTS` / `WHAT_WORKS` / `WHAT_IS_PARTIAL` / `WHAT_IS_OUT
 ### EMPLOYEE_MODEL
 - **EXISTS**: Employee con `status`, `external_employee_id` único por organización cuando está presente, `user_id` opcional, `area_id` opcional; alta inline durante import; bulk provisioning.
 - **WORKS**: `EMPLOYEE_HAS_HISTORY` impide borrar con historial; `LAST_ADMIN` protege al último administrador; el vínculo User↔Employee activa automáticamente al empleado.
-- **PARTIAL**: los cuatro caminos de bloqueo por identidad (inactivo, `pending_access`, ambiguo, nuevo) se comunican con diálogos nativos.
-- **MISSING**: contrato de autoservicio del EMPLOYEE.
-- **UNCERTAIN**: qué debe ocurrir con las filas ajenas en un import hecho por un EMPLOYEE (D-04).
+- **PARTIAL**: los cuatro caminos de bloqueo por identidad (inactivo, `pending_access`, ambiguo, nuevo)
+  requieren verificación dentro del flujo persistente de importación.
+- **WORKS_TO_VERIFY**: contrato de autoservicio del EMPLOYEE aprobado por D-03/D-04.
 
 ### MEMBERSHIP_MODEL
 - **EXISTS**: Membership(user, organization, role, `scoped_area_id`, `employee_id`); gestión B2B en `api/memberships`.
@@ -358,7 +359,7 @@ Hoy solo OWNER tiene `MEASURED_BROWSER`.
 | Ver su propio calendario | ✔ | ✔ | ✔ | ✔ | SELF/ORG | BROWSER |
 | Ver calendarios de la organización | ✔ | ✔ | ✔ (su área) | ✘ | ORG/AREA | BROWSER |
 | Importar turnos de terceros | ✔ | ✔ | ✘ | ✘ | ORG | BROWSER |
-| Importar los propios turnos | ✔ | ✔ | ✔ | ✔ (según D-04) | SELF | BROWSER |
+| Importar los propios turnos | ✔ | ✔ | ✔ | ✔ (D-03, scope SELF) | SELF | BROWSER |
 | Importación multiempleado | ✔ (plan `team`) | ✔ (plan `team`) | ✘ | ✘ | ORG | BROWSER |
 | Crear Employee (alta inline) | ✔ | ✔ | ✘ | ✘ | ORG | BROWSER |
 | Editar/desactivar Employee | ✔ | ✔ | ✘ | ✘ | ORG | BROWSER |
@@ -380,7 +381,8 @@ Hoy solo OWNER tiene `MEASURED_BROWSER`.
 **Invariantes de la matriz**
 - Único OWNER por organización (migración `0014`).
 - El último ADMIN no puede degradarse ni eliminarse; nadie puede auto-eliminarse.
-- PLANNER sin `scoped_area_id` opera a nivel ORGANIZATION (comportamiento actual — pendiente de D-05).
+- PLANNER sin `scoped_area_id` opera a nivel ORGANIZATION sólo si la organización no tiene áreas
+  activas; con áreas activas queda en `SCOPE_UNAVAILABLE` hasta recibir asignación (D-05).
 - EMPLOYEE sin Employee vinculado queda bloqueado en "Cuenta no vinculada", sin datos.
 - EMPLOYEE cuyo Employee está `inactive` no puede recibir turnos importados ni asignaciones.
 
@@ -433,7 +435,7 @@ los roles pueden ejecutar todos los journeys.**
 | ONBOARD | Nuevo OWNER | 2 pasos; el checkbox "También trabajaré como empleado" es la **única** vía de crear un Employee para el propietario; validación inline con `aria-describedby` si falta el nombre. |
 | CREATE ORGANIZATION | OWNER | Personal (`free`/`personal`) o empresa (`team`); el plan resultante y sus límites se muestran al terminar. |
 | LINK OWNER TO EMPLOYEE | OWNER, ADMIN | Explícito y reversible; nunca implícito a partir del nombre de usuario. |
-| IMPORT OWN SHIFTS | Todos los roles con Employee vinculado | Import bajo scope SELF; filas ajenas descartadas con recuento visible; identidad ausente ⇒ `blocked` con acción de desambiguación (D-04). |
+| IMPORT OWN SHIFTS | Todos los roles con Employee vinculado | Import bajo scope SELF; filas ajenas descartadas con recuento visible; identidad ausente o ambigua ⇒ `blocked`; fechas futuras excluidas (D-03/D-04). |
 | IMPORT TEAM SHIFTS | OWNER, ADMIN con plan `team` | Aviso de plan **antes** de seleccionar fichero; matching por lote con desglose de 5 categorías; una única confirmación. |
 | RESOLVE UNKNOWN EMPLOYEE | OWNER, ADMIN | Alta parcial (`pending_access`) ofrecida sin salir del flujo; el intento se detiene, se registra como `blocked` y ofrece "Completar alta" + "Reintentar". |
 | RESOLVE AMBIGUOUS EMPLOYEE | OWNER, ADMIN | Resultado persistente con la lista de candidatos y una acción de desambiguación, no un `alert`. |
@@ -545,12 +547,13 @@ declarar cuántos turnos quedaron confirmados y cuántos en borrador (P7-M03).
 - `EMPLOYEE_HAS_HISTORY` impide el borrado permanente; se ofrece desactivar.
 - `LAST_ADMIN` protege al empleado vinculado al último administrador.
 
-**Contrato de autoservicio (P5-M05, condicionado a D-04)** — estado objetivo:
+**Contrato de autoservicio (P5-M05, aprobado por D-03/D-04)** — estado objetivo:
 - Un EMPLOYEE puede importar un fichero para **sus propios** turnos.
 - Si el fichero contiene otras personas, esas filas se descartan con recuento explícito y visible.
 - Si su identidad no aparece, el resultado es `blocked` / `SELF_IDENTITY_NOT_FOUND`.
 - Un EMPLOYEE **nunca** puede crear un Employee desde el flujo de importación.
-- El alcance temporal (histórico y futuro) que puede escribir queda fijado por D-04.
+- Puede escribir únicamente turnos propios pasados y presentes. Las filas futuras se excluyen y no
+  crean `Shift`, `Schedule` ni `ScheduleVersion`.
 
 ---
 
@@ -562,7 +565,8 @@ declarar cuántos turnos quedaron confirmados y cuántos en borrador (P7-M03).
 - Publicar materializa los turnos; una versión publicada queda bloqueada (R3-M11); se crea una nueva versión para cambiar.
 - Validación de solapes y regla de descanso base.
 - Solo Employees `active` son destino válido (`36e7857`).
-- Alcance: OWNER/ADMIN a nivel organización; PLANNER limitado a su `scoped_area_id` (o a la organización si no tiene área — pendiente de D-05).
+- Alcance: OWNER/ADMIN a nivel organización; PLANNER limitado a su `scoped_area_id`, salvo que no
+  existan áreas activas, caso en el que D-05 permite scope ORGANIZATION.
 - Alternativa accesible en tabla, con `aria-label` descriptivo verificado. **Fortaleza a preservar.**
 - Cambios previstos en este roadmap: únicamente presentación responsive (P4) y comunicación (P7).
 
@@ -966,7 +970,7 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 - Adopción declarada: AOS 0.2.0, Governance Level 3 (autoridad local de producto), `.anclora/AOS_ADOPTION.md`.
 - Fuentes AOS de referencia: `anclora-governance/` (constitution, MASTER_DECISIONS, CURRENT_STATE, SOURCE_OF_TRUTH_REGISTRY, standards, playbooks) y `anclora-vault/00-governance/`.
 - Decisiones de producto (PD) se registran en `sdd/`; ED → `MASTER_DECISIONS`; OD → mecanismo CHG de la vault; EX → la propia declaración de adopción. **Una decisión, una fuente canónica.**
-- Las decisiones abiertas de §41 son **PD**: se registran en `sdd/` cuando se resuelvan, no en este documento.
+- Las decisiones de §41 son **PD**: D-03, D-04 y D-05 están aprobadas y registradas en `sdd/decisions/`; las restantes conservan su estado histórico.
 - Excepción vigente `EX-SI-001` (default branch `development`): `ACCEPTED`, se conserva sin modificación.
 - **Deuda AOS identificada**: `Last Reviewed: 2026-08-18` pese a haberse cerrado R1–R5 desde entonces; la política exige revisión al inicio de cada fase de producto. Se salda en P0.
 - Los contratos de `docs/standards/` son copia local; el canónico vive en la vault y no se modifica desde este repositorio.
@@ -974,7 +978,7 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 
 ---
 
-## 41. OPEN DECISIONS
+## 41. PRODUCT DECISIONS — REGISTERED AND OPEN
 
 ### PRODUCT_DECISIONS_REQUIRED
 
@@ -1008,6 +1012,8 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 
 ---
 **DECISION_ID**: D-03
+**STATUS**: APPROVED — opción A, con las restricciones explícitas de scope `SELF` y sin creación,
+reactivación o resolución de Employees desde el flujo.
 **QUESTION**: ¿Puede un EMPLOYEE importar sus propios turnos?
 **CURRENT_BEHAVIOR**: técnicamente **sí** — `createImport` y `upsertShifts` aceptan scope `SELF` forzando el `employeeId` propio (`api/_lib/data.js:1500-1513`, `:1686-1700`). Ningún documento de producto lo declara y ninguna UI lo promueve.
 **OPTIONS**
@@ -1017,11 +1023,15 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 **RECOMMENDATION**: **A** para el MVP, **C** como evolución.
 **RATIONALE**: la capacidad ya existe y es coherente con el scope `SELF`; cerrarla sería una regresión funcional no solicitada. Una política por organización es la forma correcta de darle control al administrador, pero introduce modelo de datos nuevo y no es urgente.
 **IMPACT**: define el alcance de P5-M05 y la fila correspondiente de la matriz de roles.
-**BLOCKS_PHASES**: **P5**.
+**BLOCKS_PHASES**: resuelto; condicionó P5 hasta su aprobación.
 **DEFAULT_IF_NOT_DECIDED**: A, con el comportamiento actual documentado tal cual y sin ampliarlo.
+**FINAL_RESOLUTION**: Puede hacerlo si tiene Employee activo vinculado; sólo sus turnos, bajo
+scope `SELF`, sin futuros ni publicación.
 
 ---
 **DECISION_ID**: D-04
+**STATUS**: APPROVED — variante A para filas ajenas, con alcance temporal aprobado de pasado y
+presente; las fechas futuras se excluyen y no generan planificación.
 **QUESTION**: Si un EMPLOYEE importa un fichero que contiene a otras personas, ¿qué ocurre exactamente — y qué alcance temporal puede escribir?
 **CURRENT_BEHAVIOR**: indefinido. `assertScopedResource` impediría escribir filas ajenas, pero no está especificado si se descartan en silencio, si se avisa, ni qué ocurre si su identidad no aparece. Tampoco está declarado si puede escribir sobre fechas pasadas o futuras.
 **OPTIONS**
@@ -1031,11 +1041,16 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 **RECOMMENDATION**: **A**.
 **RATIONALE**: B castiga un caso frecuentísimo (el cuadrante de la empresa incluye a todo el mundo); C viola el principio "la importación nunca falla en silencio". A preserva el aislamiento y la comprensión simultáneamente. La restricción de publicación mantiene intacta la matriz de roles.
 **IMPACT**: define P5-M05 completo, el motivo `SELF_IDENTITY_NOT_FOUND` y una fila de la matriz.
-**BLOCKS_PHASES**: **P5** (y por dependencia, el Gate de P6).
+**BLOCKS_PHASES**: resuelto; condicionó P5 hasta su aprobación (y por dependencia el Gate de P6).
 **DEFAULT_IF_NOT_DECIDED**: **ninguno — esta decisión no admite default.** Sin decidirla, P5 se declara `BLOCKED`. Es la única decisión del programa con implicación directa de aislamiento de datos.
+**FINAL_RESOLUTION**: Sólo se persisten filas propias inequívocas de pasado/presente; filas ajenas,
+no identificables y futuras se excluyen con recuento; identidad ausente o ambigua produce
+`blocked`/`SELF_IDENTITY_NOT_FOUND` o desambiguación explícita, respectivamente.
 
 ---
 **DECISION_ID**: D-05
+**STATUS**: APPROVED — variante híbrida: `ORGANIZATION` únicamente cuando no hay áreas activas;
+`SCOPE_UNAVAILABLE` cuando sí las hay y el PLANNER no tiene área.
 **QUESTION**: Un PLANNER sin `scoped_area_id`, ¿debe operar a nivel organización (comportamiento actual) o quedar bloqueado?
 **CURRENT_BEHAVIOR**: `resolveAccessScope` devuelve `{ type: 'ORGANIZATION' }` para un PLANNER sin área asignada.
 **OPTIONS**
@@ -1045,8 +1060,10 @@ Obligatorio cuando la evidencia automatizada no puede sustituir la observación:
 **RECOMMENDATION**: **A** con documentación, o **C** si se considera un riesgo operativo.
 **RATIONALE**: el comportamiento es coherente con la jerarquía (PLANNER < ADMIN) y no rompe aislamiento — sigue confinado a su organización. Pero es una elevación de alcance silenciosa que ningún documento declara, y un administrador podría no esperarla.
 **IMPACT**: P5-M03 y la matriz de roles.
-**BLOCKS_PHASES**: **P5** (parcialmente: P5-M03 no puede cerrarse sin esta decisión).
+**BLOCKS_PHASES**: resuelto; condicionó P5-M03 hasta su aprobación.
 **DEFAULT_IF_NOT_DECIDED**: A — no cambiar comportamiento, documentarlo como está y marcarlo para revisión.
+**FINAL_RESOLUTION**: El backend deriva el scope del membership y del número de áreas activas de
+la organización; el cliente no puede elegir el alcance.
 
 ---
 **DECISION_ID**: D-06
@@ -1139,8 +1156,8 @@ Solo puede ejecutarse si P0–P7 están en `PASS` o `PASS_WITH_GAPS`, con cada g
 - `PASS` exige las 15 preguntas satisfechas **y** los 4 gaps adicionales cubiertos.
 - `PASS_WITH_GAPS` exige que cada gap restante esté nombrado, acotado, no bloqueante, con propietario y con fase o release de absorción.
 - `FAIL` ante cualquier degradación de seguridad, aislamiento, autorización o integridad de datos — sin excepción y sin compensación por mejoras en otras áreas.
-- `BLOCKED` si D-04 sigue sin decidir (P5 no puede cerrarse) o si no hay acceso a Neon development.
+- `BLOCKED` si alguna decisión requerida por P5 no está registrada o si no hay acceso a Neon development.
 - El Gate **no** puede declararse `PASS` sobre la base de `npm test` y `npm run build` en verde. Verifica comportamiento observado.
 
-**ESTADO ACTUAL DEL FINAL_PRODUCT_GATE**: **`BLOCKED`** — ninguna fase ejecutada; D-04 pendiente;
-P8 bloqueada por fuente inaccesible.
+**ESTADO ACTUAL DEL FINAL_PRODUCT_GATE**: **`BLOCKED`** — P5–P7 aún no ejecutadas; P8 bloqueada
+por fuente inaccesible.

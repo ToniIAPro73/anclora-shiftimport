@@ -2,7 +2,7 @@
 
 Fecha: 2026-09-06  
 Rama: `development`  
-Estado: `BLOCKED — decisiones D-03/D-04/D-05 no registradas`
+Estado: `EN PROGRESO — decisiones D-03/D-04/D-05 aprobadas y registradas`
 
 ## P5-M01 — Fixture de QA
 
@@ -55,7 +55,5 @@ Las dos ejecuciones fueron dirigidas a esos riesgos; no se lanzó la batería hi
 
 ## Bloqueo formal
 
-P5 no puede cerrarse hasta registrar D-03, D-04 y D-05. D-04 es el bloqueo material: define qué
-ocurre cuando un EMPLOYEE importa un fichero multiempleado y qué alcance temporal puede escribir.
-No se modifica el comportamiento de importación ni se hacen mutaciones correctivas de datos sin
-esa decisión.
+Las decisiones D-03, D-04 y D-05 ya están registradas. Este documento conserva la evidencia
+parcial histórica; la implementación y el cierre formal se documentan en el informe final de P5.

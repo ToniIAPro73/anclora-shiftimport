@@ -1164,7 +1164,7 @@ correcto en light/dark; el patrón `aria-label={row.name}` ya correcto de `TeamI
 verificaron en navegador— y definir con precisión qué puede hacer un EMPLOYEE con una importación.
 **WHY_NOW**: La auditoría se declaró `PASS_WITH_GAPS` principalmente por esto. Además, este
 análisis ha verificado que `createImport` **sí** permite a un EMPLOYEE registrar un import bajo
-scope `SELF` (`api/_lib/data.js:1502`), lo que abre preguntas de producto no resueltas.
+scope `SELF` (`api/_lib/data.js:1502`); D-03 y D-04 ya fijan el contrato que debe verificarse.
 **USER_VALUE**: Un empleado puede gestionar sus propios turnos con garantías; un planner opera sin
 temor a salirse de su área.
 **BUSINESS_VALUE**: Habilita el discurso B2B2E; reduce carga de trabajo del administrador.
@@ -1181,7 +1181,7 @@ temor a salirse de su área.
 - Implementar facturación para conseguir un plan Team.
 
 **DEPENDENCIES**: P0, P2 (la señalización de plan define cómo se llega a una org Team).
-**PREREQUISITES**: decisiones D-03, D-04, D-05 de la SPEC resueltas.
+**PREREQUISITES**: decisiones D-03, D-04 y D-05 aprobadas y registradas en `sdd/decisions/`.
 **RISKS**: (a) esta fase puede **descubrir** defectos de autorización no conocidos, lo que la convertiría en generadora de trabajo no planificado; (b) el grant `team` sin pago es una decisión comercial que no debe normalizarse.
 **DO_NOT_BREAK**: `resolveAccessScope` y su regla de que el cliente no puede ensanchar el scope;
 el bloqueo "Cuenta no vinculada" para EMPLOYEE sin employee vinculado; la separación
@@ -1205,7 +1205,7 @@ OWNER↔Employee de `3ff90b2`; la elegibilidad "solo empleados ACTIVE" de `36e78
 ---
 **ID**: P5-M01
 **TITLE**: Provisionar una organización de QA en plan `team` sin compra real
-**PURPOSE**: Desbloquear la verificación de tres roles.
+**PURPOSE**: Desbloquear la verificación de tres roles, usando la ruta Team de QA ya aprobada.
 **SOURCE**: Audit §12 `PLAN_BLOCKED`; `docs/pricing-hypothesis.md` §2 (onboarding de empresa persiste `team` incondicionalmente — grant pre-billing).
 **PRECONDITIONS**: P2 Gate.
 **FILES_LIKELY_AFFECTED**: `qa/e2e-acceptance/local-setup.ts`, `db/seed-dev.mjs`.
@@ -1236,14 +1236,16 @@ OWNER↔Employee de `3ff90b2`; la elegibilidad "solo empleados ACTIVE" de `36e78
 ---
 **ID**: P5-M03
 **TITLE**: Verificar PLANNER en navegador real, con y sin `scoped_area_id`
-**PURPOSE**: PLANNER es el rol con la regla de scope más sutil: sin área asignada su scope es `ORGANIZATION`.
+**PURPOSE**: PLANNER es el rol con la regla de scope más sutil: su alcance depende server-side de
+la existencia de áreas activas (D-05).
 **SOURCE**: `api/_lib/auth.js` `resolveAccessScope` (rama PLANNER).
 **PRECONDITIONS**: P5-M01.
 **ACCEPTANCE_CRITERIA**:
 - Given un PLANNER con `scoped_area_id` asignado
 - When intenta crear o editar un borrador fuera de su área
 - Then recibe 403 y la UI no ofrece la acción
-- And un PLANNER **sin** área asignada opera a nivel organización, y ese comportamiento queda documentado explícitamente como intencionado (o corregido si D-05 decide lo contrario)
+- And un PLANNER **sin** área asignada opera a nivel organización sólo si no hay áreas activas; con
+  áreas activas queda bloqueado con `SCOPE_UNAVAILABLE`, conforme a D-05
 - And un PLANNER nunca puede gestionar usuarios ni roles.
 **DO_NOT_BREAK**: R3-M13 (authorization scope) y sus tests.
 **DEPENDENCIES**: P5-M01, decisión D-05. **RISK**: MEDIO. **ESTIMATED_COMPLEXITY**: L.
@@ -1266,11 +1268,10 @@ OWNER↔Employee de `3ff90b2`; la elegibilidad "solo empleados ACTIVE" de `36e78
 ---
 **ID**: P5-M05
 **TITLE**: Definir e implementar el contrato de importación del EMPLOYEE
-**PURPOSE**: Hoy un EMPLOYEE puede registrar un import bajo scope `SELF`; el producto no ha
-declarado qué ocurre si el fichero contiene a otras personas, si su identidad no aparece, o qué
-puede tocar del histórico y del futuro.
+**PURPOSE**: Verificar el contrato aprobado de self-import bajo scope `SELF`: filas propias,
+filas ajenas, identidad ausente/ambigua y exclusión de fechas futuras.
 **SOURCE**: `api/_lib/data.js:1500-1513` (createImport con `SELF`), `:1686-1700` (listShifts SELF); decisión D-04 de la SPEC.
-**PRECONDITIONS**: decisión D-04 resuelta; P5-M04.
+**PRECONDITIONS**: D-03 y D-04 aprobadas; P5-M04.
 **FILES_LIKELY_AFFECTED**: `src/App.tsx` (resolución de empleado), `ImportModal.tsx`, `api/_lib/data.js`, `docs/product/` (nuevo `EMPLOYEE_SELF_SERVICE_CONTRACT.md`).
 **SECURITY_IMPACT**: máximo — es el punto donde un fichero multiempleado podría filtrar o escribir datos ajenos.
 **ACCEPTANCE_CRITERIA**:
@@ -1280,7 +1281,7 @@ puede tocar del histórico y del futuro.
 - And las filas ajenas se descartan con un recuento explícito y visible ("12 filas de otras personas ignoradas"), nunca en silencio
 - And si su identidad no aparece en el fichero, el resultado es `blocked` con motivo `SELF_IDENTITY_NOT_FOUND` y una acción de desambiguación
 - And un EMPLOYEE nunca puede crear un employee nuevo desde el flujo de importación
-- And el comportamiento sobre fechas futuras queda declarado (D-04) y probado.
+- And las fechas futuras se excluyen con recuento y no crean `Shift`, `Schedule` ni `ScheduleVersion`.
 **DO_NOT_BREAK**: `assertScopedResource` con scope `SELF`; ningún `Shift` sin `organization_id`+`employee_id`.
 **DEPENDENCIES**: D-04, P5-M04, P1 (para el resultado persistente). **RISK**: ALTO. **ESTIMATED_COMPLEXITY**: XL.
 
@@ -1319,7 +1320,7 @@ puede tocar del histórico y del futuro.
 
 **EVIDENCE_REQUIRED**: tabla rol×capacidad×endpoint×HTTP; capturas de sesión por rol; salida de `role-matrix.spec.ts`; prueba de que un EMPLOYEE importando un roster multiempleado persiste exclusivamente sus filas (conteo de `shifts` por `employee_id` antes/después).
 
-**RESULTADOS**: `PASS` | `PASS_WITH_GAPS` | `FAIL` | `BLOCKED` (si D-04 o D-05 no se deciden).
+**RESULTADOS**: `PASS` | `PASS_WITH_GAPS` | `FAIL` | `BLOCKED` (sólo ante un nuevo bloqueo real).
 
 ---
 
@@ -1660,7 +1661,7 @@ mientras la fuente no sea legible.
 | P2 | Plan Entitlement UX | 5 | P0 (paralelizable con P1) | PASS |
 | P3 | Dialog Replacement & Copy | 9 | P1 | PASS / PASS_WITH_GAPS |
 | P4 | Accessibility & Responsive | 7 | P0 (independiente de P1–P3) | PASS / PASS_WITH_GAPS |
-| P5 | Role Reality & Employee Self-Service | 6 | P0, P2 | PASS / BLOCKED sin D-04/D-05 |
+| P5 | Role Reality & Employee Self-Service | 6 | P0, P2 | PASS / PASS_WITH_GAPS / BLOCKED ante nuevo bloqueo |
 | P6 | Import History & Traceability | 6 | P1, P5 | PASS |
 | P7 | Import vs Schedule Communication | 5 | P1, P6 | PASS |
 | P8 | CRC Tryp Research | — | fuente accesible | **BLOCKED** |

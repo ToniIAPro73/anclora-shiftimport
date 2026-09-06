@@ -85,9 +85,9 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - P4 — Accessibility & Responsive Hardening: `PASS_WITH_GAPS`, commit `cc767b9`; runner compacto
   `test:p4` 1/1, tests dirigidos 45/45, lint y build PASS. El gap restante es el archivado de
   capturas comparativas, documentado en `docs/roadmap/P4-ACCESSIBILITY-RESPONSIVE-GATE.md`.
-- P5: BLOCKED por las decisiones de producto D-03, D-04 y D-05; existe evidencia browser parcial
-  en `docs/roadmap/P5-ROLE-REALITY-PARTIAL-EVIDENCE.md` (`2/2 PASS`), pero P6 depende de P5 y
-  P7 depende de P6.
+- P5: EN EJECUCIÓN; D-03, D-04 y D-05 están aprobadas y registradas en `sdd/decisions/`. Existe
+  evidencia browser parcial en `docs/roadmap/P5-ROLE-REALITY-PARTIAL-EVIDENCE.md` (`2/2 PASS`);
+  se están cerrando ADMIN, PLANNER, EMPLOYEE y self-import antes de iniciar P6.
 - P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
   existe una exportación accesible. No se inventará contenido de esa fuente.
 
@@ -113,11 +113,9 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 - Se conservan como fuera de alcance: billing, verificación de email, infraestructura de correo,
   rate limit distribuido, integración del design system y refactor global de `src/App.tsx`.
 
-## Decisiones que mantienen bloqueos
+## Decisiones pendientes
 
-- **D-03**: la capacidad de self-import del EMPLOYEE no está registrada como decisión aprobada.
-- **D-04**: el comportamiento exacto del self-import de EMPLOYEE cuando el fichero contiene otras
-  personas y su alcance temporal no está decidido. P5 quedará BLOCKED hasta recibir esa decisión.
-- **D-05**: no está registrada la decisión sobre el alcance de un PLANNER sin área asignada.
+- **D-03, D-04 y D-05**: aprobadas y registradas en `sdd/decisions/`; su implementación y evidencia
+  de P5 siguen pendientes de cierre.
 - **D-07 / P8**: la fuente CRC Tryp sigue inaccesible; se requiere exportación, fuentes originales,
   acceso autenticado autorizado o cancelación explícita de P8.
