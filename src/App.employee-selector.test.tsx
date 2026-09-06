@@ -80,6 +80,10 @@ function renderApp() {
   );
 }
 
+function openContext() {
+  fireEvent.click(screen.getByTestId('app-shell-context-menu'));
+}
+
 describe('App — Employee calendar selector (ADMIN)', () => {
   it('selecting a different Employee updates the calendar to that Employee\'s own shifts', async () => {
     mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
@@ -88,6 +92,8 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    openContext();
     await waitFor(() => expect(screen.getAllByText('Employee A · ID 1001').length).toBeGreaterThan(0));
     expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(1); // Employee A: 1 shift
 
@@ -100,8 +106,7 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
     fireEvent.click(screen.getByText('Employee C · ID 1003'));
 
-    await waitFor(() => expect(screen.getByText(new RegExp(`No hay turnos registrados`))).toBeTruthy());
-    expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(0);
+    await waitFor(() => expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(0));
   });
 
   it('never mixes shifts between employees — each switch fetches only that employee\'s own scope', async () => {
@@ -110,6 +115,8 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     mockedLoadRemoteShifts.mockImplementation(shiftsFor);
 
     renderApp();
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    openContext();
     await waitFor(() => expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(1));
 
     fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
@@ -151,6 +158,8 @@ describe('App — Employee calendar selector (ADMIN)', () => {
 
     renderApp();
 
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+    openContext();
     await waitFor(() => expect(document.querySelector('.team-bar')).toBeTruthy());
     const teamBar = document.querySelector('.team-bar');
     expect(teamBar?.textContent).toContain('OrganizaciónAnclora Group');

@@ -64,7 +64,7 @@ const T_KEYS = [
   'employeeNotifications.unknown', 'employeeNotifications.openShift', 'employeeNotifications.markedRead',
   'employeeNotifications.markReadError',
   'stats.own', 'stats.company', 'stats.totalMonth', 'stats.totalYear', 'stats.month', 'stats.year',
-  'calendar.addShiftTitle', 'calendar.addShiftBlockedTitle',
+  'calendar.addShiftTitle', 'calendar.addShiftBlockedTitle', 'calendar.planShiftAria', 'calendar.planShiftTitle',
   'shiftModal.titleNew', 'shiftModal.titleEdit', 'shiftModal.dateLabel', 'shiftModal.startLabel',
   'shiftModal.endLabel', 'shiftModal.typeLabel', 'shiftModal.confirm', 'shiftModal.working', 'shiftModal.saveSuccess',
   'importConflict.title', 'importConflict.description', 'importConflict.existing', 'importConflict.incoming',
@@ -102,6 +102,9 @@ const T_KEYS = [
   'planner.employeeFilter', 'planner.allEmployees', 'planner.employeeSearchPlaceholder',
   'planner.employeeSearchEmpty', 'planner.employeeFilterEmptyTitle', 'planner.employeeFilterEmptyDescription',
   'planner.openEditor', 'planner.scopeUnavailableTitle', 'planner.scopeUnavailableDescription',
+  'approvalInbox.navLabel', 'calendar.shiftCount', 'planner.close', 'planner.previousWeekDisabled',
+  'planner.pastDay', 'shiftModal.historicalOnly', 'shell.organization', 'shell.role',
+  'shell.employeeContext', 'shell.import', 'shell.addShift', 'shell.history',
 ];
 
 // A subset of T_KEYS that are full words/sentences and must read differently

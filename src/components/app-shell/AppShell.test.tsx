@@ -17,6 +17,7 @@ function renderShell(role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE' | null = '
     onAddShift: vi.fn(),
     onHistory: vi.fn(),
     onPlanner: vi.fn(),
+    onApprovals: vi.fn(),
     onMembers: vi.fn(),
     onAreas: vi.fn(),
     onFormatProfiles: vi.fn(),
@@ -51,10 +52,12 @@ describe('AppShell', () => {
     expect(screen.getByTestId('sidebar-add-shift')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-history')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-planner')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-approvals')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-members')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-areas')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-formats')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-settings')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('app-shell-context-menu'));
     expect(screen.getByText('Organization context')).toBeInTheDocument();
     expect(screen.getByRole('main', { name: 'Espacio de trabajo principal' })).toHaveTextContent('Calendar workspace');
   });
@@ -73,7 +76,7 @@ describe('AppShell', () => {
     fireEvent.click(screen.getByTestId('sidebar-collapse'));
 
     expect(screen.getByTestId('app-shell')).toHaveClass('is-collapsed');
-    expect(screen.getByTestId('sidebar-import')).toHaveAttribute('title', 'Importar');
+    expect(screen.getByTestId('sidebar-import')).toHaveAttribute('title', 'Importar turnos');
     expect(window.localStorage.getItem('anclora_shiftimport_sidebar_v1')).toBe('collapsed');
     fireEvent.click(screen.getByTestId('sidebar-import'));
     expect(callbacks.onImport).toHaveBeenCalledTimes(1);

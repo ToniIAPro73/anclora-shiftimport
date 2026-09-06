@@ -74,14 +74,14 @@ describe('R4-M00 employee entry point', () => {
     renderAuthenticated('EMPLOYEE');
 
     await waitFor(() => expect(screen.getByTestId('employee-portal')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: 'Importar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Importar turnos' })).toBeNull();
     expect(screen.getByRole('navigation', { name: 'Navegación del portal' })).toBeTruthy();
   });
 
   it('keeps the existing dashboard for an authenticated ADMIN', async () => {
     renderAuthenticated('ADMIN');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar turnos' })).toBeTruthy());
     expect(screen.queryByTestId('employee-portal')).toBeNull();
   });
 });

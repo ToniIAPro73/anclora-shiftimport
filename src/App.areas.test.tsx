@@ -73,6 +73,11 @@ function renderApp() {
   );
 }
 
+async function openContext() {
+  await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
+  fireEvent.click(screen.getByTestId('app-shell-context-menu'));
+}
+
 describe('App — area context (dashboard)', () => {
   it('0 areas: no area selector nor context, everything organization-scoped', async () => {
     mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
@@ -82,6 +87,7 @@ describe('App — area context (dashboard)', () => {
 
     renderApp();
 
+    await openContext();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Empleado:' })).toBeTruthy());
     expect(screen.queryByText('Área')).toBeNull();
     // The employee selector still lists the full org roster.
@@ -98,6 +104,7 @@ describe('App — area context (dashboard)', () => {
 
     renderApp();
 
+    await openContext();
     await waitFor(() => expect(screen.getByText('Norte')).toBeTruthy());
     expect(screen.getByText('Área')).toBeTruthy();
     // No area dropdown — the only combobox trigger is the employee selector.
@@ -117,6 +124,7 @@ describe('App — area context (dashboard)', () => {
 
     renderApp();
 
+    await openContext();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Área' })).toBeTruthy());
     // Default: whole company (null aggregates everything).
     expect(screen.getByRole('button', { name: 'Área' }).textContent).toContain('Toda la empresa');
@@ -142,6 +150,7 @@ describe('App — area context (dashboard)', () => {
 
     renderApp();
 
+    await openContext();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Área' })).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Área' }));
     fireEvent.click(screen.getByRole('option', { name: 'Norte' }));

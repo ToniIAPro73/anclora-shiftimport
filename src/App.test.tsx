@@ -107,7 +107,7 @@ describe('Fase 1.2A.1 public/private routing', () => {
   it('renders the landing page at /', async () => {
     renderAt('/');
     await waitFor(() => expect(screen.getAllByRole('button', { name: 'Empezar gratis' }).length).toBeGreaterThan(0));
-    expect(screen.queryByRole('button', { name: 'Importar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Importar turnos' })).toBeNull();
   });
 
   it('renders the pricing placeholder at /pricing', async () => {
@@ -128,11 +128,11 @@ describe('Fase 1.2A.1 public/private routing', () => {
 
   it('still serves the guest dashboard at /app (soft gate, no session required)', async () => {
     renderAt('/app');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar turnos' })).toBeTruthy());
   });
 
   it('falls back unknown paths to the /app dashboard', async () => {
     renderAt('/some/unknown/path');
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar turnos' })).toBeTruthy());
   });
 });

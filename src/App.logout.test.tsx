@@ -81,7 +81,7 @@ describe('App — deterministic logout', () => {
     renderApp();
 
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: 'Importar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Importar turnos' })).toBeNull();
     expect(window.localStorage.getItem('anclora_shifts_v1')).toBeNull();
   });
 
@@ -91,7 +91,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Empleado:' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('app-shell-user-menu'));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Salir' }));
@@ -100,7 +100,7 @@ describe('App — deterministic logout', () => {
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
     expect(window.location.pathname).toBe('/login');
     expect(screen.queryByRole('menuitem', { name: 'Salir' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Empleado:' })).toBeNull();
+    expect(screen.queryByTestId('app-shell-context-menu')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Usuarios de la organización' })).toBeNull();
     expect(document.querySelector('.team-bar')).toBeNull();
     expect(mockedLogout).toHaveBeenCalledTimes(1);
@@ -160,7 +160,7 @@ describe('App — deterministic logout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continuar sin cuenta' }));
     await waitFor(() => expect(window.location.pathname).toBe('/app'));
     expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(0);
-    expect(screen.queryByRole('button', { name: 'Empleado:' })).toBeNull();
+    expect(screen.queryByTestId('app-shell-context-menu')).toBeNull();
   });
 
   it('a 401 from an authenticated API call transitions to the login screen', async () => {
@@ -169,7 +169,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Empleado:' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
 
     // Session dies server-side (expired / invalidated in another tab): the
     // next data call answers 401 and the app must leave the partial-auth UI.
@@ -191,7 +191,7 @@ describe('App — deterministic logout', () => {
     mockedLoadRemoteShifts.mockResolvedValue([]);
 
     renderApp();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Empleado:' })).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('app-shell-context-menu')).toBeTruthy());
 
     // Browser restores the page from bfcache after the cookie was invalidated.
     mockedFetchSession.mockResolvedValue(null);

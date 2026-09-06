@@ -54,7 +54,7 @@ test('P5.1 shell: owner workspace, compact nav, drawer and account menu', async 
 
   await page.getByTestId('sidebar-collapse').click();
   await expect(page.getByTestId('app-shell')).toHaveClass(/is-collapsed/);
-  await expect(page.getByTestId('sidebar-import')).toHaveAttribute('title', 'Importar');
+  await expect(page.getByTestId('sidebar-import')).toHaveAttribute('title', 'Importar turnos');
   await capture(page, testInfo, 'owner-collapsed-dark-1366');
 
   await page.getByTestId('sidebar-collapse').click();
@@ -74,7 +74,7 @@ test('P5.1 shell: owner workspace, compact nav, drawer and account menu', async 
   await expect(page).toHaveURL(/\/app\/schedule$/);
   await expect(page.getByTestId('app-shell')).toBeVisible();
   await expect(page.getByTestId('weekly-planner')).toBeVisible();
-  await page.getByTestId('weekly-planner').getByRole('button', { name: /Volver al calendario/i }).click();
+  await page.getByRole('dialog', { name: 'Planificador semanal' }).getByRole('button', { name: 'Cerrar planificador' }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByTestId('calendar-toolbar')).toBeVisible();
 
