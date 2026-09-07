@@ -1005,11 +1005,13 @@ export function EquipoModal({
         {activeTab === 'assignments' && (
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }} data-testid="assignments-tab">
             {/* Sub-tab navigation */}
-            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }} role="tablist">
               <button
                 type="button"
                 className={`equipo-modal__tab ${assignmentSubTab === 'employees_to_area' ? 'is-active' : ''}`}
                 onClick={() => setAssignmentSubTab('employees_to_area')}
+                role="tab"
+                aria-selected={assignmentSubTab === 'employees_to_area'}
                 data-testid="subtab-employees-to-area"
               >
                 Empleados → Área (Cambio masivo)
@@ -1018,6 +1020,8 @@ export function EquipoModal({
                 type="button"
                 className={`equipo-modal__tab ${assignmentSubTab === 'planner_scopes' ? 'is-active' : ''}`}
                 onClick={() => setAssignmentSubTab('planner_scopes')}
+                role="tab"
+                aria-selected={assignmentSubTab === 'planner_scopes'}
                 data-testid="subtab-planner-scopes"
               >
                 Planificadores → Ámbitos
