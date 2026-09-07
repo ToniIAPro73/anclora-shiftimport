@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { loadFormatProfiles, saveFormatProfile, UserFormatProfile } from '../../lib/format-profiles';
+import { saveShiftTypeOverrides } from '../../lib/shift-types';
 import { getTtfvEvents } from '../../lib/ttfv';
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { Shift } from '../../lib/types';
@@ -670,5 +673,156 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
 
     await waitFor(() => expect(mockedAnalyzeDocumentFile).toHaveBeenCalled());
     expect(screen.getByText(/^2 encontrados/)).toBeTruthy();
+  });
+
+  describe('P5.5-R11-HOTFIX — unknown semantic color resolution controls', () => {
+    const makeExcelColorResult = (): DocumentAnalysisResult => {
+      const shifts = [makeShift({ date: '2026-06-16', sourceFormat: 'excel' })];
+      return {
+        kind: 'excel',
+        context: { month: 5, year: 2026 },
+        shifts,
+        quality: {
+          shifts,
+          confidence: 0.95,
+          warnings: [
+            { code: 'UNKNOWN_SHIFT_TOKEN', context: { token: '__xlsx_style__:AEFC04' } },
+            { code: 'UNKNOWN_SHIFT_TOKEN', context: { token: '__xlsx_style__:A9D0F5' } },
+          ],
+          state: 'REVIEW',
+        },
+        structure: null,
+        questions: [
+          { kind: 'token-meaning', token: '__xlsx_style__:AEFC04', displayToken: 'Color #AEFC04' },
+          { kind: 'token-meaning', token: '__xlsx_style__:A9D0F5', displayToken: 'Color #A9D0F5' },
+        ],
+        detectedContext: { month: 5, year: 2026 },
+      };
+    };
+
+    it('renders exactly one row per unique unknown color below the warning with swatch, selector, and ignore button', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeExcelColorResult());
+
+      renderImportModal('es', () => {}, { initialFile: new File(['mock'], 'Turnos_Sebastian_Pozo_Mendoza(1).xlsx') });
+
+      await waitFor(() => expect(screen.getByTestId('import-diagnostics')).toBeTruthy());
+      expect(screen.getByText('Este archivo contiene colores cuyo significado todavía no conocemos. Indica a qué tipo de turno corresponde cada color o elige ignorarlo.')).toBeTruthy();
+
+      const resolutionRows = screen.getAllByTestId('unknown-color-row');
+      expect(resolutionRows).toHaveLength(2);
+
+      const swatches = screen.getAllByTestId('color-swatch');
+      expect(swatches).toHaveLength(2);
+      expect(swatches[0].style.backgroundColor).toBe('rgb(174, 252, 4)'); // #AEFC04
+      expect(swatches[1].style.backgroundColor).toBe('rgb(169, 208, 245)'); // #A9D0F5
+
+      const selects = screen.getAllByRole('combobox', { name: /Tipo de turno/i });
+      expect(selects).toHaveLength(2);
+
+      const ignoreButtons = screen.getAllByRole('button', { name: 'Ignorar este color' });
+      expect(ignoreButtons).toHaveLength(2);
+
+      // Verify NO internal technical IDs are visible in the resolution container
+      const resolutionsContainer = screen.getByTestId('unknown-color-resolutions');
+      expect(resolutionsContainer.textContent).not.toContain('__xlsx_style__');
+      expect(resolutionsContainer.textContent).not.toContain('AEFC04');
+      expect(resolutionsContainer.textContent).not.toContain('A9D0F5');
+      expect(resolutionsContainer.textContent).toContain('Color detectado');
+    });
+
+    it('enforces resolution: unresolved blocks, partial still blocks, all resolved enables without refresh', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeExcelColorResult());
+
+      renderImportModal('es', () => {}, { initialFile: new File(['mock'], 'Turnos_Sebastian_Pozo_Mendoza(1).xlsx') });
+
+      await waitFor(() => expect(screen.getAllByTestId('unknown-color-row')).toHaveLength(2));
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+
+      // Both unresolved -> Confirm disabled
+      expect(confirmBtn.disabled).toBe(true);
+
+      const selects = screen.getAllByRole('combobox', { name: /Tipo de turno/i });
+      const ignoreButtons = screen.getAllByRole('button', { name: 'Ignorar este color' });
+
+      // Resolve row 1 (green) -> Vacaciones, row 2 still unresolved -> still disabled
+      fireEvent.change(selects[0], { target: { value: 'Vacaciones' } });
+      expect(confirmBtn.disabled).toBe(true);
+
+      // Resolve row 2 (blue) -> Ignorar -> all resolved -> Confirm enabled
+      fireEvent.click(ignoreButtons[1]);
+      expect(confirmBtn.disabled).toBe(false);
+
+      // Change row 2 back to unresolved by selecting empty option -> disabled again
+      fireEvent.change(selects[1], { target: { value: '' } });
+      expect(confirmBtn.disabled).toBe(true);
+
+      // Resolve row 2 -> Libre -> enabled again
+      fireEvent.change(selects[1], { target: { value: 'Libre' } });
+      expect(confirmBtn.disabled).toBe(false);
+    });
+
+    it('selector shows active types (including custom active) and excludes archived types', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeExcelColorResult());
+
+      saveShiftTypeOverrides({
+        types: [
+          { id: 'custom_active_type', label: 'Guardia Especial', shortLabel: 'GE', countsAsWork: true, color: '#f59e0b', archived: false },
+          { id: 'custom_archived_type', label: 'Turno Obsoleto', shortLabel: 'TO', countsAsWork: true, color: '#6b7280', archived: true },
+        ],
+        aliases: {},
+      });
+
+      renderImportModal('es', () => {}, { initialFile: new File(['mock'], 'test.xlsx') });
+
+      await waitFor(() => expect(screen.getAllByTestId('unknown-color-row')).toHaveLength(2));
+      const selects = screen.getAllByRole('combobox', { name: /Tipo de turno/i });
+      const options = Array.from(selects[0].querySelectorAll('option')).map((opt) => opt.textContent);
+
+      expect(options).toContain('Vacaciones');
+      expect(options).toContain('Libre');
+      expect(options).toContain('Guardia Especial');
+      expect(options).not.toContain('Turno Obsoleto');
+    });
+
+    it('integrates with real Turnos_Sebastian_Pozo_Mendoza.xlsx fixture', async () => {
+      const { analyzeDocumentFile: realAnalyze } = await vi.importActual<typeof import('../../ingestion/parsers/file')>('../../ingestion/parsers/file');
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockImplementation(realAnalyze);
+
+      const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza.xlsx'));
+      const realFile = new File([buffer], 'Turnos_Sebastian_Pozo_Mendoza(1).xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      renderImportModal('es', () => {}, {
+        initialFile: realFile,
+        employeePreset: { name: 'Sebastian Pozo Mendoza', externalId: '' },
+      });
+
+      await waitFor(() => expect(screen.getByTestId('import-diagnostics')).toBeTruthy(), { timeout: 10000 });
+      expect(screen.getByText('Este archivo contiene colores cuyo significado todavía no conocemos. Indica a qué tipo de turno corresponde cada color o elige ignorarlo.')).toBeTruthy();
+
+      const rows = screen.getAllByTestId('unknown-color-row');
+      expect(rows).toHaveLength(2);
+
+      const swatches = screen.getAllByTestId('color-swatch');
+      expect(swatches[0].style.backgroundColor).toBe('rgb(174, 252, 4)'); // green #AEFC04
+      expect(swatches[1].style.backgroundColor).toBe('rgb(169, 208, 245)'); // blue #A9D0F5
+
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement;
+      expect(confirmBtn.disabled).toBe(true);
+
+      const selects = screen.getAllByRole('combobox', { name: /Tipo de turno/i });
+      const ignoreButtons = screen.getAllByRole('button', { name: 'Ignorar este color' });
+
+      // Step 1: green -> Vacaciones
+      fireEvent.change(selects[0], { target: { value: 'Vacaciones' } });
+      expect(confirmBtn.disabled).toBe(true);
+
+      // Step 2: blue -> Ignorar
+      fireEvent.click(ignoreButtons[1]);
+      expect(confirmBtn.disabled).toBe(false);
+    });
   });
 });

@@ -24,7 +24,10 @@ import { ImportResult, ImportWarningCode } from '../../lib/import-quality';
 import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
-import { shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getShiftTypes, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { translateShiftTypeLabel } from '../../lib/i18n';
+import { parseXlsxTeamWorkbook } from '../../ingestion/adapters/xlsx-workbook';
+import type { ShiftCodeMapping } from '../../ingestion/core/shift-code-profile';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
@@ -104,6 +107,10 @@ const WARNING_I18N_KEYS: Record<ImportWarningCode, string> = {
 
 const MAX_VISIBLE_WARNINGS = 4;
 const XLSX_STYLE_TOKEN_PREFIX = '__xlsx_style__:';
+
+type ColorResolution =
+  | { kind: 'shift-type'; typeId: string }
+  | { kind: 'ignored' };
 
 interface ModalSelectOption {
   value: string;
@@ -300,7 +307,7 @@ function ModalSelect({
 }
 
 export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
-  const { t, tl } = useI18n();
+  const { locale, t, tl } = useI18n();
   const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
   const now = new Date();
@@ -344,8 +351,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [selfAmbiguous, setSelfAmbiguous] = useState(false);
   const [selfImportSummary, setSelfImportSummary] = useState<SelfImportSummary | null>(null);
   const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
+  const [colorResolutions, setColorResolutions] = useState<Record<string, ColorResolution>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialFileHandledRef = useRef<File | null>(null);
+
+  const activeShiftTypes = useMemo(() => getShiftTypes(), []);
+  const unknownColorTokens = useMemo(() => {
+    if (analysis?.kind !== 'excel') return [];
+    const tokens = analysis.questions.flatMap((q) =>
+      q.kind === 'token-meaning' && q.token.startsWith(XLSX_STYLE_TOKEN_PREFIX) ? [q.token] : [],
+    );
+    return [...new Set(tokens)];
+  }, [analysis]);
+  const hasUnknownColors = unknownColorTokens.length > 0;
+  const hasUnresolvedColors = hasUnknownColors && unknownColorTokens.some((token) => !colorResolutions[token]);
   const previewTrackedRef = useRef(false);
 
   const availableYears = Array.from({ length: 7 }, (_, index) => String(now.getFullYear() - 2 + index));
@@ -399,13 +418,29 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     if (!analysis) {
       return null;
     }
+    const effectiveQuality: ImportResult = {
+      ...(qualityOverride ?? analysis.quality),
+      warnings: (qualityOverride ?? analysis.quality).warnings.filter((w) => {
+        if (w.code === 'UNKNOWN_SHIFT_TOKEN') {
+          const token = String(w.context?.token ?? '');
+          return !colorResolutions[token];
+        }
+        return true;
+      }),
+    };
+    const unresolvedQuestions = analysis.questions.filter((question) => {
+      if (question.kind === 'token-meaning' && question.token.startsWith(XLSX_STYLE_TOKEN_PREFIX)) {
+        return !colorResolutions[question.token];
+      }
+      return true;
+    });
     const effective: DocumentAnalysisResult = {
       ...analysis,
       // Live working set: row edits/deletions in the preview refresh the
       // diagnosis (e.g. INCOMPLETE_TIMES clears once the row is fixed).
       shifts: parsedShifts,
-      quality: qualityOverride ?? analysis.quality,
-      questions: assistantDismissed ? [] : analysis.questions,
+      quality: effectiveQuality,
+      questions: assistantDismissed ? [] : unresolvedQuestions,
     };
     return buildImportDiagnosis(effective, {
       itemAnalysis: assistantSession?.itemAnalysis ?? null,
@@ -413,7 +448,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       periodConflictResolved,
       recoveryDismissed: assistantDismissed,
     });
-  }, [errorDiagnosis, analysis, parsedShifts, qualityOverride, assistantDismissed, assistantSession, periodConflictResolved, selectedContext]);
+  }, [errorDiagnosis, analysis, parsedShifts, qualityOverride, assistantDismissed, colorResolutions, assistantSession, periodConflictResolved, selectedContext]);
 
   const diagnosisBlocking = diagnosis?.diagnostics.some((diagnostic) => diagnostic.blocking) ?? false;
   const monthMismatch = diagnosis?.diagnostics.find(
@@ -486,6 +521,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setSelfNotFound(false);
     setSelfAmbiguous(false);
     setFutureImportDecision('historical-only');
+    setColorResolutions({});
     setScanTime(null);
     setAnalysis(null);
     setQualityOverride(null);
@@ -691,6 +727,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setScanTime(null);
     setDetectedFormat(null);
     setAnalysis(null);
+    setColorResolutions({});
     setQualityOverride(null);
     setAssistantSession(null);
     setAssistantDismissed(false);
@@ -779,6 +816,67 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     }
     setAssistantDismissed(true);
     await runAnalysis(file, selectedContext, buildCodeOverridesFromAnswers(answers));
+  };
+
+  const applyColorResolutionToShifts = useCallback((token: string, resolution: ColorResolution) => {
+    if (file && analysis?.kind === 'excel') {
+      const nextResolutions: Record<string, ColorResolution> = { ...colorResolutions, [token]: resolution };
+      const styleMappings = new Map<string, ShiftCodeMapping>();
+      for (const [t, res] of Object.entries(nextResolutions)) {
+        if (res.kind === 'ignored') {
+          styleMappings.set(t.toUpperCase(), { code: t, status: 'ignore', startTime: null, endTime: null });
+        } else if (res.kind === 'shift-type') {
+          const countsAsWork = shiftTypeCountsAsWork(res.typeId);
+          styleMappings.set(t.toUpperCase(), {
+            code: t,
+            status: countsAsWork ? 'work' : 'free',
+            shiftTypeId: res.typeId,
+            startTime: null,
+            endTime: null,
+          });
+        }
+      }
+      void parseXlsxTeamWorkbook(file, { styleMappings }).then((wb) => {
+        if (wb.employees[0]?.shifts.length) {
+          setParsedShifts(wb.employees[0].shifts.map((s) => ({ ...s, sourceFormat: 'excel' as const })));
+        }
+      }).catch(() => {
+        // Mock file or non-blocking read failure: fallback cleanly
+      });
+    } else {
+      setParsedShifts((current) => {
+        if (resolution.kind === 'ignored') {
+          return current.filter((s) => s.rawText !== token);
+        }
+        return current.map((s) => (s.rawText === token ? { ...s, shiftType: resolution.typeId } : s));
+      });
+    }
+  }, [file, analysis?.kind, colorResolutions]);
+
+  const handleColorSelect = (token: string, typeId: string) => {
+    if (!typeId) {
+      setColorResolutions((current) => {
+        const next = { ...current };
+        delete next[token];
+        return next;
+      });
+      return;
+    }
+    const nextResolution: ColorResolution = { kind: 'shift-type', typeId };
+    setColorResolutions((current) => ({
+      ...current,
+      [token]: nextResolution,
+    }));
+    applyColorResolutionToShifts(token, nextResolution);
+  };
+
+  const handleColorIgnore = (token: string) => {
+    const nextResolution: ColorResolution = { kind: 'ignored' };
+    setColorResolutions((current) => ({
+      ...current,
+      [token]: nextResolution,
+    }));
+    applyColorResolutionToShifts(token, nextResolution);
   };
 
   // MONTH_MISMATCH recovery: the user explicitly picks the document's period.
@@ -876,7 +974,34 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       }
     }
 
-    const finalShifts: Shift[] = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
+    let shiftsToPersist = parsedShifts;
+    if (file && analysis?.kind === 'excel' && Object.keys(colorResolutions).length > 0) {
+      try {
+        const styleMappings = new Map<string, ShiftCodeMapping>();
+        for (const [t, res] of Object.entries(colorResolutions)) {
+          if (res.kind === 'ignored') {
+            styleMappings.set(t.toUpperCase(), { code: t, status: 'ignore', startTime: null, endTime: null });
+          } else if (res.kind === 'shift-type') {
+            const countsAsWork = shiftTypeCountsAsWork(res.typeId);
+            styleMappings.set(t.toUpperCase(), {
+              code: t,
+              status: countsAsWork ? 'work' : 'free',
+              shiftTypeId: res.typeId,
+              startTime: null,
+              endTime: null,
+            });
+          }
+        }
+        const wb = await parseXlsxTeamWorkbook(file, { styleMappings });
+        if (wb.employees[0]?.shifts.length) {
+          shiftsToPersist = wb.employees[0].shifts.map((s) => ({ ...s, sourceFormat: 'excel' as const }));
+        }
+      } catch (err) {
+        console.warn('[ImportModal] Failed to apply resolved colors on confirm:', err);
+      }
+    }
+
+    const finalShifts: Shift[] = shiftsToPersist.filter(hasImportableShiftData).map(toDomainShift);
 
     // identityLocked: the selector is always the account's own identity —
     // never whatever text sits in the (now read-only) fields.
@@ -932,7 +1057,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   // diagnostic (for example MONTH_MISMATCH) while an unknown-code question
   // remains in the same analysis. The assistant must not disappear in that
   // case: it is the existing path that applies tokenAliases/offTokens/codeTimes.
+  const hasXlsxStyleQuestions = analysis?.kind === 'excel'
+    && analysis.questions.length > 0
+    && analysis.questions.some((question) => question.kind === 'token-meaning' && question.token.startsWith(XLSX_STYLE_TOKEN_PREFIX));
   const showAssistant = !assistantDismissed
+    && !hasXlsxStyleQuestions
     && (assistantSession !== null || (analysis?.kind === 'excel' && analysis.questions.length > 0))
     && analysis !== null
     && analysis.questions.length > 0
@@ -940,9 +1069,6 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       || diagnosis?.state === 'NEEDS_USER_INPUT'
       || diagnosis?.state === 'BLOCKED'
       || diagnosis?.state === 'UNSUPPORTED');
-  const hasXlsxStyleQuestions = analysis?.kind === 'excel'
-    && analysis.questions.length > 0
-    && analysis.questions.some((question) => question.kind === 'token-meaning' && question.token.startsWith(XLSX_STYLE_TOKEN_PREFIX));
 
   // Warnings already surfaced as structured diagnostics are not repeated.
   const DIAGNOSTIC_COVERED_WARNINGS = new Set(['UNKNOWN_SHIFT_TOKEN', 'PARTIAL_EXTRACTION', 'MULTIPLE_EMPLOYEE_MATCHES', 'UNSUPPORTED_SECTION']);
@@ -1304,6 +1430,92 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </div>
             )}
 
+            {hasXlsxStyleQuestions && unknownColorTokens.length > 0 && (
+              <div
+                data-testid="unknown-color-resolutions"
+                style={{
+                  margin: '0 0 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  maxHeight: '260px',
+                  overflowY: 'auto',
+                }}
+              >
+                {unknownColorTokens.map((token) => {
+                  const rawHex = token.slice(XLSX_STYLE_TOKEN_PREFIX.length);
+                  const swatchHex = /^[0-9A-F]{6}$/i.test(rawHex)
+                    ? `#${rawHex}`
+                    : /^[0-9A-F]{8}$/i.test(rawHex)
+                      ? `#${rawHex.slice(2)}`
+                      : rawHex;
+                  const resolution = colorResolutions[token];
+                  return (
+                    <div
+                      key={token}
+                      data-testid="unknown-color-row"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        padding: '10px 12px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--glass-border)',
+                        background: 'var(--panel-muted-bg)',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          data-testid="color-swatch"
+                          role="img"
+                          aria-label="Color detectado"
+                          style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '4px',
+                            backgroundColor: swatchHex,
+                            border: '1px solid var(--glass-border)',
+                            display: 'inline-block',
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Color detectado</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          <span>Tipo de turno:</span>
+                          <select
+                            className="modal-input"
+                            aria-label="Tipo de turno"
+                            value={resolution?.kind === 'shift-type' ? resolution.typeId : ''}
+                            onChange={(e) => handleColorSelect(token, e.target.value)}
+                            style={{ padding: '6px 10px', fontSize: '0.8rem', minWidth: '150px' }}
+                          >
+                            <option value="">Seleccionar…</option>
+                            {activeShiftTypes.map((type) => (
+                              <option key={type.id} value={type.id}>
+                                {translateShiftTypeLabel(type.id, locale, type.label)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          className={resolution?.kind === 'ignored' ? 'btn-gold' : 'btn-outline'}
+                          onClick={() => handleColorIgnore(token)}
+                          style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '0.8rem', fontWeight: 600 }}
+                        >
+                          Ignorar este color
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {visibleWarnings.length > 0 && (
               <ul style={{ margin: '0 0 10px', padding: '0 0 0 18px', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                 {visibleWarnings.map((warning, warningIndex) => (
@@ -1510,7 +1722,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           )}
           <button
             className="btn-gold import-process-button"
-            disabled={!isAuthenticated || (readyShifts.length === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
+            disabled={!isAuthenticated || (readyShifts.length === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || importAlreadyExists || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: interactionLocked ? 'wait' : undefined }}
@@ -1519,7 +1731,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length }) : t('importModal.authRequired')}
             </span>
           </button>
-          {diagnosisBlocking && (
+          {(diagnosisBlocking || hasUnresolvedColors) && (
             <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--danger)', textAlign: 'center' }}>
               {t('diagnosis.confirmBlocked')}
             </p>
