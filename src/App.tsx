@@ -50,6 +50,7 @@ import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal'
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
 import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
 import { MembersModal } from './components/shift-dashboard/MembersModal';
+import { EquipoModal } from './components/team/EquipoModal';
 import { AreasModal } from './components/shift-dashboard/AreasModal';
 import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryModal';
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
@@ -207,6 +208,7 @@ function App() {
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
   const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
   const [isMembersOpen, setIsMembersOpen] = useState(false);
+  const [isEquipoOpen, setIsEquipoOpen] = useState(false);
   const [membersInitialEmployeeId, setMembersInitialEmployeeId] = useState<string | null>(null);
   const [membersRecoveryResult, setMembersRecoveryResult] = useState<ImportOutcomeReport | null>(null);
   const [isAreasOpen, setIsAreasOpen] = useState(false);
@@ -1895,6 +1897,7 @@ function App() {
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
           onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+          onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -1930,6 +1933,7 @@ function App() {
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
           onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+          onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -1994,6 +1998,7 @@ function App() {
       onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
       onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
       onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+      onTeam={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsEquipoOpen(true); } : undefined}
       onMembers={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsMembersOpen(true); } : undefined}
       onAreas={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsAreasOpen(true); } : undefined}
       onFormatProfiles={session ? () => { if (!isImporting) setIsFormatProfilesOpen(true); } : undefined}
@@ -2426,6 +2431,22 @@ function App() {
           }
         }}
       />
+
+      {isEquipoOpen && session && (
+        <EquipoModal
+          isOpen={isEquipoOpen && !isImporting}
+          onClose={() => setIsEquipoOpen(false)}
+          employees={employees}
+          areas={areas}
+          currentUserId={session.user.id}
+          currentUserRole={session.role}
+          onChanged={() => {
+            if (session) {
+              void hydrateAuthenticated(session);
+            }
+          }}
+        />
+      )}
 
       <AreasModal
         isOpen={isAreasOpen && !isImporting}

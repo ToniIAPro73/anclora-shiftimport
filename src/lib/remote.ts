@@ -857,6 +857,13 @@ export interface RemoteMember {
   displayName: string;
   role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE';
   scopedAreaId?: string | null;
+  plannerScopeType?: 'ORGANIZATION' | 'AREAS' | 'EMPLOYEES' | null;
+  scopedAreaIds?: string[];
+  scopedEmployeeIds?: string[];
+  employeeId?: string | null;
+  employeeName?: string | null;
+  employeeExternalId?: string | null;
+  employeeAreaId?: string | null;
 }
 
 export async function listRemoteMembers(): Promise<RemoteMember[]> {
@@ -889,6 +896,9 @@ export async function addRemoteMember(input: {
   displayName?: string;
   employeeId?: string;
   scopedAreaId?: string | null;
+  plannerScopeType?: 'ORGANIZATION' | 'AREAS' | 'EMPLOYEES' | null;
+  scopedAreaIds?: string[];
+  scopedEmployeeIds?: string[];
 }): Promise<AddedMember> {
   const payload = await apiFetch<{ member: AddedMember }>('/api/memberships', {
     method: 'POST',
@@ -931,10 +941,30 @@ export async function bulkAddRemoteMembers(items: {
   });
 }
 
-export async function updateRemoteMemberRole(userId: string, role: RemoteMember['role'], scopedAreaId?: string | null): Promise<void> {
+export async function updateRemoteMemberRole(
+  userId: string,
+  role: RemoteMember['role'],
+  scopedAreaId?: string | null,
+  options?: {
+    plannerScopeType?: 'ORGANIZATION' | 'AREAS' | 'EMPLOYEES' | null;
+    scopedAreaIds?: string[];
+    scopedEmployeeIds?: string[];
+  },
+): Promise<void> {
   await apiFetch('/api/memberships', {
     method: 'PATCH',
-    body: JSON.stringify({ userId, role, ...(role === 'PLANNER' ? { scopedAreaId: scopedAreaId ?? null } : {}) }),
+    body: JSON.stringify({
+      userId,
+      role,
+      ...(role === 'PLANNER'
+        ? {
+          scopedAreaId: scopedAreaId ?? null,
+          plannerScopeType: options?.plannerScopeType ?? null,
+          scopedAreaIds: options?.scopedAreaIds ?? [],
+          scopedEmployeeIds: options?.scopedEmployeeIds ?? [],
+        }
+        : {}),
+    }),
   });
 }
 
@@ -942,6 +972,90 @@ export async function removeRemoteMember(userId: string): Promise<void> {
   await apiFetch('/api/memberships', {
     method: 'DELETE',
     body: JSON.stringify({ userId }),
+  });
+}
+
+// ------------------------------------------------------------ ownership transfer (P5.7)
+
+export interface OwnershipTransferResult {
+  transferred: boolean;
+  previousOwnerUserId: string;
+  newOwnerUserId: string;
+  previousOwnerRole: string;
+}
+
+export async function transferRemoteOwnership(
+  targetUserId: string,
+  previousOwnerRole: 'ADMIN' | 'PLANNER' = 'ADMIN',
+): Promise<OwnershipTransferResult> {
+  return apiFetch<OwnershipTransferResult>('/api/organizations/transfer-ownership', {
+    method: 'POST',
+    body: JSON.stringify({ targetUserId, previousOwnerRole }),
+  });
+}
+
+// ------------------------------------------------------------ operational assignments (P5.7)
+
+export interface RemoteOperationalAssignment {
+  id: string;
+  organizationId: string;
+  assignmentType: 'EMPLOYEE_AREA' | 'PLANNER_AREA' | 'PLANNER_EMPLOYEE';
+  subjectId: string;
+  targetId: string;
+  validFrom: string;
+  validTo: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function listRemoteOperationalAssignments(filter?: {
+  assignmentType?: string;
+  subjectId?: string;
+  targetId?: string;
+}): Promise<RemoteOperationalAssignment[]> {
+  const params = new URLSearchParams();
+  if (filter?.assignmentType) params.set('type', filter.assignmentType);
+  if (filter?.subjectId) params.set('subjectId', filter.subjectId);
+  if (filter?.targetId) params.set('targetId', filter.targetId);
+  const query = params.toString();
+  const payload = await apiFetch<{ assignments: RemoteOperationalAssignment[] }>(`/api/assignments${query ? `?${query}` : ''}`);
+  return payload.assignments;
+}
+
+export async function createOrUpdateRemoteOperationalAssignment(input: {
+  assignmentType: 'EMPLOYEE_AREA' | 'PLANNER_AREA' | 'PLANNER_EMPLOYEE';
+  subjectId: string;
+  targetId: string;
+  effectiveDate?: string;
+}): Promise<RemoteOperationalAssignment> {
+  const payload = await apiFetch<{ assignment: RemoteOperationalAssignment }>('/api/assignments', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.assignment;
+}
+
+export async function removeRemoteOperationalAssignment(input: {
+  id?: string;
+  subjectId?: string;
+  targetId?: string;
+  assignmentType?: string;
+  effectiveDate?: string;
+}): Promise<{ removed: boolean; count: number }> {
+  return apiFetch<{ removed: boolean; count: number }>('/api/assignments', {
+    method: 'DELETE',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function bulkMoveRemoteEmployeesArea(input: {
+  employeeIds: string[];
+  targetAreaId: string | null;
+  effectiveDate?: string;
+}): Promise<{ moved: boolean; count: number; targetAreaId: string | null; effectiveDate: string }> {
+  return apiFetch('/api/assignments/bulk-move', {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
 }
 
