@@ -20,6 +20,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     listRemoteAreas: vi.fn(),
     createRemoteArea: vi.fn(),
     updateRemoteArea: vi.fn(),
+    bulkMoveRemoteEmployeesArea: vi.fn(),
   };
 });
 
@@ -38,6 +39,7 @@ const mockedTransferRemoteOwnership = vi.mocked(remote.transferRemoteOwnership);
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
 const mockedCreateRemoteArea = vi.mocked(remote.createRemoteArea);
 const mockedUpdateRemoteArea = vi.mocked(remote.updateRemoteArea);
+const mockedBulkMoveRemoteEmployeesArea = vi.mocked(remote.bulkMoveRemoteEmployeesArea);
 
 const areasFixture: RemoteArea[] = [
   { id: 'area-ops', name: 'Operaciones', code: 'OPS', active: true, createdAt: '2026-01-01' },
@@ -566,3 +568,102 @@ describe('EquipoModal — Tab 3: ÁREAS', () => {
     expect(screen.getByTestId('assignments-tab')).toBeInTheDocument();
   });
 });
+
+describe('EquipoModal — Tab 4: ASIGNACIONES & Bulk Operations', () => {
+  it('allows bulk moving employees to an area with effective date', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedBulkMoveRemoteEmployeesArea.mockResolvedValue({
+      moved: true,
+      count: 1,
+      targetAreaId: 'area-sec',
+      effectiveDate: '2026-10-01',
+    });
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    // Switch to Assignments tab
+    fireEvent.click(screen.getByTestId('tab-assignments'));
+    expect(screen.getByTestId('assignments-tab')).toBeInTheDocument();
+
+    // Verify subtab is employees_to_area by default
+    expect(screen.getByTestId('subtab-employees-to-area')).toHaveClass('is-active');
+
+    // Select target area
+    fireEvent.change(screen.getByTestId('bulk-target-area-select'), { target: { value: 'area-sec' } });
+
+    // Set effective date
+    fireEvent.change(screen.getByTestId('bulk-effective-date-input'), { target: { value: '2026-10-01' } });
+
+    // Select employee emp-bob
+    const checkbox = screen.getByTestId('select-emp-emp-bob');
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    // Verify counter
+    expect(screen.getByTestId('bulk-selection-count')).toHaveTextContent('1 de 2 seleccionados');
+
+    // Click Apply button
+    const applyButton = screen.getByTestId('apply-bulk-move-button');
+    expect(applyButton).toBeEnabled();
+    fireEvent.click(applyButton);
+
+    await waitFor(() => {
+      expect(mockedBulkMoveRemoteEmployeesArea).toHaveBeenCalledWith({
+        employeeIds: ['emp-bob'],
+        targetAreaId: 'area-sec',
+        effectiveDate: '2026-10-01',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('bulk-success-message')).toHaveTextContent(
+        '1 empleados asignados a "Seguridad" con fecha de efecto 2026-10-01.',
+      );
+    });
+  });
+
+  it('allows updating planner scope from tab 4', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedUpdateRemoteMemberRole.mockResolvedValue(undefined);
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    // Switch to Assignments tab
+    fireEvent.click(screen.getByTestId('tab-assignments'));
+
+    // Switch to Planner scopes subtab
+    fireEvent.click(screen.getByTestId('subtab-planner-scopes'));
+    expect(screen.getByTestId('subtab-planner-scopes')).toHaveClass('is-active');
+
+    // Select planner
+    fireEvent.change(screen.getByTestId('tab4-planner-select'), { target: { value: 'usr-planner' } });
+
+    // Switch scope mode to ORGANIZATION
+    fireEvent.click(screen.getByTestId('tab4-scope-org'));
+
+    // Click save
+    fireEvent.click(screen.getByTestId('save-tab4-planner-scope-button'));
+
+    await waitFor(() => {
+      expect(mockedUpdateRemoteMemberRole).toHaveBeenCalledWith(
+        'usr-planner',
+        'PLANNER',
+        null,
+        {
+          plannerScopeType: 'ORGANIZATION',
+          scopedAreaIds: [],
+          scopedEmployeeIds: [],
+        },
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab4-planner-success')).toHaveTextContent(
+        'Ámbito de planificación guardado correctamente.',
+      );
+    });
+  });
+});
+

@@ -10,6 +10,7 @@ import {
 import { buildPersonas, filterPersonas, Persona } from '../../lib/personas';
 import {
   addRemoteMember,
+  bulkMoveRemoteEmployeesArea,
   createRemoteArea,
   createRemoteEmployee,
   listRemoteAreas,
@@ -114,6 +115,25 @@ export function EquipoModal({
   const [areaActive, setAreaActive] = useState(true);
   const [areaSubmitting, setAreaSubmitting] = useState(false);
 
+  // Tab 4: Asignaciones state
+  const [assignmentSubTab, setAssignmentSubTab] = useState<'employees_to_area' | 'planner_scopes'>('employees_to_area');
+  const [selectedBulkEmployeeIds, setSelectedBulkEmployeeIds] = useState<string[]>([]);
+  const [bulkTargetAreaId, setBulkTargetAreaId] = useState<string>('');
+  const [bulkEffectiveDate, setBulkEffectiveDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [bulkSearch, setBulkSearch] = useState('');
+  const [bulkFilterCurrentArea, setBulkFilterCurrentArea] = useState<string>('all');
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkSuccessMessage, setBulkSuccessMessage] = useState<string | null>(null);
+
+  // Tab 4: Planner scope assignment state
+  const [selectedPlannerUserId, setSelectedPlannerUserId] = useState<string>('');
+  const [tab4ScopeType, setTab4ScopeType] = useState<'ORGANIZATION' | 'AREAS' | 'EMPLOYEES'>('ORGANIZATION');
+  const [tab4ScopedAreas, setTab4ScopedAreas] = useState<string[]>([]);
+  const [tab4ScopedEmployees, setTab4ScopedEmployees] = useState<string[]>([]);
+  const [tab4EmployeeSearch, setTab4EmployeeSearch] = useState('');
+  const [plannerScopeSubmitting, setPlannerScopeSubmitting] = useState(false);
+  const [plannerScopeSuccessMessage, setPlannerScopeSuccessMessage] = useState<string | null>(null);
+
   // Load members
   const fetchMembers = useCallback(async () => {
     if (!isOpen) return;
@@ -211,6 +231,101 @@ export function EquipoModal({
   const transferCandidates = useMemo(() => {
     return members.filter((m) => m.userId !== currentUserId);
   }, [members, currentUserId]);
+
+  // Tab 4: Planner selection sync
+  useEffect(() => {
+    if (selectedPlannerUserId) {
+      const m = members.find((mem) => mem.userId === selectedPlannerUserId);
+      if (m) {
+        setTab4ScopeType(m.plannerScopeType || (m.scopedAreaId ? 'AREAS' : 'ORGANIZATION'));
+        setTab4ScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
+        setTab4ScopedEmployees(m.scopedEmployeeIds || []);
+        setTab4EmployeeSearch('');
+      }
+    } else {
+      const firstPlanner = members.find((m) => m.role === 'PLANNER' || m.role === 'ADMIN');
+      if (firstPlanner) {
+        setSelectedPlannerUserId(firstPlanner.userId);
+      }
+    }
+  }, [selectedPlannerUserId, members]);
+
+  // Tab 4: Filtered employees for bulk assignment
+  const filteredBulkEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      if (bulkFilterCurrentArea !== 'all') {
+        if (bulkFilterCurrentArea === 'none' && emp.areaId) return false;
+        if (bulkFilterCurrentArea !== 'none' && emp.areaId !== bulkFilterCurrentArea) return false;
+      }
+      if (bulkSearch.trim()) {
+        const q = bulkSearch.trim().toLowerCase();
+        const matchName = emp.name.toLowerCase().includes(q);
+        const matchId = emp.externalEmployeeId ? emp.externalEmployeeId.toLowerCase().includes(q) : false;
+        if (!matchName && !matchId) return false;
+      }
+      return true;
+    });
+  }, [employees, bulkFilterCurrentArea, bulkSearch]);
+
+  const handleToggleSelectAllBulk = () => {
+    if (selectedBulkEmployeeIds.length === filteredBulkEmployees.length && filteredBulkEmployees.length > 0) {
+      setSelectedBulkEmployeeIds([]);
+    } else {
+      setSelectedBulkEmployeeIds(filteredBulkEmployees.map((e) => e.id));
+    }
+  };
+
+  const handleApplyBulkMove = async () => {
+    if (selectedBulkEmployeeIds.length === 0 || !bulkTargetAreaId) return;
+    setBulkSubmitting(true);
+    setError(null);
+    setBulkSuccessMessage(null);
+    try {
+      const targetAreaId = bulkTargetAreaId === '__NONE__' ? null : bulkTargetAreaId;
+      const res = await bulkMoveRemoteEmployeesArea({
+        employeeIds: selectedBulkEmployeeIds,
+        targetAreaId,
+        effectiveDate: bulkEffectiveDate || undefined,
+      });
+      const areaName = targetAreaId
+        ? effectiveAreas.find((a) => a.id === targetAreaId)?.name || 'Área'
+        : 'Sin área';
+      setBulkSuccessMessage(`${res.count} empleados asignados a "${areaName}" con fecha de efecto ${res.effectiveDate}.`);
+      setSelectedBulkEmployeeIds([]);
+      onChanged();
+      await fetchMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
+    } finally {
+      setBulkSubmitting(false);
+    }
+  };
+
+  const handleSaveTab4PlannerScope = async () => {
+    if (!selectedPlannerUserId) return;
+    setPlannerScopeSubmitting(true);
+    setError(null);
+    setPlannerScopeSuccessMessage(null);
+    try {
+      await updateRemoteMemberRole(
+        selectedPlannerUserId,
+        'PLANNER',
+        tab4ScopeType === 'AREAS' && tab4ScopedAreas.length > 0 ? tab4ScopedAreas[0] : null,
+        {
+          plannerScopeType: tab4ScopeType,
+          scopedAreaIds: tab4ScopeType === 'AREAS' ? tab4ScopedAreas : [],
+          scopedEmployeeIds: tab4ScopeType === 'EMPLOYEES' ? tab4ScopedEmployees : [],
+        },
+      );
+      setPlannerScopeSuccessMessage('Ámbito de planificación guardado correctamente.');
+      onChanged();
+      await fetchMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
+    } finally {
+      setPlannerScopeSubmitting(false);
+    }
+  };
 
   const isOwner = currentUserRole === 'OWNER';
 
@@ -866,6 +981,9 @@ export function EquipoModal({
                                 className="equipo-btn equipo-btn--secondary"
                                 onClick={() => {
                                   setActiveTab('assignments');
+                                  setAssignmentSubTab('employees_to_area');
+                                  setBulkTargetAreaId(a.id);
+                                  setBulkFilterCurrentArea('all');
                                 }}
                                 data-testid={`manage-area-assignments-${a.id}`}
                               >
@@ -885,11 +1003,359 @@ export function EquipoModal({
 
         {/* TAB 4: ASIGNACIONES */}
         {activeTab === 'assignments' && (
-          <div className="equipo-modal__table-container" style={{ padding: '24px' }} data-testid="assignments-tab">
-            <h3 style={{ margin: '0 0 8px 0' }}>Asignaciones operativas</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              Gestión de asignaciones temporales con validez efectiva.
-            </p>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }} data-testid="assignments-tab">
+            {/* Sub-tab navigation */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+              <button
+                type="button"
+                className={`equipo-modal__tab ${assignmentSubTab === 'employees_to_area' ? 'is-active' : ''}`}
+                onClick={() => setAssignmentSubTab('employees_to_area')}
+                data-testid="subtab-employees-to-area"
+              >
+                Empleados → Área (Cambio masivo)
+              </button>
+              <button
+                type="button"
+                className={`equipo-modal__tab ${assignmentSubTab === 'planner_scopes' ? 'is-active' : ''}`}
+                onClick={() => setAssignmentSubTab('planner_scopes')}
+                data-testid="subtab-planner-scopes"
+              >
+                Planificadores → Ámbitos
+              </button>
+            </div>
+
+            {assignmentSubTab === 'employees_to_area' && (
+              <>
+                {/* Bulk Operation Action Bar */}
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'var(--bg-surface-header, #f8fafc)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: '12px',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Área de destino:</label>
+                    <select
+                      className="equipo-modal__select"
+                      value={bulkTargetAreaId}
+                      onChange={(e) => setBulkTargetAreaId(e.target.value)}
+                      data-testid="bulk-target-area-select"
+                    >
+                      <option value="">Selecciona área de destino…</option>
+                      {effectiveAreas.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name} {a.code ? `(${a.code})` : ''}</option>
+                      ))}
+                      <option value="__NONE__">Sin área / Desasignar</option>
+                    </select>
+
+                    <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Fecha de efecto:</label>
+                    <input
+                      type="date"
+                      className="equipo-modal__input"
+                      value={bulkEffectiveDate}
+                      onChange={(e) => setBulkEffectiveDate(e.target.value)}
+                      data-testid="bulk-effective-date-input"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="equipo-btn equipo-btn--primary"
+                    disabled={selectedBulkEmployeeIds.length === 0 || !bulkTargetAreaId || bulkSubmitting}
+                    onClick={() => void handleApplyBulkMove()}
+                    data-testid="apply-bulk-move-button"
+                  >
+                    {bulkSubmitting
+                      ? 'Reasignando…'
+                      : `Aplicar a ${selectedBulkEmployeeIds.length} ${selectedBulkEmployeeIds.length === 1 ? 'empleado' : 'empleados'}`}
+                  </button>
+                </div>
+
+                {bulkSuccessMessage && (
+                  <div className="equipo-modal__alert equipo-modal__alert--success" data-testid="bulk-success-message">
+                    {bulkSuccessMessage}
+                  </div>
+                )}
+
+                {/* Filter and selection tools */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="text"
+                      className="equipo-modal__search"
+                      placeholder="Buscar por nombre o ID de empleado…"
+                      value={bulkSearch}
+                      onChange={(e) => setBulkSearch(e.target.value)}
+                      data-testid="bulk-employee-search"
+                    />
+                    <select
+                      className="equipo-modal__select"
+                      value={bulkFilterCurrentArea}
+                      onChange={(e) => setBulkFilterCurrentArea(e.target.value)}
+                      data-testid="bulk-filter-current-area"
+                    >
+                      <option value="all">Área actual: Todas</option>
+                      <option value="none">Sin área asignada</option>
+                      {effectiveAreas.map((a) => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }} data-testid="bulk-selection-count">
+                      {selectedBulkEmployeeIds.length} de {filteredBulkEmployees.length} seleccionados
+                    </span>
+                    <button
+                      type="button"
+                      className="equipo-btn equipo-btn--secondary"
+                      style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                      onClick={handleToggleSelectAllBulk}
+                      data-testid="bulk-select-all-button"
+                    >
+                      {selectedBulkEmployeeIds.length === filteredBulkEmployees.length && filteredBulkEmployees.length > 0
+                        ? 'Deseleccionar todos'
+                        : 'Seleccionar todos'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Employee table with selection checkboxes */}
+                <div className="equipo-modal__table-container">
+                  <table className="equipo-table" data-testid="bulk-employees-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '40px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={filteredBulkEmployees.length > 0 && selectedBulkEmployeeIds.length === filteredBulkEmployees.length}
+                            onChange={handleToggleSelectAllBulk}
+                          />
+                        </th>
+                        <th>Empleado</th>
+                        <th>ID Externo</th>
+                        <th>Área actual</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBulkEmployees.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                            No se encontraron empleados con los filtros aplicados.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredBulkEmployees.map((emp) => {
+                          const isSelected = selectedBulkEmployeeIds.includes(emp.id);
+                          const area = emp.areaId ? effectiveAreas.find((a) => a.id === emp.areaId) : null;
+                          return (
+                            <tr
+                              key={emp.id}
+                              style={{ background: isSelected ? 'var(--accent-subtle, rgba(14, 165, 233, 0.08))' : undefined }}
+                              data-testid={`bulk-employee-row-${emp.id}`}
+                            >
+                              <td style={{ textAlign: 'center' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedBulkEmployeeIds([...selectedBulkEmployeeIds, emp.id]);
+                                    } else {
+                                      setSelectedBulkEmployeeIds(selectedBulkEmployeeIds.filter((id) => id !== emp.id));
+                                    }
+                                  }}
+                                  data-testid={`select-emp-${emp.id}`}
+                                />
+                              </td>
+                              <td><strong>{emp.name}</strong></td>
+                              <td>{emp.externalEmployeeId || '—'}</td>
+                              <td>
+                                {area ? (
+                                  <span className="equipo-badge equipo-badge--neutral">{area.name}</span>
+                                ) : (
+                                  <span style={{ color: 'var(--text-muted)' }}>Sin área</span>
+                                )}
+                              </td>
+                              <td>
+                                <span className={`equipo-badge equipo-badge--${emp.status}`}>
+                                  {emp.status === 'active' ? 'Activo' : 'Pendiente'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {assignmentSubTab === 'planner_scopes' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
+                <div style={{
+                  padding: '16px',
+                  background: 'var(--bg-surface-header, #f8fafc)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <label htmlFor="tab4-planner-select" style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                      Seleccionar planificador:
+                    </label>
+                    <select
+                      id="tab4-planner-select"
+                      className="equipo-modal__select"
+                      value={selectedPlannerUserId}
+                      onChange={(e) => setSelectedPlannerUserId(e.target.value)}
+                      data-testid="tab4-planner-select"
+                    >
+                      <option value="">Selecciona un usuario…</option>
+                      {members.filter((m) => m.role === 'PLANNER' || m.role === 'ADMIN').map((m) => (
+                        <option key={m.userId} value={m.userId}>
+                          {m.displayName || m.email} ({m.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {plannerScopeSuccessMessage && (
+                    <div className="equipo-modal__alert equipo-modal__alert--success" data-testid="tab4-planner-success">
+                      {plannerScopeSuccessMessage}
+                    </div>
+                  )}
+
+                  {selectedPlannerUserId && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
+                      <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>Ámbito de gestión:</p>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="tab4-scope-type"
+                          checked={tab4ScopeType === 'ORGANIZATION'}
+                          onChange={() => setTab4ScopeType('ORGANIZATION')}
+                          data-testid="tab4-scope-org"
+                        />
+                        {t('teamWorkspace.scopeWholeOrg')}
+                      </label>
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="tab4-scope-type"
+                          checked={tab4ScopeType === 'AREAS'}
+                          onChange={() => setTab4ScopeType('AREAS')}
+                          disabled={effectiveAreas.length === 0}
+                          data-testid="tab4-scope-areas"
+                        />
+                        <span>
+                          {t('teamWorkspace.scopeAreas')}
+                          {effectiveAreas.length === 0 && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                              (No hay áreas)
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                      {tab4ScopeType === 'AREAS' && effectiveAreas.length > 0 && (
+                        <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
+                          {effectiveAreas.map((a) => (
+                            <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={tab4ScopedAreas.includes(a.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setTab4ScopedAreas([...tab4ScopedAreas, a.id]);
+                                  } else {
+                                    setTab4ScopedAreas(tab4ScopedAreas.filter((id) => id !== a.id));
+                                  }
+                                }}
+                                data-testid={`tab4-scope-area-${a.id}`}
+                              />
+                              <span><strong>{a.name}</strong> {a.code ? `(${a.code})` : ''}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                        <input
+                          type="radio"
+                          name="tab4-scope-type"
+                          checked={tab4ScopeType === 'EMPLOYEES'}
+                          onChange={() => setTab4ScopeType('EMPLOYEES')}
+                          data-testid="tab4-scope-employees"
+                        />
+                        {t('teamWorkspace.scopeEmployees')}
+                      </label>
+                      {tab4ScopeType === 'EMPLOYEES' && (
+                        <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="text"
+                              placeholder={t('teamWorkspace.searchEmployees')}
+                              value={tab4EmployeeSearch}
+                              onChange={(e) => setTab4EmployeeSearch(e.target.value)}
+                              className="equipo-modal__input"
+                              style={{ fontSize: '0.8rem', padding: '4px 8px', maxWidth: '280px' }}
+                              data-testid="tab4-scope-employee-search"
+                            />
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} data-testid="tab4-scope-employees-count">
+                              {tab4ScopedEmployees.length} seleccionados
+                            </span>
+                          </div>
+                          <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {employees
+                              .filter((emp) => emp.name.toLowerCase().includes(tab4EmployeeSearch.toLowerCase()))
+                              .map((emp) => (
+                                <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={tab4ScopedEmployees.includes(emp.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setTab4ScopedEmployees([...tab4ScopedEmployees, emp.id]);
+                                      } else {
+                                        setTab4ScopedEmployees(tab4ScopedEmployees.filter((id) => id !== emp.id));
+                                      }
+                                    }}
+                                    data-testid={`tab4-scope-employee-${emp.id}`}
+                                  />
+                                  <span>{emp.name} {emp.externalEmployeeId ? `(${emp.externalEmployeeId})` : ''}</span>
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                        <button
+                          type="button"
+                          className="equipo-btn equipo-btn--primary"
+                          disabled={plannerScopeSubmitting}
+                          onClick={() => void handleSaveTab4PlannerScope()}
+                          data-testid="save-tab4-planner-scope-button"
+                        >
+                          {plannerScopeSubmitting ? 'Guardando…' : 'Guardar ámbito de planificador'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
