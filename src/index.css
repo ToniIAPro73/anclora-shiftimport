@@ -6718,8 +6718,21 @@ button[aria-busy='true'] {
 .onboarding-wizard__summary dd { margin: 0; color: var(--text-primary); }
 .onboarding-wizard__error { margin: 14px 0 0; color: var(--danger); font-size: .85rem; }
 .onboarding-wizard__actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 20px; }
+.onboarding-wizard__body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 2px 16px; }
+.onboarding-wizard__stepper { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-soft); }
+.onboarding-wizard__step-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 700; color: var(--color-accent); text-transform: uppercase; letter-spacing: 0.5px; }
+.onboarding-wizard__structure-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.onboarding-wizard__structure-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--panel-muted-bg); color: var(--text-primary); text-align: left; cursor: pointer; transition: all 0.15s ease; }
+.onboarding-wizard__structure-card:hover { border-color: var(--color-accent); transform: translateY(-1px); }
+.onboarding-wizard__structure-card.is-selected { border-color: var(--color-accent); background: var(--gold-tint-bg); box-shadow: 0 0 0 2px var(--color-accent); }
+.onboarding-wizard__card { padding: 14px; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--panel-muted-bg); margin-bottom: 12px; }
+.onboarding-wizard__chip-group { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+.onboarding-wizard__chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px dashed var(--glass-border); border-radius: 20px; background: var(--glass-bg); color: var(--text-primary); font-size: 0.8rem; cursor: pointer; transition: all 0.15s ease; }
+.onboarding-wizard__chip:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.onboarding-wizard__section-title { font-size: 1.1rem; font-weight: 800; color: var(--text-primary); margin: 0 0 4px; }
+.onboarding-wizard__badge { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--glass-bg); color: var(--text-muted); font-size: 0.72rem; font-weight: 600; border: 1px solid var(--glass-border); }
 @media (max-width: 640px) {
-  .onboarding-wizard__plans, .onboarding-wizard__form-grid { grid-template-columns: 1fr; }
+  .onboarding-wizard__plans, .onboarding-wizard__form-grid, .onboarding-wizard__structure-cards { grid-template-columns: 1fr; }
   .onboarding-wizard__form-grid .onboarding-wizard__check { grid-column: auto; }
   .onboarding-wizard__plan { min-height: auto; }
   .onboarding-wizard__summary > div { grid-template-columns: 1fr; gap: 3px; }

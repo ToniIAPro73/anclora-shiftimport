@@ -190,4 +190,127 @@ describe('POST /api/onboarding', () => {
     expect(res.statusCode).toBe(500);
     expect(res.body.error).toBe('Unexpected API error');
   });
+
+  describe('P5.7 Canonical Scenarios A-F', () => {
+    it('Scenario A: Minimal organization (Owner only, 0 Areas, 0 Planners, 0 Employees)', async () => {
+      state = { sql: makeSql() };
+      const res = await call({
+        plan: 'team',
+        organization: { name: 'Minimal Org' },
+        owner: { isEmployee: false },
+        areas: [],
+        admins: [],
+        planners: [],
+        employees: [],
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(state.sql.queries.filter((q) => q.text.includes('INSERT INTO organizations'))).toHaveLength(1);
+      expect(state.sql.queries.filter((q) => q.text.includes('INSERT INTO memberships'))).toHaveLength(1);
+      expect(state.sql.queries.some((q) => q.text.includes('INSERT INTO employees'))).toBe(false);
+      expect(state.sql.queries.some((q) => q.text.includes('INSERT INTO areas'))).toBe(false);
+      expect(state.sql.queries.some((q) => q.text.includes('INSERT INTO operational_assignments'))).toBe(false);
+    });
+
+    it('Scenario B: Small organization (Owner, Admin, Employees, 0 Areas)', async () => {
+      state = { sql: makeSql() };
+      const res = await call({
+        plan: 'team',
+        organization: { name: 'Small Org' },
+        owner: { isEmployee: false },
+        admins: [{ name: 'Admin Bob', email: 'bob@example.com', isEmployee: false }],
+        employees: [{ name: 'Employee Ana' }, { name: 'Employee Carlos' }],
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(state.sql.queries.filter((q) => q.text.includes('INSERT INTO users'))).toHaveLength(1);
+      expect(state.sql.queries.filter((q) => q.text.includes('INSERT INTO memberships'))).toHaveLength(2); // OWNER + ADMIN
+      expect(state.sql.queries.filter((q) => q.text.includes('INSERT INTO employees'))).toHaveLength(2); // 2 standalone employees
+      expect(state.sql.queries.some((q) => q.text.includes('INSERT INTO areas'))).toBe(false);
+      expect(res.body.adminCredentials.email).toBe('bob@example.com');
+    });
+
+    it('Scenario C: Planner without Areas (Owner, Planner with direct employee scope, 0 Areas)', async () => {
+      state = { sql: makeSql() };
+      const res = await call({
+        plan: 'team',
+        organization: { name: 'Planner Org' },
+        owner: { isEmployee: false },
+        planners: [{
+          name: 'Planner Patricia',
+          email: 'patricia@example.com',
+          isEmployee: false,
+          plannerScopeType: 'EMPLOYEES',
+          scopedEmployeeRefs: ['emp-0'],
+        }],
+        employees: [{ ref: 'emp-0', name: 'Operational Worker' }],
+        assignments: {
+          employeeToPlanner: [{ employeeRef: 'emp-0', plannerRef: 'planner-0' }],
+        },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const plannerMembership = state.sql.queries.find((q) => q.text.includes("'PLANNER'"));
+      expect(plannerMembership).toBeDefined();
+      expect(plannerMembership?.values).toContain('EMPLOYEES');
+      const plannerEmpAssign = state.sql.queries.find((q) => q.text.includes("'PLANNER_EMPLOYEE'"));
+      expect(plannerEmpAssign).toBeDefined();
+    });
+
+    it('Scenario D: Multi-area organization (Owner, Areas, Planner with area scopes, Employees assigned to areas)', async () => {
+      state = { sql: makeSql() };
+      const res = await call({
+        plan: 'team',
+        organization: { name: 'Multi Area Corp' },
+        owner: { isEmployee: false },
+        areas: [{ ref: 'area-ops', name: 'Operaciones' }, { ref: 'area-ramp', name: 'Rampa' }],
+        planners: [{
+          ref: 'planner-ops',
+          name: 'Ops Planner',
+          email: 'opsplanner@example.com',
+          isEmployee: false,
+          plannerScopeType: 'AREAS',
+          scopedAreaRefs: ['area-ops'],
+        }],
+        employees: [{ ref: 'emp-1', name: 'Worker 1', areaRef: 'area-ops' }],
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(state.sql.queries.filter((q) => q.text.includes('INSERT INTO areas'))).toHaveLength(2);
+      expect(state.sql.queries.some((q) => q.text.includes("'PLANNER_AREA'"))).toBe(true);
+      expect(state.sql.queries.some((q) => q.text.includes("'EMPLOYEE_AREA'"))).toBe(true);
+    });
+
+    it('Scenario E: Owner is explicitly NOT an Employee (no employee record)', async () => {
+      state = { sql: makeSql() };
+      const res = await call({
+        plan: 'team',
+        organization: { name: 'No Employee Owner' },
+        owner: { isEmployee: false },
+      });
+
+      expect(res.statusCode).toBe(201);
+      expect(state.sql.queries.some((q) => q.text.includes('INSERT INTO employees'))).toBe(false);
+    });
+
+    it('Scenario F: Admin IS an Employee (creates linked employee record)', async () => {
+      state = { sql: makeSql() };
+      const res = await call({
+        plan: 'team',
+        organization: { name: 'Admin Employee Org' },
+        owner: { isEmployee: false },
+        admins: [{
+          name: 'Admin Worker',
+          email: 'adminworker@example.com',
+          isEmployee: true,
+          employeeName: 'Admin Worker Operational',
+        }],
+      });
+
+      expect(res.statusCode).toBe(201);
+      const empInsert = state.sql.queries.find((q) => q.text.includes('INSERT INTO employees'));
+      expect(empInsert).toBeDefined();
+      expect(empInsert?.values).toContain('Admin Worker Operational');
+    });
+  });
 });

@@ -68,4 +68,98 @@ describe('OnboardingChoiceModal — plan-aware governance', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(screen.queryByText('Áreas')).toBeNull();
   });
+
+  describe('P5.7 Canonical Scenarios A-F (UI)', () => {
+    it('Scenario B: Small org with Admin (Admin is NOT employee)', async () => {
+      const onConfirm = renderModal();
+      // Step: Plan
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Organization
+      fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Small Corp' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Owner
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Admin
+      fireEvent.click(screen.getByRole('radio', { name: 'Sí' }));
+      fireEvent.change(screen.getByLabelText('Nombre del administrador'), { target: { value: 'Admin Carlos' } });
+      fireEvent.change(screen.getByLabelText('Email del administrador'), { target: { value: 'carlos@example.com' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Structure (default 'none')
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Summary
+      await waitFor(() => expect(screen.getByText('Small Corp')).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
+
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        plan: 'team',
+        organization: { name: 'Small Corp' },
+        owner: expect.objectContaining({ isEmployee: false }),
+        admin: expect.objectContaining({
+          name: 'Admin Carlos',
+          email: 'carlos@example.com',
+          isEmployee: false,
+        }),
+      })));
+    });
+
+    it('Scenario D: Structured org with Areas (adds quick suggested area)', async () => {
+      const onConfirm = renderModal();
+      // Step: Plan
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Organization
+      fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Aero Corp' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Owner
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Admin
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Structure -> choose "Quiero crear áreas"
+      fireEvent.click(screen.getByRole('radio', { name: /Quiero crear áreas/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Areas -> click quick chip "+ Operaciones"
+      fireEvent.click(screen.getByRole('button', { name: '+ Operaciones' }));
+      expect(screen.getByDisplayValue('Operaciones')).toBeInTheDocument();
+      // Skip remaining optional steps directly to summary
+      fireEvent.click(screen.getByRole('button', { name: 'Saltar este paso' }));
+      // Step: Summary
+      await waitFor(() => expect(screen.getByText('Operaciones')).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
+
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        organization: { name: 'Aero Corp' },
+        areas: expect.arrayContaining([expect.objectContaining({ name: 'Operaciones' })]),
+      })));
+    });
+
+    it('Scenario F: Admin IS an employee (explicitly marked)', async () => {
+      const onConfirm = renderModal();
+      // Step: Plan
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Organization
+      fireEvent.change(screen.getByLabelText('Nombre de la organización'), { target: { value: 'Dual Admin Org' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Owner
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Admin
+      fireEvent.click(screen.getByRole('radio', { name: 'Sí' }));
+      fireEvent.change(screen.getByLabelText('Nombre del administrador'), { target: { value: 'Elena Admin' } });
+      fireEvent.change(screen.getByLabelText('Email del administrador'), { target: { value: 'elena@example.com' } });
+      fireEvent.click(screen.getByRole('checkbox', { name: /Este administrador también trabaja como empleado/ }));
+      fireEvent.change(screen.getByLabelText('Nombre del empleado'), { target: { value: 'Elena Operational' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Structure
+      fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+      // Step: Summary
+      fireEvent.click(screen.getByRole('button', { name: 'Crear organización' }));
+
+      await waitFor(() => expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        admin: expect.objectContaining({
+          name: 'Elena Admin',
+          email: 'elena@example.com',
+          isEmployee: true,
+          employeeName: 'Elena Operational',
+        }),
+      })));
+    });
+  });
 });

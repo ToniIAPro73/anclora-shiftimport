@@ -31,6 +31,36 @@ export interface SessionInfo {
 
 export type OnboardingPlanId = NonNullable<SessionInfo['plan']>;
 
+export interface OnboardingAdminInput {
+  ref?: string;
+  name: string;
+  email: string;
+  isEmployee: boolean;
+  employeeName?: string;
+  externalEmployeeId?: string;
+  areaRef?: string | null;
+}
+
+export interface OnboardingPlannerInput {
+  ref?: string;
+  name: string;
+  email: string;
+  isEmployee: boolean;
+  employeeName?: string;
+  externalEmployeeId?: string;
+  areaRef?: string | null;
+  plannerScopeType?: 'ORGANIZATION' | 'AREAS' | 'EMPLOYEES' | null;
+  scopedAreaRefs?: string[];
+  scopedEmployeeRefs?: string[];
+}
+
+export interface OnboardingEmployeeInput {
+  ref?: string;
+  name: string;
+  externalEmployeeId?: string;
+  areaRef?: string | null;
+}
+
 export interface OrganizationOnboardingInput {
   plan: OnboardingPlanId;
   organization: { name: string };
@@ -41,13 +71,13 @@ export interface OrganizationOnboardingInput {
     externalEmployeeId?: string;
     areaRef?: string | null;
   };
-  admin?: {
-    name: string;
-    email: string;
-    isEmployee: boolean;
-    employeeName?: string;
-    externalEmployeeId?: string;
-    areaRef?: string | null;
+  admin?: OnboardingAdminInput;
+  admins?: OnboardingAdminInput[];
+  planners?: OnboardingPlannerInput[];
+  employees?: OnboardingEmployeeInput[];
+  assignments?: {
+    employeeToArea?: Array<{ employeeRef: string; areaRef: string }>;
+    employeeToPlanner?: Array<{ employeeRef: string; plannerRef: string }>;
   };
 }
 
