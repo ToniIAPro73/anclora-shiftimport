@@ -239,6 +239,14 @@ function App() {
   const hasImportConflict = importConflictState !== null;
 
   useEffect(() => {
+    const busy = isImporting || isSavingShift;
+    document.body.classList.toggle('app--busy', busy);
+    return () => {
+      document.body.classList.remove('app--busy');
+    };
+  }, [isImporting, isSavingShift]);
+
+  useEffect(() => {
     if (!isImporting) {
       return;
     }
@@ -720,6 +728,53 @@ function App() {
     shifts.find(s => s.id === editingShiftId) || null
   , [shifts, editingShiftId]);
 
+  const [isRefreshingCalendar, setIsRefreshingCalendar] = useState(false);
+
+  const refreshCalendarData = useCallback(async (employeeIdOverride?: string | null) => {
+    setIsRefreshingCalendar(true);
+    try {
+      const activeEmpId = employeeIdOverride !== undefined
+        ? employeeIdOverride
+        : (selectedEmployeeId ?? (session?.role === 'EMPLOYEE' ? session.employeeId : null));
+
+      if (session && activeEmpId) {
+        const remoteShifts = await loadRemoteShifts(activeEmpId);
+        setShifts(remoteShifts);
+      } else if (!session) {
+        const localShifts = await loadShifts();
+        setShifts(localShifts);
+      }
+
+      if (session && session.role !== 'EMPLOYEE' && !needsOrgChoice) {
+        try {
+          const versions = await listRemoteScheduleVersions(effectiveAreaId);
+          const dates = new Set<string>();
+          for (const version of versions) {
+            if (version.status !== 'DRAFT') continue;
+            for (let cursor = version.periodStart; cursor <= version.periodEnd; cursor = shiftOperationalDate(cursor, 1)) {
+              if (cursor >= getOperationalDate()) dates.add(cursor);
+            }
+          }
+          setEditableScheduleDates(dates);
+        } catch {
+          // ignore schedule version refresh errors
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh calendar data', error);
+    } finally {
+      setIsRefreshingCalendar(false);
+    }
+  }, [session, selectedEmployeeId, needsOrgChoice, effectiveAreaId]);
+
+  const prevRouteRef = useRef(route);
+  useEffect(() => {
+    if (prevRouteRef.current === '/app/schedule' && route === '/app') {
+      void refreshCalendarData();
+    }
+    prevRouteRef.current = route;
+  }, [route, refreshCalendarData]);
+
   const handleNavigate = (delta: number) => {
     if (isImporting) {
       return;
@@ -753,6 +808,7 @@ function App() {
       setEditingShiftId(null);
       setDraftShiftDate(null);
       setAppFeedback({ kind: 'status', message: t('shiftModal.saveSuccess') });
+      void refreshCalendarData();
     } catch (error) {
       console.error('Failed to persist shift', error);
       setAppFeedback({ kind: 'alert', message: t('importConflict.saveShiftFailed') });
@@ -773,6 +829,7 @@ function App() {
       setIsModalOpen(false);
       setEditingShiftId(null);
       setDraftShiftDate(null);
+      void refreshCalendarData();
     } catch (error) {
       console.error('Failed to delete shift', error);
       setAppFeedback({ kind: 'alert', message: t('importConflict.deleteShiftFailed') });
@@ -1320,10 +1377,11 @@ function App() {
       setIsImportOpen(false);
       setOnboardingFile(null);
       // TTFV funnel endpoint + onboarding completion on the first real import.
-          trackTtfvEvent('import_confirmed');
-          if (!loadOnboarding().completed) {
-            completeOnboardingGuide();
-          }
+      trackTtfvEvent('import_confirmed');
+      if (!loadOnboarding().completed) {
+        completeOnboardingGuide();
+      }
+      void refreshCalendarData(targetEmployeeId);
     };
 
     try {
@@ -1861,7 +1919,7 @@ function App() {
         >
           <ModalShell
             isOpen
-            onClose={() => navigate('/app')}
+            onClose={() => { navigate('/app'); void refreshCalendarData(); }}
             title={t('planner.title')}
             closeAriaLabel={t('planner.close')}
             workspace
@@ -1875,7 +1933,7 @@ function App() {
               embedded
               initialDate={plannerInitialDate}
               modalHeader
-              onClose={() => navigate('/app')}
+              onClose={() => { navigate('/app'); void refreshCalendarData(); }}
             />
           </ModalShell>
         </AppShell>
@@ -1931,6 +1989,8 @@ function App() {
           areaControl={calendarAreaControl}
           employeeControl={calendarEmployeeControl}
           onNavigate={(delta) => { if (!isImporting) handleNavigate(delta); }}
+          onRefresh={() => { if (!isImporting) void refreshCalendarData(); }}
+          isRefreshing={isRefreshingCalendar}
         />
         {appFeedback && (
           <div
@@ -2026,7 +2086,7 @@ function App() {
 
       <ApprovalInboxModal
         isOpen={isApprovalsOpen && !isImporting}
-        onClose={() => setIsApprovalsOpen(false)}
+        onClose={() => { setIsApprovalsOpen(false); void refreshCalendarData(); }}
       />
 
       {session?.role === 'EMPLOYEE' && session.employeeId && (
@@ -2174,6 +2234,7 @@ function App() {
           onImportStateChange={(importing) => setAppOperation(importing ? 'importing' : 'idle')}
           onImported={() => {
             void hydrateAuthenticated(session);
+            void refreshCalendarData();
           }}
           sessionRole={session.role}
           currentPlan={session.plan ?? null}

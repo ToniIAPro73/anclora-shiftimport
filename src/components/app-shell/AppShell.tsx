@@ -11,6 +11,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  RotateCw,
   Settings2,
   Upload,
   UsersRound,
@@ -26,7 +27,25 @@ const SIDEBAR_STATE_KEY = 'anclora_shiftimport_sidebar_v1';
 
 export type ShellSection = 'calendar' | 'planner';
 
-export function CalendarToolbar({ year, month, shiftCount, areaControl, employeeControl, onNavigate }: { year: number; month: number; shiftCount?: number; areaControl?: ReactNode; employeeControl?: ReactNode; onNavigate: (delta: number) => void }) {
+export function CalendarToolbar({
+  year,
+  month,
+  shiftCount,
+  areaControl,
+  employeeControl,
+  onNavigate,
+  onRefresh,
+  isRefreshing = false,
+}: {
+  year: number;
+  month: number;
+  shiftCount?: number;
+  areaControl?: ReactNode;
+  employeeControl?: ReactNode;
+  onNavigate: (delta: number) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+}) {
   const { t, tl } = useI18n();
   const monthNames = tl('calendar.months');
   return (
@@ -42,6 +61,19 @@ export function CalendarToolbar({ year, month, shiftCount, areaControl, employee
           <span className="calendar-toolbar__count" role="status" aria-live="polite">
             {t('calendar.shiftCount', { count: shiftCount })}
           </span>
+        )}
+        {onRefresh && (
+          <button
+            type="button"
+            className="calendar-toolbar__refresh-button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label={t('calendar.refreshCalendar')}
+            title={t('calendar.refreshCalendar')}
+            data-testid="calendar-refresh-button"
+          >
+            <RotateCw size={16} className={isRefreshing ? 'icon-spin' : undefined} aria-hidden="true" />
+          </button>
         )}
         <div className="month-navigator" aria-label={t('calendar.monthNavigation')}>
           <button type="button" className="month-nav-button" onClick={() => onNavigate(-1)} aria-label={t('header.previousMonth')}>

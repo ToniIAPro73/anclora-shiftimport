@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from '../../lib/i18n-react';
-import { AppShell } from './AppShell';
+import { setupLocalStorageMock } from '../../test-utils/local-storage';
+import { AppShell, CalendarToolbar } from './AppShell';
+
+setupLocalStorageMock();
 
 afterEach(cleanup);
 
@@ -135,5 +138,74 @@ describe('AppShell', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.getByTestId('app-shell')).not.toHaveClass('is-drawer-open');
     expect(screen.getByRole('heading', { name: 'Calendar workspace' })).toBeInTheDocument();
+  });
+});
+
+describe('CalendarToolbar', () => {
+  it('renders the manual refresh button with accessible label and tooltip', () => {
+    window.localStorage.setItem('anclora_shiftimport_locale_v1', 'es');
+    const onRefresh = vi.fn();
+    render(
+      <I18nProvider>
+        <CalendarToolbar
+          year={2026}
+          month={8}
+          shiftCount={12}
+          onNavigate={vi.fn()}
+          onRefresh={onRefresh}
+          isRefreshing={false}
+        />
+      </I18nProvider>,
+    );
+
+    const button = screen.getByTestId('calendar-refresh-button');
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveAttribute('aria-label', 'Actualizar calendario');
+    expect(button).toHaveAttribute('title', 'Actualizar calendario');
+    expect(button).not.toBeDisabled();
+
+    fireEvent.click(button);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the refresh button in English when English locale is active', () => {
+    window.localStorage.setItem('anclora_shiftimport_locale_v1', 'en');
+    render(
+      <I18nProvider>
+        <CalendarToolbar
+          year={2026}
+          month={8}
+          shiftCount={12}
+          onNavigate={vi.fn()}
+          onRefresh={vi.fn()}
+          isRefreshing={false}
+        />
+      </I18nProvider>,
+    );
+
+    const button = screen.getByTestId('calendar-refresh-button');
+    expect(button).toHaveAttribute('aria-label', 'Refresh calendar');
+    expect(button).toHaveAttribute('title', 'Refresh calendar');
+  });
+
+  it('disables the refresh button and displays spinning icon while refreshing', () => {
+    window.localStorage.setItem('anclora_shiftimport_locale_v1', 'es');
+    render(
+      <I18nProvider>
+        <CalendarToolbar
+          year={2026}
+          month={8}
+          shiftCount={12}
+          onNavigate={vi.fn()}
+          onRefresh={vi.fn()}
+          isRefreshing={true}
+        />
+      </I18nProvider>,
+    );
+
+    const button = screen.getByTestId('calendar-refresh-button');
+    expect(button).toBeDisabled();
+    const icon = button.querySelector('.icon-spin');
+    expect(icon).toBeInTheDocument();
   });
 });

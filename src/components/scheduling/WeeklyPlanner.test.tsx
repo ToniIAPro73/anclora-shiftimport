@@ -7,7 +7,10 @@ import { I18nProvider } from '../../lib/i18n-react';
 import { ThemeProvider } from '../../lib/theme-react';
 import * as remote from '../../lib/remote';
 import { ScheduleSnapshot, ScheduleVersion, ShiftAssignment } from '../../lib/remote';
+import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { WeeklyPlanner } from './WeeklyPlanner';
+
+setupLocalStorageMock();
 
 vi.mock('../../lib/remote', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/remote')>();

@@ -826,4 +826,201 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       expect(confirmBtn.disabled).toBe(false);
     });
   });
+
+  describe('CTA Enablement & Actionable Count (P5.5-R13)', () => {
+    function makeDomainShift(overrides: Partial<Shift> = {}): Shift {
+      return {
+        id: 'shift-1',
+        date: '2020-03-04',
+        startTime: '08:00',
+        endTime: '16:00',
+        shiftType: 'Regular',
+        countsAsWork: true,
+        location: 'Regular',
+        origin: 'IMP',
+        ...overrides,
+      };
+    }
+
+    it('all duplicates: disables CTA and sends 0 network requests', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [makeShift({ date: '2020-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' })],
+      }));
+
+      const onConfirmImport = vi.fn().mockResolvedValue(true);
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [makeDomainShift({ date: '2020-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' })],
+        onConfirmImport,
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación/i })).toBeTruthy());
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/i }) as HTMLButtonElement;
+
+      expect(confirmBtn.disabled).toBe(true);
+      fireEvent.click(confirmBtn);
+      expect(onConfirmImport).not.toHaveBeenCalled();
+
+      expect(screen.getByText('No hay turnos nuevos para importar.')).toBeTruthy();
+      expect(screen.getByText(/Los 1 turnos detectados ya existen y no se realizará ningún cambio./)).toBeTruthy();
+    });
+
+    it('all existing: disables CTA and sends 0 network requests', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [
+          makeShift({ date: '2020-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+          makeShift({ date: '2020-03-05', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+        ],
+      }));
+
+      const onConfirmImport = vi.fn().mockResolvedValue(true);
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [
+          makeDomainShift({ id: 's1', date: '2020-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+          makeDomainShift({ id: 's2', date: '2020-03-05', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+        ],
+        onConfirmImport,
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación/i })).toBeTruthy());
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/i }) as HTMLButtonElement;
+
+      expect(confirmBtn.disabled).toBe(true);
+      fireEvent.click(confirmBtn);
+      expect(onConfirmImport).not.toHaveBeenCalled();
+      expect(screen.getByText('No hay turnos nuevos para importar.')).toBeTruthy();
+    });
+
+    it('all ignored: disables CTA and sends 0 network requests', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [
+          makeShift({ startTime: '??:??', endTime: '??:??', shiftType: 'Regular' }),
+        ],
+      }));
+
+      const onConfirmImport = vi.fn().mockResolvedValue(true);
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [],
+        onConfirmImport,
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación/i })).toBeTruthy());
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/i }) as HTMLButtonElement;
+
+      expect(confirmBtn.disabled).toBe(true);
+      fireEvent.click(confirmBtn);
+      expect(onConfirmImport).not.toHaveBeenCalled();
+    });
+
+    it('historical new: enables CTA', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [
+          makeShift({ date: '2020-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+        ],
+      }));
+
+      const onConfirmImport = vi.fn().mockResolvedValue(true);
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [],
+        onConfirmImport,
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación/i })).toBeTruthy());
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/i }) as HTMLButtonElement;
+
+      expect(confirmBtn.disabled).toBe(false);
+      fireEvent.click(confirmBtn);
+      await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
+    });
+
+    it('future only + historical-only selected disables CTA, draft enables CTA', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [
+          makeShift({ date: '2099-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+        ],
+      }));
+
+      const onConfirmImport = vi.fn().mockResolvedValue(true);
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [],
+        identityLocked: false,
+        onConfirmImport,
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación/i })).toBeTruthy());
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/i }) as HTMLButtonElement;
+
+      // Default is historical-only, so for future-only shifts, actionableCount is 0 -> disabled
+      expect(confirmBtn.disabled).toBe(true);
+      expect(screen.getByText('Este archivo no contiene turnos anteriores a hoy.')).toBeTruthy();
+
+      // Switch to draft -> actionableCount > 0 -> enabled
+      const draftOption = screen.getByLabelText(/Importar históricos y añadir los futuros a planificación en borrador/i);
+      fireEvent.click(draftOption);
+
+      expect(confirmBtn.disabled).toBe(false);
+
+      // Switch back to historical-only -> disabled again
+      const histOption = screen.getByLabelText(/Importar solo los turnos históricos/i);
+      fireEvent.click(histOption);
+
+      expect(confirmBtn.disabled).toBe(true);
+      fireEvent.click(confirmBtn);
+      expect(onConfirmImport).not.toHaveBeenCalled();
+    });
+
+    it('mixed shifts: enablement follows selected temporal option and recalculates actionable count', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [
+          makeShift({ date: '2020-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+          makeShift({ date: '2099-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+        ],
+      }));
+
+      const onConfirmImport = vi.fn().mockResolvedValue(true);
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [],
+        identityLocked: false,
+        onConfirmImport,
+      });
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación/i })).toBeTruthy());
+      const confirmBtn = screen.getByRole('button', { name: /Confirmar Importación/i }) as HTMLButtonElement;
+
+      // Historical only: 1 actionable shift out of 2 total -> enabled
+      expect(confirmBtn.disabled).toBe(false);
+      expect(confirmBtn.textContent).toContain('1/2');
+
+      // Switch to draft: 2 actionable shifts -> enabled
+      const draftOption = screen.getByLabelText(/Importar históricos y añadir los futuros a planificación en borrador/i);
+      fireEvent.click(draftOption);
+
+      expect(confirmBtn.disabled).toBe(false);
+      expect(confirmBtn.textContent).toContain('2/2');
+    });
+
+    it('busy state: applies app--busy to modal overlay when isImporting is true', async () => {
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        isImporting: true,
+      });
+
+      const overlay = document.querySelector('[data-import-modal]');
+      expect(overlay?.classList.contains('app--busy')).toBe(true);
+
+      const confirmBtn = screen.getByRole('button', { name: /Importando/i }) as HTMLButtonElement;
+      expect(confirmBtn.disabled).toBe(true);
+    });
+  });
 });

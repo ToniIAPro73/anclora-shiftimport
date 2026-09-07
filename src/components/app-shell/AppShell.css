@@ -148,6 +148,33 @@
 .calendar-toolbar__eyebrow { color: var(--text-subtle); font-size: 0.66rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
 .calendar-toolbar__title { margin-top: 2px; font-size: clamp(1.35rem, 2vw, 1.8rem); line-height: 1.05; }
 .calendar-toolbar__count { padding: 6px 10px; border: 1px solid var(--glass-border); border-radius: 999px; color: var(--text-muted); font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
+.calendar-toolbar__refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass-bg);
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  flex: 0 0 auto;
+}
+.calendar-toolbar__refresh-button:hover:not(:disabled) {
+  background: var(--panel-muted-bg);
+  border-color: var(--color-accent);
+}
+.calendar-toolbar__refresh-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.calendar-toolbar__refresh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .calendar-toolbar .month-navigator { min-width: 220px; }
 .dashboard-sign-in-hint { display: flex; justify-content: flex-end; margin-bottom: 8px; }
 .planner-scope-unavailable { display: grid; flex: 1; place-items: center; }

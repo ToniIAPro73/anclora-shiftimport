@@ -826,7 +826,7 @@ export const TeamImportModal = ({
 
   return (
     <>
-    <div className="modal-overlay" data-import-modal>
+    <div className={`modal-overlay${interactionLocked ? ' app--busy' : ''}`} data-import-modal>
       <div className="modal-content" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('teamImport.title')} style={{ maxWidth: '760px', width: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
           <div>
@@ -1248,7 +1248,7 @@ export const TeamImportModal = ({
               <button type="button" className="btn-outline" disabled={interactionLocked} onClick={() => setStep('select')} style={{ padding: '10px 18px', fontWeight: 700 }}>
                 {t('teamImport.back')}
               </button>
-              <button type="button" className="btn-gold" disabled={interactionLocked} aria-busy={interactionLocked} onClick={() => void handleConfirmImport()} style={{ padding: '10px 18px', fontWeight: 800, cursor: interactionLocked ? 'wait' : undefined }}>
+              <button type="button" className="btn-gold" disabled={interactionLocked || totals.created === 0} aria-busy={interactionLocked} onClick={() => void handleConfirmImport()} style={{ padding: '10px 18px', fontWeight: 800, cursor: interactionLocked ? 'wait' : undefined }}>
                 {interactionLocked ? t('importModal.importing') : t('teamImport.confirmImport')}
               </button>
             </div>

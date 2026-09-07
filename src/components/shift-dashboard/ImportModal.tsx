@@ -30,7 +30,7 @@ import { parseXlsxTeamWorkbook } from '../../ingestion/adapters/xlsx-workbook';
 import type { ShiftCodeMapping } from '../../ingestion/core/shift-code-profile';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
-import { classifyImportChanges } from '../../lib/import-dedup';
+import { classifyImportChanges, fingerprintShift } from '../../lib/import-dedup';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 import { AssistantAnswers, buildProfileFromTokenMeanings, buildCodeOverridesFromAnswers } from '../../ingestion/assistant';
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
@@ -389,9 +389,6 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     const readyForDiff = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
     return classifyImportChanges(existingShifts, readyForDiff);
   }, [parsedShifts, existingShifts]);
-  const importAlreadyExists = importDiff.unchanged.length > 0
-    && importDiff.new.length === 0
-    && importDiff.changed.length === 0;
   const temporalSummary = useMemo(() => {
     const ready = parsedShifts.filter(hasImportableShiftData);
     const split = splitImportByOperationalDate(ready);
@@ -400,6 +397,43 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       future: split.future.length,
     };
   }, [parsedShifts]);
+
+  const actionableCount = useMemo(() => {
+    if (parsedShifts.length === 0) {
+      return 0;
+    }
+    const ready = parsedShifts.filter(hasImportableShiftData);
+    if (ready.length === 0) {
+      return 0;
+    }
+
+    const seenIncoming = new Set<string>();
+    const uniqueReady: Shift[] = [];
+    for (const shift of ready) {
+      const domain = toDomainShift(shift);
+      const fp = fingerprintShift(domain).full;
+      if (!seenIncoming.has(fp)) {
+        seenIncoming.add(fp);
+        uniqueReady.push(domain);
+      }
+    }
+
+    const diff = classifyImportChanges(existingShifts, uniqueReady);
+    const candidateAdditions = diff.additions;
+
+    if (candidateAdditions.length === 0) {
+      return 0;
+    }
+
+    const split = splitImportByOperationalDate(candidateAdditions);
+    const historicalCount = split.historical.length;
+    const futureCount = split.future.length;
+
+    const canImportFuture = !identityLocked && futureImportDecision === 'draft';
+    const effectiveFuture = canImportFuture ? futureCount : 0;
+
+    return historicalCount + effectiveFuture;
+  }, [parsedShifts, existingShifts, identityLocked, futureImportDecision]);
 
   const selectedContext = useMemo<CalendarImportContext | undefined>(
     () => selectedPeriod === 'multi' ? undefined : {
@@ -914,7 +948,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   const handleConfirm = async () => {
-    if (interactionLocked) {
+    if (interactionLocked || diagnosisBlocking || hasUnresolvedColors || (actionableCount === 0 && !selfNotFound && !selfAmbiguous)) {
       return;
     }
     onImportStateChange?.(true);
@@ -1093,7 +1127,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   };
 
   return (
-    <div className="modal-overlay import-modal-overlay" data-import-modal>
+    <div className={`modal-overlay import-modal-overlay${interactionLocked ? ' app--busy' : ''}`} data-import-modal>
       <div className="modal-content import-modal" role="dialog" aria-modal="true" aria-busy={interactionLocked} aria-label={t('importModal.title')} style={{ maxWidth: '1380px', width: '96vw', display: 'flex', flexDirection: 'column' }}>
         <button
           type="button"
@@ -1720,10 +1754,24 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               )
             )}
 
-            {importAlreadyExists && (
-              <p role="alert" style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                {t('importModal.alreadyImported', { count: importDiff.unchanged.length })}
-              </p>
+            {parsedShifts.length > 0 && actionableCount === 0 && !hasUnresolvedColors && !diagnosisBlocking && (
+              temporalSummary.historical === 0 && temporalSummary.future > 0 && futureImportDecision === 'historical-only' ? (
+                <p role="status" style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                  {t('importModal.noHistoricalInFile')}
+                </p>
+              ) : (
+                <div role="alert" style={{ margin: '8px 0 0', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {t('importModal.noNewShifts')}
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {t('importModal.allDetectedExist', { count: importDiff.unchanged.length > 0 ? importDiff.unchanged.length : parsedShifts.length })}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {t('importModal.alreadyImported', { count: importDiff.unchanged.length > 0 ? importDiff.unchanged.length : parsedShifts.length })}
+                  </p>
+                </div>
+              )
             )}
 
           </div>
@@ -1737,13 +1785,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           )}
           <button
             className="btn-gold import-process-button"
-            disabled={!isAuthenticated || (readyShifts.length === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || importAlreadyExists || isImporting}
+            disabled={!isAuthenticated || (actionableCount === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: interactionLocked ? 'wait' : undefined }}
           >
             <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
-              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length }) : t('importModal.authRequired')}
+              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: actionableCount > 0 ? actionableCount : readyShifts.length, total: parsedShifts.length }) : t('importModal.authRequired')}
             </span>
           </button>
           {(diagnosisBlocking || hasUnresolvedColors) && (
