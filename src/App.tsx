@@ -58,7 +58,7 @@ import { ImportResultModal, ImportOutcomeReport, TemporalImportReport } from './
 import { ModalShell } from './components/ui/ModalShell';
 import { ApprovalInboxModal } from './components/shift-dashboard/ApprovalInboxModal';
 import { NewChangeRequestModal } from './components/employee-portal/NewChangeRequestModal';
-import { RequestStatus } from './components/employee-portal/RequestStatus';
+import { RequestStatus, RequestView } from './components/employee-portal/RequestStatus';
 import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
 import { AuthScreen } from './components/AuthScreen';
 import { ForgotPasswordScreen } from './components/ForgotPasswordScreen';
@@ -214,6 +214,7 @@ function App() {
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
   const [isEmployeeRequestsOpen, setIsEmployeeRequestsOpen] = useState(false);
+  const [employeeRequestView, setEmployeeRequestView] = useState<RequestView>('list');
   const [isNewEmployeeRequestOpen, setIsNewEmployeeRequestOpen] = useState(false);
   const [employeeRequestRefreshSignal, setEmployeeRequestRefreshSignal] = useState(0);
   const now = new Date();
@@ -1875,7 +1876,7 @@ function App() {
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
-          onApprovals={isAdminRole(session.role) ? () => setIsApprovalsOpen(true) : undefined}
+          onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -1910,7 +1911,7 @@ function App() {
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
-          onApprovals={isAdminRole(session.role) ? () => setIsApprovalsOpen(true) : undefined}
+          onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -1974,7 +1975,7 @@ function App() {
       } : undefined}
       onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
       onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
-      onApprovals={session && isAdminRole(session.role) ? () => setIsApprovalsOpen(true) : undefined}
+      onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
       onMembers={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsMembersOpen(true); } : undefined}
       onAreas={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsAreasOpen(true); } : undefined}
       onFormatProfiles={session ? () => { if (!isImporting) setIsFormatProfilesOpen(true); } : undefined}
@@ -2092,19 +2093,32 @@ function App() {
       {session?.role === 'EMPLOYEE' && session.employeeId && (
         <ModalShell
           isOpen={isEmployeeRequestsOpen && !isImporting}
-          onClose={() => setIsEmployeeRequestsOpen(false)}
-          title={t('employeePortal.requests')}
+          onClose={() => {
+            setIsEmployeeRequestsOpen(false);
+            setEmployeeRequestView('list');
+          }}
+          title={
+            employeeRequestView === 'create'
+              ? t('employeePortal.newRequest')
+              : employeeRequestView === 'detail'
+                ? t('employeeChangeRequest.title')
+                : t('employeePortal.requests')
+          }
           closeAriaLabel={t('common.close')}
-          maxWidth="760px"
+          maxWidth="780px"
+          workspace
         >
           <RequestStatus
-            onNewRequest={() => setIsNewEmployeeRequestOpen(true)}
+            employeeId={session.employeeId}
+            view={employeeRequestView}
+            onViewChange={setEmployeeRequestView}
             refreshSignal={employeeRequestRefreshSignal}
+            onRefresh={() => setEmployeeRequestRefreshSignal((current) => current + 1)}
           />
         </ModalShell>
       )}
 
-      {session?.role === 'EMPLOYEE' && session.employeeId && (
+      {session?.role === 'EMPLOYEE' && session.employeeId && isNewEmployeeRequestOpen && (
         <NewChangeRequestModal
           isOpen={isNewEmployeeRequestOpen && !isImporting}
           employeeId={session.employeeId}

@@ -86,9 +86,11 @@ export const PortalShell = ({ session, employeeName, employeeId, onOpenSelfImpor
         {activeView === 'week' && <MyWeek weekStart={weekStart} onWeekStartChange={setWeekStart} onSelectShift={(shiftId) => openDetail(shiftId, 'week')} />}
         {activeView === 'requests' && (
           <RequestStatus
+            employeeId={employeeId ?? undefined}
             onSelectShift={(shiftId) => openDetail(shiftId, 'requests')}
             onNewRequest={employeeId ? () => setIsNewRequestOpen(true) : undefined}
             refreshSignal={requestRefreshSignal}
+            onRefresh={() => setRequestRefreshSignal((current) => current + 1)}
           />
         )}
         {activeView === 'more' && (

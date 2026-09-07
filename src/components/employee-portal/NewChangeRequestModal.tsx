@@ -4,6 +4,7 @@ import { ModalShell } from '../ui/ModalShell';
 import { useI18n } from '../../lib/use-i18n';
 import { ChangeRequestForm } from './ChangeRequestForm';
 import { Shift } from '../../lib/types';
+import { ShiftPicker } from './ShiftPicker';
 
 interface NewChangeRequestModalProps {
   isOpen: boolean;
@@ -49,9 +50,12 @@ export function NewChangeRequestModal({ isOpen, employeeId, onClose, onCreated }
       title={t('employeePortal.newRequest')}
       closeAriaLabel={t('common.close')}
       maxWidth="620px"
+      workspace
     >
-      <div className="employee-new-request" data-testid="new-change-request-modal">
-        <p className="employee-new-request__description">{t('employeePortal.newRequestDescription')}</p>
+      <div className="employee-new-request" data-testid="new-change-request-modal" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+        <p className="employee-new-request__description" style={{ margin: '0 0 14px', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
+          {t('employeePortal.newRequestDescription')}
+        </p>
 
         {state.status === 'loading' && (
           <p role="status" aria-busy="true">{t('employeePortal.loadingOwnShifts')}</p>
@@ -66,19 +70,18 @@ export function NewChangeRequestModal({ isOpen, employeeId, onClose, onCreated }
           <p className="employee-new-request__empty">{t('employeePortal.noOwnShiftsForRequest')}</p>
         )}
         {state.status === 'ready' && state.shifts.length > 0 && selectedShift && (
-          <>
-            <label htmlFor="employee-new-request-shift">{t('employeePortal.requestShiftLabel')}</label>
-            <select
-              id="employee-new-request-shift"
-              value={selectedShiftId}
-              onChange={(event) => setSelectedShiftId(event.target.value)}
-            >
-              {state.shifts.map((shift) => (
-                <option key={shift.id} value={shift.id}>
-                  {shift.date} · {shift.startTime} — {shift.endTime}
-                </option>
-              ))}
-            </select>
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div>
+              <label htmlFor="employee-new-request-shift" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
+                {t('employeePortal.requestShiftLabel')}
+              </label>
+              <ShiftPicker
+                id="employee-new-request-shift"
+                shifts={state.shifts}
+                selectedShiftId={selectedShiftId}
+                onSelectShift={setSelectedShiftId}
+              />
+            </div>
             <ChangeRequestForm
               key={selectedShift.id}
               shiftId={selectedShift.id}
@@ -86,7 +89,7 @@ export function NewChangeRequestModal({ isOpen, employeeId, onClose, onCreated }
               shiftEndTime={selectedShift.endTime}
               onCreated={onCreated}
             />
-          </>
+          </div>
         )}
       </div>
     </ModalShell>

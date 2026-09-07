@@ -2019,6 +2019,29 @@ select:disabled {
   box-shadow: var(--shadow-soft);
 }
 
+.modal-content .employee-request-status {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.employee-request-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.shift-picker-trigger:hover:not(:disabled) {
+  border-color: var(--color-accent) !important;
+}
+
+.shift-picker-option:hover {
+  background: rgba(var(--color-accent-rgb, 14, 165, 233), 0.15) !important;
+  color: var(--text-primary) !important;
+}
+
 .employee-request-status__eyebrow,
 .employee-request-status__item-label {
   color: var(--color-accent);
