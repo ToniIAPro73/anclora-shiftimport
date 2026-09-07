@@ -94,6 +94,8 @@ const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
 export function normalizeShiftInput(raw) {
   const location = String(raw?.location ?? '').trim();
   const explicitShiftType = String(raw?.shiftType ?? '').trim();
+  const startTime = String(raw?.startTime ?? '').trim() || null;
+  const endTime = String(raw?.endTime ?? '').trim() || null;
   // Future scheduling assignments require concrete shift semantics. Older
   // clients/fixtures did not send them, so preserve the legacy label when it
   // identifies a non-working type and otherwise use the configured working
@@ -105,8 +107,8 @@ export function normalizeShiftInput(raw) {
     employeeId: String(raw?.employeeId ?? '').trim(),
     importId: String(raw?.importId ?? '').trim() || null,
     date: normalizeShiftDate(raw?.date ?? ''),
-    startTime: String(raw?.startTime ?? '').trim(),
-    endTime: String(raw?.endTime ?? '').trim(),
+    startTime,
+    endTime,
     shiftType,
     countsAsWork: typeof raw?.countsAsWork === 'boolean'
       ? raw.countsAsWork

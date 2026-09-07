@@ -54,6 +54,19 @@ describe('R3-M14 future import contract', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
+  it('rejects a working future shift without times as a controlled validation error', async () => {
+    const transaction = vi.fn();
+    const sql = () => Promise.resolve([]);
+    sql.transaction = transaction;
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', scopedAreaId: AREA, employeeId: null, plan: 'team' };
+
+    await expect(confirmFutureImport(sql, ctx, {
+      ...request(FUTURE_DATE),
+      shifts: [{ ...base, date: FUTURE_DATE, shiftType: 'Regular', countsAsWork: true, startTime: '', endTime: '' }],
+    })).rejects.toMatchObject({ status: 400, code: 'SHIFT_TIMES_REQUIRED' });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
   it('uses one transaction for every mutation and propagates an intermediate failure', async () => {
     const transaction = vi.fn(async (callback) => {
       const txn = () => Promise.resolve([]);

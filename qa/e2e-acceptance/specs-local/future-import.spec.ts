@@ -36,6 +36,25 @@ const shift = (date: string, employeeId = fixture.empA1) => ({
 const fourteenFutureShifts = Array.from({ length: 14 }, (_, index) => (
   shift(futureDate(20 + Math.floor(index / 7), index % 7))
 ));
+const fourteenFutureShiftsWithNonWorking = [
+  ...Array.from({ length: 10 }, (_, index) => shift(futureDate(28 + Math.floor(index / 7), index % 7))),
+  ...Array.from({ length: 2 }, (_, index) => ({
+    ...shift(futureDate(30, index + 2)),
+    startTime: '',
+    endTime: '',
+    shiftType: 'Libre',
+    countsAsWork: false,
+    location: 'Libre',
+  })),
+  ...Array.from({ length: 2 }, (_, index) => ({
+    ...shift(futureDate(30, index + 4)),
+    startTime: '',
+    endTime: '',
+    shiftType: 'Vacaciones',
+    countsAsWork: false,
+    location: 'Vacaciones',
+  })),
+];
 
 async function login(request: APIRequestContext, email: string, orgId: string) {
   const response = await request.post('/api/auth/login', {
@@ -98,6 +117,26 @@ test.describe('R3-M14 future import integration', () => {
     const repeatFutureBody = await repeatFutureResponse.json();
     expect(repeatFutureBody.future.createdAssignmentCount).toBe(0);
     expect(repeatFutureBody.future.existingAssignmentCount).toBe(14);
+
+    const semanticResponse = await confirm(page.request, fourteenFutureShiftsWithNonWorking, '9'.repeat(64));
+    expect(semanticResponse.status()).toBe(201);
+    const semanticBody = await semanticResponse.json();
+    expect(semanticBody.future.createdAssignmentCount).toBe(14);
+    const semanticDraftSnapshots = await Promise.all(semanticBody.future.drafts.map(async (draft: { scheduleId: string; scheduleVersionId: string }) => (
+      page.request.get(`/api/schedules/${draft.scheduleId}/versions/${draft.scheduleVersionId}`, {
+        headers: { 'x-organization-id': fixture.orgA },
+      }).then((response) => response.json())
+    )));
+    const semanticAssignments = semanticDraftSnapshots
+      .flatMap((snapshot) => snapshot.assignments)
+      .filter((assignment: { importId: string }) => assignment.importId === semanticBody.importId);
+    expect(semanticAssignments).toHaveLength(14);
+    expect(semanticAssignments.filter((assignment: { shiftType: string }) => assignment.shiftType === 'Libre')).toHaveLength(2);
+    expect(semanticAssignments.filter((assignment: { shiftType: string }) => assignment.shiftType === 'Vacaciones')).toHaveLength(2);
+    expect(semanticAssignments
+      .filter((assignment: { shiftType: string }) => ['Libre', 'Vacaciones'].includes(assignment.shiftType))
+      .every((assignment: { startTime: string | null; endTime: string | null }) => assignment.startTime === null && assignment.endTime === null))
+      .toBe(true);
 
     const mixedFingerprint = 'b'.repeat(64);
     const mixedResponse = await confirm(page.request, [shift(pastDate()), shift(today), shift(futureDate(21))], mixedFingerprint);

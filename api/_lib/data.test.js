@@ -30,7 +30,9 @@ describe('configured shift time semantics', () => {
     expect(normalizeShiftInput({ location: 'Libre' }))
       .toMatchObject({ shiftType: 'Libre', countsAsWork: false });
     expect(normalizeShiftInput({ shiftType: 'Custom non-working', countsAsWork: false }))
-      .toMatchObject({ shiftType: 'Custom non-working', countsAsWork: false });
+      .toMatchObject({ shiftType: 'Custom non-working', countsAsWork: false, startTime: null, endTime: null });
+    expect(normalizeShiftInput({ startTime: ' ', endTime: '\t', location: 'Libre' }))
+      .toMatchObject({ startTime: null, endTime: null });
   });
 
   it.each([
