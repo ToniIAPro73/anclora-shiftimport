@@ -139,6 +139,90 @@ describe('AppShell', () => {
     expect(screen.getByTestId('app-shell')).not.toHaveClass('is-drawer-open');
     expect(screen.getByRole('heading', { name: 'Calendar workspace' })).toBeInTheDocument();
   });
+
+  it('renders unified Equipo entry point in Gestión group and separates Configuración', () => {
+    const onTeam = vi.fn();
+    render(
+      <I18nProvider>
+        <AppShell
+          role="ADMIN"
+          userName="Toni"
+          userRole="Admin"
+          activeSection="calendar"
+          themeControl={<button type="button">Theme</button>}
+          languageControl={<button type="button">Language</button>}
+          onTeam={onTeam}
+          onHistory={vi.fn()}
+          onFormatProfiles={vi.fn()}
+          onSettings={vi.fn()}
+          onImport={vi.fn()}
+          onAddShift={vi.fn()}
+          onPlanner={vi.fn()}
+          onApprovals={vi.fn()}
+        >
+          <h1>Content</h1>
+        </AppShell>
+      </I18nProvider>,
+    );
+
+    // Verify Equipo is present and separate members/areas are omitted
+    expect(screen.getByTestId('sidebar-team')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-team')).toHaveTextContent('Equipo');
+    expect(screen.queryByTestId('sidebar-members')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-areas')).not.toBeInTheDocument();
+
+    // Verify groups
+    expect(screen.getByText('Operación')).toBeInTheDocument();
+    expect(screen.getByText('Gestión')).toBeInTheDocument();
+    expect(screen.getByText('Configuración')).toBeInTheDocument();
+
+    // Click Equipo
+    fireEvent.click(screen.getByTestId('sidebar-team'));
+    expect(onTeam).toHaveBeenCalledTimes(1);
+  });
+
+  it('enforces Solicitudes terminology (never Aprobaciones) in manager and employee navigation', () => {
+    // Manager
+    render(
+      <I18nProvider>
+        <AppShell
+          role="OWNER"
+          userName="Toni"
+          activeSection="calendar"
+          themeControl={null}
+          languageControl={null}
+          onApprovals={vi.fn()}
+        >
+          <h1>Content</h1>
+        </AppShell>
+      </I18nProvider>,
+    );
+    const managerApprovals = screen.getByTestId('sidebar-approvals');
+    expect(managerApprovals).toHaveTextContent('Solicitudes');
+    expect(managerApprovals).not.toHaveTextContent('Aprobaciones');
+    cleanup();
+
+    // Employee
+    render(
+      <I18nProvider>
+        <AppShell
+          role="EMPLOYEE"
+          userName="Employee"
+          activeSection="calendar"
+          themeControl={null}
+          languageControl={null}
+          onRequests={vi.fn()}
+        >
+          <h1>Content</h1>
+        </AppShell>
+      </I18nProvider>,
+    );
+    const employeeRequests = screen.getByTestId('sidebar-requests');
+    expect(employeeRequests).toHaveTextContent('Solicitudes');
+    expect(employeeRequests).not.toHaveTextContent('Aprobaciones');
+    expect(screen.queryByText('Gestión')).not.toBeInTheDocument();
+    expect(screen.queryByText('Configuración')).not.toBeInTheDocument();
+  });
 });
 
 describe('CalendarToolbar', () => {

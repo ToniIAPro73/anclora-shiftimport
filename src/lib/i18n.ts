@@ -94,6 +94,10 @@ const translations: Record<Locale, TranslationTree> = {
       import: 'Importar turnos',
       addShift: 'Añadir turno',
       history: 'Historial de importaciones',
+      configuration: 'Configuración',
+      team: 'Equipo',
+      pendingRequests: 'Solicitudes pendientes',
+      requests: 'Solicitudes',
     },
     employeePortal: {
       eyebrow: 'MI ESPACIO',
@@ -1519,6 +1523,10 @@ const translations: Record<Locale, TranslationTree> = {
       import: 'Import shifts',
       addShift: 'Add shift',
       history: 'Import history',
+      configuration: 'Configuration',
+      team: 'Team',
+      pendingRequests: 'Pending requests',
+      requests: 'Requests',
     },
     employeePortal: {
       eyebrow: 'MY SPACE',

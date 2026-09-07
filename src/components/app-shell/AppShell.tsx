@@ -109,6 +109,7 @@ export interface AppShellProps {
   onHistory?: () => void;
   onPlanner?: () => void;
   onApprovals?: () => void;
+  onTeam?: () => void;
   onMembers?: () => void;
   onAreas?: () => void;
   onFormatProfiles?: () => void;
@@ -244,6 +245,7 @@ export function AppShell({
   onHistory,
   onPlanner,
   onApprovals,
+  onTeam,
   onMembers,
   onAreas,
   onFormatProfiles,
@@ -321,10 +323,9 @@ export function AppShell({
           </div>
 
           <nav className="app-shell__nav" aria-label={t('shell.navigationLabel')}>
-            <SidebarGroup label={t('shell.primary')}>
-              <SidebarItem label={t('shell.calendar')} icon={<CalendarDays size={18} />} active={activeSection === 'calendar'} collapsed={!expanded} onClick={() => runAction()} testId="sidebar-calendar" />
-            </SidebarGroup>
+            {/* OPERACIÓN: Calendario, Planificar, Importar, Añadir turno, Solicitudes */}
             <SidebarGroup label={t('shell.operation')}>
+              <SidebarItem label={t('shell.calendar')} icon={<CalendarDays size={18} />} active={activeSection === 'calendar'} collapsed={!expanded} onClick={() => runAction()} testId="sidebar-calendar" />
               {isEmployee ? (
                 <>
                   {onSelfImport && <SidebarItem label={t('employeePortal.importSelf')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onSelfImport)} testId="sidebar-self-import" />}
@@ -333,20 +334,83 @@ export function AppShell({
                 </>
               ) : (
                 <>
+                  {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!expanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
                   {onImport && <SidebarItem label={t('shell.import')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
                   {onAddShift && <SidebarItem label={t('shell.addShift')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
-                  {onHistory && <SidebarItem label={t('shell.history')} icon={<History size={18} />} collapsed={!expanded} onClick={() => runAction(onHistory)} testId="sidebar-history" />}
-                  {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!expanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
-                  {onApprovals && <SidebarItem label={t('approvalInbox.navLabel')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onApprovals)} testId="sidebar-approvals" />}
+                  {(onApprovals || onRequests) && (
+                    <SidebarItem
+                      label={t('approvalInbox.navLabel')}
+                      icon={<FileCog size={18} />}
+                      collapsed={!expanded}
+                      onClick={() => runAction(onApprovals || onRequests)}
+                      testId="sidebar-approvals"
+                    />
+                  )}
                 </>
               )}
             </SidebarGroup>
-            {canManage && (
+
+            {/* GESTIÓN: Equipo, Historial de importaciones, Formatos aprendidos (hidden from EMPLOYEE) */}
+            {!isEmployee && (canManage || onHistory) && (
               <SidebarGroup label={t('shell.management')}>
-                {onMembers && <SidebarItem label={t('members.title')} icon={<UsersRound size={18} />} collapsed={!expanded} onClick={() => runAction(onMembers)} testId="sidebar-members" />}
-                {onAreas && <SidebarItem label={t('areas.manage')} icon={<Map size={18} />} collapsed={!expanded} onClick={() => runAction(onAreas)} testId="sidebar-areas" />}
-                {onFormatProfiles && <SidebarItem label={t('formatProfiles.manage')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onFormatProfiles)} testId="sidebar-formats" />}
-                {onSettings && <SidebarItem label={t('settings.title')} icon={<Settings2 size={18} />} collapsed={!expanded} onClick={() => runAction(onSettings)} testId="sidebar-settings" />}
+                {canManage && onTeam && (
+                  <SidebarItem
+                    label={t('shell.team')}
+                    icon={<UsersRound size={18} />}
+                    collapsed={!expanded}
+                    onClick={() => runAction(onTeam)}
+                    testId="sidebar-team"
+                  />
+                )}
+                {canManage && !onTeam && onMembers && (
+                  <SidebarItem
+                    label={t('members.title')}
+                    icon={<UsersRound size={18} />}
+                    collapsed={!expanded}
+                    onClick={() => runAction(onMembers)}
+                    testId="sidebar-members"
+                  />
+                )}
+                {canManage && !onTeam && onAreas && (
+                  <SidebarItem
+                    label={t('areas.manage')}
+                    icon={<Map size={18} />}
+                    collapsed={!expanded}
+                    onClick={() => runAction(onAreas)}
+                    testId="sidebar-areas"
+                  />
+                )}
+                {onHistory && (
+                  <SidebarItem
+                    label={t('shell.history')}
+                    icon={<History size={18} />}
+                    collapsed={!expanded}
+                    onClick={() => runAction(onHistory)}
+                    testId="sidebar-history"
+                  />
+                )}
+                {canManage && onFormatProfiles && (
+                  <SidebarItem
+                    label={t('formatProfiles.manage')}
+                    icon={<FileCog size={18} />}
+                    collapsed={!expanded}
+                    onClick={() => runAction(onFormatProfiles)}
+                    testId="sidebar-formats"
+                  />
+                )}
+              </SidebarGroup>
+            )}
+
+            {/* CONFIGURACIÓN: Ajustes (hidden from EMPLOYEE) */}
+            {!isEmployee && canManage && onSettings && (
+              <SidebarGroup label={t('shell.configuration')}>
+                <SidebarItem
+                  label={t('settings.title')}
+                  icon={<Settings2 size={18} />}
+                  collapsed={!expanded}
+                  onClick={() => runAction(onSettings)}
+                  testId="sidebar-settings"
+                />
               </SidebarGroup>
             )}
           </nav>
