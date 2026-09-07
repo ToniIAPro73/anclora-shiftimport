@@ -13,6 +13,7 @@ import {
   listImports,
   listMembers,
   listShifts,
+  normalizeShiftInput,
   removeMember,
   resetOrganization,
   updateOrganizationName,
@@ -23,6 +24,15 @@ import {
 } from './data.js';
 
 describe('configured shift time semantics', () => {
+  it('materializes scheduling semantics for legacy inputs without shift metadata', () => {
+    expect(normalizeShiftInput({ location: 'M14 E2E', startTime: '09:00', endTime: '17:00' }))
+      .toMatchObject({ shiftType: 'Regular', countsAsWork: true });
+    expect(normalizeShiftInput({ location: 'Libre' }))
+      .toMatchObject({ shiftType: 'Libre', countsAsWork: false });
+    expect(normalizeShiftInput({ shiftType: 'Custom non-working', countsAsWork: false }))
+      .toMatchObject({ shiftType: 'Custom non-working', countsAsWork: false });
+  });
+
   it.each([
     ['Regular', true, '08:00', '16:00'],
     ['Extras', true, '18:00', '22:00'],

@@ -721,7 +721,7 @@ export const TeamImportModal = ({
         areaId: importAreaId ?? null,
       })));
     if (submitted.length === 0) {
-      setError(t('teamImport.noHistoricalRows'));
+      setError(t('importModal.noHistoricalRows'));
       return;
     }
     if (hasFutureData && futureImportDecision === 'draft') {
@@ -752,6 +752,13 @@ export const TeamImportModal = ({
         futureConsent: 'draft',
         weekStart: getPlannerWeekStartPreference(),
       });
+      const submittedFutureCount = submitted.filter((shift) => shift.date >= cutoff).length;
+      const persistedFutureCount = futureResult.future.createdAssignmentCount
+        + futureResult.future.existingAssignmentCount;
+      if (persistedFutureCount !== submittedFutureCount) {
+        setError(t('importConflict.importSaveFailed'));
+        return;
+      }
       for (const entry of preview) {
         results.push({ row: entry.row, ok: true, created: entry.newShifts.length });
       }
@@ -794,6 +801,9 @@ export const TeamImportModal = ({
       setOutcomes(results);
       setStep('result');
       onImported();
+    } catch (err) {
+      console.error('Team import persistence failed', err);
+      setError(t('importConflict.importSaveFailed'));
     } finally {
       setImporting(false);
       onImportStateChange?.(false);
@@ -1215,11 +1225,11 @@ export const TeamImportModal = ({
                 <legend style={{ padding: '0 6px', fontWeight: 700 }}>{t('importModal.futureConsentTitle')}</legend>
                 <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('importModal.futureConsentDescription')}</p>
                 <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <input type="radio" name="team-future-import-decision" value="historical-only" checked={futureImportDecision === 'historical-only'} onChange={() => setFutureImportDecision('historical-only')} />
+                  <input type="radio" name="team-future-import-decision" value="historical-only" checked={futureImportDecision === 'historical-only'} onChange={() => { setError(''); setFutureImportDecision('historical-only'); }} />
                   <span>{t('importModal.futureConsentHistoricalOnly')}</span>
                 </label>
                 <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <input type="radio" name="team-future-import-decision" value="draft" checked={futureImportDecision === 'draft'} onChange={() => setFutureImportDecision('draft')} />
+                  <input type="radio" name="team-future-import-decision" value="draft" checked={futureImportDecision === 'draft'} onChange={() => { setError(''); setFutureImportDecision('draft'); }} />
                   <span>{t('importModal.futureConsentDraft')}</span>
                 </label>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('importModal.futureConsentCancelHint')}</p>

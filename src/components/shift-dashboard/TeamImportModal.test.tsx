@@ -29,6 +29,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     createRemoteEmployee: vi.fn(),
     updateRemoteEmployee: vi.fn(),
     bulkCreateRemoteEmployees: vi.fn(),
+    confirmRemoteFutureImport: vi.fn(),
     createRemoteImport: vi.fn(),
     syncRemoteShifts: vi.fn(),
     loadRemoteShifts: vi.fn(),
@@ -46,6 +47,7 @@ const mockedMatchRemoteEmployee = vi.mocked(remote.matchRemoteEmployee);
 const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
 const mockedUpdateRemoteEmployee = vi.mocked(remote.updateRemoteEmployee);
 const mockedBulkCreateRemoteEmployees = vi.mocked(remote.bulkCreateRemoteEmployees);
+const mockedConfirmRemoteFutureImport = vi.mocked(remote.confirmRemoteFutureImport);
 const mockedCreateRemoteImport = vi.mocked(remote.createRemoteImport);
 const mockedSyncRemoteShifts = vi.mocked(remote.syncRemoteShifts);
 const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
@@ -105,7 +107,76 @@ const rosterShift = (date: string) => ({
   color: null,
 });
 
+const futureImportResult = (createdAssignmentCount: number, existingAssignmentCount = createdAssignmentCount === 0 ? 14 : 0): remote.FutureImportResult => ({
+  classification: 'FUTURE',
+  cutoff: '2026-09-07',
+  importId: 'import-future',
+  deduplicated: createdAssignmentCount === 0,
+  historical: { submittedCount: 0, persistedCount: 0, deletedCount: 0 },
+  future: {
+    submittedCount: 14,
+    createdAssignmentCount,
+    existingAssignmentCount,
+    draftCount: 1,
+    createdDraftCount: createdAssignmentCount > 0 ? 1 : 0,
+    drafts: [{
+      scheduleId: 'schedule-future',
+      scheduleVersionId: 'version-future',
+      versionNumber: 1,
+      periodStart: '2099-03-01',
+      periodEnd: '2099-03-07',
+      areaId: null,
+    }],
+  },
+  import: { id: 'import-future', fileName: 'futuro.csv', sourceFormat: 'csv', periodYear: 2099, periodMonth: 2, status: 'completed' },
+});
+
 describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', () => {
+  it('keeps future-only historical validation local, clears it on draft choice, and rejects a zero-write success response', async () => {
+    const futureShifts = Array.from({ length: 14 }, (_, index) => rosterShift(`2099-03-${String(index + 1).padStart(2, '0')}`));
+    mockedDetectTeamRoster.mockReturnValue({
+      employees: [{ key: 'future', externalEmployeeId: 'FUTURE-14', name: 'Ana Martinez', shifts: futureShifts }],
+    });
+    mockedMatchRemoteEmployee.mockResolvedValue({
+      kind: 'recognized',
+      employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: 'FUTURE-14' })],
+    });
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+    mockedConfirmRemoteFutureImport.mockResolvedValueOnce(futureImportResult(0, 0));
+    const onImported = vi.fn();
+
+    renderTeamImportModal(onImported);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+
+    await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
+    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
+
+    const historicalOnly = screen.getByRole('radio', { name: /Importar solo los turnos históricos/ });
+    const draft = screen.getByRole('radio', { name: /Importar históricos y añadir los futuros/ });
+    fireEvent.click(historicalOnly);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
+    await waitFor(() => expect(screen.getByText(/No hay turnos históricos que importar/)).toBeTruthy());
+    expect(mockedConfirmRemoteFutureImport).not.toHaveBeenCalled();
+
+    fireEvent.click(draft);
+    expect(screen.queryByText(/No hay turnos históricos que importar/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
+    await waitFor(() => expect(mockedConfirmRemoteFutureImport).toHaveBeenCalledTimes(1));
+    expect(mockedConfirmRemoteFutureImport.mock.calls[0][0]).toMatchObject({ futureConsent: 'draft', shifts: expect.any(Array) });
+    expect(screen.queryByText('Importación completada')).toBeNull();
+    expect(screen.getByText('No se pudieron guardar los turnos importados en la base de datos. Inténtalo de nuevo.')).toBeTruthy();
+    expect(onImported).not.toHaveBeenCalled();
+
+    mockedConfirmRemoteFutureImport.mockResolvedValueOnce(futureImportResult(14));
+    fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
+    await waitFor(() => expect(screen.getByText('Importación completada')).toBeTruthy());
+    expect(mockedConfirmRemoteFutureImport).toHaveBeenCalledTimes(2);
+    expect(onImported).toHaveBeenCalledTimes(1);
+  });
+
   it('announces the Team gate before file selection on Personal', () => {
     renderTeamImportModal(() => {}, 'ADMIN', { currentPlan: 'personal' });
 

@@ -89,7 +89,17 @@ async function enforcePlanLimit(sql, ctx, limitKey, currentCount, message) {
   }
 }
 
+const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
+
 export function normalizeShiftInput(raw) {
+  const location = String(raw?.location ?? '').trim();
+  const explicitShiftType = String(raw?.shiftType ?? '').trim();
+  // Future scheduling assignments require concrete shift semantics. Older
+  // clients/fixtures did not send them, so preserve the legacy label when it
+  // identifies a non-working type and otherwise use the configured working
+  // default used by the existing import pipeline.
+  const shiftType = explicitShiftType
+    || (LEGACY_NON_WORKING_TYPES.has(location.toLowerCase()) ? location : 'Regular');
   return {
     id: String(raw?.id ?? '').trim() || null,
     employeeId: String(raw?.employeeId ?? '').trim(),
@@ -97,15 +107,16 @@ export function normalizeShiftInput(raw) {
     date: normalizeShiftDate(raw?.date ?? ''),
     startTime: String(raw?.startTime ?? '').trim(),
     endTime: String(raw?.endTime ?? '').trim(),
-    shiftType: String(raw?.shiftType ?? '').trim() || null,
-    countsAsWork: typeof raw?.countsAsWork === 'boolean' ? raw.countsAsWork : null,
-    location: String(raw?.location ?? '').trim(),
+    shiftType,
+    countsAsWork: typeof raw?.countsAsWork === 'boolean'
+      ? raw.countsAsWork
+      : !LEGACY_NON_WORKING_TYPES.has(shiftType.toLowerCase()),
+    location,
     origin: raw?.origin === 'MAN' ? 'MAN' : 'IMP',
     areaId: raw?.areaId ? String(raw.areaId).trim() || null : null,
   };
 }
 
-const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
 const HHMM_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 function shiftRequiresTimes(shift) {

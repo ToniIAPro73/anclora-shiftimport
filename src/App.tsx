@@ -1353,6 +1353,12 @@ function App() {
             setImportResult(reconciliation);
             return false;
           }
+          const persistedFutureCount = futureResult.future.createdAssignmentCount
+            + futureResult.future.existingAssignmentCount;
+          if (persistedFutureCount !== futureUpserts.length) {
+            setAppFeedback({ kind: 'alert', message: t('importConflict.importSaveFailed') });
+            return false;
+          }
           setImportResult({
             status: 'COMPLETED',
             historical: {

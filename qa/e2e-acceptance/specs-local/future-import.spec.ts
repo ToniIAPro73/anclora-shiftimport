@@ -33,6 +33,10 @@ const shift = (date: string, employeeId = fixture.empA1) => ({
   origin: 'IMP',
 });
 
+const fourteenFutureShifts = Array.from({ length: 14 }, (_, index) => (
+  shift(futureDate(20 + Math.floor(index / 7), index % 7))
+));
+
 async function login(request: APIRequestContext, email: string, orgId: string) {
   const response = await request.post('/api/auth/login', {
     data: { email, password: fixture.password },
@@ -70,25 +74,30 @@ test.describe('R3-M14 future import integration', () => {
     expect((await missingConsent.json()).code).toBe('FUTURE_IMPORT_CONSENT_REQUIRED');
 
     const futureFingerprint = 'a'.repeat(64);
-    const futureResponse = await confirm(page.request, [shift(futureDate(20))], futureFingerprint);
+    const futureResponse = await confirm(page.request, fourteenFutureShifts, futureFingerprint);
     expect(futureResponse.status()).toBe(201);
     const futureBody = await futureResponse.json();
     expect(futureBody.classification).toBe('FUTURE');
-    expect(futureBody.future.createdAssignmentCount).toBe(1);
-    expect(futureBody.future.draftCount).toBe(1);
-    expect(futureBody.future.drafts[0].areaId).toBe(fixture.areaA);
+    expect(futureBody.future.submittedCount).toBe(14);
+    expect(futureBody.future.createdAssignmentCount).toBe(14);
+    expect(futureBody.future.draftCount).toBeGreaterThanOrEqual(1);
+    expect(futureBody.future.drafts.every((draft: { areaId: string }) => draft.areaId === fixture.areaA)).toBe(true);
 
-    const schedules = await (await page.request.get(`/api/schedules?areaId=${fixture.areaA}`, {
-      headers: { 'x-organization-id': fixture.orgA },
-    })).json();
-    const schedule = schedules.schedules.find((item: { periodStart: string }) => item.periodStart === futureBody.future.drafts[0].periodStart);
-    expect(schedule).toBeTruthy();
-    const snapshot = await (await page.request.get(`/api/schedules/${schedule.scheduleId}/versions/${schedule.id}`, {
-      headers: { 'x-organization-id': fixture.orgA },
-    })).json();
-    expect(snapshot.assignments).toEqual(expect.arrayContaining([
+    const draftSnapshots = await Promise.all(futureBody.future.drafts.map(async (draft: { scheduleId: string; scheduleVersionId: string }) => (
+      page.request.get(`/api/schedules/${draft.scheduleId}/versions/${draft.scheduleVersionId}`, {
+        headers: { 'x-organization-id': fixture.orgA },
+      }).then((response) => response.json())
+    )));
+    expect(draftSnapshots.flatMap((snapshot) => snapshot.assignments)).toHaveLength(14);
+    expect(draftSnapshots.flatMap((snapshot) => snapshot.assignments)).toEqual(expect.arrayContaining([
       expect.objectContaining({ employeeId: fixture.empA1, importId: futureBody.importId }),
     ]));
+
+    const repeatFutureResponse = await confirm(page.request, fourteenFutureShifts, futureFingerprint);
+    expect(repeatFutureResponse.status()).toBe(200);
+    const repeatFutureBody = await repeatFutureResponse.json();
+    expect(repeatFutureBody.future.createdAssignmentCount).toBe(0);
+    expect(repeatFutureBody.future.existingAssignmentCount).toBe(14);
 
     const mixedFingerprint = 'b'.repeat(64);
     const mixedResponse = await confirm(page.request, [shift(pastDate()), shift(today), shift(futureDate(21))], mixedFingerprint);
@@ -96,7 +105,8 @@ test.describe('R3-M14 future import integration', () => {
     const mixedBody = await mixedResponse.json();
     expect(mixedBody.classification).toBe('MIXED');
     expect(mixedBody.historical.persistedCount).toBe(1);
-    expect(mixedBody.future.createdAssignmentCount).toBe(2);
+    expect(mixedBody.future.createdAssignmentCount).toBe(1);
+    expect(mixedBody.future.existingAssignmentCount).toBe(1);
 
     const multiweekShifts = [shift(futureDate(23)), shift(futureDate(24))];
     const multiweekFingerprint = 'c'.repeat(64);
