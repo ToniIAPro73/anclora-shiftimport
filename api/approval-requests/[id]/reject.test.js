@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const ORG = 'org-reject';
 const REQUEST = '22222222-2222-4222-8222-222222222222';
 const ADMIN_TOKEN = 'reject-admin';
+const PLANNER_TOKEN = 'reject-planner';
 const EMPLOYEE_TOKEN = 'reject-employee';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 let state;
@@ -22,16 +23,19 @@ function makeSql() {
     calls.push({ text, values });
     if (text.includes('FROM sessions')) {
       const user = values[0] === hash(ADMIN_TOKEN) ? 'admin-1'
-        : values[0] === hash(EMPLOYEE_TOKEN) ? 'employee-1' : null;
+        : values[0] === hash(PLANNER_TOKEN) ? 'planner-1'
+          : values[0] === hash(EMPLOYEE_TOKEN) ? 'employee-1' : null;
       return Promise.resolve(user ? [{ id: user, email: `${user}@test`, display_name: user }] : []);
     }
     if (text.includes('FROM memberships')) {
-      const role = values[0] === 'employee-1' ? 'EMPLOYEE' : 'ADMIN';
+      const role = values[0] === 'employee-1' ? 'EMPLOYEE' : values[0] === 'planner-1' ? 'PLANNER' : 'ADMIN';
       return Promise.resolve([{ organization_id: ORG, role, scoped_area_id: null, organization_name: 'Org', organization_plan: 'team' }]);
     }
     if (text.includes('FROM employees')) return Promise.resolve([]);
     if (text.includes('WITH eligible')) {
-      const eligible = state.status === 'PENDING' && state.caller === 'admin-1';
+      const eligible = state.status === 'PENDING'
+        && !state.isSelfApproval
+        && (state.caller === 'admin-1' || state.caller === 'planner-1');
       return Promise.resolve(eligible ? [{
         id: REQUEST,
         organization_id: ORG,
@@ -43,7 +47,13 @@ function makeSql() {
         rejection_reason: state.reason,
       }] : []);
     }
-    if (text.startsWith('SELECT ar.status')) return Promise.resolve([{ status: state.status }]);
+    if (text.startsWith('SELECT ar.status')) {
+      return Promise.resolve([{
+        status: state.status,
+        employee_user_id: state.isSelfApproval ? state.caller : 'other-user',
+        employee_id: state.isSelfApproval ? 'emp-self' : 'emp-other',
+      }]);
+    }
     return Promise.resolve([]);
   };
   sql.calls = calls;
@@ -60,8 +70,9 @@ function response() {
   };
 }
 
-async function call({ token = ADMIN_TOKEN, reason, method = 'POST' } = {}) {
-  state.caller = token === EMPLOYEE_TOKEN ? 'employee-1' : 'admin-1';
+async function call({ token = ADMIN_TOKEN, reason = 'Cambio no autorizado.', method = 'POST' } = {}) {
+  state.caller = token === EMPLOYEE_TOKEN ? 'employee-1'
+    : token === PLANNER_TOKEN ? 'planner-1' : 'admin-1';
   state.reason = reason;
   const res = response();
   await handler({ method, query: { id: REQUEST }, body: { reason }, headers: { cookie: `anclora_session=${token}` } }, res);
@@ -69,7 +80,7 @@ async function call({ token = ADMIN_TOKEN, reason, method = 'POST' } = {}) {
 }
 
 beforeEach(() => {
-  state = { status: 'PENDING', caller: 'admin-1', reason: 'Cambio no autorizado.', sql: makeSql() };
+  state = { status: 'PENDING', caller: 'admin-1', reason: 'Cambio no autorizado.', isSelfApproval: false, sql: makeSql() };
 });
 
 describe('POST /api/approval-requests/:id/reject', () => {
@@ -81,6 +92,19 @@ describe('POST /api/approval-requests/:id/reject', () => {
     const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
     expect(audit.values[2]).toBe('approval_request.rejected');
     expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: 'change-1', reason: 'Cambio no autorizado.' });
+  });
+
+  it('allows PLANNER to reject in organization scope', async () => {
+    const res = await call({ token: PLANNER_TOKEN, reason: 'Planificador deniega cambio.' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.approvalRequest).toMatchObject({ id: REQUEST, status: 'REJECTED', rejectionReason: 'Planificador deniega cambio.' });
+  });
+
+  it('forbids self-rejection with 403 self_approval_forbidden', async () => {
+    state.isSelfApproval = true;
+    const res = await call({ reason: 'Auto denegado.' });
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe('self_approval_forbidden');
   });
 
   it('rejects empty reasons before authentication or database writes', async () => {

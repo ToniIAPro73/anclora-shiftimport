@@ -39,6 +39,10 @@ export default async function handler(req, res) {
 
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
+    if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN' && ctx.role !== 'PLANNER') {
+      logApprovalAuthorizationDenied({ endpoint: 'POST /api/approval-requests/:id/approve', ctx, reason: 'role_insufficient' });
+      return sendJson(res, 403, { error: 'Approver access required' });
+    }
     const resultingVersionId = randomUUID();
     const [updatedRows] = await sql.transaction((txn) => [txn`
       WITH eligible AS MATERIALIZED (
@@ -75,20 +79,40 @@ export default async function handler(req, res) {
         WHERE ar.id = ${approvalRequestId}
           AND ar.organization_id = ${ctx.organizationId}
           AND ar.status = 'PENDING'
+          AND (e.user_id IS NULL OR e.user_id <> ${ctx.user.id})
+          AND (${ctx.employeeId || null} IS NULL OR cr.employee_id <> ${ctx.employeeId || null})
           AND (
-            (
-              o.approval_policy = 'ORGANIZATION_ADMIN'
-              AND caller_membership.role IN ('OWNER', 'ADMIN')
+            caller_membership.role = 'OWNER'
+            OR (
+              caller_membership.role = 'ADMIN'
+              AND (
+                o.approval_policy IN ('ORGANIZATION_ADMIN', 'NO_APPROVAL')
+                OR (
+                  o.approval_policy = 'AREA_RESPONSIBLE'
+                  AND (
+                    EXISTS (
+                      SELECT 1
+                      FROM area_responsibles arx
+                      WHERE arx.area_id = e.area_id
+                        AND arx.user_id = caller_membership.user_id
+                        AND arx.organization_id = ar.organization_id
+                    )
+                    OR NOT EXISTS (
+                      SELECT 1
+                      FROM area_responsibles arx
+                      WHERE arx.area_id = e.area_id
+                        AND arx.organization_id = ar.organization_id
+                    )
+                    OR e.area_id IS NULL
+                  )
+                )
+              )
             )
             OR (
-              o.approval_policy = 'AREA_RESPONSIBLE'
-              AND caller_membership.role = 'ADMIN'
-              AND EXISTS (
-                SELECT 1
-                FROM area_responsibles arx
-                WHERE arx.area_id = e.area_id
-                  AND arx.user_id = caller_membership.user_id
-                  AND arx.organization_id = ar.organization_id
+              caller_membership.role = 'PLANNER'
+              AND (
+                caller_membership.scoped_area_id IS NULL
+                OR (e.area_id IS NOT NULL AND caller_membership.scoped_area_id = e.area_id)
               )
             )
           )
@@ -202,10 +226,12 @@ export default async function handler(req, res) {
 
     const existingRows = await sql`
       SELECT ar.status, cr.request_type, cr.requested_start_time, cr.requested_end_time,
+             cr.employee_id, e.user_id AS employee_user_id,
              COALESCE(approved_actor.display_name, rejected_actor.display_name) AS decision_by_name,
              COALESCE(ar.approved_at, ar.rejected_at) AS decision_at
       FROM approval_requests ar
       JOIN change_requests cr ON cr.id = ar.change_request_id
+      JOIN employees e ON e.id = cr.employee_id
       LEFT JOIN users approved_actor ON approved_actor.id = ar.approved_by_user_id
       LEFT JOIN users rejected_actor ON rejected_actor.id = ar.rejected_by_user_id
       WHERE ar.id = ${approvalRequestId}
@@ -228,6 +254,10 @@ export default async function handler(req, res) {
           at: existingRows[0].decision_at ?? null,
         },
       });
+    }
+    if (existingRows[0].employee_user_id === ctx.user.id || (ctx.employeeId && existingRows[0].employee_id === ctx.employeeId)) {
+      logApprovalAuthorizationDenied({ endpoint: 'POST /api/approval-requests/:id/approve', ctx, reason: 'self_approval_forbidden' });
+      return sendJson(res, 403, { error: 'You cannot approve your own request', code: 'self_approval_forbidden' });
     }
     if (existingRows[0].request_type === 'TIME_CHANGE'
       && (!existingRows[0].requested_start_time || !existingRows[0].requested_end_time)) {

@@ -8,16 +8,21 @@ const context = (role) => ({
 });
 
 describe('resolveApprovers', () => {
-  it('returns no approvers for NO_APPROVAL', () => {
+  it('routes NO_APPROVAL and ORGANIZATION_ADMIN to unique organization admins', () => {
     expect(resolveApprovers({ areaId: 'area-1' }, 'NO_APPROVAL', {
       areaResponsibleUserIds: ['admin-1'], organizationAdminUserIds: ['admin-2'],
-    })).toEqual([]);
-  });
+    })).toEqual(['admin-2']);
 
-  it('routes ORGANIZATION_ADMIN to unique organization admins', () => {
     expect(resolveApprovers({}, 'ORGANIZATION_ADMIN', {
       organizationAdminUserIds: ['admin-1', 'admin-1', 'admin-2'],
     })).toEqual(['admin-1', 'admin-2']);
+  });
+
+  it('filters out employee user id from approver list to prevent self-approval', () => {
+    expect(resolveApprovers({ areaId: 'area-1' }, 'ORGANIZATION_ADMIN', {
+      organizationAdminUserIds: ['user-1', 'admin-2'],
+      employeeUserId: 'user-1',
+    })).toEqual(['admin-2']);
   });
 
   it('routes AREA_RESPONSIBLE and falls back to organization admins', () => {

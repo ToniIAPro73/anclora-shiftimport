@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
-    if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') {
+    if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN' && ctx.role !== 'PLANNER') {
       logApprovalAuthorizationDenied({ endpoint: 'GET /api/approval-requests', ctx, reason: 'role_insufficient' });
       return sendJson(res, 403, { error: 'Approver access required' });
     }
@@ -79,20 +79,40 @@ export default async function handler(req, res) {
        AND caller_membership.user_id = ${ctx.user.id}
       WHERE ar.organization_id = ${ctx.organizationId}
         AND ar.status = ${rawStatus}
+        AND (e.user_id IS NULL OR e.user_id <> ${ctx.user.id})
+        AND (${ctx.employeeId || null} IS NULL OR cr.employee_id <> ${ctx.employeeId || null})
         AND (
-          (
-            o.approval_policy = 'ORGANIZATION_ADMIN'
-            AND caller_membership.role IN ('OWNER', 'ADMIN')
+          caller_membership.role = 'OWNER'
+          OR (
+            caller_membership.role = 'ADMIN'
+            AND (
+              o.approval_policy IN ('ORGANIZATION_ADMIN', 'NO_APPROVAL')
+              OR (
+                o.approval_policy = 'AREA_RESPONSIBLE'
+                AND (
+                  EXISTS (
+                    SELECT 1
+                    FROM area_responsibles arx
+                    WHERE arx.area_id = e.area_id
+                      AND arx.user_id = caller_membership.user_id
+                      AND arx.organization_id = ar.organization_id
+                  )
+                  OR NOT EXISTS (
+                    SELECT 1
+                    FROM area_responsibles arx
+                    WHERE arx.area_id = e.area_id
+                      AND arx.organization_id = ar.organization_id
+                  )
+                  OR e.area_id IS NULL
+                )
+              )
+            )
           )
           OR (
-            o.approval_policy = 'AREA_RESPONSIBLE'
-            AND caller_membership.role = 'ADMIN'
-            AND EXISTS (
-              SELECT 1
-              FROM area_responsibles arx
-              WHERE arx.area_id = e.area_id
-                AND arx.user_id = caller_membership.user_id
-                AND arx.organization_id = ar.organization_id
+            caller_membership.role = 'PLANNER'
+            AND (
+              caller_membership.scoped_area_id IS NULL
+              OR (e.area_id IS NOT NULL AND caller_membership.scoped_area_id = e.area_id)
             )
           )
         )

@@ -2250,14 +2250,17 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
       SELECT id, employee_id, organization_id, ${requestType}, ${reason},
              NULLIF(${requestedStartTime}, '')::time,
              NULLIF(${requestedEndTime}, '')::time,
-             CASE WHEN approval_policy = 'NO_APPROVAL' THEN 'APPROVED' ELSE 'PENDING' END,
-             CASE WHEN approval_policy = 'NO_APPROVAL' THEN NOW() ELSE NULL END
+             'PENDING',
+             NULL
       FROM owned_shift
       RETURNING id, shift_id, employee_id, organization_id, request_type, reason,
                 status, created_at, resolved_at, resolved_by_user_id,
                 requested_start_time, requested_end_time
     ), routing AS (
-      SELECT c.*, o.approval_policy, e.area_id
+      SELECT c.*,
+             CASE WHEN o.approval_policy = 'NO_APPROVAL' THEN 'ORGANIZATION_ADMIN' ELSE o.approval_policy END AS approval_policy,
+             e.area_id,
+             e.user_id AS employee_user_id
       FROM created c
       JOIN organizations o ON o.id = c.organization_id
       JOIN employees e
@@ -2268,8 +2271,12 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
       FROM routing r
       JOIN memberships m
         ON m.organization_id = r.organization_id
-       AND m.role IN ('OWNER', 'ADMIN')
+       AND (
+         m.role IN ('OWNER', 'ADMIN')
+         OR (m.role = 'PLANNER' AND m.scoped_area_id IS NULL)
+       )
       WHERE r.approval_policy IN ('ORGANIZATION_ADMIN', 'AREA_RESPONSIBLE')
+        AND (r.employee_user_id IS NULL OR m.user_id <> r.employee_user_id)
     ), area_responsible_candidates AS (
       SELECT DISTINCT r.id AS change_request_id, ar.user_id
       FROM routing r
@@ -2282,6 +2289,17 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
        AND m.role = 'ADMIN'
       WHERE r.approval_policy = 'AREA_RESPONSIBLE'
         AND r.area_id IS NOT NULL
+        AND (r.employee_user_id IS NULL OR ar.user_id <> r.employee_user_id)
+      UNION
+      SELECT DISTINCT r.id AS change_request_id, m.user_id
+      FROM routing r
+      JOIN memberships m
+        ON m.organization_id = r.organization_id
+       AND m.role = 'PLANNER'
+       AND m.scoped_area_id = r.area_id
+      WHERE r.approval_policy = 'AREA_RESPONSIBLE'
+        AND r.area_id IS NOT NULL
+        AND (r.employee_user_id IS NULL OR m.user_id <> r.employee_user_id)
     ), eligible_approvers AS (
       SELECT change_request_id, user_id FROM organization_admins
       WHERE EXISTS (
@@ -2301,134 +2319,11 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
           FROM area_responsible_candidates arc
           WHERE arc.change_request_id = r.id
         )
-    ), auto_source_assignment AS MATERIALIZED (
-      SELECT r.id AS change_request_id, r.organization_id,
-             r.employee_id,
-             r.requested_start_time, r.requested_end_time,
-             sh.date AS source_date,
-             sh.start_time AS source_start_time,
-             sh.end_time AS source_end_time,
-             sh.location AS source_location,
-             sv.id AS source_version_id,
-             sv.schedule_id AS source_schedule_id,
-             sa.id AS source_assignment_id
-      FROM routing r
-      JOIN shifts sh
-        ON sh.id = r.shift_id
-       AND sh.employee_id = r.employee_id
-       AND sh.organization_id = r.organization_id
-      JOIN schedule_versions sv
-        ON sv.id = sh.schedule_version_id
-       AND sv.status = 'PUBLISHED'
-      JOIN schedules source_schedule
-        ON source_schedule.id = sv.schedule_id
-       AND source_schedule.organization_id = r.organization_id
-      JOIN shift_assignments sa
-        ON sa.schedule_version_id = sv.id
-       AND sa.employee_id = r.employee_id
-       AND sa.date = sh.date
-       AND sa.start_time = sh.start_time::time
-       AND sa.end_time = sh.end_time::time
-       AND sa.location IS NOT DISTINCT FROM sh.location
-      WHERE r.approval_policy = 'NO_APPROVAL'
-        AND r.request_type = 'TIME_CHANGE'
-        AND r.requested_start_time IS NOT NULL
-        AND r.requested_end_time IS NOT NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM shift_assignments conflict
-          WHERE conflict.schedule_version_id = sv.id
-            AND conflict.employee_id = r.employee_id
-            AND conflict.date = sh.date
-            AND conflict.id <> sa.id
-            AND conflict.start_time < r.requested_end_time
-            AND conflict.end_time > r.requested_start_time
-        )
-      LIMIT 1
-    ), auto_draft_conflict AS MATERIALIZED (
-      SELECT source.*, existing.id AS existing_draft_id
-      FROM auto_source_assignment source
-      LEFT JOIN schedule_versions existing
-        ON existing.schedule_id = source.source_schedule_id
-       AND existing.status = 'DRAFT'
-    ), auto_next_version AS (
-      SELECT d.source_version_id, d.source_schedule_id, d.source_assignment_id,
-             d.requested_start_time, d.requested_end_time,
-             COALESCE(MAX(sv.version_number), 0) + 1 AS next_version_number
-      FROM auto_draft_conflict d
-      LEFT JOIN schedule_versions sv ON sv.schedule_id = d.source_schedule_id
-      WHERE d.existing_draft_id IS NULL
-      GROUP BY d.source_version_id, d.source_schedule_id, d.source_assignment_id,
-               d.requested_start_time, d.requested_end_time
-    ), auto_created_version AS (
-      INSERT INTO schedule_versions
-        (id, schedule_id, version_number, status, created_by_user_id)
-      SELECT ${randomUUID()}, source_schedule_id, next_version_number,
-             'DRAFT', ${ctx.user.id}
-      FROM auto_next_version
-      RETURNING id, schedule_id
-    ), auto_target_version AS (
-      SELECT change_request_id, existing_draft_id AS draft_version_id
-      FROM auto_draft_conflict
-      WHERE existing_draft_id IS NOT NULL
-      UNION ALL
-      SELECT source.change_request_id, created.id AS draft_version_id
-      FROM auto_source_assignment source
-      JOIN auto_created_version created
-        ON created.schedule_id = source.source_schedule_id
-    ), auto_existing_assignment AS (
-      SELECT DISTINCT ON (source.change_request_id)
-             source.change_request_id, target.id AS target_assignment_id
-      FROM auto_source_assignment source
-      JOIN auto_draft_conflict draft
-        ON draft.change_request_id = source.change_request_id
-       AND draft.existing_draft_id IS NOT NULL
-      JOIN shift_assignments target
-        ON target.schedule_version_id = draft.existing_draft_id
-       AND target.employee_id = source.employee_id
-       AND target.date = source.source_date
-       AND target.location IS NOT DISTINCT FROM source.source_location
-      ORDER BY source.change_request_id,
-               (target.start_time = source.source_start_time::time
-                AND target.end_time = source.source_end_time::time) DESC,
-               target.id
-    ), auto_updated_assignments AS (
-      UPDATE shift_assignments target
-      SET start_time = source.requested_start_time,
-          end_time = source.requested_end_time,
-          updated_at = NOW()
-      FROM auto_source_assignment source
-      JOIN auto_existing_assignment existing
-        ON existing.change_request_id = source.change_request_id
-      WHERE target.id = existing.target_assignment_id
-      RETURNING target.id
-    ), auto_copied_assignments AS (
-      INSERT INTO shift_assignments
-        (schedule_version_id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work)
-      SELECT target_version.draft_version_id, sa.employee_id, sa.date,
-             CASE WHEN sa.id = source.source_assignment_id
-               THEN source.requested_start_time ELSE sa.start_time END,
-             CASE WHEN sa.id = source.source_assignment_id
-               THEN source.requested_end_time ELSE sa.end_time END,
-             sa.location, sa.shift_type, sa.counts_as_work
-      FROM shift_assignments sa
-      JOIN auto_source_assignment source
-        ON source.source_version_id = sa.schedule_version_id
-       AND source.source_assignment_id IS NOT NULL
-      JOIN auto_target_version target_version
-        ON target_version.change_request_id = source.change_request_id
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM auto_existing_assignment existing
-        WHERE existing.change_request_id = source.change_request_id
-      )
-      RETURNING id
     ), approval_insert AS (
       INSERT INTO approval_requests
         (organization_id, change_request_id, status, policy_snapshot)
       SELECT organization_id, id, 'PENDING', approval_policy
       FROM routing
-      WHERE approval_policy <> 'NO_APPROVAL'
       RETURNING id, organization_id, change_request_id
     ), notification_insert AS (
       INSERT INTO notifications
@@ -2446,10 +2341,7 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
            r.approval_policy, ai.id AS approval_request_id,
            (SELECT COUNT(*)::integer FROM eligible_approvers ea
             WHERE ea.change_request_id = r.id) AS approver_count,
-           (SELECT COUNT(*)::integer FROM notification_insert) AS notification_count,
-           (SELECT draft_version_id FROM auto_target_version LIMIT 1) AS auto_draft_version_id,
-           (SELECT COUNT(*)::integer FROM auto_updated_assignments)
-             + (SELECT COUNT(*)::integer FROM auto_copied_assignments) AS auto_applied_count
+           (SELECT COUNT(*)::integer FROM notification_insert) AS notification_count
     FROM routing r
     LEFT JOIN approval_insert ai ON ai.change_request_id = r.id
   `]);

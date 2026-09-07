@@ -55,11 +55,10 @@ function makeFakeSql() {
         return Promise.resolve([]);
       }
       state.writes += 1;
-      const status = state.policy === 'NO_APPROVAL' ? 'APPROVED' : 'PENDING';
       return Promise.resolve([{
-        ...makeRequest(status),
-        approval_policy: state.policy,
-        approval_request_id: state.policy === 'NO_APPROVAL' ? null : 'approval-1',
+        ...makeRequest('PENDING'),
+        approval_policy: state.policy === 'NO_APPROVAL' ? 'ORGANIZATION_ADMIN' : state.policy,
+        approval_request_id: 'approval-1',
         approver_count: state.approverCount,
         notification_count: state.approverCount,
       }]);
@@ -112,14 +111,14 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
     expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: REQUEST_ID, policySnapshot: 'ORGANIZATION_ADMIN' });
   });
 
-  it('auto-approves without creating an approval envelope when policy is NO_APPROVAL', async () => {
+  it('routes employee requests as PENDING through approval even when policy is NO_APPROVAL', async () => {
     state.policy = 'NO_APPROVAL';
     const res = await call({ body: { requestType: 'TIME_CHANGE', reason: 'No approval needed.', requestedStartTime: '10:00', requestedEndTime: '18:00' } });
     expect(res.statusCode).toBe(201);
-    expect(res.body.request.status).toBe('APPROVED');
+    expect(res.body.request.status).toBe('PENDING');
     const routeQuery = state.sql.calls.find((entry) => entry.text.includes('WITH owned_shift'));
     expect(routeQuery.text).toContain('approval_requests');
-    expect(routeQuery.text).toContain("approval_policy = 'NO_APPROVAL'");
+    expect(routeQuery.text).toContain("'PENDING'");
   });
 
   it('keeps a pending request behind an approval envelope for AREA_RESPONSIBLE', async () => {

@@ -31,18 +31,18 @@ export function requireApprovalAdmin(ctx, endpoint) {
 export function resolveApprovers(changeRequest, policy, {
   areaResponsibleUserIds = [],
   organizationAdminUserIds = [],
+  employeeUserId = null,
 } = {}) {
-  if (policy === 'NO_APPROVAL') return [];
-
   const unique = (ids) => [...new Set(ids.map((id) => String(id).trim()).filter(Boolean))];
-  const admins = unique(organizationAdminUserIds);
+  const filterSelf = (ids) => (employeeUserId ? ids.filter((id) => id !== employeeUserId) : ids);
+  const admins = filterSelf(unique(organizationAdminUserIds));
 
-  if (policy === 'ORGANIZATION_ADMIN') {
+  if (policy === 'NO_APPROVAL' || policy === 'ORGANIZATION_ADMIN') {
     return admins;
   }
 
   if (policy === 'AREA_RESPONSIBLE') {
-    const areaIds = unique(areaResponsibleUserIds);
+    const areaIds = filterSelf(unique(areaResponsibleUserIds));
     return changeRequest?.areaId && areaIds.length > 0 ? areaIds : admins;
   }
 

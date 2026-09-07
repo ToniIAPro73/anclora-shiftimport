@@ -6,6 +6,7 @@ const REQUEST = '11111111-1111-4111-8111-111111111111';
 const ADMIN_TOKEN = 'approve-admin';
 const AREA_TOKEN = 'approve-area';
 const EMPLOYEE_TOKEN = 'approve-employee';
+const PLANNER_TOKEN = 'approve-planner';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 let state;
 
@@ -24,17 +25,19 @@ function makeSql() {
     if (text.includes('FROM sessions')) {
       const user = values[0] === hash(ADMIN_TOKEN) ? { id: 'admin-1' }
         : values[0] === hash(AREA_TOKEN) ? { id: 'area-admin-1' }
-          : values[0] === hash(EMPLOYEE_TOKEN) ? { id: 'employee-1' } : null;
+          : values[0] === hash(PLANNER_TOKEN) ? { id: 'planner-1' }
+            : values[0] === hash(EMPLOYEE_TOKEN) ? { id: 'employee-1' } : null;
       return Promise.resolve(user ? [{ id: user.id, email: `${user.id}@test`, display_name: user.id }] : []);
     }
     if (text.includes('FROM memberships')) {
-      const role = values[0] === 'employee-1' ? 'EMPLOYEE' : 'ADMIN';
+      const role = values[0] === 'employee-1' ? 'EMPLOYEE' : values[0] === 'planner-1' ? 'PLANNER' : 'ADMIN';
       return Promise.resolve([{ organization_id: ORG, role, scoped_area_id: null, organization_name: 'Org', organization_plan: 'team' }]);
     }
     if (text.includes('FROM employees')) return Promise.resolve([]);
     if (text.includes('WITH eligible')) {
       const eligible = state.status === 'PENDING'
-        && ((state.policy === 'ORGANIZATION_ADMIN' && state.caller === 'admin-1')
+        && !state.isSelfApproval
+        && ((state.policy === 'ORGANIZATION_ADMIN' && (state.caller === 'admin-1' || state.caller === 'planner-1'))
           || (state.policy === 'AREA_RESPONSIBLE' && state.caller === 'area-admin-1'));
       return Promise.resolve(eligible ? [{
         id: REQUEST,
@@ -47,7 +50,11 @@ function makeSql() {
       }] : []);
     }
     if (text.startsWith('SELECT ar.status')) {
-      return Promise.resolve([{ status: state.status }]);
+      return Promise.resolve([{
+        status: state.status,
+        employee_user_id: state.isSelfApproval ? state.caller : 'other-user',
+        employee_id: state.isSelfApproval ? 'emp-self' : 'emp-other',
+      }]);
     }
     return Promise.resolve([]);
   };
@@ -66,14 +73,16 @@ function response() {
 }
 
 async function call(token = ADMIN_TOKEN) {
-  state.caller = token === AREA_TOKEN ? 'area-admin-1' : token === EMPLOYEE_TOKEN ? 'employee-1' : 'admin-1';
+  state.caller = token === AREA_TOKEN ? 'area-admin-1'
+    : token === PLANNER_TOKEN ? 'planner-1'
+      : token === EMPLOYEE_TOKEN ? 'employee-1' : 'admin-1';
   const res = response();
   await handler({ method: 'POST', query: { id: REQUEST }, headers: { cookie: `anclora_session=${token}` } }, res);
   return res;
 }
 
 beforeEach(() => {
-  state = { policy: 'ORGANIZATION_ADMIN', status: 'PENDING', caller: 'admin-1', sql: makeSql() };
+  state = { policy: 'ORGANIZATION_ADMIN', status: 'PENDING', caller: 'admin-1', isSelfApproval: false, sql: makeSql() };
 });
 
 describe('POST /api/approval-requests/:id/approve', () => {
@@ -89,6 +98,19 @@ describe('POST /api/approval-requests/:id/approve', () => {
     const audit = state.sql.calls.find((entry) => entry.text.startsWith('INSERT INTO organization_audit_events'));
     expect(audit.values[2]).toBe('approval_request.approved');
     expect(JSON.parse(audit.values[5])).toMatchObject({ changeRequestId: 'change-1', policySnapshot: 'ORGANIZATION_ADMIN' });
+  });
+
+  it('allows PLANNER to approve in organization scope', async () => {
+    const res = await call(PLANNER_TOKEN);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.approvalRequest).toMatchObject({ id: REQUEST, status: 'APPROVED', approvedByUserId: 'planner-1' });
+  });
+
+  it('forbids self-approval with 403 self_approval_forbidden', async () => {
+    state.isSelfApproval = true;
+    const res = await call();
+    expect(res.statusCode).toBe(403);
+    expect(res.body.code).toBe('self_approval_forbidden');
   });
 
   it('rejects an ineligible caller and an already decided request', async () => {
