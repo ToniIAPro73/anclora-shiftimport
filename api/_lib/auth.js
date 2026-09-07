@@ -94,7 +94,7 @@ export async function resolveContext(req, sql) {
   const user = { id: rows[0].id, email: rows[0].email, displayName: rows[0].display_name };
 
   const memberships = await sql`
-    SELECT m.organization_id, m.role, m.scoped_area_id,
+    SELECT m.organization_id, m.role, m.scoped_area_id, m.planner_scope_type,
            o.name AS organization_name, o.plan AS organization_plan
     FROM memberships m
     JOIN organizations o ON o.id = m.organization_id
@@ -114,6 +114,9 @@ export async function resolveContext(req, sql) {
     : (memberships.length === 1 ? memberships[0] : null);
 
   let employeeId = null;
+  let scopedAreaIds = [];
+  let scopedEmployeeIds = [];
+
   if (membership) {
     const employeeRows = await sql`
       SELECT id FROM employees
@@ -122,6 +125,29 @@ export async function resolveContext(req, sql) {
         AND status = 'active'
     `;
     employeeId = employeeRows[0]?.id ?? null;
+
+    if (membership.role === 'PLANNER') {
+      try {
+        const assignments = await sql`
+          SELECT assignment_type, target_id
+          FROM operational_assignments
+          WHERE organization_id = ${membership.organization_id}
+            AND subject_id = ${user.id}
+            AND valid_to IS NULL
+        `;
+        scopedAreaIds = assignments
+          .filter((a) => a.assignment_type === 'PLANNER_AREA')
+          .map((a) => String(a.target_id));
+        scopedEmployeeIds = assignments
+          .filter((a) => a.assignment_type === 'PLANNER_EMPLOYEE')
+          .map((a) => String(a.target_id));
+      } catch {
+        // Safe fallback if assignments table not queried (e.g. in older unit test mocks)
+      }
+      if (membership.scoped_area_id && !scopedAreaIds.includes(membership.scoped_area_id)) {
+        scopedAreaIds.push(membership.scoped_area_id);
+      }
+    }
   }
 
   return {
@@ -129,6 +155,9 @@ export async function resolveContext(req, sql) {
     organizationId: membership?.organization_id ?? null,
     role: membership?.role ?? null,
     scopedAreaId: membership?.scoped_area_id ?? null,
+    plannerScopeType: membership?.planner_scope_type ?? null,
+    scopedAreaIds,
+    scopedEmployeeIds,
     // Plan of the ACTIVE organization — the single backend authority for
     // entitlement checks (plans.js); null when no organization is selected.
     plan: membership?.organization_plan ?? null,
@@ -138,6 +167,7 @@ export async function resolveContext(req, sql) {
       organizationName: m.organization_name,
       role: m.role,
       scopedAreaId: m.scoped_area_id ?? null,
+      plannerScopeType: m.planner_scope_type ?? null,
     })),
   };
 }
@@ -191,6 +221,25 @@ export function resolveAccessScope(membership) {
     return { type: 'ORGANIZATION' };
   }
   if (role === 'PLANNER') {
+    const scopeType = membership?.plannerScopeType;
+    if (scopeType === 'EMPLOYEES') {
+      const employeeIds = (membership.scopedEmployeeIds || []).map((id) => String(id).trim()).filter(Boolean);
+      return { type: 'EMPLOYEES', employeeIds };
+    }
+    if (scopeType === 'AREAS') {
+      const areaIds = [
+        ...(membership.scopedAreaIds || []),
+        ...(membership.scopedAreaId ? [membership.scopedAreaId] : []),
+      ].map((id) => String(id).trim()).filter(Boolean);
+      return {
+        type: 'AREAS',
+        areaIds,
+        areaId: areaIds[0] || null,
+      };
+    }
+    if (scopeType === 'ORGANIZATION') {
+      return { type: 'ORGANIZATION' };
+    }
     const areaId = String(membership?.scopedAreaId ?? '').trim();
     return areaId ? { type: 'AREA', areaId } : { type: 'ORGANIZATION' };
   }
@@ -217,19 +266,44 @@ export function resolveAccessScope(membership) {
  */
 export async function resolveEffectiveAccessScope(sql, membership) {
   const scope = resolveAccessScope(membership);
-  if (membership?.role !== 'PLANNER' || scope.type === 'AREA') {
+  if (membership?.role !== 'PLANNER') {
     return scope;
   }
-  const rows = await sql`
-    SELECT COUNT(*)::int AS active_area_count
-    FROM areas
-    WHERE organization_id = ${membership.organizationId}
-      AND active = TRUE
-  `;
-  if (Number(rows[0]?.active_area_count ?? 0) > 0) {
-    const error = new HttpError(403, 'Planner area assignment is required for this organization');
-    error.code = 'SCOPE_UNAVAILABLE';
-    throw error;
+  if (scope.type === 'AREA') {
+    return scope;
+  }
+  if (scope.type === 'AREAS') {
+    if (!scope.areaIds || scope.areaIds.length === 0) {
+      const error = new HttpError(403, 'Planner area assignment is required');
+      error.code = 'SCOPE_UNAVAILABLE';
+      throw error;
+    }
+    return scope;
+  }
+  if (scope.type === 'EMPLOYEES') {
+    if (!scope.employeeIds || scope.employeeIds.length === 0) {
+      const error = new HttpError(403, 'Planner employee assignment is required');
+      error.code = 'SCOPE_UNAVAILABLE';
+      throw error;
+    }
+    return scope;
+  }
+  if (scope.type === 'ORGANIZATION') {
+    if (membership?.plannerScopeType === 'ORGANIZATION') {
+      return scope;
+    }
+    const rows = await sql`
+      SELECT COUNT(*)::int AS active_area_count
+      FROM areas
+      WHERE organization_id = ${membership.organizationId}
+        AND active = TRUE
+    `;
+    if (Number(rows[0]?.active_area_count ?? 0) > 0) {
+      const error = new HttpError(403, 'Planner area assignment is required for this organization');
+      error.code = 'SCOPE_UNAVAILABLE';
+      throw error;
+    }
+    return scope;
   }
   return scope;
 }

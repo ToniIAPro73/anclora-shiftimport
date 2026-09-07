@@ -202,4 +202,54 @@ describe('resolveEffectiveAccessScope — approved D-05 rule', () => {
       .resolves.toEqual({ type: 'AREA', areaId: 'area-1' });
     expect(sql).not.toHaveBeenCalled();
   });
+
+  it('resolves explicit ORGANIZATION scope for planner even when active areas exist', async () => {
+    const explicitOrgPlanner = {
+      role: 'PLANNER',
+      organizationId: 'org-1',
+      plannerScopeType: 'ORGANIZATION',
+    };
+    await expect(resolveEffectiveAccessScope(sqlWithActiveAreas(), explicitOrgPlanner))
+      .resolves.toEqual({ type: 'ORGANIZATION' });
+  });
+
+  it('resolves multi-area scope for AREAS planner and fails closed if empty', async () => {
+    const areasPlanner = {
+      role: 'PLANNER',
+      organizationId: 'org-1',
+      plannerScopeType: 'AREAS',
+      scopedAreaIds: ['area-1', 'area-2'],
+    };
+    await expect(resolveEffectiveAccessScope(sqlWithActiveAreas(), areasPlanner))
+      .resolves.toEqual({ type: 'AREAS', areaIds: ['area-1', 'area-2'], areaId: 'area-1' });
+
+    const emptyAreasPlanner = {
+      role: 'PLANNER',
+      organizationId: 'org-1',
+      plannerScopeType: 'AREAS',
+      scopedAreaIds: [],
+    };
+    await expect(resolveEffectiveAccessScope(sqlWithActiveAreas(), emptyAreasPlanner))
+      .rejects.toMatchObject({ status: 403, code: 'SCOPE_UNAVAILABLE' });
+  });
+
+  it('resolves employee set scope for EMPLOYEES planner and fails closed if empty', async () => {
+    const empPlanner = {
+      role: 'PLANNER',
+      organizationId: 'org-1',
+      plannerScopeType: 'EMPLOYEES',
+      scopedEmployeeIds: ['emp-1', 'emp-2'],
+    };
+    await expect(resolveEffectiveAccessScope(sqlWithActiveAreas(), empPlanner))
+      .resolves.toEqual({ type: 'EMPLOYEES', employeeIds: ['emp-1', 'emp-2'] });
+
+    const emptyEmpPlanner = {
+      role: 'PLANNER',
+      organizationId: 'org-1',
+      plannerScopeType: 'EMPLOYEES',
+      scopedEmployeeIds: [],
+    };
+    await expect(resolveEffectiveAccessScope(sqlWithActiveAreas(), emptyEmpPlanner))
+      .rejects.toMatchObject({ status: 403, code: 'SCOPE_UNAVAILABLE' });
+  });
 });
