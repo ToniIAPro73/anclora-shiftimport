@@ -57,6 +57,15 @@ export const ModalShell = ({
 }: ModalShellProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const blockingRef = useRef(blocking);
+  const suppressEscapeRef = useRef(suppressEscape);
+  const initialFocusRef = useRef(initialFocus);
+
+  onCloseRef.current = onClose;
+  blockingRef.current = blocking;
+  suppressEscapeRef.current = suppressEscape;
+  initialFocusRef.current = initialFocus;
 
   useEffect(() => {
     if (!isOpen) {
@@ -72,7 +81,7 @@ export const ModalShell = ({
     ).filter((element) => !element.hasAttribute('disabled'));
 
     // Initial focus: first focusable, falling back to the dialog itself.
-    const initial = (initialFocus ? contentRef.current?.querySelector<HTMLElement>(initialFocus) : null)
+    const initial = (initialFocusRef.current ? contentRef.current?.querySelector<HTMLElement>(initialFocusRef.current) : null)
       ?? focusables()[0]
       ?? contentRef.current;
     initial?.focus();
@@ -83,11 +92,11 @@ export const ModalShell = ({
         : null;
       if (nestedDialog && nestedDialog !== contentRef.current) return;
       if (event.key === 'Escape') {
-        if (blocking || suppressEscape) {
+        if (blockingRef.current || suppressEscapeRef.current) {
           return;
         }
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') {
@@ -113,7 +122,7 @@ export const ModalShell = ({
       document.removeEventListener('keydown', handleKeyDown, true);
       previousFocusRef.current?.focus();
     };
-  }, [initialFocus, isOpen, onClose, blocking, suppressEscape]);
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;

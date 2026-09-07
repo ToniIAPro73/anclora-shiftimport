@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from '../../lib/i18n-react';
@@ -116,6 +117,35 @@ function renderModal(
   return { onChanged, onClose };
 }
 
+function renderModalWithParentRerenderOnInput(initialTab: 'personas' | 'assignments' = 'personas') {
+  mockedListRemoteMembers.mockResolvedValue(membersFixture);
+
+  function Parent() {
+    const [, setRevision] = useState(0);
+
+    return (
+      <div onInput={() => setRevision((current) => current + 1)}>
+        <EquipoModal
+          isOpen
+          onClose={() => {}}
+          employees={employeesFixture}
+          areas={areasFixture}
+          currentUserId="usr-owner"
+          currentUserRole="OWNER"
+          onChanged={() => {}}
+          initialTab={initialTab}
+        />
+      </div>
+    );
+  }
+
+  render(
+    <I18nProvider>
+      <Parent />
+    </I18nProvider>,
+  );
+}
+
 describe('EquipoModal — Workspace navigation and tabs', () => {
   it('renders all 4 tabs and defaults to Personas', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
@@ -153,6 +183,22 @@ describe('EquipoModal — Workspace navigation and tabs', () => {
 });
 
 describe('EquipoModal — Tab 1: PERSONAS', () => {
+  it('preserves Personas search focus when the modal parent rerenders during typing', async () => {
+    renderModalWithParentRerenderOnInput('personas');
+
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    const searchInput = screen.getByTestId('personas-search');
+    searchInput.focus();
+    fireEvent.input(searchInput, { target: { value: 'a' } });
+    fireEvent.input(searchInput, { target: { value: 'ab' } });
+    fireEvent.input(searchInput, { target: { value: 'abc' } });
+
+    expect(searchInput).toHaveValue('abc');
+    expect(document.activeElement).toBe(searchInput);
+    expect(screen.getByRole('button', { name: 'Cerrar' })).not.toHaveFocus();
+  });
+
   it('displays unified Personas table merging members and unlinked employees', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
     renderModal('OWNER');
@@ -270,6 +316,7 @@ describe('EquipoModal — Tab 1: PERSONAS', () => {
     });
   });
 });
+
 
 describe('EquipoModal — Tab 2: ROLES Y ACCESO & Ownership Transfer', () => {
   it('displays members authority, roles, and scopes', async () => {
@@ -570,6 +617,22 @@ describe('EquipoModal — Tab 3: ÁREAS', () => {
 });
 
 describe('EquipoModal — Tab 4: ASIGNACIONES & Bulk Operations', () => {
+  it('preserves Asignaciones search focus when the modal parent rerenders during typing', async () => {
+    renderModalWithParentRerenderOnInput('assignments');
+
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    const searchInput = screen.getByTestId('bulk-employee-search');
+    searchInput.focus();
+    fireEvent.input(searchInput, { target: { value: 'a' } });
+    fireEvent.input(searchInput, { target: { value: 'ab' } });
+    fireEvent.input(searchInput, { target: { value: 'abc' } });
+
+    expect(searchInput).toHaveValue('abc');
+    expect(document.activeElement).toBe(searchInput);
+    expect(screen.getByRole('button', { name: 'Cerrar' })).not.toHaveFocus();
+  });
+
   it('allows bulk moving employees to an area with effective date', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
     mockedBulkMoveRemoteEmployeesArea.mockResolvedValue({
@@ -666,4 +729,3 @@ describe('EquipoModal — Tab 4: ASIGNACIONES & Bulk Operations', () => {
     });
   });
 });
-
