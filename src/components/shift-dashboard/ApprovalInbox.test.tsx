@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from '../../lib/i18n-react';
 import * as remote from '../../lib/remote';
 import { ApprovalInbox } from './ApprovalInbox';
@@ -34,10 +35,10 @@ const request: remote.ApprovalRequest = {
   shiftLocation: 'Hotel Aurora',
 };
 
-function renderInbox() {
+function renderInbox(currentEmployeeId?: string | null) {
   return render(
     <I18nProvider>
-      <ApprovalInbox />
+      <ApprovalInbox currentEmployeeId={currentEmployeeId} />
     </I18nProvider>,
   );
 }
@@ -111,5 +112,54 @@ describe('ApprovalInbox', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar rechazo' }));
     await waitFor(() => expect(mockedReject).toHaveBeenCalledWith('approval-1', 'No hay cobertura.'));
     await waitFor(() => expect(screen.getByTestId('approval-inbox-empty')).toBeTruthy());
+  });
+
+  it('enforces anti-self-approval rule in UI with warning banner and disabled buttons', async () => {
+    mockedList.mockResolvedValue([request]);
+    renderInbox('employee-1');
+    await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
+
+    // Check warning banner
+    const warning = screen.getByTestId('self-approval-warning-approval-1');
+    expect(warning).toBeInTheDocument();
+    expect(warning).toHaveTextContent('No puedes aprobar o rechazar tus propias solicitudes');
+
+    // Buttons should be disabled
+    const approveBtn = screen.getByTestId('approve-btn-approval-1');
+    const rejectBtn = screen.getByTestId('reject-btn-approval-1');
+    expect(approveBtn).toBeDisabled();
+    expect(rejectBtn).toBeDisabled();
+  });
+
+  it('displays anti-self-approval message when server returns 403 self_approval_forbidden on approve', async () => {
+    mockedList.mockResolvedValue([request]);
+    mockedApprove.mockRejectedValueOnce(Object.assign(new Error('You cannot approve your own request'), {
+      status: 403,
+      code: 'self_approval_forbidden',
+    }));
+    renderInbox('other-employee');
+    await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobar' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('No puedes aprobar o rechazar tus propias solicitudes');
+    });
+  });
+
+  it('displays anti-self-approval message when server returns 403 self_approval_forbidden on reject', async () => {
+    mockedList.mockResolvedValue([request]);
+    mockedReject.mockRejectedValueOnce(Object.assign(new Error('You cannot reject your own request'), {
+      status: 403,
+      code: 'self_approval_forbidden',
+    }));
+    renderInbox('other-employee');
+    await waitFor(() => expect(screen.getByText('Ana López')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Rechazar' }));
+    fireEvent.change(screen.getByLabelText('Motivo del rechazo'), { target: { value: 'Denegado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar rechazo' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('No puedes aprobar o rechazar tus propias solicitudes');
+    });
   });
 });

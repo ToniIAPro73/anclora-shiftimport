@@ -115,6 +115,7 @@ export interface AppShellProps {
   onFormatProfiles?: () => void;
   onSettings?: () => void;
   onLogout?: () => void;
+  pendingRequestsCount?: number;
 }
 
 interface SidebarItemProps {
@@ -251,6 +252,7 @@ export function AppShell({
   onFormatProfiles,
   onSettings,
   onLogout,
+  pendingRequestsCount,
 }: AppShellProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(() => {
@@ -341,6 +343,7 @@ export function AppShell({
                     <SidebarItem
                       label={t('approvalInbox.navLabel')}
                       icon={<FileCog size={18} />}
+                      badge={typeof pendingRequestsCount === 'number' && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
                       collapsed={!expanded}
                       onClick={() => runAction(onApprovals || onRequests)}
                       testId="sidebar-approvals"
@@ -444,6 +447,19 @@ export function AppShell({
           {hasContext && contextSummary && <div className="app-shell__context-topbar"><div className="app-shell__context-summary">{contextSummary}</div></div>}
           <div className="app-shell__topbar-spacer" />
           <div className="app-shell__topbar-controls">
+            {!isEmployee && typeof pendingRequestsCount === 'number' && pendingRequestsCount > 0 && (onApprovals || onRequests) && (
+              <button
+                type="button"
+                className="app-shell__topbar-requests"
+                onClick={() => runAction(onApprovals || onRequests)}
+                title={t('approvalInbox.count', { count: pendingRequestsCount })}
+                aria-label={t('approvalInbox.count', { count: pendingRequestsCount })}
+                data-testid="topbar-pending-requests"
+              >
+                <FileCog size={16} aria-hidden="true" />
+                <span className="app-shell__topbar-requests-badge">{pendingRequestsCount}</span>
+              </button>
+            )}
             {themeControl}
             {languageControl}
             <UserMenu userName={userName} userRole={userRole} onSignIn={onSignIn} onLogout={onLogout} />

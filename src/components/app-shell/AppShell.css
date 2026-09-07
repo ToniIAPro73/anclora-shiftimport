@@ -113,6 +113,10 @@
 .app-shell__topbar-spacer { flex: 1; }
 .app-shell__topbar-controls { display: flex; align-items: center; gap: 8px; }
 .app-shell__topbar-controls > .theme-toggle { min-height: 38px; }
+.app-shell__topbar-requests { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--amber-border, rgba(245, 158, 11, 0.4)); background: var(--amber-subtle, rgba(245, 158, 11, 0.12)); color: #b45309; font-size: 0.78rem; font-weight: 700; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; }
+.app-shell__topbar-requests:hover { background: rgba(245, 158, 11, 0.22); transform: none; }
+[data-theme='dark'] .app-shell__topbar-requests { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+.app-shell__topbar-requests-badge { display: inline-block; min-width: 18px; text-align: center; }
 .app-shell__user { position: relative; }
 .app-shell__user-trigger { display: flex; align-items: center; gap: 9px; min-height: 40px; padding: 4px 7px 4px 5px; border: 1px solid transparent; border-radius: 12px; color: var(--text-primary); }
 .app-shell__user-trigger:hover,

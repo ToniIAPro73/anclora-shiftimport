@@ -223,6 +223,35 @@ describe('AppShell', () => {
     expect(screen.queryByText('Gestión')).not.toBeInTheDocument();
     expect(screen.queryByText('Configuración')).not.toBeInTheDocument();
   });
+
+  it('renders pending requests counter badge in sidebar and topbar for managers', () => {
+    const onApprovals = vi.fn();
+    render(
+      <I18nProvider>
+        <AppShell
+          role="ADMIN"
+          userName="Bob"
+          activeSection="calendar"
+          themeControl={null}
+          languageControl={null}
+          onApprovals={onApprovals}
+          pendingRequestsCount={3}
+        >
+          <h1>Content</h1>
+        </AppShell>
+      </I18nProvider>,
+    );
+
+    // Sidebar badge
+    const sidebarApprovals = screen.getByTestId('sidebar-approvals');
+    expect(sidebarApprovals).toHaveTextContent('3');
+
+    // Topbar counter button
+    const topbarCounter = screen.getByTestId('topbar-pending-requests');
+    expect(topbarCounter).toHaveTextContent('3');
+    fireEvent.click(topbarCounter);
+    expect(onApprovals).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('CalendarToolbar', () => {

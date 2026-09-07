@@ -29,6 +29,7 @@ import {
   createRemoteImport,
   updateRemoteImportOutcome,
   listRemoteAreas,
+  listRemoteApprovalRequests,
   listRemoteEmployees,
   listRemoteScheduleVersions,
   loadRemoteShifts,
@@ -215,6 +216,7 @@ function App() {
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
   const [isEmployeeRequestsOpen, setIsEmployeeRequestsOpen] = useState(false);
   const [employeeRequestView, setEmployeeRequestView] = useState<RequestView>('list');
   const [isNewEmployeeRequestOpen, setIsNewEmployeeRequestOpen] = useState(false);
@@ -761,6 +763,13 @@ function App() {
           setEditableScheduleDates(dates);
         } catch {
           // ignore schedule version refresh errors
+        }
+
+        try {
+          const reqs = await listRemoteApprovalRequests();
+          setPendingApprovalsCount(reqs.length);
+        } catch {
+          // ignore pending approvals refresh errors
         }
       }
     } catch (error) {
@@ -1897,6 +1906,7 @@ function App() {
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
           onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+          pendingRequestsCount={pendingApprovalsCount}
           onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
@@ -1933,6 +1943,7 @@ function App() {
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
           onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+          pendingRequestsCount={pendingApprovalsCount}
           onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
           onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
           onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
@@ -1998,6 +2009,7 @@ function App() {
       onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
       onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
       onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+      pendingRequestsCount={pendingApprovalsCount}
       onTeam={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsEquipoOpen(true); } : undefined}
       onMembers={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsMembersOpen(true); } : undefined}
       onAreas={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsAreasOpen(true); } : undefined}
@@ -2111,6 +2123,8 @@ function App() {
       <ApprovalInboxModal
         isOpen={isApprovalsOpen && !isImporting}
         onClose={() => { setIsApprovalsOpen(false); void refreshCalendarData(); }}
+        currentEmployeeId={session?.employeeId}
+        currentUserId={session?.user?.id}
       />
 
       {session?.role === 'EMPLOYEE' && session.employeeId && (

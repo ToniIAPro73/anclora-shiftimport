@@ -1,14 +1,19 @@
-import { RotateCcw } from 'lucide-react';
+import { AlertCircle, RotateCcw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ApprovalRequest, approveRemoteApprovalRequest, listRemoteApprovalRequests, rejectRemoteApprovalRequest } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
+
+export interface ApprovalInboxProps {
+  currentEmployeeId?: string | null;
+  currentUserId?: string | null;
+}
 
 type InboxState =
   | { status: 'loading'; requests: ApprovalRequest[] }
   | { status: 'ready'; requests: ApprovalRequest[] }
   | { status: 'error'; requests: ApprovalRequest[] };
 
-export function ApprovalInbox() {
+export function ApprovalInbox({ currentEmployeeId }: ApprovalInboxProps = {}) {
   const { t } = useI18n();
   const [state, setState] = useState<InboxState>({ status: 'loading', requests: [] });
   const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -39,6 +44,18 @@ export function ApprovalInbox() {
     }
   }, []);
 
+  const isSelfForbiddenError = (error: unknown, status: number): boolean => {
+    if (status === 403) return true;
+    if (typeof error === 'object' && error !== null) {
+      const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
+      const message = 'message' in error ? String((error as { message?: unknown }).message) : '';
+      if (code === 'self_approval_forbidden' || message.includes('self_approval_forbidden') || message.includes('own request')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const handleApprove = async (request: ApprovalRequest) => {
     if (approvingId || rejectingRequestId) return;
     setApprovingId(request.id);
@@ -53,9 +70,13 @@ export function ApprovalInbox() {
       const status = typeof error === 'object' && error !== null && 'status' in error
         ? Number(error.status)
         : 0;
-      setApprovalError(status === 409
-        ? conflictMessage(error)
-        : t('approvalInbox.approveError'));
+      setApprovalError(
+        status === 409
+          ? conflictMessage(error)
+          : isSelfForbiddenError(error, status)
+            ? t('approvalInbox.selfApprovalForbidden')
+            : t('approvalInbox.approveError'),
+      );
       if (status === 409) void load();
     } finally {
       setApprovingId(null);
@@ -97,11 +118,15 @@ export function ApprovalInbox() {
       const status = typeof error === 'object' && error !== null && 'status' in error
         ? Number(error.status)
         : 0;
-      setRejectionError(status === 409
-        ? conflictMessage(error)
-        : status === 400
-          ? t('approvalInbox.rejectError')
-          : t('approvalInbox.rejectError'));
+      setRejectionError(
+        status === 409
+          ? conflictMessage(error)
+          : isSelfForbiddenError(error, status)
+            ? t('approvalInbox.selfApprovalForbidden')
+            : status === 400
+              ? t('approvalInbox.rejectError')
+              : t('approvalInbox.rejectError'),
+      );
       if (status === 409) void load();
     } finally {
       setRejectingRequestId(null);
@@ -157,6 +182,7 @@ export function ApprovalInbox() {
             const requestType = request.requestType === 'TIME_CHANGE'
               ? t('approvalInbox.timeChange')
               : t('approvalInbox.other');
+            const isSelfRequest = Boolean(currentEmployeeId && request.employeeId === currentEmployeeId);
             return (
               <li className="approval-inbox__item" key={request.id}>
                 <article>
@@ -176,20 +202,30 @@ export function ApprovalInbox() {
                     <div><dt>{t('approvalInbox.reason')}</dt><dd>{request.reason}</dd></div>
                   </dl>
                   <p className="approval-inbox__location">{request.shiftLocation || t('approvalInbox.noLocation')}</p>
+                  {isSelfRequest && (
+                    <div className="approval-inbox__self-warning" role="note" data-testid={`self-approval-warning-${request.id}`}>
+                      <AlertCircle size={15} aria-hidden="true" />
+                      <span>{t('approvalInbox.selfApprovalForbidden')}</span>
+                    </div>
+                  )}
                   <div className="approval-inbox__actions">
                     <button
                       type="button"
                       className="approval-inbox__approve"
-                      disabled={Boolean(approvingId || rejectingRequestId)}
+                      disabled={isSelfRequest || Boolean(approvingId || rejectingRequestId)}
+                      title={isSelfRequest ? t('approvalInbox.selfApprovalForbidden') : undefined}
                       onClick={() => void handleApprove(request)}
+                      data-testid={`approve-btn-${request.id}`}
                     >
                       {approvingId === request.id ? t('approvalInbox.approving') : t('approvalInbox.approve')}
                     </button>
                     <button
                       type="button"
                       className="approval-inbox__reject-trigger"
-                      disabled={Boolean(approvingId || rejectingRequestId)}
+                      disabled={isSelfRequest || Boolean(approvingId || rejectingRequestId)}
+                      title={isSelfRequest ? t('approvalInbox.selfApprovalForbidden') : undefined}
                       onClick={() => openRejectForm(request.id)}
+                      data-testid={`reject-btn-${request.id}`}
                     >
                       {t('approvalInbox.reject')}
                     </button>
