@@ -2156,7 +2156,7 @@ function App() {
             const self = employees.find((employee) => employee.id === session.employeeId);
             return self ? { name: self.name, externalId: self.externalEmployeeId ?? '' } : null;
           })()}
-          identityLocked={Boolean(session)}
+          identityLocked={session?.role === 'EMPLOYEE'}
           userId={session?.user.id ?? null}
           organizationId={session?.organizationId ?? null}
           isAuthenticated={Boolean(session)}

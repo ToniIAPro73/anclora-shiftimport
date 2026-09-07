@@ -29,6 +29,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
 import { classifyImportChanges } from '../../lib/import-dedup';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
+import { AssistantAnswers, buildProfileFromTokenMeanings, buildCodeOverridesFromAnswers } from '../../ingestion/assistant';
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { RemoteArea } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
@@ -67,7 +68,7 @@ interface ImportModalProps {
   /** Authenticated mode: employee selected in the team bar. Prefills the
    * identity fields so the parser targets that person's row. */
   employeePreset?: { name: string; externalId: string } | null;
-  /** EMPLOYEE role (or any authenticated session): identity comes from the
+  /** EMPLOYEE role: identity comes from the
    * account, not free text — Name/ID become read-only context, never a
    * selector the user can retype to import as someone else. */
   identityLocked?: boolean;
@@ -477,7 +478,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     };
   }, [employeeName, employeeId, userId]);
 
-  const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext) => {
+  const runAnalysis = useCallback(async (target: File, contextOverride?: CalendarImportContext, xlsxStyleMappings?: Map<string, import('../../ingestion/core/shift-code-profile').ShiftCodeMapping>) => {
     setLoading(true);
     setErrorDiagnosis(null);
     setAuthError(false);
@@ -583,7 +584,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       const result = await analyzeDocumentFile(target, buildSelector(), profilesHint, effectiveContext, {
         onStage: () => setVlmStage('analyzing'),
         signal: vlmAbort.signal,
-      });
+      }, { styleMappings: xlsxStyleMappings });
       if (vlmAbort.signal.aborted) {
         return; // reset/closed while analyzing: leave the cleared state alone
       }
@@ -754,6 +755,31 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setAssistantDismissed(true);
   };
 
+  const handleStyleAssistantComplete = async (answers: AssistantAnswers) => {
+    if (!file || analysis?.kind !== 'excel') return;
+    const profile = buildProfileFromTokenMeanings(answers.tokenMeanings);
+    try {
+      await formatProfileStore.saveCandidate({
+        displayName: profile.label,
+        sourceType: 'tabular',
+        signature: profile.signature,
+        tokenAliases: profile.tokenAliases,
+        codeTimes: profile.codeTimes ?? {},
+        offTokens: profile.offTokens,
+        employeeRowStrategy: profile.employeeRow.strategy,
+        employeeRowIndex: profile.employeeRow.rowIndex ?? null,
+        dayColumnMap: profile.dayColumnMap ?? null,
+        tabularMemory: profile.tabular ?? null,
+        parserConfig: profile.parserParams,
+      });
+    } catch (error) {
+      console.error('[ImportModal] Format Memory: XLSX style save failed', error);
+      setFormatMemoryWarning('SAVE_FAILED');
+    }
+    setAssistantDismissed(true);
+    await runAnalysis(file, selectedContext, buildCodeOverridesFromAnswers(answers));
+  };
+
   // MONTH_MISMATCH recovery: the user explicitly picks the document's period.
   const handleUseDetectedPeriod = async () => {
     const detected = analysis?.detectedContext;
@@ -906,7 +932,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   // remains in the same analysis. The assistant must not disappear in that
   // case: it is the existing path that applies tokenAliases/offTokens/codeTimes.
   const showAssistant = !assistantDismissed
-    && assistantSession !== null
+    && (assistantSession !== null || (analysis?.kind === 'excel' && analysis.questions.length > 0))
     && analysis !== null
     && analysis.questions.length > 0
     && (diagnosis?.recovery.strategy === 'answer-question'
@@ -1317,12 +1343,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               <div style={{ overflowY: 'auto', minHeight: 0 }}>
                 <ProfileAssistantPanel
                   questions={analysis.questions}
-                  items={assistantSession.items}
+                  items={assistantSession?.items ?? []}
                   context={analysis.context}
-                  analysis={analysis.structure !== null ? assistantSession.itemAnalysis : null}
+                  analysis={analysis.structure !== null && assistantSession ? assistantSession.itemAnalysis : null}
                   table={analysis.table ?? null}
                   selector={buildSelector()}
                   onComplete={handleAssistantComplete}
+                  styleOnly={analysis.kind === 'excel' && analysis.structure === null && analysis.questions.length > 0}
+                  onStyleComplete={handleStyleAssistantComplete}
                   onCancel={() => setAssistantDismissed(true)}
                   store={formatProfileStore}
                   onSaveCandidateError={() => setFormatMemoryWarning('SAVE_FAILED')}

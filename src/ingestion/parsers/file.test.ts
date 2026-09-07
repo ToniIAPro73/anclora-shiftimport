@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { mergeShiftTypeOverrides, SHIFT_TYPE_PRESET_EXAMPLE } from '../../lib/shift-types';
+import { codeOverridesFromLearning } from '../core/shift-code-profile';
 import { ParsedCalendarShift } from '../../lib/import-types';
 import {
   cellPositionToItem,
@@ -230,8 +231,32 @@ describe('analyzeDocumentFile — positional XLSX regression', () => {
     expect(result.coveredPeriods).toHaveLength(9);
     expect(result.coveredPeriods?.[0]).toEqual({ month: 0, year: 2026 });
     expect(result.coveredPeriods?.[8]).toEqual({ month: 8, year: 2026 });
-    expect(result.quality.warnings).toEqual([]);
+    expect(result.quality.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'UNKNOWN_SHIFT_TOKEN' }),
+    ]));
+    expect(result.questions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'token-meaning', displayToken: 'Color #AEFC04' }),
+      expect.objectContaining({ kind: 'token-meaning', displayToken: 'Color #A9D0F5' }),
+    ]));
     expect(result.shifts.find((shift) => shift.date === '2026-06-16')).toMatchObject({ startTime: '17:00', endTime: '01:00' });
+
+    const classified = await analyzeDocumentFile(
+      file,
+      { employeeName: 'Sebastian Pozo Mendoza', employeeIdentifiers: [] },
+      undefined,
+      { month: 8, year: 2026 },
+      undefined,
+      { styleMappings: codeOverridesFromLearning({
+        tokenAliases: {
+          '__xlsx_style__:AEFC04': 'Vacaciones',
+          '__xlsx_style__:A9D0F5': 'Vacaciones',
+        },
+        offTokens: ['__xlsx_style__:AEFC04', '__xlsx_style__:A9D0F5'],
+      }) },
+    );
+    expect(classified.questions).toEqual([]);
+    expect(classified.shifts.length).toBeGreaterThan(result.shifts.length);
+    expect(classified.shifts.some((shift) => shift.shiftType === 'Vacaciones' && !shift.startTime && !shift.endTime)).toBe(true);
   });
 
   it('reads the changed workbook and keeps all five requested edits', async () => {
@@ -239,7 +264,9 @@ describe('analyzeDocumentFile — positional XLSX regression', () => {
     const file = makeFile('Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx', [buffer], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const result = await analyzeDocumentFile(file, { employeeName: 'Sebastian Pozo Mendoza', employeeIdentifiers: [] }, undefined, { month: 8, year: 2026 });
     expect(result.shifts).toHaveLength(232);
-    expect(result.quality.warnings).toEqual([]);
+    expect(result.quality.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'UNKNOWN_SHIFT_TOKEN' }),
+    ]));
     expect(result.shifts).toEqual(expect.arrayContaining([
       expect.objectContaining({ date: '2026-01-04', startTime: '20:00', endTime: '04:00' }),
       expect.objectContaining({ date: '2026-01-15', startTime: '06:00', endTime: '14:00' }),

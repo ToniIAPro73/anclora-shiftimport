@@ -43,7 +43,8 @@ import { extractPdfTextItems } from './pdf';
 import { resolveShiftTypeId } from '../../lib/shift-types';
 import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
 import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
-import { loadXlsxWorksheets, parseXlsxTeamWorkbook } from '../adapters/xlsx-workbook';
+import { loadXlsxWorksheets, parseXlsxTeamWorkbook, XLSX_STYLE_TOKEN_PREFIX } from '../adapters/xlsx-workbook';
+import { codeOverridesFromLearning, ShiftCodeMapping } from '../core/shift-code-profile';
 
 // The canonical alias table lives in ../tabular-assistant (shared with the
 // tabular assistant fallback); re-exported here for API compatibility.
@@ -562,6 +563,10 @@ export interface DocumentAnalysisResult {
   vlmError?: { code: VlmErrorCode };
 }
 
+export interface XlsxStyleImportOptions {
+  styleMappings?: Map<string, ShiftCodeMapping>;
+}
+
 /** Hooks the UI passes to observe/control the VLM fallback stage. */
 export interface VlmFallbackHooks {
   onStage?: (stage: 'analyzing') => void;
@@ -894,6 +899,7 @@ export async function analyzeDocumentFile(
   savedProfilesHint?: UserFormatProfile[],
   contextOverride?: CalendarImportContext,
   vlm?: VlmFallbackHooks,
+  xlsxOptions?: XlsxStyleImportOptions,
 ): Promise<DocumentAnalysisResult> {
   const kind = classifyDocument(file);
   if (kind === 'unknown' || kind === 'text') {
@@ -940,7 +946,29 @@ export async function analyzeDocumentFile(
   }
 
   if (kind === 'excel') {
-    const workbook = await parseXlsxTeamWorkbook(file);
+    const learnedStyleAliases = (savedProfilesHint ?? []).reduce<Record<string, string>>((aliases, profile) => {
+      for (const [token, typeId] of Object.entries(profile.tokenAliases)) {
+        if (token.startsWith(XLSX_STYLE_TOKEN_PREFIX)) aliases[token] = typeId;
+      }
+      return aliases;
+    }, {});
+    const learnedStyleOffTokens = (savedProfilesHint ?? [])
+      .flatMap((profile) => profile.offTokens)
+      .filter((token) => token.startsWith(XLSX_STYLE_TOKEN_PREFIX));
+    const learnedStyleCodeTimes = (savedProfilesHint ?? []).reduce<Record<string, { startTime: string; endTime: string }>>((times, profile) => {
+      for (const [token, value] of Object.entries(profile.codeTimes ?? {})) {
+        if (token.startsWith(XLSX_STYLE_TOKEN_PREFIX)) times[token] = value;
+      }
+      return times;
+    }, {});
+    const learnedStyleMappings = codeOverridesFromLearning({
+      tokenAliases: learnedStyleAliases,
+      offTokens: learnedStyleOffTokens,
+      codeTimes: learnedStyleCodeTimes,
+    });
+    const workbook = await parseXlsxTeamWorkbook(file, {
+      styleMappings: xlsxOptions?.styleMappings ?? learnedStyleMappings,
+    });
     if (workbook.employees.length === 0) {
       // Zero recognizable employees is semantic uncertainty over a
       // successfully-read workbook, not a technical failure: return a
@@ -981,6 +1009,14 @@ export async function analyzeDocumentFile(
     ).values()];
     const detectedContext = periods[0] ?? contextOverride ?? { month: 0, year: new Date().getFullYear() };
     const context = contextOverride ?? detectedContext;
+    const unresolvedTokens = workbook.unresolvedTokens ?? [];
+    const questions: AssistantQuestion[] = unresolvedTokens.map((token) => ({
+      kind: 'token-meaning' as const,
+      token,
+      displayToken: token.startsWith(XLSX_STYLE_TOKEN_PREFIX)
+        ? `Color #${token.slice(XLSX_STYLE_TOKEN_PREFIX.length)}`
+        : token,
+    }));
     const quality = computeImportResult(shifts, {
       knownProfileMatched: false,
       profileDrift: false,
@@ -990,7 +1026,7 @@ export async function analyzeDocumentFile(
       mappedDays: shifts.length,
       totalTokens: shifts.length,
       recognizedTokens: shifts.length,
-      unknownTokens: [],
+      unknownTokens: unresolvedTokens,
       invalidTimes: 0,
       incompleteAssignments: 0,
     });
@@ -1000,8 +1036,8 @@ export async function analyzeDocumentFile(
       shifts,
       quality: { ...quality, shifts },
       structure: null,
-      questions: [],
       detectedContext,
+      questions,
       ...(periods.length > 1 ? { coveredPeriods: periods } : {}),
     };
   }

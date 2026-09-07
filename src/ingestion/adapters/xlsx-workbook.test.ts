@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { parseXlsxTeamWorkbook } from './xlsx-workbook';
+import { codeOverridesFromLearning } from '../core/shift-code-profile';
 
 async function workbookFile(name: string, build: (wb: ExcelJS.Workbook) => void): Promise<File> {
   const wb = new ExcelJS.Workbook();
@@ -223,6 +224,51 @@ describe('parseXlsxTeamWorkbook', () => {
     ]);
     expect(result.diagnostics.some((diagnostic) => diagnostic.sourceRef === 'Leyenda')).toBe(true);
     expect(result.diagnostics.some((diagnostic) => diagnostic.code === 'UNKNOWN_SHIFT_CODES')).toBe(false);
+    expect(result.unresolvedTokens).toEqual(expect.arrayContaining([
+      '__xlsx_style__:AEFC04',
+      '__xlsx_style__:A9D0F5',
+    ]));
+  });
+
+  it('preserves meaningful blank-cell fills for the existing assistant instead of discarding them', async () => {
+    const file = await workbookFile('styled-calendar.xlsx', (wb) => {
+      const sheet = wb.addWorksheet('Calendario empleado');
+      sheet.addRow(['Ana Calendario 2026']);
+      sheet.addRow([null, 1, 2]);
+      sheet.addRow(['Enero', '06:00\n14:00', null]);
+      sheet.getCell('C3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFAEFC04' } };
+    });
+    const unresolved = await parseXlsxTeamWorkbook(file);
+    expect(unresolved.employees[0]?.shifts).toHaveLength(1);
+    expect(unresolved.unresolvedTokens).toEqual(['__xlsx_style__:AEFC04']);
+
+    const styleMappings = codeOverridesFromLearning({
+      tokenAliases: { '__xlsx_style__:AEFC04': 'Vacaciones' },
+      offTokens: ['__xlsx_style__:AEFC04'],
+    });
+    const resolved = await parseXlsxTeamWorkbook(file, { styleMappings });
+    expect(resolved.unresolvedTokens).toEqual([]);
+    expect(resolved.employees[0]?.shifts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ shiftType: 'Vacaciones', startTime: '', endTime: '' }),
+    ]));
+  });
+
+  it('reuses learned mappings for unknown textual codes on the same canonical rerun', async () => {
+    const file = await workbookFile('unknown-code-calendar.xlsx', (wb) => {
+      const sheet = wb.addWorksheet('Calendario empleado');
+      sheet.addRow(['Ana Calendario 2026']);
+      sheet.addRow([null, 1]);
+      sheet.addRow(['Enero', 'VACX']);
+    });
+    const unresolved = await parseXlsxTeamWorkbook(file);
+    expect(unresolved.unresolvedTokens).toEqual(['VACX']);
+
+    const mappings = codeOverridesFromLearning({ tokenAliases: { VACX: 'Vacaciones' }, offTokens: ['VACX'] });
+    const resolved = await parseXlsxTeamWorkbook(file, { styleMappings: mappings });
+    expect(resolved.unresolvedTokens).toEqual([]);
+    expect(resolved.employees[0]?.shifts).toEqual([
+      expect.objectContaining({ shiftType: 'Vacaciones', startTime: '', endTime: '' }),
+    ]);
   });
 
   it('regression: modified positional fixture retains both sheets and five changed values', async () => {

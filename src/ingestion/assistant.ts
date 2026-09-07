@@ -14,7 +14,7 @@
  * - tokenAliases/offTokens contain document TOKENS the user classified,
  *   never person names or employee ids.
  */
-import { FORMAT_PROFILE_VERSION, UserFormatProfile } from '../lib/format-profiles';
+import { computeLayoutSignature, FORMAT_PROFILE_VERSION, UserFormatProfile } from '../lib/format-profiles';
 import { CalendarImportContext, ParsedCalendarShift, PdfDocumentType } from '../lib/import-types';
 import { mergeShiftTypeOverrides, ShiftTypeOverrides } from '../lib/shift-types';
 import { getDaysInMonth } from '../lib/week';
@@ -38,7 +38,7 @@ import { DayMappingDiagnostic, ItemAnalysis } from './analysis';
 export type AssistantQuestion =
   | { kind: 'row-selection'; candidates: EmployeeRowCandidate[] }
   | { kind: 'day-mapping'; columnIndex: number; sampleTokens: string[]; proposedDay: number }
-  | { kind: 'token-meaning'; token: string }
+  | { kind: 'token-meaning'; token: string; displayToken?: string }
   | { kind: 'shift-code'; code: string };
 
 export interface EmployeeRowCandidate {
@@ -57,7 +57,7 @@ export interface AssistantAnswers {
    */
   dayMapping?: { confirmed: boolean; correctedDay?: number };
   tokenMeanings: Record<string, {
-    kind: 'work' | 'rest';
+    kind: 'work' | 'rest' | 'ignore';
     shiftTypeId?: string;
     startTime?: string;
     endTime?: string;
@@ -289,7 +289,7 @@ export function buildProfileFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') {
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -336,6 +336,48 @@ export function buildProfileFromAnswers(
       columnMatchMaxDistance: detected?.columnMatchMaxDistance ?? 0,
     },
     ...(dayColumnMap ? { dayColumnMap } : {}),
+    createdAt: now,
+    updatedAt: now,
+    useCount: 0,
+  };
+}
+
+/** Builds the existing format-memory profile shape for structured adapter
+ * classifications (for example XLSX fill/style questions) that do not have
+ * positioned PDF items to re-parse. */
+export function buildProfileFromTokenMeanings(
+  tokenMeanings: AssistantAnswers['tokenMeanings'],
+  label = 'Formato XLSX',
+): UserFormatProfile {
+  const tokenAliases: Record<string, string> = {};
+  const codeTimes: Record<string, { startTime: string; endTime: string }> = {};
+  const offTokens: string[] = [];
+  for (const [token, meaning] of Object.entries(tokenMeanings)) {
+    const trimmed = token.trim();
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') continue;
+    tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
+    if (meaning.kind === 'rest') offTokens.push(trimmed);
+    if (meaning.kind === 'work' && meaning.startTime && meaning.endTime) {
+      codeTimes[trimmed] = { startTime: meaning.startTime, endTime: meaning.endTime };
+    }
+  }
+  const now = new Date().toISOString();
+  return {
+    profileVersion: FORMAT_PROFILE_VERSION,
+    id: generateProfileId(),
+    label,
+    signature: computeLayoutSignature({
+      documentType: 'UNKNOWN',
+      dayHeaderCount: 0,
+      columnCount: 0,
+      hasLegend: false,
+      structureTokens: Object.keys(tokenAliases),
+    }),
+    tokenAliases,
+    offTokens,
+    ...(Object.keys(codeTimes).length > 0 ? { codeTimes } : {}),
+    employeeRow: { strategy: 'name' },
+    parserParams: { clusterTolerance: 0, columnMatchMaxDistance: 0 },
     createdAt: now,
     updatedAt: now,
     useCount: 0,
@@ -495,7 +537,7 @@ export function buildCodeOverridesFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') {
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');

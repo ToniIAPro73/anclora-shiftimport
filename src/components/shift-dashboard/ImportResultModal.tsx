@@ -109,6 +109,7 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
                 totalRows: Number(outcomeReport.outcomeDetail.totalRows ?? outcomeReport.attemptedCount),
                 ownRows: Number(outcomeReport.outcomeDetail.ownRows ?? outcomeReport.attemptedCount),
                 ignoredRows: Number(outcomeReport.outcomeDetail.ignoredRows ?? 0),
+                unidentifiedRows: Number(outcomeReport.outcomeDetail.unidentifiedRows ?? 0),
                 futureRows: Number(outcomeReport.outcomeDetail.futureOwnRows ?? outcomeReport.outcomeDetail.futureRows ?? 0),
               })}
             </p>

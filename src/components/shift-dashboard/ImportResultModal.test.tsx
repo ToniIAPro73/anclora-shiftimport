@@ -98,5 +98,6 @@ describe('ImportResultModal', () => {
     const dialog = screen.getAllByRole('dialog').at(-1) as HTMLElement;
     expect(within(dialog).getByText(/8 filas detectadas: 8 propias/)).toBeTruthy();
     expect(within(dialog).getByText(/Las fechas futuras no se importan/)).toBeTruthy();
+    expect(dialog.textContent).not.toContain('{{unidentifiedRows}}');
   });
 });

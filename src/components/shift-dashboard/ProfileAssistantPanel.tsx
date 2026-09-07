@@ -77,6 +77,8 @@ interface ProfileAssistantPanelProps {
    * never silent, see AGENTS.md "Reglas para cambios").
    */
   onSaveCandidateError?: () => void;
+  styleOnly?: boolean;
+  onStyleComplete?: (answers: AssistantAnswers) => void;
 }
 
 type TokenMeaning = AssistantAnswers['tokenMeanings'][string];
@@ -100,6 +102,8 @@ export const ProfileAssistantPanel = ({
   onCancel,
   store = DEFAULT_LOCAL_STORE,
   onSaveCandidateError,
+  styleOnly = false,
+  onStyleComplete,
 }: ProfileAssistantPanelProps) => {
   const { locale, t } = useI18n();
   const [selectedRow, setSelectedRow] = useState<EmployeeRowCandidate | null>(null);
@@ -153,6 +157,11 @@ export const ProfileAssistantPanel = ({
     // The just-classified codes apply immediately to the re-parse — no
     // storage round-trip needed for this import to pick them up.
     const codeOverrides = buildCodeOverridesFromAnswers(answers);
+
+    if (styleOnly && onStyleComplete) {
+      onStyleComplete(answers);
+      return;
+    }
 
     // Tabular (CSV) mode: no positioned pipeline — the profile and the
     // re-parse are built directly from the parsed table (PII-free, see
@@ -269,6 +278,9 @@ export const ProfileAssistantPanel = ({
     if (!meaning) {
       return true; // every unknown code must be classified — never dropped silently
     }
+    if (meaning.kind === 'ignore') {
+      return false;
+    }
     // A work code without times could not rebuild its shift on re-parse.
     return meaning.kind === 'work' && (!meaning.startTime || !meaning.endTime);
   });
@@ -328,11 +340,14 @@ export const ProfileAssistantPanel = ({
         const token = question.kind === 'shift-code' ? question.code : question.token;
         const meaning = tokenMeanings[token];
         const titleKey = question.kind === 'shift-code' ? 'assistant.shiftCodeQuestion' : 'assistant.tokenMeaningQuestion';
-        const titleVars: Record<string, string> = question.kind === 'shift-code' ? { code: token } : { token };
+        const titleVars: Record<string, string> = question.kind === 'shift-code'
+          ? { code: token }
+          : { token: question.displayToken ?? token };
         const isRest = meaning?.kind === 'rest' && meaning.shiftTypeId === 'Libre';
         const isVacation = meaning?.kind === 'rest' && meaning.shiftTypeId === 'Vacaciones';
         const isOther = meaning?.kind === 'rest' && meaning.shiftTypeId === undefined;
-        const showTypeSelect = meaning?.kind === 'work' || isOther;
+        const isIgnored = meaning?.kind === 'ignore';
+        const showTypeSelect = (meaning?.kind === 'work' || isOther) && !isIgnored;
         const missingTimes = meaning?.kind === 'work' && (!meaning.startTime || !meaning.endTime);
         return (
           <div key={`${question.kind}-${token}`} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -369,6 +384,14 @@ export const ProfileAssistantPanel = ({
                 onClick={() => setTokenMeaning(token, { kind: 'rest', shiftTypeId: undefined, startTime: undefined, endTime: undefined })}
               >
                 {t('assistant.otherOption')}
+              </button>
+              <button
+                type="button"
+                className={isIgnored ? 'btn-gold' : 'btn-outline'}
+                style={segmentedButtonStyle(isIgnored)}
+                onClick={() => setTokenMeaning(token, { kind: 'ignore', shiftTypeId: undefined, startTime: undefined, endTime: undefined })}
+              >
+                {t('assistant.ignoreOption')}
               </button>
             </div>
             {showTypeSelect && (

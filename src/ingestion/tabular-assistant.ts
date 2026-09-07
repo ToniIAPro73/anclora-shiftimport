@@ -496,7 +496,7 @@ export function buildTabularProfileFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') {
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -586,6 +586,9 @@ function buildTabularCellShifts(
 
     const meaning = tokenMeanings[cell];
     if (meaning) {
+      if (meaning.kind === 'ignore') {
+        continue;
+      }
       if (meaning.kind === 'rest') {
         shifts.push(untimedShift(date, meaning.shiftTypeId ?? 'Libre', cell));
       } else if (meaning.startTime && meaning.endTime) {
