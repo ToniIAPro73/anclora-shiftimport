@@ -758,7 +758,7 @@ describe('MembersModal — bulk access management (Fase 3/4/6/7/8)', () => {
       renderMembersModal([], () => {}, [], 'team', 'u-owner');
 
       await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
-      expect(screen.getByText('owner@example.com')).toBeTruthy();
+      expect(screen.getByText(/owner@example\.com/)).toBeTruthy();
       expect(screen.getByText('Propietario')).toBeTruthy();
       expect(screen.getByTestId('members-transfer-ownership-button')).toBeTruthy();
     });
@@ -771,7 +771,7 @@ describe('MembersModal — bulk access management (Fase 3/4/6/7/8)', () => {
       renderMembersModal([], () => {}, [], 'team', 'user-admin');
 
       await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
-      expect(screen.getByText('owner@example.com')).toBeTruthy();
+      expect(screen.getByText(/owner@example\.com/)).toBeTruthy();
       expect(screen.queryByTestId('members-transfer-ownership-button')).toBeNull();
     });
   });

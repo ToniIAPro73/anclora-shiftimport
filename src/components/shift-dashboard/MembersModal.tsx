@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
 import {
   addRemoteMember,
@@ -312,7 +312,19 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
     }
   }, [t]);
 
-  const transferCandidates = members.filter((m) => m.userId !== currentUserId);
+  const currentMember = useMemo(() => {
+    return members.find((m) => m.userId === currentUserId);
+  }, [members, currentUserId]);
+
+  const isOwner = currentMember?.role === 'OWNER';
+
+  const currentOwner = useMemo(() => {
+    return members.find((m) => m.role === 'OWNER');
+  }, [members]);
+
+  const transferCandidates = useMemo(() => {
+    return members.filter((m) => m.userId !== currentUserId && m.role !== 'OWNER');
+  }, [members, currentUserId]);
 
   const handleTransferOwnership = async () => {
     if (!transferTargetUserId || !transferConfirmed) return;
@@ -1166,7 +1178,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                         style={{ width: 'auto', flex: '0 0 auto' }}
                       />
                     )}
-                    {member.role === 'OWNER' && member.userId === currentUserId && (
+                    {member.role === 'OWNER' && isOwner && member.userId === currentUserId && (
                       <button
                         type="button"
                         className="btn-outline"
@@ -1773,7 +1785,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       onCancel={() => setConfirmation(null)}
       onConfirm={() => confirmation?.onConfirm()}
     />
-    {isTransferOpen && (
+    {isTransferOpen && isOwner && (
       <ModalShell
         isOpen={isTransferOpen}
         onClose={() => setIsTransferOpen(false)}
@@ -1787,6 +1799,21 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
               {t('teamWorkspace.transferOwnershipWarning')}
             </p>
+          </div>
+
+          <div style={{
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            fontSize: '0.85rem',
+            border: '1px solid var(--border-subtle, rgba(255, 255, 255, 0.08))',
+            borderRadius: '6px',
+            background: 'var(--bg-surface, rgba(255, 255, 255, 0.03))',
+            color: 'var(--text-primary)',
+          }}>
+            <div><strong>{t('teamWorkspace.currentOwnerLabel')}:</strong> {currentOwner?.displayName || currentOwner?.email || 'Tú'} ({currentOwner?.email})</div>
+            <div style={{ color: 'var(--text-muted)' }}>Esta acción es transaccional y cederá el control total de la organización.</div>
           </div>
 
           {transferSuccessMsg && (

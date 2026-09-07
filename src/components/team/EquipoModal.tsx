@@ -227,9 +227,9 @@ export function EquipoModal({
     });
   }, [personas, search, filterAccess, filterRole, filterArea, filterStatus]);
 
-  // Candidate members for ownership transfer (active members excluding current user)
+  // Candidate members for ownership transfer (active members excluding current user and existing owners)
   const transferCandidates = useMemo(() => {
-    return members.filter((m) => m.userId !== currentUserId);
+    return members.filter((m) => m.userId !== currentUserId && m.role !== 'OWNER');
   }, [members, currentUserId]);
 
   // Tab 4: Planner selection sync
@@ -327,7 +327,16 @@ export function EquipoModal({
     }
   };
 
-  const isOwner = currentUserRole === 'OWNER';
+  const currentMember = useMemo(() => {
+    return members.find((m) => m.userId === currentUserId);
+  }, [members, currentUserId]);
+
+  const effectiveRole = currentMember ? currentMember.role : currentUserRole;
+  const isOwner = effectiveRole === 'OWNER';
+
+  const currentOwner = useMemo(() => {
+    return members.find((m) => m.role === 'OWNER');
+  }, [members]);
 
   // Handle Wizard Submit
   const handleCreatePersona = async () => {
@@ -1843,8 +1852,8 @@ export function EquipoModal({
           </ModalShell>
         )}
 
-        {/* OWNERSHIP TRANSFER MODAL */}
-        {isTransferOpen && (
+        {/* OWNERSHIP TRANSFER MODAL (Restricted strictly to the active OWNER) */}
+        {isTransferOpen && isOwner && (
           <ModalShell
             isOpen={isTransferOpen}
             onClose={() => setIsTransferOpen(false)}
@@ -1863,6 +1872,17 @@ export function EquipoModal({
                     </p>
                   </div>
                 </div>
+              </div>
+
+              <div className="equipo-panel" style={{
+                padding: '12px 14px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '4px',
+                fontSize: '0.85rem',
+              }}>
+                <div><strong>{t('teamWorkspace.currentOwnerLabel')}:</strong> {currentOwner?.displayName || currentOwner?.email || 'Tú'} ({currentOwner?.email})</div>
+                <div style={{ color: 'var(--text-muted)' }}>Esta acción es transaccional y cederá el control total de la organización.</div>
               </div>
 
               {transferSuccessMsg && (

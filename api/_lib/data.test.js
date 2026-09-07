@@ -1340,11 +1340,11 @@ describe('membership management (B2B minimal)', () => {
       .rejects.toMatchObject({ status: 403 });
   });
 
-  it('accepts OWNER and PLANNER as explicit membership roles', async () => {
+  it('accepts PLANNER as explicit membership role and rejects direct OWNER assignment', async () => {
     const fresh = makeFakeSql({ memberships: membershipsFixture(), users: usersFixture() });
-    const owner = await addMember(fresh.sql, adminCtx, { email: 'owner@example.com', role: 'OWNER', password: 'temporal-123' }, fakeHash);
+    await expect(addMember(fresh.sql, adminCtx, { email: 'owner@example.com', role: 'OWNER', password: 'temporal-123' }, fakeHash))
+      .rejects.toMatchObject({ status: 400, code: 'OWNER_NOT_ASSIGNABLE' });
     const planner = await addMember(fresh.sql, adminCtx, { email: 'planner@example.com', role: 'PLANNER', password: 'temporal-123' }, fakeHash);
-    expect(owner.role).toBe('OWNER');
     expect(planner.role).toBe('PLANNER');
   });
 
@@ -1354,7 +1354,7 @@ describe('membership management (B2B minimal)', () => {
       users: usersFixture(),
     });
     await expect(updateMemberRole(singleOwner.sql, adminCtx, { userId: USER_ADMIN, role: 'ADMIN' }))
-      .rejects.toMatchObject({ status: 400, code: 'LAST_OWNER' });
+      .rejects.toMatchObject({ status: 403, code: 'LAST_OWNER' });
     await expect(updateMemberRole(singleOwner.sql, employeeCtx, { userId: USER_ADMIN, role: 'EMPLOYEE' }))
       .rejects.toMatchObject({ status: 403 });
   });
@@ -1368,7 +1368,7 @@ describe('membership management (B2B minimal)', () => {
       users: usersFixture(),
     });
     await expect(updateMemberRole(withOwner.sql, adminCtx, { userId: 'user-emp', role: 'OWNER' }))
-      .rejects.toMatchObject({ status: 400, code: 'OWNER_EXISTS' });
+      .rejects.toMatchObject({ status: 400, code: 'OWNER_NOT_ASSIGNABLE' });
   });
 
   it('the last ADMIN cannot be demoted or removed; self-removal blocked', async () => {

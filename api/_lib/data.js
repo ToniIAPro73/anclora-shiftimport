@@ -1008,9 +1008,9 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
   if (!email || !VALID_ROLES.includes(role)) {
     throw new HttpError(400, 'Valid email and role are required');
   }
-  if (role === 'OWNER' && (await countOrgOwners(sql, ctx.organizationId)) >= 1) {
-    const error = new HttpError(400, 'The organization already has an OWNER. Ownership changes must use transfer-ownership.');
-    error.code = 'OWNER_EXISTS';
+  if (role === 'OWNER') {
+    const error = new HttpError(400, 'The OWNER role cannot be assigned directly. Ownership changes must use transfer-ownership.');
+    error.code = 'OWNER_NOT_ASSIGNABLE';
     throw error;
   }
 
@@ -1379,18 +1379,15 @@ export async function updateMemberRole(sql, ctx, input) {
   }
   const current = rows[0];
 
-  if (current.role === 'OWNER' && role !== 'OWNER') {
-    const error = new HttpError(400, 'The organization owner cannot be demoted directly. Use transfer-ownership.');
+  if (current.role === 'OWNER') {
+    const error = new HttpError(403, 'The organization OWNER cannot be modified or demoted via role change. Ownership changes must use transfer-ownership.');
     error.code = 'LAST_OWNER';
     throw error;
   }
-  if (current.role !== 'OWNER' && role === 'OWNER') {
-    const error = new HttpError(400, 'The organization already has an OWNER. Ownership changes must use transfer-ownership.');
-    error.code = 'OWNER_EXISTS';
+  if (role === 'OWNER') {
+    const error = new HttpError(400, 'The OWNER role cannot be assigned via role change. Ownership changes must use transfer-ownership.');
+    error.code = 'OWNER_NOT_ASSIGNABLE';
     throw error;
-  }
-  if (ctx.role !== 'OWNER' && current.role === 'OWNER') {
-    throw new HttpError(403, 'Only the organization OWNER can transfer or modify ownership');
   }
 
   // Compatibility guard for any pre-R2-M06 data encountered before the
@@ -2909,6 +2906,9 @@ export async function transferOwnership(sql, ctx, input) {
   `;
   if (targetRows.length === 0) {
     throw new HttpError(404, 'Target member not found in this organization');
+  }
+  if (targetRows[0].role === 'OWNER') {
+    throw new HttpError(400, 'Target member is already an OWNER');
   }
 
   const ownerRows = await sql`
