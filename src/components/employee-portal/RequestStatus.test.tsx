@@ -91,6 +91,18 @@ describe('RequestStatus', () => {
     await waitFor(() => expect(screen.getByTestId('request-status-error')).toBeTruthy());
   });
 
+  it('uses the same associated shift callback from request detail', async () => {
+    const onSelectShift = vi.fn();
+    mockedLoad.mockResolvedValue([request('PENDING', 'request-pending')]);
+    renderStatus(onSelectShift);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Ver turno asociado/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Ver' }));
+    fireEvent.click(screen.getByRole('button', { name: /Ver turno asociado/ }));
+
+    expect(onSelectShift).toHaveBeenCalledWith(shiftId);
+  });
+
   it('shows the approver reason for rejected requests', async () => {
     mockedLoad.mockResolvedValue([request('REJECTED', 'request-rejected', 'Falta cobertura en el turno.')]);
     renderStatus();

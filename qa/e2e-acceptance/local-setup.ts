@@ -99,6 +99,8 @@ export default async function globalSetup() {
 
   const shiftToday = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(now.getDate())}, '09:00', '17:00', 'Portal E2E', 'MAN') RETURNING id`)[0].id;
   const shiftEnglish = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(now.getDate())}, '18:00', '22:00', 'Portal E2E EN', 'MAN') RETURNING id`)[0].id;
+  const associatedShift = (await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, '2026-09-17', '19:00', '03:00', 'Regular', 'MAN') RETURNING id`)[0].id;
+  await sql`INSERT INTO change_requests (organization_id, employee_id, shift_id, request_type, reason, status) VALUES (${orgA}, ${empA1}, ${associatedShift}, 'TIME_CHANGE', 'Cambio de horario', 'PENDING')`;
   // A1: 08:00-16:00; A2 same day 14:00-22:00 (multi-employee coexistence).
   await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(10)}, '08:00', '16:00', 'Regular', 'MAN')`;
   await sql`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin) VALUES (${orgA}, ${empA1}, ${day(12)}, '08:00', '16:00', 'Regular', 'MAN')`;
@@ -135,7 +137,7 @@ export default async function globalSetup() {
   writeFileSync(FIXTURE_PATH, JSON.stringify({
     password: PASSWORD,
     orgA, orgB, orgFresh, approvalShift,
-    adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, adminEmployeeId, plannerId, plannerNoAreaId, plannerGlobalId, inactiveEmployeeUserId, ownerBId, plannerBId, employeeBId,
+    adminId, empId, multiId, freshId, freshTargetId, unlinkedId, ownerId, adminEmployeeId, plannerId, plannerNoAreaId, plannerGlobalId, inactiveEmployeeUserId, ownerBId, plannerBId, employeeBId, associatedShift,
     empA1, empA2, empAdmin, empInactive, empFresh, empB1, areaA, areaB, importB, shiftB, shiftToday, shiftEnglish, shiftA2,
     orgAName: 'E2E Org A',
     orgBName: 'E2E Org B',

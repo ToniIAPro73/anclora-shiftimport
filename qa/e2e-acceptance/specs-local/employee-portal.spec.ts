@@ -77,3 +77,41 @@ test('compact unified employee shell journey', async ({ page }) => {
   await page.getByRole('menuitem', { name: 'Salir' }).click();
   await expect(page.locator('#auth-email')).toBeVisible();
 });
+
+async function openRequests(page: Page) {
+  await loginAsEmployee(page);
+  await page.getByTestId('sidebar-requests').click();
+  await expect(page.getByRole('dialog', { name: 'Solicitudes' })).toBeVisible();
+  await expect(page.getByTestId('request-status').getByText('Cambio de horario').first()).toBeVisible();
+}
+
+async function expectAssociatedShiftOpen(page: Page) {
+  await expect(page.getByRole('dialog', { name: 'Solicitudes' })).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Actualizar Turno' })).toBeVisible();
+  await expect(page.getByTestId('calendar-toolbar')).toHaveText(/Septiembre 2026/);
+  const dialog = page.getByRole('dialog', { name: 'Actualizar Turno' });
+  await expect(dialog.locator('input[type="date"]')).toHaveValue('2026-09-17');
+  await expect(dialog.locator('input[type="time"]').nth(0)).toHaveValue('19:00');
+  await expect(dialog.locator('input[type="time"]').nth(1)).toHaveValue('03:00');
+  await expect(page.locator('.modal-overlay')).toHaveCount(1);
+}
+
+test('associated shift CTA opens the shift from the request list', async ({ page }, testInfo) => {
+  await openRequests(page);
+  await page.screenshot({ path: testInfo.outputPath('list-before.png'), fullPage: true });
+
+  await page.getByRole('button', { name: /Ver turno asociado/ }).click();
+  await expectAssociatedShiftOpen(page);
+  await page.screenshot({ path: testInfo.outputPath('list-after.png'), fullPage: true });
+});
+
+test('associated shift CTA opens the shift from request detail', async ({ page }, testInfo) => {
+  await openRequests(page);
+  await page.getByRole('button', { name: 'Ver', exact: true }).click();
+  await expect(page.getByTestId('request-status-detail')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('detail-before.png'), fullPage: true });
+
+  await page.getByRole('button', { name: /Ver turno asociado/ }).click();
+  await expectAssociatedShiftOpen(page);
+  await page.screenshot({ path: testInfo.outputPath('detail-after.png'), fullPage: true });
+});

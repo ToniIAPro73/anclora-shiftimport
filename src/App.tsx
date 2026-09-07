@@ -846,6 +846,24 @@ function App() {
     setIsModalOpen(true);
   };
 
+  const handleOpenAssociatedShift = (shiftId: string) => {
+    if (isImporting) {
+      return;
+    }
+    const associatedShift = shifts.find((shift) => shift.id === shiftId);
+    setIsEmployeeRequestsOpen(false);
+    setEmployeeRequestView('list');
+    if (!associatedShift) {
+      setAppFeedback({ kind: 'alert', message: t('employeeRequestStatus.shiftUnavailable') });
+      return;
+    }
+    const shiftYear = Number(associatedShift.date.slice(0, 4));
+    const shiftMonth = Number(associatedShift.date.slice(5, 7)) - 1;
+    setCurrentYear(shiftYear);
+    setCurrentMonth(shiftMonth);
+    handleEditShift(shiftId);
+  };
+
   const handleCreateShiftForDate = (date: string) => {
     if (isImporting) {
       return;
@@ -2112,6 +2130,7 @@ function App() {
             employeeId={session.employeeId}
             view={employeeRequestView}
             onViewChange={setEmployeeRequestView}
+            onSelectShift={handleOpenAssociatedShift}
             refreshSignal={employeeRequestRefreshSignal}
             onRefresh={() => setEmployeeRequestRefreshSignal((current) => current + 1)}
           />

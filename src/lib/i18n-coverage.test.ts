@@ -55,7 +55,7 @@ const T_KEYS = [
   'employeeRequestStatus.loading', 'employeeRequestStatus.errorTitle', 'employeeRequestStatus.errorDescription',
   'employeeRequestStatus.retry', 'employeeRequestStatus.emptyTitle', 'employeeRequestStatus.emptyDescription',
   'employeeRequestStatus.requestTypeTimeChange', 'employeeRequestStatus.requestTypeOther',
-  'employeeRequestStatus.reason', 'employeeRequestStatus.shift', 'employeeRequestStatus.openShift',
+  'employeeRequestStatus.reason', 'employeeRequestStatus.shift', 'employeeRequestStatus.openShift', 'employeeRequestStatus.shiftUnavailable',
   'employeeRequestStatus.statusLabel', 'employeeRequestStatus.noLocation',
   'employeeNotifications.eyebrow', 'employeeNotifications.title', 'employeeNotifications.unreadCount', 'employeeNotifications.unreadCountOne',
   'employeeNotifications.loading', 'employeeNotifications.errorTitle', 'employeeNotifications.errorDescription',
