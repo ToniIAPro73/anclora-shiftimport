@@ -32,6 +32,7 @@ import { getDaysInMonth } from '../lib/week';
 import { normalizeText, normalizeTimeToken } from './core/normalize';
 import { shiftTypeCountsAsWork } from '../lib/shift-types';
 import { isExplicitlyIgnoredCode } from './core/ignored-codes';
+import { IGNORED_LEARNED_TOKEN } from './core/shift-code-profile';
 import { EmployeeSelector, matchesNameTokens } from './core/row-detection';
 import {
   AssistantAnswers,
@@ -496,7 +497,11 @@ export function buildTabularProfileFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
+      continue;
+    }
+    if (meaning.kind === 'ignore') {
+      tokenAliases[trimmed] = IGNORED_LEARNED_TOKEN;
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');

@@ -62,6 +62,9 @@ function buildFromSingleCode(
   if (mapped.status === 'free') {
     return [buildAbsenceShift(date, tokens[0], mapped.shiftTypeId ?? 'Libre')];
   }
+  if (mapped.status === 'ignore') {
+    return [];
+  }
   if (!mapped.startTime || !mapped.endTime) {
     return null;
   }

@@ -84,6 +84,10 @@ interface ProfileAssistantPanelProps {
 type TokenMeaning = AssistantAnswers['tokenMeanings'][string];
 
 const MAX_FOLLOW_UP_QUESTIONS = 6;
+const XLSX_STYLE_TOKEN_PREFIX = '__xlsx_style__:';
+
+const isXlsxStyleQuestion = (question: AssistantQuestion, styleOnly: boolean): question is Extract<AssistantQuestion, { kind: 'token-meaning' }> =>
+  styleOnly && question.kind === 'token-meaning' && question.token.startsWith(XLSX_STYLE_TOKEN_PREFIX);
 
 /**
  * Inline format assistant (Phase 1A, wave 3): renders the assistant questions
@@ -336,13 +340,104 @@ export const ProfileAssistantPanel = ({
         </div>
       )}
 
-      {tokenQuestions.map((question) => {
+      {tokenQuestions.map((question, questionIndex) => {
         const token = question.kind === 'shift-code' ? question.code : question.token;
+        const displayToken = question.kind === 'token-meaning' ? question.displayToken : undefined;
         const meaning = tokenMeanings[token];
+        if (isXlsxStyleQuestion(question, styleOnly)) {
+          const styleValue = question.token.slice(XLSX_STYLE_TOKEN_PREFIX.length);
+          const styleQuestionIndex = tokenQuestions
+            .slice(0, questionIndex + 1)
+            .filter((candidate) => isXlsxStyleQuestion(candidate, styleOnly)).length;
+          const detectedLabel = t('assistant.detectedColor', { index: styleQuestionIndex });
+          const swatchColor = /^[0-9A-F]{6}$/i.test(styleValue) ? `#${styleValue}` : 'var(--panel-muted-bg)';
+          const missingTimes = meaning?.kind === 'work' && (!meaning.startTime || !meaning.endTime);
+          return (
+            <div
+              key={`${question.kind}-${token}`}
+              data-testid={`assistant-color-question-${styleQuestionIndex}`}
+              style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 0' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  role="img"
+                  aria-label={detectedLabel}
+                  style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: swatchColor, border: '1px solid var(--glass-border)', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)', flexShrink: 0 }}
+                />
+                <strong>{detectedLabel}</strong>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <SearchableSelect
+                  label={t('assistant.colorShiftTypeLabel')}
+                  value={meaning?.kind === 'ignore' ? '' : meaning?.shiftTypeId ?? ''}
+                  onChange={(typeId) => {
+                    const definition = shiftTypes.find((type) => type.id === typeId);
+                    setTokenMeaning(token, {
+                      kind: definition?.countsAsWork ? 'work' : 'rest',
+                      shiftTypeId: typeId || undefined,
+                      startTime: undefined,
+                      endTime: undefined,
+                    });
+                  }}
+                  placeholder={t('assistant.colorShiftTypeLabel')}
+                  searchPlaceholder={t('assistant.searchPlaceholder')}
+                  emptyMessage={t('assistant.noShiftTypes')}
+                  ariaLabel={`${detectedLabel}: ${t('assistant.colorShiftTypeLabel')}`}
+                  options={[
+                    { value: '', label: t('assistant.colorShiftTypeLabel'), searchText: '' },
+                    ...shiftTypes.map((type) => ({
+                      value: type.id,
+                      label: translateShiftTypeLabel(type.id, locale, type.label),
+                      searchText: `${type.label} ${type.id}`.toLowerCase(),
+                    })),
+                  ]}
+                  style={{ flex: '1 1 220px', minWidth: 180 }}
+                />
+                <button
+                  type="button"
+                  className={meaning?.kind === 'ignore' ? 'btn-gold' : 'btn-outline'}
+                  style={segmentedButtonStyle(meaning?.kind === 'ignore')}
+                  onClick={() => setTokenMeaning(token, { kind: 'ignore', shiftTypeId: undefined, startTime: undefined, endTime: undefined })}
+                >
+                  {t('assistant.ignoreColorOption')}
+                </button>
+              </div>
+              {meaning?.kind === 'work' && (
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {t('shiftModal.startLabel')}
+                    <input
+                      type="time"
+                      className="modal-input"
+                      aria-label={t('shiftModal.startLabel')}
+                      value={meaning.startTime ?? ''}
+                      onChange={(event) => setTokenMeaning(token, { startTime: event.target.value || undefined })}
+                    />
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    {t('shiftModal.endLabel')}
+                    <input
+                      type="time"
+                      className="modal-input"
+                      aria-label={t('shiftModal.endLabel')}
+                      value={meaning.endTime ?? ''}
+                      onChange={(event) => setTokenMeaning(token, { endTime: event.target.value || undefined })}
+                    />
+                  </label>
+                </div>
+              )}
+              {missingTimes && (
+                <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-gold)' }}>
+                  {t('assistant.timesRequired')}
+                </p>
+              )}
+            </div>
+          );
+        }
         const titleKey = question.kind === 'shift-code' ? 'assistant.shiftCodeQuestion' : 'assistant.tokenMeaningQuestion';
         const titleVars: Record<string, string> = question.kind === 'shift-code'
           ? { code: token }
-          : { token: question.displayToken ?? token };
+          : { token: displayToken ?? token };
         const isRest = meaning?.kind === 'rest' && meaning.shiftTypeId === 'Libre';
         const isVacation = meaning?.kind === 'rest' && meaning.shiftTypeId === 'Vacaciones';
         const isOther = meaning?.kind === 'rest' && meaning.shiftTypeId === undefined;

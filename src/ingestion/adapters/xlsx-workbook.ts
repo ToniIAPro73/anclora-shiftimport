@@ -197,6 +197,10 @@ function positionalCalendarFromSheet(
         } else if (!type) {
           const mapping = styleMappings.get(raw) ?? styleMappings.get(raw.toUpperCase());
           if (mapping) {
+            if (mapping.status === 'ignore') {
+              monthHasData = true;
+              continue;
+            }
             const requestedType = mapping.shiftTypeId ?? (mapping.status === 'work' ? 'Regular' : 'Libre');
             const activeType = getShiftTypes().find((candidate) => candidate.id === requestedType);
             const startTime = mapping.startTime ?? '';
@@ -214,10 +218,14 @@ function positionalCalendarFromSheet(
       } else if (cell.styleToken) {
         const mapping = styleMappings.get(cell.styleToken.toUpperCase());
         if (mapping) {
+          if (mapping.status === 'ignore') {
+            monthHasData = true;
+            continue;
+          }
           const requestedType = mapping.shiftTypeId ?? (mapping.status === 'work' ? 'Regular' : 'Libre');
           const activeType = getShiftTypes().find((candidate) => candidate.id === requestedType);
           if (!activeType) {
-            unresolvedTokens.add(cell.styleToken);
+            markUnresolved(cell.styleToken);
             continue;
           }
           const type = activeType.id;

@@ -18,7 +18,7 @@ export interface ShiftCodeMapping {
   code: string;
   startTime: string | null;
   endTime: string | null;
-  status: 'work' | 'free';
+  status: 'work' | 'free' | 'ignore';
   /**
    * Target shift-type id when the mapping was learned from the user (guided
    * recovery). Absent for the generic defaults/legends, which keep the
@@ -26,6 +26,10 @@ export interface ShiftCodeMapping {
    */
   shiftTypeId?: string;
 }
+
+/** Reserved value carried by the existing learned tokenAliases profile when
+ * the user explicitly ignores a source token/style. */
+export const IGNORED_LEARNED_TOKEN = '__ignored__';
 
 export const DEFAULT_CODE_PROFILE: ShiftCodeMapping[] = [
   { code: 'M', startTime: '07:00', endTime: '15:00', status: 'work' },
@@ -97,6 +101,10 @@ export function codeOverridesFromLearning(learned: {
   for (const [rawToken, typeId] of Object.entries(learned.tokenAliases)) {
     const code = rawToken.trim().toUpperCase();
     if (!code || !typeId || isExplicitlyIgnoredCode(code)) {
+      continue;
+    }
+    if (typeId === IGNORED_LEARNED_TOKEN) {
+      overrides.set(code, { code, startTime: null, endTime: null, status: 'ignore' });
       continue;
     }
     const times = learned.codeTimes?.[rawToken] ?? learned.codeTimes?.[code];

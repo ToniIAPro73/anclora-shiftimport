@@ -62,6 +62,9 @@ export function expandShiftTokens(value: string, codeProfile?: Map<string, Shift
   if (codeProfile) {
     const mapped = resolveCode(core, codeProfile);
     if (mapped) {
+      if (mapped.status === 'ignore') {
+        return [];
+      }
       return mapped.status === 'free' ? ['OFF'] : [mapped.startTime as string, mapped.endTime as string];
     }
   }

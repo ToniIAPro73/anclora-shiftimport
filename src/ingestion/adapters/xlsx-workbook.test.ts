@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { parseXlsxTeamWorkbook } from './xlsx-workbook';
-import { codeOverridesFromLearning } from '../core/shift-code-profile';
+import { codeOverridesFromLearning, IGNORED_LEARNED_TOKEN } from '../core/shift-code-profile';
 
 async function workbookFile(name: string, build: (wb: ExcelJS.Workbook) => void): Promise<File> {
   const wb = new ExcelJS.Workbook();
@@ -251,6 +251,23 @@ describe('parseXlsxTeamWorkbook', () => {
     expect(resolved.employees[0]?.shifts).toEqual(expect.arrayContaining([
       expect.objectContaining({ shiftType: 'Vacaciones', startTime: '', endTime: '' }),
     ]));
+  });
+
+  it('reuses an explicit ignored style mapping without producing a shift or question', async () => {
+    const file = await workbookFile('ignored-style-calendar.xlsx', (wb) => {
+      const sheet = wb.addWorksheet('Calendario empleado');
+      sheet.addRow(['Ana Calendario 2026']);
+      sheet.addRow([null, 1]);
+      sheet.addRow(['Enero', null]);
+      sheet.getCell('B3').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFAEFC04' } };
+    });
+    const mappings = codeOverridesFromLearning({
+      tokenAliases: { '__xlsx_style__:AEFC04': IGNORED_LEARNED_TOKEN },
+      offTokens: [],
+    });
+    const resolved = await parseXlsxTeamWorkbook(file, { styleMappings: mappings });
+    expect(resolved.unresolvedTokens).toEqual([]);
+    expect(resolved.employees[0]?.shifts).toEqual([]);
   });
 
   it('reuses learned mappings for unknown textual codes on the same canonical rerun', async () => {

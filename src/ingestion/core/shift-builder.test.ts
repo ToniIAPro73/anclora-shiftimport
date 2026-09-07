@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { buildShiftEntriesForDay } from './shift-builder';
+import { codeOverridesFromLearning, IGNORED_LEARNED_TOKEN } from './shift-code-profile';
 import { mergeShiftTypeOverrides, SHIFT_TYPE_PRESET_EXAMPLE } from '../../lib/shift-types';
 
 setupLocalStorageMock();
@@ -56,6 +57,14 @@ describe('buildShiftEntriesForDay', () => {
       { date: '2026-08-02', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
     ]);
     expect(buildShiftEntriesForDay('2026-08-03', ['AJ', ''])).toEqual([]);
+  });
+
+  it('applies an explicit learned ignore without creating a parsed record', () => {
+    const mappings = codeOverridesFromLearning({
+      tokenAliases: { UNKNOWN: IGNORED_LEARNED_TOKEN },
+      offTokens: [],
+    });
+    expect(buildShiftEntriesForDay('2026-08-04', ['UNKNOWN'], mappings)).toEqual([]);
   });
 
   it('treats company tokens as nothing unless the preset alias is loaded', () => {

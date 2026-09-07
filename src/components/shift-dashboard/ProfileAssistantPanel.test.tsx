@@ -6,7 +6,7 @@ import { I18nProvider } from '../../lib/i18n-react';
 import { loadFormatProfiles } from '../../lib/format-profiles';
 import { resolveShiftTypeId, setShiftTypeArchived, upsertShiftType } from '../../lib/shift-types';
 import { analyzeItemsForImport } from '../../ingestion/analysis';
-import { generateAssistantQuestions, AssistantQuestion } from '../../ingestion/assistant';
+import { generateAssistantQuestions, AssistantAnswers, AssistantQuestion } from '../../ingestion/assistant';
 import { EmployeeSelector } from '../../ingestion/core/row-detection';
 import { PdfTextItem } from '../../ingestion/core/text-items';
 import { detectCalendarContextFromItems } from '../../ingestion/parsers/parse-items';
@@ -38,7 +38,13 @@ function renderPanel(
   selector: EmployeeSelector,
   onComplete: (result: AssistantCompletion) => void = () => {},
   onCancel: () => void = () => {},
-  options: { items?: PdfTextItem[]; context?: typeof CONTEXT; table?: ReturnType<typeof parseRosterTable> } = {},
+  options: {
+    items?: PdfTextItem[];
+    context?: typeof CONTEXT;
+    table?: ReturnType<typeof parseRosterTable>;
+    styleOnly?: boolean;
+    onStyleComplete?: (answers: AssistantAnswers) => void;
+  } = {},
 ) {
   return render(
     <I18nProvider>
@@ -50,6 +56,8 @@ function renderPanel(
         table={options.table ?? null}
         selector={selector}
         onComplete={onComplete}
+        styleOnly={options.styleOnly}
+        onStyleComplete={options.onStyleComplete}
         onCancel={onCancel}
       />
     </I18nProvider>,
@@ -57,6 +65,29 @@ function renderPanel(
 }
 
 describe('ProfileAssistantPanel', () => {
+  it('classifies grouped unknown XLSX styles without exposing internal style ids', () => {
+    const questions: AssistantQuestion[] = [
+      { kind: 'token-meaning', token: '__xlsx_style__:AEFC04' },
+      { kind: 'token-meaning', token: '__xlsx_style__:A9D0F5' },
+    ];
+    const onStyleComplete = vi.fn();
+    renderPanel(questions, null, TYPE_A_SELECTOR, () => {}, () => {}, { styleOnly: true, onStyleComplete });
+
+    expect(screen.getAllByTestId(/^assistant-color-question-/)).toHaveLength(2);
+    expect(screen.getAllByRole('img', { name: /Color detectado/ })).toHaveLength(2);
+    expect(document.body.textContent).not.toContain('__xlsx_style__');
+    expect((screen.getByText('Aplicar y continuar') as HTMLButtonElement).disabled).toBe(true);
+
+    const typeSelectors = screen.getAllByRole('button', { name: /Color detectado.*Tipo de turno/ });
+    fireEvent.click(typeSelectors[0]);
+    fireEvent.click(screen.getByText('Vacaciones'));
+    fireEvent.click(screen.getAllByText('Ignorar este color')[1]);
+    expect((screen.getByText('Aplicar y continuar') as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByText('Aplicar y continuar'));
+    expect(onStyleComplete).toHaveBeenCalledTimes(1);
+  });
+
   it('renders the row-selection question with the candidate labels', () => {
     const unknownSelector: EmployeeSelector = { employeeName: 'Nadie', employeeIdentifiers: [] };
     const { analysis, questions } = setup(unknownSelector);

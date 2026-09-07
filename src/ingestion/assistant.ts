@@ -21,7 +21,7 @@ import { getDaysInMonth } from '../lib/week';
 import { mapColumnGroupsToDays } from './core/clustering';
 import { EmployeeRow, EmployeeSelector, isBareEmployeeId } from './core/row-detection';
 import { normalizeEmployeeId, normalizeText } from './core/normalize';
-import { buildCodeProfile, codeOverridesFromLearning, ShiftCodeMapping } from './core/shift-code-profile';
+import { buildCodeProfile, codeOverridesFromLearning, IGNORED_LEARNED_TOKEN, ShiftCodeMapping } from './core/shift-code-profile';
 import { isExplicitlyIgnoredCode } from './core/ignored-codes';
 import { isEmployeeIdToken, isEmployeeNameLabel, looksLikeEmployeeLabel } from './core/tokens';
 import { PdfTextItem, sortPdfItemsForReading } from './core/text-items';
@@ -289,7 +289,11 @@ export function buildProfileFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
+      continue;
+    }
+    if (meaning.kind === 'ignore') {
+      tokenAliases[trimmed] = IGNORED_LEARNED_TOKEN;
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -354,7 +358,11 @@ export function buildProfileFromTokenMeanings(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') continue;
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) continue;
+    if (meaning.kind === 'ignore') {
+      tokenAliases[trimmed] = IGNORED_LEARNED_TOKEN;
+      continue;
+    }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
     if (meaning.kind === 'rest') offTokens.push(trimmed);
     if (meaning.kind === 'work' && meaning.startTime && meaning.endTime) {
@@ -537,7 +545,11 @@ export function buildCodeOverridesFromAnswers(
   const offTokens: string[] = [];
   for (const [token, meaning] of Object.entries(answers.tokenMeanings)) {
     const trimmed = token.trim();
-    if (!trimmed || isExplicitlyIgnoredCode(trimmed) || meaning.kind === 'ignore') {
+    if (!trimmed || isExplicitlyIgnoredCode(trimmed)) {
+      continue;
+    }
+    if (meaning.kind === 'ignore') {
+      tokenAliases[trimmed] = IGNORED_LEARNED_TOKEN;
       continue;
     }
     tokenAliases[trimmed] = meaning.shiftTypeId ?? (meaning.kind === 'work' ? 'Regular' : 'Libre');
@@ -602,7 +614,7 @@ export function parseWithDayMapping(
  */
 export function applyTokenAliasesToShiftTypes(profile: UserFormatProfile): ShiftTypeOverrides {
   const aliases: Record<string, string> = Object.fromEntries(
-    Object.entries(profile.tokenAliases).filter(([token]) => !isExplicitlyIgnoredCode(token)),
+    Object.entries(profile.tokenAliases).filter(([token, typeId]) => !isExplicitlyIgnoredCode(token) && typeId !== IGNORED_LEARNED_TOKEN),
   );
   for (const token of profile.offTokens) {
     if (!isExplicitlyIgnoredCode(token) && !aliases[token]) {

@@ -103,6 +103,7 @@ const WARNING_I18N_KEYS: Record<ImportWarningCode, string> = {
 };
 
 const MAX_VISIBLE_WARNINGS = 4;
+const XLSX_STYLE_TOKEN_PREFIX = '__xlsx_style__:';
 
 interface ModalSelectOption {
   value: string;
@@ -939,6 +940,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       || diagnosis?.state === 'NEEDS_USER_INPUT'
       || diagnosis?.state === 'BLOCKED'
       || diagnosis?.state === 'UNSUPPORTED');
+  const hasXlsxStyleQuestions = analysis?.kind === 'excel'
+    && analysis.questions.length > 0
+    && analysis.questions.some((question) => question.kind === 'token-meaning' && question.token.startsWith(XLSX_STYLE_TOKEN_PREFIX));
 
   // Warnings already surfaced as structured diagnostics are not repeated.
   const DIAGNOSTIC_COVERED_WARNINGS = new Set(['UNKNOWN_SHIFT_TOKEN', 'PARTIAL_EXTRACTION', 'MULTIPLE_EMPLOYEE_MATCHES', 'UNSUPPORTED_SECTION']);
@@ -1245,7 +1249,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 {diagnosis.diagnostics.map((diagnostic, diagnosticIndex) => (
                   <div key={`${diagnostic.code}-${diagnosticIndex}`}>
                     <p style={{ margin: 0 }}>
-                      {t(diagnostic.messageKey, diagnosticVars(diagnostic))}
+                      {diagnostic.code === 'UNKNOWN_SHIFT_CODES' && hasXlsxStyleQuestions
+                        ? t('diagnosis.unknownCodes.colorMessage')
+                        : t(diagnostic.messageKey, diagnosticVars(diagnostic))}
                     </p>
                     {diagnostic.affectedDays && diagnostic.affectedDays.length > 0 && (
                       <p style={{ margin: '2px 0 0', opacity: 0.85 }}>
@@ -1339,7 +1345,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </div>
             )}
 
-            {showAssistant && assistantSession && analysis && (
+            {showAssistant && analysis && (
               <div style={{ overflowY: 'auto', minHeight: 0 }}>
                 <ProfileAssistantPanel
                   questions={analysis.questions}
