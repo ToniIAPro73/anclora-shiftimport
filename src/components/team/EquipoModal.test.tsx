@@ -17,12 +17,16 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     removeRemoteMember: vi.fn(),
     createRemoteEmployee: vi.fn(),
     transferRemoteOwnership: vi.fn(),
+    listRemoteAreas: vi.fn(),
+    createRemoteArea: vi.fn(),
+    updateRemoteArea: vi.fn(),
   };
 });
 
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mockedListRemoteAreas.mockResolvedValue(areasFixture);
 });
 
 const mockedListRemoteMembers = vi.mocked(remote.listRemoteMembers);
@@ -31,6 +35,9 @@ const mockedUpdateRemoteMemberRole = vi.mocked(remote.updateRemoteMemberRole);
 const mockedRemoveRemoteMember = vi.mocked(remote.removeRemoteMember);
 const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
 const mockedTransferRemoteOwnership = vi.mocked(remote.transferRemoteOwnership);
+const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
+const mockedCreateRemoteArea = vi.mocked(remote.createRemoteArea);
+const mockedUpdateRemoteArea = vi.mocked(remote.updateRemoteArea);
 
 const areasFixture: RemoteArea[] = [
   { id: 'area-ops', name: 'Operaciones', code: 'OPS', active: true, createdAt: '2026-01-01' },
@@ -82,7 +89,11 @@ const employeesFixture: RemoteEmployee[] = [
   },
 ];
 
-function renderModal(role: 'OWNER' | 'ADMIN' = 'OWNER', currentUserId = 'usr-owner') {
+function renderModal(
+  role: 'OWNER' | 'ADMIN' = 'OWNER',
+  currentUserId = 'usr-owner',
+  areas: RemoteArea[] = areasFixture,
+) {
   const onChanged = vi.fn();
   const onClose = vi.fn();
 
@@ -92,7 +103,7 @@ function renderModal(role: 'OWNER' | 'ADMIN' = 'OWNER', currentUserId = 'usr-own
         isOpen
         onClose={onClose}
         employees={employeesFixture}
-        areas={areasFixture}
+        areas={areas}
         currentUserId={currentUserId}
         currentUserRole={role}
         onChanged={onChanged}
@@ -376,5 +387,182 @@ describe('EquipoModal — Tab 2: ROLES Y ACCESO & Ownership Transfer', () => {
         expect.objectContaining({ plannerScopeType: 'ORGANIZATION' }),
       );
     });
+  });
+});
+
+describe('EquipoModal — Tab 2: PLANNER Scopes', () => {
+  it('allows managing planner scope with specific areas', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedUpdateRemoteMemberRole.mockResolvedValue(undefined);
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId('tab-roles'));
+
+    // Click "Gestionar ámbito" for Charlie Planner
+    fireEvent.click(screen.getByTestId('manage-scope-usr-planner'));
+    expect(screen.getByTestId('change-role-modal')).toBeInTheDocument();
+
+    // Select specific areas radio
+    const areasRadio = screen.getByTestId('scope-radio-areas');
+    fireEvent.click(areasRadio);
+
+    // Toggle area-sec checkbox
+    const secCheckbox = screen.getByTestId('scope-area-area-sec');
+    fireEvent.click(secCheckbox);
+
+    fireEvent.click(screen.getByTestId('save-role-change-button'));
+
+    await waitFor(() => {
+      expect(mockedUpdateRemoteMemberRole).toHaveBeenCalledWith(
+        'usr-planner',
+        'PLANNER',
+        'area-ops',
+        expect.objectContaining({
+          plannerScopeType: 'AREAS',
+          scopedAreaIds: expect.arrayContaining(['area-ops', 'area-sec']),
+        }),
+      );
+    });
+  });
+
+  it('allows managing planner scope with specific employees and search', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedUpdateRemoteMemberRole.mockResolvedValue(undefined);
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId('tab-roles'));
+
+    // Click "Gestionar ámbito" for Charlie Planner
+    fireEvent.click(screen.getByTestId('manage-scope-usr-planner'));
+
+    // Select specific employees radio
+    const employeesRadio = screen.getByTestId('scope-radio-employees');
+    fireEvent.click(employeesRadio);
+
+    // Verify search and counter exist
+    expect(screen.getByTestId('scope-employee-search')).toBeInTheDocument();
+    expect(screen.getByTestId('scope-selected-employees-count')).toHaveTextContent('0 seleccionados');
+
+    // Select employee
+    const empCheckbox = screen.getByTestId('scope-employee-emp-bob');
+    fireEvent.click(empCheckbox);
+
+    expect(screen.getByTestId('scope-selected-employees-count')).toHaveTextContent('1 seleccionados');
+
+    fireEvent.click(screen.getByTestId('save-role-change-button'));
+
+    await waitFor(() => {
+      expect(mockedUpdateRemoteMemberRole).toHaveBeenCalledWith(
+        'usr-planner',
+        'PLANNER',
+        null,
+        expect.objectContaining({
+          plannerScopeType: 'EMPLOYEES',
+          scopedEmployeeIds: ['emp-bob'],
+        }),
+      );
+    });
+  });
+});
+
+describe('EquipoModal — Tab 3: ÁREAS', () => {
+  it('displays empty state when organization has 0 areas and allows creating first area', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedCreateRemoteArea.mockResolvedValue({
+      id: 'area-new',
+      name: 'Mantenimiento',
+      code: 'MNT',
+      active: true,
+      createdAt: '2026-09-07',
+    });
+
+    renderModal('OWNER', 'usr-owner', []);
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('tab-areas'));
+    expect(screen.getByTestId('empty-areas-state')).toBeInTheDocument();
+
+    // Click "+ Crear primera área"
+    fireEvent.click(screen.getByTestId('create-first-area-button'));
+    expect(screen.getByTestId('area-modal')).toBeInTheDocument();
+
+    // Fill form
+    fireEvent.change(screen.getByTestId('area-name-input'), { target: { value: 'Mantenimiento' } });
+    fireEvent.change(screen.getByTestId('area-code-input'), { target: { value: 'mnt' } });
+
+    // Submit
+    fireEvent.click(screen.getByTestId('save-area-button'));
+
+    await waitFor(() => {
+      expect(mockedCreateRemoteArea).toHaveBeenCalledWith({
+        name: 'Mantenimiento',
+        code: 'MNT',
+      });
+    });
+  });
+
+  it('displays areas table with active status, employee count, and planner count', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('tab-areas'));
+    expect(screen.getByTestId('areas-table')).toBeInTheDocument();
+
+    const opsRow = screen.getByTestId('area-row-area-ops');
+    expect(opsRow).toHaveTextContent('Operaciones');
+    expect(opsRow).toHaveTextContent('OPS');
+    expect(opsRow).toHaveTextContent('Activa');
+    expect(opsRow).toHaveTextContent('1 empleado');
+  });
+
+  it('allows editing an existing area', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedUpdateRemoteArea.mockResolvedValue({
+      id: 'area-ops',
+      name: 'Operaciones y Vuelo',
+      code: 'OPS',
+      active: true,
+      createdAt: '2026-01-01',
+    });
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('tab-areas'));
+
+    // Click Edit on area-ops
+    fireEvent.click(screen.getByTestId('edit-area-area-ops'));
+    expect(screen.getByTestId('area-modal')).toBeInTheDocument();
+
+    const nameInput = screen.getByTestId('area-name-input');
+    expect(nameInput).toHaveValue('Operaciones');
+
+    fireEvent.change(nameInput, { target: { value: 'Operaciones y Vuelo' } });
+    fireEvent.click(screen.getByTestId('save-area-button'));
+
+    await waitFor(() => {
+      expect(mockedUpdateRemoteArea).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'area-ops',
+          name: 'Operaciones y Vuelo',
+        }),
+      );
+    });
+  });
+
+  it('switches to assignments tab when clicking manage assignments on an area', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('tab-areas'));
+    fireEvent.click(screen.getByTestId('manage-area-assignments-area-ops'));
+
+    expect(screen.getByTestId('assignments-tab')).toBeInTheDocument();
   });
 });

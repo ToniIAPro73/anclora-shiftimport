@@ -10,13 +10,16 @@ import {
 import { buildPersonas, filterPersonas, Persona } from '../../lib/personas';
 import {
   addRemoteMember,
+  createRemoteArea,
   createRemoteEmployee,
+  listRemoteAreas,
   listRemoteMembers,
   RemoteArea,
   RemoteEmployee,
   RemoteMember,
   removeRemoteMember,
   transferRemoteOwnership,
+  updateRemoteArea,
   updateRemoteMemberRole,
 } from '../../lib/remote';
 import type { Role } from '../../lib/session';
@@ -90,7 +93,26 @@ export function EquipoModal({
   const [newRoleSelection, setNewRoleSelection] = useState<'ADMIN' | 'PLANNER' | 'EMPLOYEE'>('EMPLOYEE');
   const [newRoleScopeType, setNewRoleScopeType] = useState<'ORGANIZATION' | 'AREAS' | 'EMPLOYEES'>('ORGANIZATION');
   const [newRoleScopedAreas, setNewRoleScopedAreas] = useState<string[]>([]);
+  const [newRoleScopedEmployees, setNewRoleScopedEmployees] = useState<string[]>([]);
+  const [roleEmployeeSearch, setRoleEmployeeSearch] = useState('');
   const [roleChangeSubmitting, setRoleChangeSubmitting] = useState(false);
+
+  // Local areas state (initialized from props, refreshed on mutations)
+  const [localAreas, setLocalAreas] = useState<RemoteArea[]>(areas || []);
+  useEffect(() => {
+    setLocalAreas(areas || []);
+  }, [areas]);
+  const effectiveAreas = useMemo(() => {
+    return Array.isArray(localAreas) && localAreas.length > 0 ? localAreas : (areas || []);
+  }, [localAreas, areas]);
+
+  // Area creation / editing modal state
+  const [isAreaModalOpen, setIsAreaModalOpen] = useState(false);
+  const [editingArea, setEditingArea] = useState<RemoteArea | null>(null);
+  const [areaName, setAreaName] = useState('');
+  const [areaCode, setAreaCode] = useState('');
+  const [areaActive, setAreaActive] = useState(true);
+  const [areaSubmitting, setAreaSubmitting] = useState(false);
 
   // Load members
   const fetchMembers = useCallback(async () => {
@@ -107,14 +129,73 @@ export function EquipoModal({
     }
   }, [isOpen, t]);
 
+  const refreshAreas = useCallback(async () => {
+    try {
+      const data = await listRemoteAreas();
+      if (Array.isArray(data)) {
+        setLocalAreas(data);
+      }
+    } catch {
+      // Keep existing areas on network error
+    }
+  }, []);
+
   useEffect(() => {
     void fetchMembers();
   }, [fetchMembers]);
 
+  // Area handlers
+  const handleOpenCreateArea = () => {
+    setEditingArea(null);
+    setAreaName('');
+    setAreaCode('');
+    setAreaActive(true);
+    setError(null);
+    setIsAreaModalOpen(true);
+  };
+
+  const handleOpenEditArea = (area: RemoteArea) => {
+    setEditingArea(area);
+    setAreaName(area.name);
+    setAreaCode(area.code || '');
+    setAreaActive(area.active);
+    setError(null);
+    setIsAreaModalOpen(true);
+  };
+
+  const handleSaveArea = async () => {
+    if (!areaName.trim()) return;
+    setAreaSubmitting(true);
+    setError(null);
+    try {
+      if (editingArea) {
+        await updateRemoteArea({
+          id: editingArea.id,
+          name: areaName.trim(),
+          code: areaCode.trim() ? areaCode.trim().toUpperCase() : null,
+          active: areaActive,
+        });
+      } else {
+        await createRemoteArea({
+          name: areaName.trim(),
+          code: areaCode.trim() ? areaCode.trim().toUpperCase() : undefined,
+        });
+      }
+      setIsAreaModalOpen(false);
+      onChanged();
+      await refreshAreas();
+      await fetchMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
+    } finally {
+      setAreaSubmitting(false);
+    }
+  };
+
   // Derived personas
   const personas = useMemo(() => {
-    return buildPersonas(members, employees, currentUserId, areas);
-  }, [members, employees, currentUserId, areas]);
+    return buildPersonas(members, employees, currentUserId, effectiveAreas);
+  }, [members, employees, currentUserId, effectiveAreas]);
 
   const filteredPersonas = useMemo(() => {
     return filterPersonas(personas, {
@@ -215,6 +296,7 @@ export function EquipoModal({
         {
           plannerScopeType: newRoleSelection === 'PLANNER' ? newRoleScopeType : null,
           scopedAreaIds: newRoleSelection === 'PLANNER' && newRoleScopeType === 'AREAS' ? newRoleScopedAreas : [],
+          scopedEmployeeIds: newRoleSelection === 'PLANNER' && newRoleScopeType === 'EMPLOYEES' ? newRoleScopedEmployees : [],
         },
       );
       setEditingRolePersona(null);
@@ -634,11 +716,13 @@ export function EquipoModal({
                                 className="equipo-btn equipo-btn--secondary"
                                 onClick={() => {
                                   const persona = personas.find((p) => p.userId === m.userId);
-                                  if (persona) {
+                                   if (persona) {
                                     setEditingRolePersona(persona);
                                     setNewRoleSelection(m.role as 'ADMIN' | 'PLANNER' | 'EMPLOYEE');
                                     setNewRoleScopeType(m.plannerScopeType || 'ORGANIZATION');
                                     setNewRoleScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
+                                    setNewRoleScopedEmployees(m.scopedEmployeeIds || []);
+                                    setRoleEmployeeSearch('');
                                   }
                                 }}
                                 data-testid={`change-role-${m.userId}`}
@@ -655,8 +739,10 @@ export function EquipoModal({
                                   if (persona) {
                                     setEditingRolePersona(persona);
                                     setNewRoleSelection('PLANNER');
-                                    setNewRoleScopeType(m.plannerScopeType || 'ORGANIZATION');
+                                    setNewRoleScopeType(m.plannerScopeType || (m.scopedAreaId ? 'AREAS' : 'ORGANIZATION'));
                                     setNewRoleScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
+                                    setNewRoleScopedEmployees(m.scopedEmployeeIds || []);
+                                    setRoleEmployeeSearch('');
                                   }
                                 }}
                                 data-testid={`manage-scope-${m.userId}`}
@@ -677,45 +763,124 @@ export function EquipoModal({
 
         {/* TAB 3: ÁREAS */}
         {activeTab === 'areas' && (
-          <div className="equipo-modal__table-container" style={{ padding: '24px' }}>
-            {areas.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 16px' }} data-testid="empty-areas-state">
-                <Users size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
-                <h3 style={{ margin: '0 0 8px 0' }}>{t('teamWorkspace.emptyAreas')}</h3>
-                <p style={{ margin: '0 0 16px 0', color: 'var(--text-muted)', maxWidth: '440px', marginLeft: 'auto', marginRight: 'auto' }}>
-                  {t('teamWorkspace.emptyAreasSubtitle')}
+          <>
+            <div className="equipo-modal__toolbar">
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>Áreas organizativas</h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Estructura departamental y centros de trabajo (opcional).
                 </p>
               </div>
-            ) : (
-              <table className="equipo-table" data-testid="areas-table">
-                <thead>
-                  <tr>
-                    <th>Área</th>
-                    <th>Código</th>
-                    <th>Estado</th>
-                    <th>Empleados asignados</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {areas.map((a) => {
-                    const empCount = employees.filter((e) => e.areaId === a.id).length;
-                    return (
-                      <tr key={a.id}>
-                        <td><strong>{a.name}</strong></td>
-                        <td>{a.code || '—'}</td>
-                        <td>
-                          <span className={`equipo-badge equipo-badge--${a.active ? 'success' : 'neutral'}`}>
-                            {a.active ? 'Activa' : 'Inactiva'}
-                          </span>
-                        </td>
-                        <td>{empCount} empleados</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+
+              <button
+                type="button"
+                className="equipo-btn equipo-btn--primary"
+                onClick={handleOpenCreateArea}
+                data-testid="create-area-button"
+              >
+                <UserPlus size={16} />
+                {t('teamWorkspace.newArea')}
+              </button>
+            </div>
+
+            <div className="equipo-modal__table-container">
+              {effectiveAreas.length === 0 ? (
+                <div className="equipo-modal__empty-state" data-testid="empty-areas-state">
+                  <Users size={48} style={{ color: 'var(--text-muted)', marginBottom: '12px' }} />
+                  <h3 style={{ margin: '0 0 8px 0' }}>{t('teamWorkspace.emptyAreas')}</h3>
+                  <p style={{ margin: '0 0 16px 0', color: 'var(--text-muted)', maxWidth: '440px', marginLeft: 'auto', marginRight: 'auto' }}>
+                    {t('teamWorkspace.emptyAreasSubtitle')}
+                  </p>
+                  <button
+                    type="button"
+                    className="equipo-btn equipo-btn--primary"
+                    onClick={handleOpenCreateArea}
+                    data-testid="create-first-area-button"
+                  >
+                    <UserPlus size={16} />
+                    {t('teamWorkspace.createFirstArea')}
+                  </button>
+                </div>
+              ) : (
+                <table className="equipo-table" data-testid="areas-table">
+                  <thead>
+                    <tr>
+                      <th>Área</th>
+                      <th>Código</th>
+                      <th>Estado</th>
+                      <th>Empleados asignados</th>
+                      <th>Planificadores asignados</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {effectiveAreas.map((a) => {
+                      const empCount = employees.filter((e) => e.areaId === a.id).length;
+                      const assignedPlanners = members.filter(
+                        (m) =>
+                          m.role === 'PLANNER' &&
+                          (m.scopedAreaId === a.id ||
+                            (m.plannerScopeType === 'AREAS' && m.scopedAreaIds?.includes(a.id)) ||
+                            m.plannerScopeType === 'ORGANIZATION')
+                      );
+
+                      return (
+                        <tr key={a.id} data-testid={`area-row-${a.id}`}>
+                          <td>
+                            <strong>{a.name}</strong>
+                          </td>
+                          <td>
+                            {a.code ? (
+                              <span className="equipo-badge equipo-badge--neutral">{a.code}</span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td>
+                            <span className={`equipo-badge equipo-badge--${a.active ? 'active' : 'inactive'}`}>
+                              {a.active ? 'Activa' : 'Inactiva'}
+                            </span>
+                          </td>
+                          <td>{empCount} {empCount === 1 ? 'empleado' : 'empleados'}</td>
+                          <td>
+                            {assignedPlanners.length > 0 ? (
+                              <span style={{ fontSize: '0.85rem' }}>
+                                {assignedPlanners.length} {assignedPlanners.length === 1 ? 'planificador' : 'planificadores'}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin planificadores</span>
+                            )}
+                          </td>
+                          <td>
+                            <div className="equipo-actions-cell">
+                              <button
+                                type="button"
+                                className="equipo-btn equipo-btn--secondary"
+                                onClick={() => handleOpenEditArea(a)}
+                                data-testid={`edit-area-${a.id}`}
+                              >
+                                {t('teamWorkspace.edit')}
+                              </button>
+                              <button
+                                type="button"
+                                className="equipo-btn equipo-btn--secondary"
+                                onClick={() => {
+                                  setActiveTab('assignments');
+                                }}
+                                data-testid={`manage-area-assignments-${a.id}`}
+                              >
+                                {t('teamWorkspace.manageAssignments')}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </>
         )}
 
         {/* TAB 4: ASIGNACIONES */}
@@ -1094,32 +1259,41 @@ export function EquipoModal({
               </div>
 
               {newRoleSelection === 'PLANNER' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>Ámbito de planificación</p>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
                     <input
                       type="radio"
                       name="role-scope-type"
                       checked={newRoleScopeType === 'ORGANIZATION'}
                       onChange={() => setNewRoleScopeType('ORGANIZATION')}
+                      data-testid="scope-radio-org"
                     />
-                    Toda la organización
+                    {t('teamWorkspace.scopeWholeOrg')}
                   </label>
-                  {areas.length > 0 && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <input
-                        type="radio"
-                        name="role-scope-type"
-                        checked={newRoleScopeType === 'AREAS'}
-                        onChange={() => setNewRoleScopeType('AREAS')}
-                      />
-                      Áreas específicas
-                    </label>
-                  )}
-                  {newRoleScopeType === 'AREAS' && (
-                    <div style={{ paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {areas.map((a) => (
-                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="role-scope-type"
+                      checked={newRoleScopeType === 'AREAS'}
+                      onChange={() => setNewRoleScopeType('AREAS')}
+                      disabled={effectiveAreas.length === 0}
+                      data-testid="scope-radio-areas"
+                    />
+                    <span>
+                      {t('teamWorkspace.scopeAreas')}
+                      {effectiveAreas.length === 0 && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                          (No hay áreas)
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                  {newRoleScopeType === 'AREAS' && effectiveAreas.length > 0 && (
+                    <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflowY: 'auto' }}>
+                      {effectiveAreas.map((a) => (
+                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer' }}>
                           <input
                             type="checkbox"
                             checked={newRoleScopedAreas.includes(a.id)}
@@ -1130,10 +1304,61 @@ export function EquipoModal({
                                 setNewRoleScopedAreas(newRoleScopedAreas.filter((id) => id !== a.id));
                               }
                             }}
+                            data-testid={`scope-area-${a.id}`}
                           />
-                          {a.name}
+                          <span><strong>{a.name}</strong> {a.code ? `(${a.code})` : ''}</span>
                         </label>
                       ))}
+                    </div>
+                  )}
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="role-scope-type"
+                      checked={newRoleScopeType === 'EMPLOYEES'}
+                      onChange={() => setNewRoleScopeType('EMPLOYEES')}
+                      data-testid="scope-radio-employees"
+                    />
+                    {t('teamWorkspace.scopeEmployees')}
+                  </label>
+                  {newRoleScopeType === 'EMPLOYEES' && (
+                    <div style={{ paddingLeft: '24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="text"
+                          placeholder={t('teamWorkspace.searchEmployees')}
+                          value={roleEmployeeSearch}
+                          onChange={(e) => setRoleEmployeeSearch(e.target.value)}
+                          className="equipo-modal__input"
+                          style={{ fontSize: '0.8rem', padding: '4px 8px', flex: 1 }}
+                          data-testid="scope-employee-search"
+                        />
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }} data-testid="scope-selected-employees-count">
+                          {newRoleScopedEmployees.length} seleccionados
+                        </span>
+                      </div>
+                      <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {employees
+                          .filter((emp) => emp.name.toLowerCase().includes(roleEmployeeSearch.toLowerCase()))
+                          .map((emp) => (
+                            <label key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={newRoleScopedEmployees.includes(emp.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setNewRoleScopedEmployees([...newRoleScopedEmployees, emp.id]);
+                                  } else {
+                                    setNewRoleScopedEmployees(newRoleScopedEmployees.filter((id) => id !== emp.id));
+                                  }
+                                }}
+                                data-testid={`scope-employee-${emp.id}`}
+                              />
+                              <span>{emp.name} {emp.externalEmployeeId ? `(${emp.externalEmployeeId})` : ''}</span>
+                            </label>
+                          ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1253,6 +1478,88 @@ export function EquipoModal({
                   data-testid="confirm-transfer-ownership-button"
                 >
                   {transferSubmitting ? t('teamWorkspace.transferring') : t('teamWorkspace.confirmTransfer')}
+                </button>
+              </div>
+            </div>
+          </ModalShell>
+        )}
+
+        {/* AREA MODAL (NUEVA / EDITAR) */}
+        {isAreaModalOpen && (
+          <ModalShell
+            isOpen={true}
+            title={editingArea ? t('teamWorkspace.editArea') : t('teamWorkspace.newArea')}
+            onClose={() => setIsAreaModalOpen(false)}
+            closeAriaLabel="Cerrar"
+            maxWidth="480px"
+          >
+            <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: '16px' }} data-testid="area-modal">
+              {error && (
+                <div className="equipo-modal__alert equipo-modal__alert--danger">
+                  {error}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label htmlFor="area-name" style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                  {t('teamWorkspace.areaNameLabel')} *
+                </label>
+                <input
+                  id="area-name"
+                  type="text"
+                  className="equipo-modal__input"
+                  placeholder="Ej. Operaciones, Rampa, Administración"
+                  value={areaName}
+                  onChange={(e) => setAreaName(e.target.value)}
+                  data-testid="area-name-input"
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label htmlFor="area-code" style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                  {t('teamWorkspace.areaCodeLabel')}
+                </label>
+                <input
+                  id="area-code"
+                  type="text"
+                  maxLength={10}
+                  className="equipo-modal__input"
+                  placeholder="Ej. OPS, MAD, ADM"
+                  value={areaCode}
+                  onChange={(e) => setAreaCode(e.target.value.toUpperCase())}
+                  data-testid="area-code-input"
+                />
+              </div>
+
+              {editingArea && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={areaActive}
+                    onChange={(e) => setAreaActive(e.target.checked)}
+                    data-testid="area-active-checkbox"
+                  />
+                  <span>{t('teamWorkspace.areaActiveLabel')}</span>
+                </label>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  className="equipo-btn equipo-btn--secondary"
+                  onClick={() => setIsAreaModalOpen(false)}
+                >
+                  {t('teamWorkspace.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="equipo-btn equipo-btn--primary"
+                  disabled={!areaName.trim() || areaSubmitting}
+                  onClick={() => void handleSaveArea()}
+                  data-testid="save-area-button"
+                >
+                  {areaSubmitting ? t('teamWorkspace.saving') : t('teamWorkspace.saveArea')}
                 </button>
               </div>
             </div>

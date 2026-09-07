@@ -98,6 +98,14 @@ function makeFakeSql({ areas = [] } = {}) {
       }
       return Promise.resolve(target ? [target] : []);
     }
+    if (text.startsWith('UPDATE areas SET active = TRUE')) {
+      const [id, organizationId] = values;
+      const target = areas.find((a) => a.id === id && a.organization_id === organizationId);
+      if (target) {
+        target.active = true;
+      }
+      return Promise.resolve(target ? [target] : []);
+    }
     if (text.startsWith('UPDATE areas SET name')) {
       const [name, code, id, organizationId] = values;
       const normalized = name.trim().toLowerCase();
@@ -202,6 +210,13 @@ describe('PATCH /api/areas', () => {
     const res = await call('PATCH', { body: { id: 'area-ops', deactivate: true } });
     expect(res.statusCode).toBe(200);
     expect(res.body.area.active).toBe(false);
+  });
+
+  it('reactivates a deactivated area', async () => {
+    await call('PATCH', { body: { id: 'area-ops', deactivate: true } });
+    const res = await call('PATCH', { body: { id: 'area-ops', reactivate: true } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.area.active).toBe(true);
   });
 
   it('returns 404 for an area of another organization (no leak)', async () => {

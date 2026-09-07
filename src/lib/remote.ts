@@ -819,8 +819,10 @@ export async function createRemoteArea(input: { name: string; code?: string }): 
 export async function updateRemoteArea(input: {
   id: string;
   name?: string;
-  code?: string;
+  code?: string | null;
   deactivate?: boolean;
+  reactivate?: boolean;
+  active?: boolean;
 }): Promise<RemoteArea> {
   const payload = await apiFetch<{ area: RemoteArea }>('/api/areas', {
     method: 'PATCH',

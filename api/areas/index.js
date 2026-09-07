@@ -88,7 +88,7 @@ export default async function handler(req, res) {
         return sendJson(res, 404, { error: 'Area not found' });
       }
 
-      const deactivate = req.body?.deactivate === true;
+      const deactivate = req.body?.deactivate === true || req.body?.active === false;
       if (deactivate) {
         const rows = await sql`
           UPDATE areas SET active = FALSE, updated_at = NOW()
@@ -98,6 +98,25 @@ export default async function handler(req, res) {
         const row = rows[0];
         await recordAuditEvent(sql, ctx, {
           eventType: 'AREA_DEACTIVATED',
+          targetType: 'AREA',
+          targetId: row.id,
+          metadata: { name: row.name },
+        });
+        return sendJson(res, 200, {
+          area: { id: row.id, name: row.name, code: row.code, active: row.active, createdAt: row.created_at },
+        });
+      }
+
+      const reactivate = req.body?.reactivate === true || (req.body?.active === true && existing[0].active === false);
+      if (reactivate && req.body?.name === undefined && req.body?.code === undefined) {
+        const rows = await sql`
+          UPDATE areas SET active = TRUE, updated_at = NOW()
+          WHERE id = ${id} AND organization_id = ${ctx.organizationId}
+          RETURNING id, name, code, active, created_at
+        `;
+        const row = rows[0];
+        await recordAuditEvent(sql, ctx, {
+          eventType: 'AREA_REACTIVATED',
           targetType: 'AREA',
           targetId: row.id,
           metadata: { name: row.name },

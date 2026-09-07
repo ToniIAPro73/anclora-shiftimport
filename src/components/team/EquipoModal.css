@@ -283,3 +283,13 @@
   margin-bottom: 16px;
   font-size: 0.875rem;
 }
+
+.equipo-modal__empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  text-align: center;
+}
+
