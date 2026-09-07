@@ -98,11 +98,12 @@ test.describe('R5 Approval Lite E2E', () => {
       expect(created.request.status).toBe('PENDING');
 
       admin = await createLoggedInPage(browser, fixture.emails.admin);
+      await admin.page.getByTestId('sidebar-approvals').click();
       const inbox = admin.page.getByTestId('approval-inbox');
       await expect(inbox).toContainText(reason);
       await inbox.getByRole('button', { name: 'Aprobar' }).click();
       await expect(inbox).toHaveAttribute('data-testid', 'approval-inbox');
-      await expect(inbox).toContainText('No tienes aprobaciones pendientes');
+      await expect(inbox).toContainText('No tienes solicitudes pendientes');
 
       const schedulesResponse = await adminApi.get(`/api/schedules?areaId=${fixture.areaA}`);
       expect(schedulesResponse.ok()).toBe(true);
@@ -137,12 +138,13 @@ test.describe('R5 Approval Lite E2E', () => {
       await createRequest(employeeApi, 'OTHER', reason);
 
       admin = await createLoggedInPage(browser, fixture.emails.admin);
+      await admin.page.getByTestId('sidebar-approvals').click();
       const inbox = admin.page.getByTestId('approval-inbox');
       await expect(inbox).toContainText(reason);
       await inbox.getByRole('button', { name: 'Rechazar' }).click();
       await admin.page.getByLabel('Motivo del rechazo').fill('No hay cobertura suficiente.');
       await admin.page.getByRole('button', { name: 'Confirmar rechazo' }).click();
-      await expect(inbox).toContainText('No tienes aprobaciones pendientes');
+      await expect(inbox).toContainText('No tienes solicitudes pendientes');
 
       const employeeRequests = await employeeApi.get('/api/me/change-requests');
       expect(employeeRequests.ok()).toBe(true);
@@ -204,6 +206,7 @@ test.describe('R5 Approval Lite E2E', () => {
           uiDecisionStatus = response.status();
         }
       });
+      await admin.page.getByTestId('sidebar-approvals').click();
       const inboxA = admin.page.getByTestId('approval-inbox');
       await expect(inboxA).toContainText(reason);
       const [ownerDecision] = await Promise.all([

@@ -55,7 +55,7 @@ describe('ApprovalInbox', () => {
     renderInbox();
     expect(screen.getByTestId('approval-inbox-loading')).toBeTruthy();
     await waitFor(() => expect(screen.getByTestId('approval-inbox-empty')).toBeTruthy());
-    expect(screen.getByText('No tienes aprobaciones pendientes')).toBeTruthy();
+    expect(screen.getByText('No tienes solicitudes pendientes')).toBeTruthy();
     expect(screen.getByLabelText('0 pendientes')).toBeTruthy();
   });
 

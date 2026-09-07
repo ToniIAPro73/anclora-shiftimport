@@ -263,7 +263,7 @@ test('P0-M07 compact continuous flow: signup → audit', async ({ browser, page 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('approval-inbox')).toContainText('P0 flow change request');
     await page.getByTestId('approval-inbox').getByRole('button', { name: 'Aprobar' }).click();
-    await expect(page.getByTestId('approval-inbox')).toContainText('No tienes aprobaciones pendientes');
+    await expect(page.getByTestId('approval-inbox')).toContainText('No tienes solicitudes pendientes');
     await capture(testInfo, page, '18-approval');
 
     // 16. Audit evidence: approval and the preceding organization actions are

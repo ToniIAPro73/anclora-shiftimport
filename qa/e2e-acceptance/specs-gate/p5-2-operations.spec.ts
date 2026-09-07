@@ -90,7 +90,7 @@ test('P5.2 compact owner smoke: operational navigation and temporal boundaries',
   await page.screenshot({ path: testInfo.outputPath('p5-2-owner-calendar.png'), fullPage: true });
 
   await page.getByTestId('sidebar-approvals').click();
-  const approvals = page.getByRole('dialog', { name: 'Aprobaciones' });
+  const approvals = page.getByRole('dialog', { name: 'Solicitudes' });
   await expect(approvals).toBeVisible();
   await approvals.getByRole('button', { name: 'Cerrar' }).click();
   await expect(approvals).toHaveCount(0);

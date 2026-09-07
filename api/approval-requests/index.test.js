@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ORG = 'org-approval';
 const OTHER_ORG = 'org-other';
+const OWNER_TOKEN = 'approval-owner';
 const ADMIN_TOKEN = 'approval-admin';
+const LINKED_ADMIN_TOKEN = 'approval-linked-admin';
 const AREA_ADMIN_TOKEN = 'approval-area-admin';
 const PLANNER_TOKEN = 'approval-planner';
 const OTHER_ADMIN_TOKEN = 'approval-other-admin';
@@ -46,7 +48,9 @@ function makeSql() {
     calls.push({ text, values });
     if (text.includes('FROM sessions')) {
       const users = {
+        [hash(OWNER_TOKEN)]: { id: 'owner-1', role: 'OWNER' },
         [hash(ADMIN_TOKEN)]: { id: 'admin-1', role: 'ADMIN' },
+        [hash(LINKED_ADMIN_TOKEN)]: { id: 'linked-admin-1', role: 'ADMIN' },
         [hash(AREA_ADMIN_TOKEN)]: { id: 'area-admin-1', role: 'ADMIN' },
         [hash(PLANNER_TOKEN)]: { id: 'planner-1', role: 'PLANNER' },
         [hash(OTHER_ADMIN_TOKEN)]: { id: 'other-admin-1', role: 'ADMIN' },
@@ -58,10 +62,19 @@ function makeSql() {
     if (text.includes('FROM memberships')) {
       const userId = values[0];
       const org = userId === 'other-admin-1' ? OTHER_ORG : ORG;
-      const role = userId === 'employee-user-1' ? 'EMPLOYEE' : userId === 'planner-1' ? 'PLANNER' : 'ADMIN';
+      const role = userId === 'owner-1' ? 'OWNER'
+        : userId === 'employee-user-1' ? 'EMPLOYEE'
+        : userId === 'planner-1' ? 'PLANNER' : 'ADMIN';
       return Promise.resolve([{ organization_id: org, role, scoped_area_id: null, organization_name: 'Org', organization_plan: 'team' }]);
     }
-    if (text.includes('FROM employees')) return Promise.resolve([]);
+    if (text.includes('FROM employees')) {
+      const orgId = values[0];
+      const userId = values[1];
+      if (userId === 'linked-admin-1') {
+        return Promise.resolve([{ id: 'employee-linked-admin' }]);
+      }
+      return Promise.resolve([]);
+    }
     if (text.includes('FROM approval_requests')) {
       if (state.currentUser === 'employee-user-1' || state.currentUser === 'other-admin-1') return Promise.resolve([]);
       if (state.policy === 'AREA_RESPONSIBLE' && state.currentUser !== 'area-admin-1') return Promise.resolve([]);
@@ -83,10 +96,12 @@ function response() {
 }
 
 async function call({ token = ADMIN_TOKEN, query = {} } = {}) {
-  const tokenUser = token === AREA_ADMIN_TOKEN ? 'area-admin-1'
-    : token === PLANNER_TOKEN ? 'planner-1'
-      : token === OTHER_ADMIN_TOKEN ? 'other-admin-1'
-        : token === EMPLOYEE_TOKEN ? 'employee-user-1' : 'admin-1';
+  const tokenUser = token === OWNER_TOKEN ? 'owner-1'
+    : token === LINKED_ADMIN_TOKEN ? 'linked-admin-1'
+      : token === AREA_ADMIN_TOKEN ? 'area-admin-1'
+        : token === PLANNER_TOKEN ? 'planner-1'
+          : token === OTHER_ADMIN_TOKEN ? 'other-admin-1'
+            : token === EMPLOYEE_TOKEN ? 'employee-user-1' : 'admin-1';
   state.currentUser = tokenUser;
   const res = response();
   await handler({ method: 'GET', query, headers: { cookie: `anclora_session=${token}` } }, res);
@@ -106,7 +121,23 @@ describe('GET /api/approval-requests', () => {
     expect(query.text).toContain('ar.organization_id');
     expect(query.text).toContain('caller_membership.user_id');
     expect(query.text).toContain('e.user_id <>');
+    expect(query.text).toContain('::uuid IS NULL');
     expect(query.text).not.toContain('approverId');
+  });
+
+  it('allows OWNER to view pending requests', async () => {
+    const res = await call({ token: OWNER_TOKEN });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.requests).toHaveLength(1);
+  });
+
+  it('allows ADMIN with linked employee to view pending requests with typed employee parameter', async () => {
+    const res = await call({ token: LINKED_ADMIN_TOKEN });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.requests).toHaveLength(1);
+    const query = state.sql.calls.find((entry) => entry.text.includes('FROM approval_requests'));
+    expect(query.text).toContain('::uuid IS NULL');
+    expect(query.text).toContain('cr.employee_id <>');
   });
 
   it('allows PLANNER to view pending requests in scope', async () => {

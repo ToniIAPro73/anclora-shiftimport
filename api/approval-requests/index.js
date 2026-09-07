@@ -80,7 +80,7 @@ export default async function handler(req, res) {
       WHERE ar.organization_id = ${ctx.organizationId}
         AND ar.status = ${rawStatus}
         AND (e.user_id IS NULL OR e.user_id <> ${ctx.user.id})
-        AND (${ctx.employeeId || null} IS NULL OR cr.employee_id <> ${ctx.employeeId || null})
+        AND (${ctx.employeeId || null}::uuid IS NULL OR cr.employee_id <> ${ctx.employeeId || null}::uuid)
         AND (
           caller_membership.role = 'OWNER'
           OR (
