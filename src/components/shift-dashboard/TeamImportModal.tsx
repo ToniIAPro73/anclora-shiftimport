@@ -44,6 +44,9 @@ import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPa
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference } from '../../lib/week';
+import { FutureImportConsent } from './FutureImportConsent';
+import { splitImportByOperationalDate } from '../../lib/import-temporal';
+import type { FutureImportDecision } from '../../lib/import-temporal';
 
 /** No employee identity is known yet when the team-roster detectors can't
  * classify the file — this selector only feeds the shared diagnosis
@@ -184,7 +187,7 @@ export const TeamImportModal = ({
     ambiguous: rows.filter((row) => row.status === 'ambiguous').length,
   }), [rows]);
   const [preview, setPreview] = useState<PreviewEntry[]>([]);
-  const [futureImportDecision, setFutureImportDecision] = useState<'draft' | 'historical-only'>('historical-only');
+  const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
   const [outcomes, setOutcomes] = useState<ImportOutcome[]>([]);
   const [importing, setImporting] = useState(false);
   // Fase 1.2F-PDF §12: PDF batches share ONE Import record across every
@@ -705,14 +708,8 @@ export const TeamImportModal = ({
     const fileFingerprint = sourceFile ? await fingerprintFile(sourceFile) : undefined;
 
     const cutoff = getOperationalDate();
-    const temporalCounts = preview.reduce((counts, entry) => {
-      for (const shift of entry.newShifts) {
-        if (shift.date < cutoff) counts.historical += 1;
-        else counts.future += 1;
-      }
-      return counts;
-    }, { historical: 0, future: 0 });
-    const hasFutureData = temporalCounts.future > 0;
+    const temporalCounts = splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts), cutoff);
+    const hasFutureData = temporalCounts.future.length > 0;
     const submitted = preview.flatMap((entry) => entry.newShifts
       .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'draft', cutoff))
       .map((shift) => ({
@@ -1220,20 +1217,12 @@ export const TeamImportModal = ({
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewErrors')}</div>
               </div>
             </div>
-            {(preview.reduce((count, entry) => count + entry.newShifts.filter((shift) => shift.date >= getOperationalDate()).length, 0)) > 0 && (
-              <fieldset data-testid="team-import-future-consent" style={{ padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', display: 'grid', gap: '10px' }}>
-                <legend style={{ padding: '0 6px', fontWeight: 700 }}>{t('importModal.futureConsentTitle')}</legend>
-                <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('importModal.futureConsentDescription')}</p>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <input type="radio" name="team-future-import-decision" value="historical-only" checked={futureImportDecision === 'historical-only'} onChange={() => { setError(''); setFutureImportDecision('historical-only'); }} />
-                  <span>{t('importModal.futureConsentHistoricalOnly')}</span>
-                </label>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                  <input type="radio" name="team-future-import-decision" value="draft" checked={futureImportDecision === 'draft'} onChange={() => { setError(''); setFutureImportDecision('draft'); }} />
-                  <span>{t('importModal.futureConsentDraft')}</span>
-                </label>
-                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('importModal.futureConsentCancelHint')}</p>
-              </fieldset>
+            {(splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).future.length) > 0 && (
+              <FutureImportConsent
+                decision={futureImportDecision}
+                onChange={(decision) => { setError(''); setFutureImportDecision(decision); }}
+                testId="team-import-future-consent"
+              />
             )}
             <div style={{ overflowY: 'auto', display: 'grid', gap: '6px', paddingRight: '4px', flex: 1, minHeight: 0 }}>
               {preview.map((entry) => (

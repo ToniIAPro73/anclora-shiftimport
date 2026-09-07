@@ -32,7 +32,9 @@ import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPa
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { RemoteArea } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
-import { getOperationalDate } from '../../lib/operational-date';
+import { splitImportByOperationalDate } from '../../lib/import-temporal';
+import type { FutureImportDecision } from '../../lib/import-temporal';
+import { FutureImportConsent } from './FutureImportConsent';
 
 export interface SelfImportSummary {
   totalRows: number;
@@ -42,8 +44,6 @@ export interface SelfImportSummary {
   futureOwnRows: number;
   identityAmbiguous?: boolean;
 }
-
-export type FutureImportDecision = 'draft' | 'historical-only';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -372,11 +372,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     && importDiff.new.length === 0
     && importDiff.changed.length === 0;
   const temporalSummary = useMemo(() => {
-    const cutoff = getOperationalDate();
     const ready = parsedShifts.filter(hasImportableShiftData);
+    const split = splitImportByOperationalDate(ready);
     return {
-      historical: ready.filter((shift) => shift.date < cutoff).length,
-      future: ready.filter((shift) => shift.date >= cutoff).length,
+      historical: split.historical.length,
+      future: split.future.length,
     };
   }, [parsedShifts]);
 
@@ -1451,34 +1451,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   {t('importModal.selfFutureDraftExcluded', { count: temporalSummary.future })}
                 </div>
               ) : (
-                <fieldset
-                  data-testid="import-future-consent"
-                  style={{ marginTop: '12px', padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', display: 'grid', gap: '10px' }}
-                >
-                  <legend style={{ padding: '0 6px', fontWeight: 700 }}>{t('importModal.futureConsentTitle')}</legend>
-                  <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.45 }}>{t('importModal.futureConsentDescription')}</p>
-                  <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <input
-                      type="radio"
-                      name="future-import-decision"
-                      value="historical-only"
-                      checked={futureImportDecision === 'historical-only'}
-                      onChange={() => setFutureImportDecision('historical-only')}
-                    />
-                    <span>{t('importModal.futureConsentHistoricalOnly')}</span>
-                  </label>
-                  <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <input
-                      type="radio"
-                      name="future-import-decision"
-                      value="draft"
-                      checked={futureImportDecision === 'draft'}
-                      onChange={() => setFutureImportDecision('draft')}
-                    />
-                    <span>{t('importModal.futureConsentDraft')}</span>
-                  </label>
-                  <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('importModal.futureConsentCancelHint')}</p>
-                </fieldset>
+                <FutureImportConsent
+                  decision={futureImportDecision}
+                  onChange={setFutureImportDecision}
+                  testId="import-future-consent"
+                />
               )
             )}
 
@@ -1502,7 +1479,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             disabled={!isAuthenticated || (readyShifts.length === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || confirming || importAlreadyExists || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
-            style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: confirming ? 'wait' : undefined }}
+            style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: interactionLocked ? 'wait' : undefined }}
           >
             <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
               {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: readyShifts.length, total: parsedShifts.length }) : t('importModal.authRequired')}

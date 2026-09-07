@@ -16,6 +16,14 @@ La fecha operativa se calcula con el helper canónico de producto (`Europe/Madri
 La frontera es la misma en frontend y backend. Un `Shift` histórico nunca representa una fila de
 hoy o futura proveniente de este flujo.
 
+## Aplicación independiente del formato
+
+Una vez normalizado, todo registro fechado entra en este mismo flujo temporal, sin excepción por
+formato de origen. Esto incluye los adaptadores actualmente soportados para PDF, imagen, CSV y
+XLSX, y los formatos JSON/XML del flujo de equipo. El adaptador solo parsea y normaliza; no decide
+si una fila futura se excluye o se envía a borrador. La decisión compartida se presenta mediante
+el componente `FutureImportConsent`.
+
 ## Consentimiento
 
 Si el análisis contiene filas de hoy/futuras, OWNER, ADMIN y PLANNER deben elegir por importación:
@@ -29,6 +37,9 @@ de hoy/futuras; la UI no es la autoridad de seguridad.
 
 EMPLOYEE conserva SELF import histórico y excluye hoy/futuro sin crear `ScheduleVersion` ni
 `ShiftAssignment`.
+
+Mientras una acción de importación está en curso, su control queda deshabilitado, anuncia el texto
+localizado de progreso y usa el cursor de espera hasta recibir el resultado.
 
 ## Scheduling
 

@@ -1942,7 +1942,8 @@ y dónde revisarlos antes de publicar.
 **SOURCE_DRIVERS**: prompt P5.5; `FUTURE_IMPORT_DRAFT_CONTRACT.md`; R3-M14; P5.2 temporal contract.
 **SCOPE**: preview temporal, consentimiento por operación, resolución/reutilización de drafts, assignments
 idempotentes, resultado separado, enlace a Planner, autorización por rol/scope y regresión con ficheros reales
-si están disponibles.
+si están disponibles. Tras la normalización, la política temporal es única y agnóstica al formato de
+origen: PDF, imagen, CSV, XLSX y JSON/XML del flujo de equipo no pueden saltarse el consentimiento común.
 **OUT_OF_SCOPE**: futuro desde EMPLOYEE, publicación automática, Shift Swap (P5.6), migraciones, billing y
 rediseño del dominio Scheduling.
 **DEPENDENCIES**: P5.4; `api/_lib/future-import.js`; `Schedule`/`ScheduleVersion`/`ShiftAssignment` existentes.

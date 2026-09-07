@@ -1174,6 +1174,7 @@ la organización; el cliente no puede elegir el alcance.
 **D-P5.5-03** — The operational calendar shows published reality only; imported future drafts appear in Planner.
 **D-P5.5-04** — Future imports resolve the canonical weekly Schedule/DRAFT, reuse editable drafts and preserve published-version immutability.
 **D-P5.5-05** — EMPLOYEE future import remains excluded; only its historical SELF rows may persist in this phase.
+**D-P5.5-06** — Temporal consent is format-agnostic: after normalization, every supported source enters the same date split and consent component; import controls remain disabled with localized progress and a wait cursor while persistence is pending.
 
 These decisions are approved for P5.5 and do not implement Shift Swap. The deferred intention and
 open questions remain under P5.6 in the roadmap and `docs/product/EMPLOYEE_SHIFT_SWAP_DEFERRED.md`.

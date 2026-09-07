@@ -43,7 +43,7 @@ import { setVlmFallbackSessionActive } from './ingestion/vlm-client';
 import { StatsBar } from './components/shift-dashboard/StatsBar';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
-import { FutureImportDecision, ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
+import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
 import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
@@ -82,6 +82,8 @@ import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
 import { useI18n } from './lib/use-i18n';
 import { getOperationalDate, getPreviousOperationalDate, isHistoricalDate, shiftOperationalDate } from './lib/operational-date';
+import { splitImportByOperationalDate } from './lib/import-temporal';
+import type { FutureImportDecision } from './lib/import-temporal';
 
 /** localStorage flag: local→org format-profile migration already resolved
  * (Format Memory v1). Separate from MIGRATION_DONE_KEY — shift data and
@@ -1146,8 +1148,9 @@ function App() {
       : await loadRemoteShifts(targetEmployeeId ?? '').catch(() => [] as Shift[]);
     const normalizedIncoming = newShifts.map(normalizeShift);
     const selfImportCutoff = getOperationalDate();
-    const schedulingIncoming = normalizedIncoming.filter((shift) => shift.date >= selfImportCutoff);
-    const historicalIncoming = normalizedIncoming.filter((shift) => shift.date < selfImportCutoff);
+    const temporalSplit = splitImportByOperationalDate(normalizedIncoming, selfImportCutoff);
+    const schedulingIncoming = temporalSplit.future;
+    const historicalIncoming = temporalSplit.historical;
     const eligibleIncoming = historicalIncoming;
     const excludedSchedulingCount = schedulingIncoming.length > 0 && (
       session.role === 'EMPLOYEE' || futureImportDecision === 'historical-only'
