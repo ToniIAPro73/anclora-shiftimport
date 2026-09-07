@@ -802,6 +802,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
 
       await waitFor(() => expect(screen.getByTestId('import-diagnostics')).toBeTruthy(), { timeout: 10000 });
       expect(screen.getByText('Este archivo contiene colores cuyo significado todavía no conocemos. Indica a qué tipo de turno corresponde cada color o elige ignorarlo.')).toBeTruthy();
+      expect(screen.getByText('Clasificar colores detectados')).toBeTruthy();
 
       const rows = screen.getAllByTestId('unknown-color-row');
       expect(rows).toHaveLength(2);

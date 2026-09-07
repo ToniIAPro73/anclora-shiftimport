@@ -1440,9 +1440,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   gap: '8px',
                   maxHeight: '260px',
                   overflowY: 'auto',
+                  flexShrink: 0,
                 }}
               >
-                {unknownColorTokens.map((token) => {
+                <h4
+                  style={{
+                    margin: '0 0 2px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    color: 'var(--text-primary)',
+                  }}
+                >
+                  {locale === 'en' ? 'Classify detected colors' : 'Clasificar colores detectados'}
+                </h4>
+                {unknownColorTokens.map((token, index) => {
                   const rawHex = token.slice(XLSX_STYLE_TOKEN_PREFIX.length);
                   const swatchHex = /^[0-9A-F]{6}$/i.test(rawHex)
                     ? `#${rawHex}`
@@ -1450,6 +1461,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                       ? `#${rawHex.slice(2)}`
                       : rawHex;
                   const resolution = colorResolutions[token];
+                  const colorIndex = index + 1;
                   return (
                     <div
                       key={token}
@@ -1464,16 +1476,17 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                         border: '1px solid var(--glass-border)',
                         background: 'var(--panel-muted-bg)',
                         flexWrap: 'wrap',
+                        flexShrink: 0,
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span
                           data-testid="color-swatch"
                           role="img"
-                          aria-label="Color detectado"
+                          aria-label={`Color detectado ${colorIndex}`}
                           style={{
-                            width: '20px',
-                            height: '20px',
+                            width: '24px',
+                            height: '24px',
                             borderRadius: '4px',
                             backgroundColor: swatchHex,
                             border: '1px solid var(--glass-border)',
@@ -1481,14 +1494,16 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                             flexShrink: 0,
                           }}
                         />
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Color detectado</span>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                          Color detectado {colorIndex}
+                        </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                           <span>Tipo de turno:</span>
                           <select
                             className="modal-input"
-                            aria-label="Tipo de turno"
+                            aria-label={`Tipo de turno`}
                             value={resolution?.kind === 'shift-type' ? resolution.typeId : ''}
                             onChange={(e) => handleColorSelect(token, e.target.value)}
                             style={{ padding: '6px 10px', fontSize: '0.8rem', minWidth: '150px' }}
