@@ -1009,7 +1009,7 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
     throw new HttpError(400, 'Valid email and role are required');
   }
   if (role === 'OWNER' && (await countOrgOwners(sql, ctx.organizationId)) >= 1) {
-    const error = new HttpError(400, 'The organization already has an OWNER');
+    const error = new HttpError(400, 'The organization already has an OWNER. Ownership changes must use transfer-ownership.');
     error.code = 'OWNER_EXISTS';
     throw error;
   }
@@ -1220,6 +1220,10 @@ export async function bulkAddMembers(sql, ctx, items, hashPasswordFn) {
       fail(row, 'INVALID_ROLE', 'A valid role is required');
       continue;
     }
+    if (row.role === 'OWNER') {
+      fail(row, 'OWNER_NOT_ASSIGNABLE', 'The OWNER role cannot be assigned via bulk import. Use transfer-ownership.');
+      continue;
+    }
     if (seenEmails.has(row.email)) {
       fail(row, 'DUPLICATE_IN_FILE', 'Duplicate email within this file');
       continue;
@@ -1385,6 +1389,9 @@ export async function updateMemberRole(sql, ctx, input) {
     error.code = 'OWNER_EXISTS';
     throw error;
   }
+  if (ctx.role !== 'OWNER' && current.role === 'OWNER') {
+    throw new HttpError(403, 'Only the organization OWNER can transfer or modify ownership');
+  }
 
   // Compatibility guard for any pre-R2-M06 data encountered before the
   // migration has completed: do not remove the last high-privilege member.
@@ -1534,8 +1541,8 @@ export async function removeMember(sql, ctx, input) {
   if (rows.length === 0) {
     throw new HttpError(404, 'Membership not found');
   }
-  if (rows[0].role === 'OWNER' && (await countOrgOwners(sql, ctx.organizationId)) <= 1) {
-    const error = new HttpError(400, 'The organization must keep at least one OWNER');
+  if (rows[0].role === 'OWNER') {
+    const error = new HttpError(400, 'The organization owner cannot be removed. Use transfer-ownership.');
     error.code = 'LAST_OWNER';
     throw error;
   }

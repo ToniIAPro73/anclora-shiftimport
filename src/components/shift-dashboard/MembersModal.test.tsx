@@ -57,6 +57,7 @@ function renderMembersModal(
   onChanged: () => void = () => {},
   areas: RemoteArea[] = [],
   currentPlan: 'free' | 'personal' | 'team' | null = null,
+  currentUserId: string = 'user-admin',
 ) {
   return render(
     <I18nProvider>
@@ -65,7 +66,7 @@ function renderMembersModal(
         onClose={() => {}}
         employees={employees}
         areas={areas}
-        currentUserId="user-admin"
+        currentUserId={currentUserId}
         onChanged={onChanged}
         currentPlan={currentPlan}
       />
@@ -99,14 +100,14 @@ describe('MembersModal — tabs', () => {
     expect((screen.getByLabelText('Contraseña') as HTMLInputElement).closest('fieldset')).toBe(formGate);
   });
 
-  it('offers all four MVP roles in the add-user selector', async () => {
+  it('offers assignable roles (ADMIN, PLANNER, EMPLOYEE) but never OWNER in the add-user selector', async () => {
     mockedListRemoteMembers.mockResolvedValue([]);
     renderMembersModal();
 
     await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: 'Rol' }));
 
-    expect(screen.getByRole('option', { name: 'Propietario' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Propietario' })).toBeNull();
     expect(screen.getByRole('option', { name: 'Administrador' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Planificador' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'Empleado' })).toBeTruthy();
@@ -746,5 +747,32 @@ describe('MembersModal — bulk access management (Fase 3/4/6/7/8)', () => {
     expect(screen.queryByText('Emp Uno')).toBeNull();
     // Selection made while filtered to "sin acceso" survives switching filters.
     expect(screen.getByText('2 seleccionados')).toBeTruthy();
+  });
+
+  describe('MembersModal — Ownership Transfer & Role Protection', () => {
+    it('displays OWNER as static badge and shows transfer button only for the owner', async () => {
+      mockedListRemoteMembers.mockResolvedValue([
+        { userId: 'u-owner', email: 'owner@example.com', displayName: 'Owner User', role: 'OWNER' },
+        { userId: 'user-admin', email: 'admin@example.com', displayName: 'Admin User', role: 'ADMIN' },
+      ]);
+      renderMembersModal([], () => {}, [], 'team', 'u-owner');
+
+      await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+      expect(screen.getByText('owner@example.com')).toBeTruthy();
+      expect(screen.getByText('Propietario')).toBeTruthy();
+      expect(screen.getByTestId('members-transfer-ownership-button')).toBeTruthy();
+    });
+
+    it('hides transfer button from an admin caller and prevents demoting owner', async () => {
+      mockedListRemoteMembers.mockResolvedValue([
+        { userId: 'u-owner', email: 'owner@example.com', displayName: 'Owner User', role: 'OWNER' },
+        { userId: 'user-admin', email: 'admin@example.com', displayName: 'Admin User', role: 'ADMIN' },
+      ]);
+      renderMembersModal([], () => {}, [], 'team', 'user-admin');
+
+      await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+      expect(screen.getByText('owner@example.com')).toBeTruthy();
+      expect(screen.queryByTestId('members-transfer-ownership-button')).toBeNull();
+    });
   });
 });

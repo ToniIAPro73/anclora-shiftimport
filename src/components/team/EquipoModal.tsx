@@ -1031,16 +1031,13 @@ export function EquipoModal({
             {assignmentSubTab === 'employees_to_area' && (
               <>
                 {/* Bulk Operation Action Bar */}
-                <div style={{
-                  padding: '12px 16px',
-                  background: 'var(--bg-surface-header, #f8fafc)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
+                <div className="equipo-panel" style={{
                   display: 'flex',
                   flexWrap: 'wrap',
                   alignItems: 'center',
                   gap: '12px',
-                  justifyContent: 'space-between'
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
                 }}>
                   <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
                     <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Área de destino:</label>
@@ -1161,7 +1158,7 @@ export function EquipoModal({
                           return (
                             <tr
                               key={emp.id}
-                              style={{ background: isSelected ? 'var(--accent-subtle, rgba(14, 165, 233, 0.08))' : undefined }}
+                              style={{ background: isSelected ? 'var(--gold-tint-bg)' : undefined }}
                               data-testid={`bulk-employee-row-${emp.id}`}
                             >
                               <td style={{ textAlign: 'center' }}>
@@ -1204,11 +1201,7 @@ export function EquipoModal({
 
             {assignmentSubTab === 'planner_scopes' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }}>
-                <div style={{
-                  padding: '16px',
-                  background: 'var(--bg-surface-header, #f8fafc)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
+                <div className="equipo-panel" style={{
                   display: 'flex',
                   flexDirection: 'column',
                   gap: '12px'
@@ -1380,16 +1373,13 @@ export function EquipoModal({
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                     {t('teamWorkspace.temporaryPasswordNote')}
                   </p>
-                  <div style={{
+                  <div className="equipo-panel" style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '8px',
                     margin: '16px 0',
                     padding: '12px',
-                    background: 'var(--bg-surface-header, #f8fafc)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '6px',
                     fontFamily: 'monospace',
                     fontSize: '1rem',
                   }}>
@@ -1640,11 +1630,8 @@ export function EquipoModal({
                   {wizardStep === 5 && (
                     <div className="equipo-wizard__form-group">
                       <h4 style={{ margin: '0 0 12px 0' }}>Resumen de la nueva persona</h4>
-                      <div style={{
+                      <div className="equipo-panel" style={{
                         padding: '12px 16px',
-                        background: 'var(--bg-surface-header, #f8fafc)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '6px',
                         display: 'flex',
                         flexDirection: 'column',
                         gap: '6px',

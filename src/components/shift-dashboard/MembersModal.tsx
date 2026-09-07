@@ -12,6 +12,7 @@ import {
   RemoteArea,
   RemoteMember,
   removeRemoteMember,
+  transferRemoteOwnership,
   updateRemoteMemberRole,
   updateRemoteEmployee,
   RemoteEmployee,
@@ -51,7 +52,7 @@ interface MembersModalProps {
   organizationName?: string;
 }
 
-const ROLES: RemoteMember['role'][] = ['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'];
+const ASSIGNABLE_ROLES: RemoteMember['role'][] = ['ADMIN', 'PLANNER', 'EMPLOYEE'];
 type Tab = 'users' | 'employees';
 
 interface EmployeePreviewRow {
@@ -206,6 +207,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
   const [employeeId, setEmployeeId] = useState('');
   const [lastTemporaryPassword, setLastTemporaryPassword] = useState<{ email: string; password: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [transferTargetUserId, setTransferTargetUserId] = useState('');
+  const [previousOwnerRole, setPreviousOwnerRole] = useState<'ADMIN' | 'PLANNER'>('ADMIN');
+  const [transferConfirmed, setTransferConfirmed] = useState(false);
+  const [transferSubmitting, setTransferSubmitting] = useState(false);
+  const [transferSuccessMsg, setTransferSuccessMsg] = useState<string | null>(null);
 
   // Manual "add employee" form.
   const [newEmployeeName, setNewEmployeeName] = useState('');
@@ -304,6 +311,31 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setError(t('members.loadFailed'));
     }
   }, [t]);
+
+  const transferCandidates = members.filter((m) => m.userId !== currentUserId);
+
+  const handleTransferOwnership = async () => {
+    if (!transferTargetUserId || !transferConfirmed) return;
+    setTransferSubmitting(true);
+    setError('');
+    try {
+      const res = await transferRemoteOwnership(transferTargetUserId, previousOwnerRole);
+      if (res.transferred) {
+        setTransferSuccessMsg(t('teamWorkspace.transferSuccess'));
+        onChanged();
+        await reload();
+        setTimeout(() => {
+          setIsTransferOpen(false);
+          setTransferSuccessMsg(null);
+          setTransferConfirmed(false);
+        }, 1500);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
+    } finally {
+      setTransferSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -1100,21 +1132,52 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                       {member.displayName || member.email}
                       <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}> · {member.email}</span>
                     </span>
-                    <SearchableSelect
-                      label=""
-                      value={member.role}
-                      onChange={(nextRole) => void run(() => updateRemoteMemberRole(
-                        member.userId,
-                        nextRole as RemoteMember['role'],
-                        nextRole === 'PLANNER' ? member.scopedAreaId : null,
-                      ), membersListRef.current)}
-                      searchPlaceholder={t('members.searchPlaceholder')}
-                      emptyMessage={t('members.noRoles')}
-                      ariaLabel={t('members.roleLabel')}
-                      options={ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
-                      disabled={busy || member.userId === currentUserId}
-                      style={{ width: 'auto', flex: '0 0 auto' }}
-                    />
+                    {member.role === 'OWNER' ? (
+                      <span
+                        className="equipo-badge equipo-badge--owner"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '4px 10px',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          borderRadius: '4px',
+                          background: 'var(--gold-tint-bg)',
+                          color: 'var(--color-gold)',
+                          border: '1px solid var(--glass-border)',
+                        }}
+                      >
+                        {t('role.owner')}
+                      </span>
+                    ) : (
+                      <SearchableSelect
+                        label=""
+                        value={member.role}
+                        onChange={(nextRole) => void run(() => updateRemoteMemberRole(
+                          member.userId,
+                          nextRole as RemoteMember['role'],
+                          nextRole === 'PLANNER' ? member.scopedAreaId : null,
+                        ), membersListRef.current)}
+                        searchPlaceholder={t('members.searchPlaceholder')}
+                        emptyMessage={t('members.noRoles')}
+                        ariaLabel={t('members.roleLabel')}
+                        options={ASSIGNABLE_ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
+                        disabled={busy || member.userId === currentUserId}
+                        style={{ width: 'auto', flex: '0 0 auto' }}
+                      />
+                    )}
+                    {member.role === 'OWNER' && member.userId === currentUserId && (
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        disabled={busy}
+                        onClick={() => { setIsTransferOpen(true); setTransferConfirmed(false); }}
+                        style={{ padding: '6px 10px', fontWeight: 700, borderColor: 'var(--danger)', color: 'var(--danger)', fontSize: '0.78rem' }}
+                        data-testid="members-transfer-ownership-button"
+                      >
+                        {t('teamWorkspace.transferOwnership')}
+                      </button>
+                    )}
                     {member.role === 'PLANNER' && (
                       <SearchableSelect
                         label={t('members.scopeAreaLabel')}
@@ -1128,7 +1191,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                         style={{ width: 'auto', flex: '0 0 auto' }}
                       />
                     )}
-                    {member.userId !== currentUserId && (
+                    {member.userId !== currentUserId && member.role !== 'OWNER' && (
                       <button
                         type="button"
                         className="btn-outline"
@@ -1222,7 +1285,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                     searchPlaceholder={t('members.searchPlaceholder')}
                     emptyMessage={t('members.noRoles')}
                     ariaLabel={t('members.roleLabel')}
-                    options={ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
+                    options={ASSIGNABLE_ROLES.map((role) => ({ value: role, label: t(`role.${role.toLowerCase()}`), searchText: role.toLowerCase() }))}
                   />
                   {role === 'PLANNER' && (
                     <SearchableSelect
@@ -1649,7 +1712,7 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                         aria-label={t('members.bulkGrantRoleAria', { name: employee?.name ?? '' })}
                         style={{ padding: '6px 8px', fontSize: '0.8rem' }}
                       >
-                        {ROLES.map((roleOption) => (
+                        {ASSIGNABLE_ROLES.map((roleOption) => (
                           <option key={roleOption} value={roleOption}>{t(`role.${roleOption.toLowerCase()}`)}</option>
                         ))}
                       </select>
@@ -1710,6 +1773,98 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       onCancel={() => setConfirmation(null)}
       onConfirm={() => confirmation?.onConfirm()}
     />
+    {isTransferOpen && (
+      <ModalShell
+        isOpen={isTransferOpen}
+        onClose={() => setIsTransferOpen(false)}
+        title={t('teamWorkspace.transferOwnershipTitle')}
+        closeAriaLabel="Cerrar"
+        maxWidth="520px"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }} data-testid="transfer-ownership-dialog">
+          <div className="ownership-transfer-card" style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--danger-border)', background: 'var(--danger-bg)', color: 'var(--text-primary)' }}>
+            <strong>{t('teamWorkspace.transferOwnershipTitle')}</strong>
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+              {t('teamWorkspace.transferOwnershipWarning')}
+            </p>
+          </div>
+
+          {transferSuccessMsg && (
+            <div style={{ padding: '8px 12px', color: 'var(--success, #16a34a)', fontWeight: 600 }}>
+              {transferSuccessMsg}
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="members-new-owner-select" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
+              {t('teamWorkspace.newOwnerLabel')} *
+            </label>
+            <select
+              id="members-new-owner-select"
+              className="modal-input"
+              style={{ width: '100%' }}
+              value={transferTargetUserId}
+              onChange={(e) => setTransferTargetUserId(e.target.value)}
+              data-testid="new-owner-select"
+            >
+              <option value="">Selecciona al nuevo propietario…</option>
+              {transferCandidates.map((m) => (
+                <option key={m.userId} value={m.userId}>
+                  {m.displayName || m.email} ({m.role}) — {m.email}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="members-previous-owner-role" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
+              {t('teamWorkspace.previousOwnerRoleLabel')}
+            </label>
+            <select
+              id="members-previous-owner-role"
+              className="modal-input"
+              style={{ width: '100%' }}
+              value={previousOwnerRole}
+              onChange={(e) => setPreviousOwnerRole(e.target.value as 'ADMIN' | 'PLANNER')}
+              data-testid="previous-owner-role-select"
+            >
+              <option value="ADMIN">Administrador (recomendado)</option>
+              <option value="PLANNER">Planificador</option>
+            </select>
+          </div>
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.85rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={transferConfirmed}
+              onChange={(e) => setTransferConfirmed(e.target.checked)}
+              data-testid="transfer-confirm-checkbox"
+            />
+            <span>Entiendo que cederé el rol de Propietario y esta acción no puede deshacerse de forma unilateral.</span>
+          </label>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={() => setIsTransferOpen(false)}
+            >
+              {t('teamWorkspace.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn-gold"
+              style={{ background: 'var(--danger)', borderColor: 'var(--danger)', color: '#fff' }}
+              disabled={!transferTargetUserId || !transferConfirmed || transferSubmitting}
+              onClick={() => void handleTransferOwnership()}
+              data-testid="confirm-transfer-ownership-button"
+            >
+              {transferSubmitting ? t('teamWorkspace.transferring') : t('teamWorkspace.confirmTransfer')}
+            </button>
+          </div>
+        </div>
+      </ModalShell>
+    )}
     </>
   );
 };

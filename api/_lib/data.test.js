@@ -1616,6 +1616,14 @@ describe('bulk user provisioning + automatic linking (bulkAddMembers)', () => {
     expect(results[0]).toMatchObject({ status: 'error', code: 'INVALID_ROLE' });
   });
 
+  it('case G2: role OWNER in bulk import -> row fails OWNER_NOT_ASSIGNABLE', async () => {
+    const { sql } = makeFakeSql(adminOnly());
+    const { results } = await bulkAddMembers(sql, adminCtx, [
+      { key: '1', email: 'owner2@example.com', role: 'OWNER' },
+    ], fakeHash);
+    expect(results[0]).toMatchObject({ status: 'error', code: 'OWNER_NOT_ASSIGNABLE' });
+  });
+
   it('case H: invalid email -> row fails INVALID_EMAIL', async () => {
     const { sql } = makeFakeSql(adminOnly());
     const { results } = await bulkAddMembers(sql, adminCtx, [
