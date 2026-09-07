@@ -24,6 +24,7 @@ const approvalAuditMigrationPath = resolve(dirname(fileURLToPath(import.meta.url
 const changeRequestApplicationMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0032_change_request_application.sql');
 const importOutcomeMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0033_import_outcome.sql');
 const shiftTypeSemanticsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0034_shift_type_semantics.sql');
+const operationalAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0035_operational_assignments.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -380,5 +381,42 @@ describe('0033 import outcome migration contract', () => {
     expect(sql).toContain("'IMPORT_FAILED'");
     expect(sql).toContain("'PLAN_LIMIT_REJECTED'");
     expect(sql).not.toContain('DROP TABLE');
+  });
+});
+
+describe('0035 operational assignments migration contract', () => {
+  it('creates operational_assignments table with temporal validity and constraints', async () => {
+    const sql = await readFile(operationalAssignmentsMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS operational_assignments');
+    expect(sql).toContain("CHECK (assignment_type IN ('EMPLOYEE_AREA', 'PLANNER_AREA', 'PLANNER_EMPLOYEE'))");
+    expect(sql).toContain('valid_from DATE NOT NULL DEFAULT CURRENT_DATE');
+    expect(sql).toContain('valid_to DATE');
+    expect(sql).toContain('operational_assignments_valid_range_check');
+  });
+
+  it('defines partial unique indexes for single active area and non-duplicate planner scopes', async () => {
+    const sql = await readFile(operationalAssignmentsMigrationPath, 'utf8');
+    expect(sql).toContain('op_assign_emp_active_area_idx');
+    expect(sql).toContain("WHERE assignment_type = 'EMPLOYEE_AREA' AND valid_to IS NULL");
+    expect(sql).toContain('op_assign_planner_area_unique_idx');
+    expect(sql).toContain('op_assign_planner_emp_unique_idx');
+  });
+
+  it('adds explicit planner_scope_type on memberships and backfills existing rows', async () => {
+    const sql = await readFile(operationalAssignmentsMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS planner_scope_type TEXT');
+    expect(sql).toContain("CHECK (planner_scope_type IS NULL OR planner_scope_type IN ('ORGANIZATION', 'AREAS', 'EMPLOYEES'))");
+    expect(sql).toContain("INSERT INTO operational_assignments (organization_id, assignment_type, subject_id, target_id, valid_from, valid_to)");
+    expect(sql).toContain("WHERE assignment_type = 'EMPLOYEE_AREA'");
+    expect(sql).toContain("WHERE assignment_type = 'PLANNER_AREA'");
+  });
+
+  it('extends audit event types with P5.7 domain vocabulary', async () => {
+    const sql = await readFile(operationalAssignmentsMigrationPath, 'utf8');
+    expect(sql).toContain("'OWNERSHIP_TRANSFERRED'");
+    expect(sql).toContain("'PLANNER_SCOPE_CHANGED'");
+    expect(sql).toContain("'ASSIGNMENT_CREATED'");
+    expect(sql).toContain("'ASSIGNMENT_UPDATED'");
+    expect(sql).toContain("'ASSIGNMENT_REMOVED'");
   });
 });
