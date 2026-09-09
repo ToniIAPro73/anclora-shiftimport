@@ -319,6 +319,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [authError, setAuthError] = useState(false);
   const [periodConflictResolved, setPeriodConflictResolved] = useState(false);
   const [parsedShifts, setParsedShifts] = useState<ParsedCalendarShift[]>([]);
+  // Predictable focus destination after deleting a preview row (UXR-F1-M01 /
+  // CX-F03 AC-2): the row's own trash button loses its DOM node on removal,
+  // so focus would otherwise fall back to <body>. This tracks the removed
+  // row's index so the effect below can redirect focus once the shorter
+  // array has re-rendered.
+  const [pendingRemovalFocusIndex, setPendingRemovalFocusIndex] = useState<number | null>(null);
+  const rowRemoveButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const emptyPreviewRef = useRef<HTMLDivElement | null>(null);
   const [scanTime, setScanTime] = useState<string | null>(null);
   const [employeeName, setEmployeeName] = useState(() => userId ? loadUserProfile(userId).displayName : '');
   const [employeeId, setEmployeeId] = useState(() => userId ? loadUserProfile(userId).employeeIdentifiers[0] ?? '' : '');
@@ -818,7 +826,19 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
   const handleRemoveShift = (index: number) => {
     setParsedShifts(parsedShifts.filter((_, currentIndex) => currentIndex !== index));
+    setPendingRemovalFocusIndex(index);
   };
+
+  useEffect(() => {
+    if (pendingRemovalFocusIndex === null) return;
+    if (parsedShifts.length === 0) {
+      emptyPreviewRef.current?.focus();
+    } else {
+      const targetIndex = Math.min(pendingRemovalFocusIndex, parsedShifts.length - 1);
+      rowRemoveButtonRefs.current[targetIndex]?.focus();
+    }
+    setPendingRemovalFocusIndex(null);
+  }, [parsedShifts, pendingRemovalFocusIndex]);
 
   const handleAssistantComplete = (result: AssistantCompletion) => {
     const kind = analysis?.kind;
@@ -1646,7 +1666,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                       <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colType')}</th>
                       <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colStart')}</th>
                       <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colEnd')}</th>
-                      <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid var(--glass-border)' }} />
+                      <th style={{ padding: '12px', textAlign: 'center', borderBottom: '1px solid var(--glass-border)' }}>
+                        <span className="sr-only">{t('importModal.colActions')}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1656,27 +1678,30 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                       // Under REVIEW, also highlight rows tied to a warning
                       // (warning date context / unknown token in the raw cell).
                       const needsAttention = incomplete || (quality?.state === 'REVIEW' && isWarningLinkedRow(shift));
+                      const rowNumber = index + 1;
                       return (
                         <tr key={index} style={{ borderBottom: '1px solid var(--border-soft)', background: needsAttention ? 'var(--danger-row-bg)' : 'transparent' }}>
                           <td style={{ padding: '8px' }}>
-                            <input type="text" className="modal-input" value={shift.date} onChange={(event) => handleUpdateShift(index, 'date', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
+                            <input type="text" className="modal-input" aria-label={t('importModal.rowDateAria', { row: rowNumber })} value={shift.date} onChange={(event) => handleUpdateShift(index, 'date', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
                           </td>
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
                               className="modal-input"
+                              aria-label={t('importModal.rowOriginAria', { row: rowNumber })}
                               value={shift.sourceFormat ? getImportFormatLabel(shift.sourceFormat) : (detectedFormat ?? '')}
                               readOnly
                               style={{ padding: '6px', fontSize: '0.8rem', opacity: 0.85 }}
                             />
                           </td>
                           <td style={{ padding: '8px' }}>
-                            <input type="text" className="modal-input" value={shift.shiftType ?? ''} onChange={(event) => handleUpdateShift(index, 'shiftType', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
+                            <input type="text" className="modal-input" aria-label={t('importModal.rowTypeAria', { row: rowNumber })} value={shift.shiftType ?? ''} onChange={(event) => handleUpdateShift(index, 'shiftType', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
                           </td>
                           <td style={{ padding: '8px' }}>
                             <input
                               type="text"
                               className="modal-input"
+                              aria-label={t('importModal.rowStartAria', { row: rowNumber })}
                               value={isNonWorking && shift.startTime === '??:??' ? '' : shift.startTime}
                               onChange={(event) => handleUpdateShift(index, 'startTime', event.target.value)}
                               style={{ padding: '6px', fontSize: '0.8rem', color: !isNonWorking && shift.startTime === '??:??' ? 'var(--danger)' : 'inherit' }}
@@ -1686,13 +1711,21 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                             <input
                               type="text"
                               className="modal-input"
+                              aria-label={t('importModal.rowEndAria', { row: rowNumber })}
                               value={isNonWorking && shift.endTime === '??:??' ? '' : shift.endTime}
                               onChange={(event) => handleUpdateShift(index, 'endTime', event.target.value)}
                               style={{ padding: '6px', fontSize: '0.8rem', color: !isNonWorking && shift.endTime === '??:??' ? 'var(--danger)' : 'inherit' }}
                             />
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center' }}>
-                            <button type="button" disabled={interactionLocked} onClick={() => handleRemoveShift(index)} style={{ color: 'var(--danger)', padding: '6px' }}>
+                            <button
+                              type="button"
+                              ref={(el) => { rowRemoveButtonRefs.current[index] = el; }}
+                              aria-label={t('importModal.removeRowAria', { row: rowNumber })}
+                              disabled={interactionLocked}
+                              onClick={() => handleRemoveShift(index)}
+                              style={{ color: 'var(--danger)', padding: '6px' }}
+                            >
                               <Trash2 size={16} />
                             </button>
                           </td>
@@ -1702,7 +1735,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   </tbody>
                 </table>
               ) : (
-                <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3, padding: '16px', textAlign: 'center' }}>
+                <div ref={emptyPreviewRef} tabIndex={-1} role="status" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.3, padding: '16px', textAlign: 'center' }}>
                   <FileText size={40} />
                   {/* GN-06: zero importable shifts is an explicit state with a
                       reason — never a silent "Correcto" 0/0. */}

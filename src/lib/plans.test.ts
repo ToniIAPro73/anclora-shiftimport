@@ -34,8 +34,14 @@ describe('frontend plan model (Fase 1.2G, mirrors api/_lib/plans.js)', () => {
   });
 
   it('price hypotheses match the documented commercial hypothesis, not a computed value', () => {
-    expect(PLANS.free.priceHypothesis).toBe('0 €');
-    expect(PLANS.personal.priceHypothesis).toBe('4,99 €/mes');
-    expect(PLANS.team.priceHypothesis).toBe('Desde 19 €/mes');
+    expect(PLANS.free.price).toEqual({ amount: null, currency: 'EUR', interval: 'month', fromPrefix: false });
+    expect(PLANS.personal.price).toEqual({ amount: 4.99, currency: 'EUR', interval: 'month', fromPrefix: false });
+    expect(PLANS.team.price).toEqual({ amount: 19, currency: 'EUR', interval: 'month', fromPrefix: true });
+  });
+
+  it('UXR-F1-M03 (CX-F09): only Team carries the "from" prefix — Free and Personal render a flat amount', () => {
+    expect(PLANS.free.price.fromPrefix).toBe(false);
+    expect(PLANS.personal.price.fromPrefix).toBe(false);
+    expect(PLANS.team.price.fromPrefix).toBe(true);
   });
 });

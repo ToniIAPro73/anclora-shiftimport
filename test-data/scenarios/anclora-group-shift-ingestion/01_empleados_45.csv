@@ -1,4 +1,4 @@
-﻿name,externalEmployeeId,area,areaCode,status
+﻿name,external_employee_id,area,areaCode,status
 Adrián López,LOG-001,Logística,LOG,active
 Aina Ferrer,LOG-002,Logística,LOG,active
 Alejandro Ruiz,LOG-003,Logística,LOG,active

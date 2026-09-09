@@ -28,10 +28,10 @@ desviaciones respecto a esta spec (si las hay) y decisiones tomadas durante la i
 
 | ID | Título | Estado |
 |---|---|---|
-| UXR-F1-M01 | CX-F03 — nombres accesibles en preview | PENDING |
-| UXR-F1-M02 | CX-F08 — sincronizar `lang` del documento | PENDING |
-| UXR-F1-M03 | CX-F09 — separar precio/moneda/intervalo, terminología de roles | PENDING |
-| UXR-F1-M04 | CX-E01 — alinear cabecera del fixture de empleados | PENDING |
+| UXR-F1-M01 | CX-F03 — nombres accesibles en preview | DONE |
+| UXR-F1-M02 | CX-F08 — sincronizar `lang` del documento | DONE |
+| UXR-F1-M03 | CX-F09 — separar precio/moneda/intervalo, terminología de roles | DONE |
+| UXR-F1-M04 | CX-E01 — alinear cabecera del fixture de empleados | PARTIAL (fixture+test contractual DONE; verificación manual por UI de `MembersModal` NOT_EVALUATED — requiere `vercel dev`+Neon) |
 
 ### Fase 2 — Alto impacto (6)
 
@@ -126,6 +126,76 @@ desviaciones respecto a esta spec (si las hay) y decisiones tomadas durante la i
   repetirse 2 veces antes de archivarse como definitiva, no asumirse estable a la primera.
 - **Siguiente paso**: Fase 1 (`UXR-F1-M01`…`M04`, quick wins) puede empezar — sus dependencias
   declaradas (`UXR-F0-M05`, `UXR-F0-M06`) están cumplidas.
+
+---
+
+### 2026-09-09 — Fase 1 completa (PASS_WITH_GAPS)
+
+- **HEAD antes/después**: `83ddb82` (sin cambio de HEAD — nada commiteado en esta pasada).
+- **Ficheros tocados**: `src/components/shift-dashboard/ImportModal.tsx`, `src/lib/i18n.ts`,
+  `src/lib/i18n-react.tsx`, `src/lib/plans.ts`, `src/pages/PricingPage.tsx`,
+  `test-data/scenarios/anclora-group-shift-ingestion/01_empleados_45.csv`; tests: nuevo
+  `src/lib/i18n-react.test.tsx`, ampliados `src/lib/bulk-import-csv.test.ts`, `src/lib/plans.test.ts`,
+  `src/pages/PricingPage.test.tsx`.
+- **Orden de ejecución**: M04 → M02 → M03 → M01, como manda la dependencia dura de Fase 2 sobre M04.
+- **UXR-F1-M04**: cabecera `externalEmployeeId` → `external_employee_id` en la fixture (sólo la
+  cabecera; BOM y valores de fila intactos, verificado por hexdump antes/después). Test contractual
+  nuevo en `bulk-import-csv.test.ts` que carga el fichero real y exige 45/45 filas parseadas. La pata
+  de verificación manual por `MembersModal` (UI real, ADMIN) queda `NOT_EVALUATED` — requiere
+  `vercel dev` + Neon, no levantado en esta pasada (mismo gap heredado de Fase 0).
+- **UXR-F1-M02**: una línea (`document.documentElement.lang = locale`) en el único `useEffect` de
+  `I18nProvider` (`src/lib/i18n-react.tsx`). `index.html:2` se deja en `lang="es"` (default real,
+  documentado, no se toca). Verificado con test unitario (ciclo ES→EN→ES + mount fresco simulando
+  recarga con EN persistido) y con Playwright real en modo invitado sobre `/app` y `/pricing`, ES/EN
+  (4/4 — ver evidencia en el gate).
+- **UXR-F1-M03**: `priceHypothesis: string` → `price: PlanPrice` estructurado (`amount`, `currency`,
+  `interval`, `fromPrefix`) en `plans.ts`; `PricingPage.tsx` compone el texto vía dos claves i18n
+  nuevas (`pricing.fromPrefix`, ya existía `pricing.perMonth`) en vez de concatenar sufijo sobre
+  string ya compuesto. `pricing.comparison.roles` (ES/EN) corregido de "Manager" a
+  "Planificador"/"Planner" (`role.planner` ya vigente en `i18n.ts:592`/`:2152`). Valores comerciales
+  (0 €, 4,99 €, 19 €) sin cambio — verificado byte a byte en test.
+- **UXR-F1-M01**: `aria-label` por celda (fecha/origen/tipo/inicio/fin) con identificador de fila
+  estable (`row = index + 1`, coherente con cómo el propio estado ya direcciona filas por índice — no
+  hay reordenación, sólo borrado). Foco predecible al borrar: `pendingRemovalFocusIndex` +
+  `useEffect` sobre `parsedShifts` — fila siguiente (o anterior si era la última) recibe foco; si no
+  quedan filas, foco va al contenedor de estado vacío (`role="status"`, `tabIndex={-1}`). El conteo
+  tras borrar ya se anunciaba solo (el `aria-live="polite"` del botón de confirmar incluye
+  `total: parsedShifts.length`) — no hizo falta una región nueva.
+- **Discovery no anticipado por la spec (hallazgos de axe, corregidos dentro de alcance)**:
+  1. El campo "Origen" (readOnly) de cada fila no tenía nombre accesible — axe lo marcaba `critical`.
+     Añadido `aria-label` (`rowOriginAria`) igual que el resto de campos.
+  2. La celda de cabecera de la columna de acciones (papelera) es un `<th>` vacío — axe
+     `empty-table-header` (best-practice). Añadido `<span className="sr-only">` con clave
+     `importModal.colActions` (usa `.sr-only` ya existente en `index.css`, no se tocó ese fichero).
+- **Hallazgo adicional fuera de alcance (documentado, NO corregido)**: `.import-modal__shifts-list
+  thead` (`position: sticky`) deriva varios px hacia abajo en cada borrado de fila, hasta cubrir por
+  completo el botón de papelera de la fila 1 tras ~4 borrados sucesivos. **Verificado como
+  preexistente**: se reproduce de forma idéntica (mismos y-offsets exactos) sobre el componente sin
+  modificar, aisilando el cambio con `git stash` de sólo los ficheros de producto. No es causado por
+  el foco programático añadido en esta microtarea. Es del mismo tipo de defecto que `CX-F01`/`CX-F02`
+  (layout de `ImportModal.tsx`/scroll) — se deja para Fase 2, no se toca aquí. Los tests de evidencia
+  de M01 que necesitaban borrar varias filas seguidas usan activación por teclado
+  (foco + `Enter`) en vez de click de puntero, que no depende de la geometría de superposición.
+- **Evidencia generada**: 6/6 tests Playwright temporales (AC-1, AC-2×2, tab order, axe ES/EN) todos
+  en verde — ficheros de spec temporales, no comiteados (fuera del alcance de ficheros tocables de
+  esta fase); salida JSON de axe archivada en
+  `qa/e2e-acceptance/artifacts/ux-remediation-baseline/axe-uxr-f1-m01/` (ya gitignorado, mismo prefijo
+  que Fase 0). 16 capturas nuevas (`import-preview` + `pricing`, 2 viewports × 2 temas × 2 locales
+  cada una) generadas reutilizando sin modificar
+  `qa/e2e-acceptance/specs-baseline/ux-remediation-baseline.spec.ts` de Fase 0, run id
+  `uxr-f1-evidence`.
+- **Tests ejecutados y resultado**: `npm test`/`tsc --noEmit`/`lint`/`build` antes (línea base sobre
+  HEAD limpio, vía `git stash`) y después de los cambios — los 4 en verde en ambos momentos (baseline:
+  156 ficheros/1459 tests; final: 157 ficheros/1466 tests, +7 nuevos, cero regresiones, cero
+  intermitencia). Ver gate §3.3 para la salida literal.
+- **Desviaciones respecto a la spec original**: ninguna en el alcance de código. El AC de "Axe sin
+  violaciones nuevas" se verificó con Playwright real contra `vite dev` (mismo patrón que Fase 0), no
+  con un test de componente aislado — no existía tooling de axe a nivel unitario en el repo y no se
+  añadió dependencia nueva para ello (regla de `AGENTS.md`).
+- **Siguiente paso**: Fase 2 puede empezar — `UXR-F1-M04` cierra la dependencia dura declarada en
+  `03_IMPLEMENTATION_PLAN.md` (fixture cargable por el parser real). La pata NOT_EVALUATED de M04
+  (verificación por `MembersModal` en vivo) y el hallazgo del `thead` sticky quedan como riesgo
+  heredado para Fase 2/3.
 
 ---
 

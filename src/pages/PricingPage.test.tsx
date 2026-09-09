@@ -15,6 +15,10 @@ beforeEach(() => {
     removeEventListener: () => {},
   }));
   window.history.pushState({}, '', '/pricing');
+  // This file uses the real jsdom localStorage (no mock), which persists
+  // across tests within the same file. Reset the persisted locale so every
+  // test starts from the ES default regardless of run order.
+  window.localStorage.removeItem('anclora_shiftimport_locale_v1');
 });
 
 function renderPricing(isAuthenticated: boolean | null) {
@@ -60,5 +64,47 @@ describe('PricingPage shares the public header controls', () => {
     expect(screen.getByRole('heading', { name: 'Free' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Personal' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Team' })).toBeTruthy();
+  });
+});
+
+describe('UXR-F1-M03 (CX-F09): pricing amounts render through i18n, no mixed-language suffix', () => {
+  it('AC-1: EN pricing never shows "Desde" and never doubles the interval suffix', () => {
+    const { container } = renderPricing(false);
+    fireEvent.click(screen.getByRole('button', { name: /Cambiar idioma/i }));
+
+    const priceTexts = Array.from(container.querySelectorAll('.pricing-card-price')).map((el) => el.textContent ?? '');
+    expect(priceTexts.length).toBe(3);
+    priceTexts.forEach((text) => {
+      expect(text).not.toMatch(/Desde/);
+      expect(text).not.toMatch(/\/mes/);
+      expect((text.match(/\/mo/g) ?? []).length).toBeLessThanOrEqual(1);
+    });
+
+    const teamPriceText = container.querySelector('.pricing-card--recommended .pricing-card-price')?.textContent ?? '';
+    expect(teamPriceText).toContain('From');
+    expect(teamPriceText).toContain('19');
+    expect(teamPriceText).toContain('/mo');
+  });
+
+  it('ES pricing keeps the original "Desde <amount> €/mes" composition for Team, unchanged commercial values', () => {
+    const { container } = renderPricing(false);
+    const teamPriceText = container.querySelector('.pricing-card--recommended .pricing-card-price')?.textContent ?? '';
+    expect(teamPriceText).toBe('Desde 19 €/mes');
+
+    const personalPriceText = container.querySelectorAll('.pricing-card-price')[1]?.textContent ?? '';
+    expect(personalPriceText).toBe('4,99 €/mes');
+
+    const freePriceText = container.querySelectorAll('.pricing-card-price')[0]?.textContent ?? '';
+    expect(freePriceText).toBe('0 €');
+  });
+
+  it('AC-2: role comparison uses "Planner"/"Planificador", never "Manager", in either locale', () => {
+    renderPricing(false);
+    expect(screen.getByText('Roles Admin/Planificador')).toBeTruthy();
+    expect(screen.queryByText(/Manager/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Cambiar idioma/i }));
+    expect(screen.getByText('Admin/Planner roles')).toBeTruthy();
+    expect(screen.queryByText(/Manager/)).toBeNull();
   });
 });

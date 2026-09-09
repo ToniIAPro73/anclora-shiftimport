@@ -432,17 +432,23 @@ fixture que el parser acepte.
 **Causa raíz UX**
 > Cabeceras visuales no se vinculan como nombres programáticos de cada control.
 
-**Cambio propuesto**
-1. En `src/components/shift-dashboard/ImportModal.tsx`, añadir `aria-label` contextual a cada botón
-   de papelera de fila (patrón: identificador de fecha/empleado o índice estable de la fila).
-2. Asociar cada input de la fila (fecha, hora inicio, hora fin, tipo) con su cabecera de columna vía
-   `aria-describedby` o `<label>` explícito, en vez de depender sólo de la posición visual.
-3. Anunciar el nuevo conteo de filas tras un borrado en la región de estado que el modal ya use (a
-   confirmar patrón `aria-live` existente en `ImportModal.tsx` durante implementación).
+**Cambio propuesto (implementado)**
+1. En `src/components/shift-dashboard/ImportModal.tsx`, `aria-label` contextual (`t('importModal.rowXxxAria', { row })`)
+   en cada input de fila (fecha, origen, tipo, inicio, fin) y en cada botón de papelera — índice
+   estable de fila (`row = index + 1`), no la posición visual.
+2. El conteo de filas tras un borrado ya se anunciaba: el `aria-live="polite"` del botón de confirmar
+   incluye `total: parsedShifts.length`, que cambia con el array — no hizo falta una región nueva.
+3. Foco predecible al borrar: `pendingRemovalFocusIndex` + `useEffect` sobre `parsedShifts` — la fila
+   que ocupa el hueco (o la anterior si era la última) recibe foco; sin filas restantes, foco va al
+   contenedor de estado vacío (`role="status"`, `tabIndex={-1}`).
+4. Hallazgos de axe corregidos dentro de alcance: campo "Origen" sin nombre (`rowOriginAria`) y `<th>`
+   vacío de la columna de acciones (`<span className="sr-only">`, clave `colActions`).
 
-**Ficheros previstos**
-- `src/components/shift-dashboard/ImportModal.tsx` — nombres accesibles por fila, sin nuevo texto
-  visual repetitivo.
+**Ficheros previstos (reales — implementados)**
+- `src/components/shift-dashboard/ImportModal.tsx` — nombres accesibles por fila + gestión de foco,
+  sin nuevo texto visual repetitivo.
+- `src/lib/i18n.ts` — claves `rowDateAria`/`rowOriginAria`/`rowTypeAria`/`rowStartAria`/`rowEndAria`/
+  `removeRowAria`/`colActions` (ES/EN).
 
 **DO_NOT_BREAK específico**
 - Edición precommit
@@ -467,7 +473,9 @@ fixture que el parser acepte.
 - Manual: recorrido por teclado completo del preview con lector de pantalla o inspección de árbol de
   accesibilidad; cuenta sintética ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — ver evidencia en `docs/roadmap/UXR-F1-QUICK-WINS-GATE.md` §4. Hallazgo adicional
+fuera de alcance documentado (drift del `thead` sticky en `ImportModal.tsx`, preexistente, ver
+`05_PROGRESS_LOG.md`).
 
 ---
 
@@ -496,10 +504,11 @@ fixture que el parser acepte.
    necesariamente `es` si el usuario ya tenía EN persistido).
 3. Retestear páginas públicas y modales tras el cambio.
 
-**Ficheros previstos**
-- `index.html` — valor inicial coherente.
-- Provider de `I18nContext` (fichero exacto a confirmar en implementación, hermano de
-  `src/lib/use-i18n.ts`) — sincronización en cada cambio.
+**Ficheros previstos (reales — implementados)**
+- `index.html` — sin cambio: `lang="es"` se mantiene como default real documentado (no `en`).
+- `src/lib/i18n-react.tsx` (`I18nProvider`, 22→23 líneas) — una línea en el `useEffect` existente:
+  `document.documentElement.lang = locale`. Dispara también en el montaje inicial (cubre AC-2, carga
+  fría con locale persistido).
 
 **DO_NOT_BREAK específico**
 - Persistencia de locale
@@ -522,7 +531,8 @@ fixture que el parser acepte.
   `npm run lint`, `npm run build`.
 - Manual: cambio ES→EN→ES con recarga en landing y en `/app`, cuenta GUEST y ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — GUEST verificado (test unitario + Playwright real en `/app` y `/pricing`, ES/EN).
+ADMIN queda `NOT_EVALUATED` (requiere `vercel dev`+Neon, gap heredado de Fase 0). Ver gate §4.
 
 ---
 
@@ -551,9 +561,14 @@ fixture que el parser acepte.
    concatenar un sufijo de intervalo sobre un string ya compuesto.
 3. Alinear cualquier referencia residual a "Manager" con "Planner" (`ADR-2026-09-07-P5.7-team-roles-scopes.md`).
 
-**Ficheros previstos**
-- `src/lib/plans.ts` — estructura de precio.
-- `src/pages/PricingPage.tsx` — render localizado.
+**Ficheros previstos (reales — implementados)**
+- `src/lib/plans.ts` — `PlanPrice { amount, currency, interval, fromPrefix }` sustituye
+  `priceHypothesis: string`; valores numéricos sin cambio (`null`/`4.99`/`19`).
+- `src/pages/PricingPage.tsx` — compone `fromPrefix`/`amount`/`perMonth` vía i18n, sin concatenar
+  sobre string ya compuesto.
+- `src/lib/i18n.ts` — clave nueva `pricing.fromPrefix` (ES "Desde" / EN "From"); `perMonth` ya
+  existía. `pricing.comparison.roles` corregido de "Manager" a "Planificador"/"Planner"
+  (`role.planner`, `i18n.ts:592`/`:2152`).
 
 **DO_NOT_BREAK específico**
 - Distinción Free/Personal/Team
@@ -574,7 +589,7 @@ fixture que el parser acepte.
   `npm run build`.
 - Manual: lectura completa de pricing EN sin mezcla de idioma; cuenta GUEST.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — ver evidencia en el gate §4 (16 capturas + tests unitarios/Playwright).
 
 ---
 
@@ -603,10 +618,11 @@ fixture que el parser acepte.
 2. Añadir una prueba contractual (`bulk-import-csv.test.ts` o equivalente) que cargue el fixture real
    y falle si vuelve a divergir del header esperado por `columnIndex`.
 
-**Ficheros previstos**
-- `test-data/scenarios/anclora-group-shift-ingestion/01_empleados_45.csv` — cabecera.
-- Fichero de test contractual nuevo/afectado bajo `src/lib/bulk-import-csv.test.ts` (a confirmar si
-  ya existe).
+**Ficheros previstos (reales — implementados)**
+- `test-data/scenarios/anclora-group-shift-ingestion/01_empleados_45.csv` — sólo cabecera
+  (`externalEmployeeId` → `external_employee_id`); BOM y valores de fila verificados intactos.
+- `src/lib/bulk-import-csv.test.ts` — ya existía; ampliado con el test contractual (carga el fichero
+  real, exige 45/45 filas).
 
 **DO_NOT_BREAK específico**
 - Dataset sintético
@@ -626,7 +642,10 @@ fixture que el parser acepte.
 - Manual: carga del fixture por la UI real de importación masiva de empleados, cuenta sintética
   ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `PARTIAL` — AC-1 cumplido por el test contractual (fixture real, 45/45 filas, parser sin
+cambios). La verificación manual por `MembersModal` (UI real) queda `NOT_EVALUATED`: requiere
+`vercel dev`+Neon, no levantado en esta pasada (gap heredado de Fase 0). No bloquea Fase 2: la
+dependencia dura declarada (fixture cargable por el parser) está resuelta y verificada.
 
 ---
 

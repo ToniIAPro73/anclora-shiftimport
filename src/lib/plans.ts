@@ -26,12 +26,29 @@ export interface PlanFeatures {
   fullHistory: boolean;
 }
 
+/**
+ * Structured marketing price (UXR-F1-M03 / CX-F09) — replaces the former
+ * `priceHypothesis: string`, which baked language-specific words ("Desde",
+ * "/mes") into the value itself and produced mixed-language output like
+ * "Desde 19 €/mes/mo" once the locale-aware interval suffix was appended on
+ * top in `PricingPage.tsx`. The numeric value is unchanged, see hypothesis
+ * doc; `fromPrefix`/`interval` are rendered through i18n, never concatenated
+ * onto an already-composed string.
+ */
+export interface PlanPrice {
+  /** null for the Free plan — no numeric amount to render. */
+  amount: number | null;
+  currency: 'EUR';
+  interval: 'month';
+  /** true renders the localized "From"/"Desde" prefix (Team plan). */
+  fromPrefix: boolean;
+}
+
 export interface PlanDefinition {
   id: PlanId;
   label: string;
   tagline: string;
-  /** Marketing display string — not a computed/localized price, see hypothesis doc. */
-  priceHypothesis: string;
+  price: PlanPrice;
   ctaKey: string;
   limits: PlanLimits;
   features: PlanFeatures;
@@ -45,7 +62,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     id: 'free',
     label: 'Free',
     tagline: 'Prueba ShiftImport',
-    priceHypothesis: '0 €',
+    price: { amount: null, currency: 'EUR', interval: 'month', fromPrefix: false },
     ctaKey: 'pricing.cta.free',
     limits: { maxEmployees: 1, maxMonthlyImports: 5 },
     features: { multiEmployeeImport: false, teamManagement: false, fullHistory: false },
@@ -54,7 +71,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     id: 'personal',
     label: 'Personal',
     tagline: 'Tus turnos, siempre organizados',
-    priceHypothesis: '4,99 €/mes',
+    price: { amount: 4.99, currency: 'EUR', interval: 'month', fromPrefix: false },
     ctaKey: 'pricing.cta.personal',
     limits: { maxEmployees: 1, maxMonthlyImports: null },
     features: { multiEmployeeImport: false, teamManagement: false, fullHistory: true },
@@ -63,7 +80,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     id: 'team',
     label: 'Team',
     tagline: 'Cuadrantes y equipos completos',
-    priceHypothesis: 'Desde 19 €/mes',
+    price: { amount: 19, currency: 'EUR', interval: 'month', fromPrefix: true },
     ctaKey: 'pricing.cta.team',
     limits: { maxEmployees: null, maxMonthlyImports: null },
     features: { multiEmployeeImport: true, teamManagement: true, fullHistory: true },

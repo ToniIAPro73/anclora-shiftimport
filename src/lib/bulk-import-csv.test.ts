@@ -117,6 +117,22 @@ describe('parseEmployeesCsv', () => {
       expect(new Set(ids).size).toBe(58);
     });
   });
+
+  describe('UXR-F1-M04 (CX-E01): scenario fixture header contract', () => {
+    it('01_empleados_45.csv (anclora-group-shift-ingestion) parses all 45 rows through the real UI-facing parser', () => {
+      const csv = readFileSync(
+        path.join(__dirname, '../../test-data/scenarios/anclora-group-shift-ingestion/01_empleados_45.csv'),
+        'utf-8',
+      );
+      const rows = parseEmployeesCsv(csv);
+      expect(rows).not.toBeNull();
+      expect(rows).toHaveLength(45);
+      rows!.forEach((row) => {
+        expect(row.externalEmployeeId).not.toBe('');
+        expect(row.name).not.toBe('');
+      });
+    });
+  });
 });
 
 describe('parseUsersCsv', () => {

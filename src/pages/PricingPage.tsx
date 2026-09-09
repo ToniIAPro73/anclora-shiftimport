@@ -4,6 +4,19 @@ import { PLAN_IDS, PLANS } from '../lib/plans';
 import { PublicHeader } from '../components/PublicHeader';
 import { LegalFooter } from '../components/LegalFooter';
 
+/**
+ * Renders the numeric amount with a fixed 'es-ES' decimal separator
+ * regardless of the active UI locale — the commercial value never changes
+ * per locale (DO_NOT_BREAK, CX-F09); only the surrounding words (prefix,
+ * interval) go through i18n. See UXR-F1-M03.
+ */
+function formatPlanAmount(amount: number): string {
+  return amount.toLocaleString('es-ES', {
+    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 interface PricingPageProps {
   /** null = session resolution still in flight (unknown); never conflate with guest. */
   isAuthenticated: boolean | null;
@@ -44,8 +57,9 @@ export const PricingPage = ({ isAuthenticated }: PricingPageProps) => {
               {plan.recommended && <span className="pricing-card-badge">{t('pricing.recommended')}</span>}
               <h2>{t(`pricing.plans.${planId}.label`)}</h2>
               <p className="pricing-card-price">
-                {plan.priceHypothesis}
-                {planId !== 'free' && <span className="pricing-card-period">{t('pricing.perMonth')}</span>}
+                {plan.price.fromPrefix && `${t('pricing.fromPrefix')} `}
+                {plan.price.amount === null ? '0 €' : `${formatPlanAmount(plan.price.amount)} €`}
+                {plan.price.amount !== null && <span className="pricing-card-period">{t('pricing.perMonth')}</span>}
               </p>
               <p className="pricing-card-tagline">{t(`pricing.plans.${planId}.tagline`)}</p>
               <button
