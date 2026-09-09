@@ -42,9 +42,10 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 2. Verificar que el mismo procedimiento produce capturas idénticas (pixel-diff 0) en dos ejecuciones
    consecutivas sobre el mismo HEAD, antes de aceptarlo como baseline.
 
-**Ficheros previstos**
-- Ninguno en `src/`/`api/` — sólo documentación de procedimiento (fichero exacto a definir en
-  implementación, candidato `qa/e2e-acceptance/` o `docs/audits/`).
+**Ficheros previstos** (reales — implementados)
+- `docs/audits/ux-remediation-codex-2026-09-baseline-procedure.md` (procedimiento documentado).
+- `qa/e2e-acceptance/playwright.uxr-f0-baseline.config.ts` (config de captura).
+- `qa/e2e-acceptance/specs-baseline/ux-remediation-baseline.spec.ts` (spec de captura).
 
 **DO_NOT_BREAK específico**
 - N/A (harness, no toca comportamiento de producto).
@@ -60,10 +61,20 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
       Then puede generar la baseline sin pasos no documentados.
 
 **Evidencia requerida para cerrar**
-- Automatizado: ejecución doble del procedimiento con diff 0.
+- Automatizado: doble ejecución + `node qa/e2e-acceptance/compare-baseline-runs.mjs run1 run2`
+  (verificación con tolerancia declarada; la igualdad de sha256 no es alcanzable en este stack —
+  causa medida y documentada en el procedimiento §AC-1).
 - Manual: revisión de que el procedimiento no depende de estado no versionado.
 
-**Estado**: `PENDING`
+**Estado**: `DONE con hueco declarado` — AC-2 cumplido (procedimiento documentado y ejecutable) y
+AC-1 cumplido con tolerancia declarada: **0 UNSTABLE en dos pares independientes de corridas**
+(run1/run2 y run3/run4). La causa del 70.8% inicial quedó aislada: DOM y orden de CSS idénticos
+entre procesos, capturas idénticas al byte dentro de un mismo lanzamiento, y varianza de
+rasterización entre procesos de dos tipos (jitter de antialiasing, y layout sub-píxel en
+`import-preview`). **Hueco**: la pantalla `import-preview` queda declarada inestable — es la
+distribución de alturas fijas de CX-F01 y la posee `UXR-F2-M01`/`M02`; `calendar` y `pricing`
+(40/48) sí son baseline fiable. Ver `docs/roadmap/UXR-F0-BASELINE-HARNESS-GATE.md` §3.1,
+`docs/audits/ux-remediation-codex-2026-09-baseline-procedure.md` §AC-1 y `05_PROGRESS_LOG.md`.
 
 ---
 
@@ -93,8 +104,9 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
    configuración de la herramienta, o un export adicional en formato reconocible) — sin cambiar el
    formato TS de producción si eso rompe el patrón existente del repo.
 
-**Ficheros previstos**
-- Ninguno en `src/` — sólo configuración/documentación del harness de auditoría.
+**Ficheros previstos** (reales — implementados)
+- `docs/audits/ux-remediation-codex-2026-09-baseline-procedure.md` §M02 (declaración; ningún
+  cambio en `src/`).
 
 **DO_NOT_BREAK específico**
 - El catálogo de traducciones en TS sigue siendo la fuente de verdad para la app; el harness se
@@ -110,7 +122,8 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 **Evidencia requerida para cerrar**
 - Automatizado: salida de `i18n-integrity-check` sobre HEAD con cobertura material declarada.
 
-**Estado**: `PENDING`
+**Estado**: `PARTIAL` — herramienta externa no disponible en este entorno (`NOT_EVALUATED`);
+cobertura material sustituida por `src/lib/i18n-coverage.test.ts` (PASS en `npm test`). Ver gate.
 
 ---
 
@@ -138,9 +151,9 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
    modales de `ImportModal`, vistas de `AppShell`) como entrada explícita fija para el detector, en
    vez de depender de descubrimiento automático por URL.
 
-**Ficheros previstos**
-- Ninguno en `src/` — documento de inventario (candidato `qa/e2e-acceptance/TEST-MATRIX.md` o
-  equivalente nuevo bajo `docs/audits/`).
+**Ficheros previstos** (reales — implementados)
+- `docs/audits/ux-remediation-codex-2026-09-internal-routes-inventory.md` (documento nuevo,
+  separado de `qa/e2e-acceptance/TEST-MATRIX.md` según instrucción explícita del prompt de Fase 0).
 
 **DO_NOT_BREAK específico**
 - N/A (harness).
@@ -156,7 +169,7 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 **Evidencia requerida para cerrar**
 - Manual: inventario revisado contra `App.tsx` y los componentes de `shift-dashboard/`.
 
-**Estado**: `PENDING`
+**Estado**: `DONE`
 
 ---
 
@@ -204,7 +217,8 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 - Automatizado: salida del checker.
 - Manual: inspección de `package.json`.
 
-**Estado**: `PENDING`
+**Estado**: `NOT_APPLICABLE` — confirmado sin dependencia de design system en `package.json`
+(`dependencies`/`devDependencies` revisados íntegros). No se añade dependencia nueva.
 
 ---
 
@@ -246,7 +260,10 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 **Evidencia requerida para cerrar**
 - Manual: revisión de que el parámetro está fijado en el procedimiento documentado.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — cumplido por diseño de herramienta: `@playwright/test`/Chromium real (la
+herramienta canónica elegida en `UXR-F0-M01`) nunca oculta scrollbars; no existe flag que fijar.
+Documentado en `docs/audits/ux-remediation-codex-2026-09-baseline-procedure.md` §M05 para uso
+futuro con `agent-browser`.
 
 ---
 
@@ -273,9 +290,9 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
    esta máquina, o la raíz de checkout que corresponda) en toda referencia de escenario usada por el
    harness de captura.
 
-**Ficheros previstos**
-- Documentación de escenarios (candidato `qa/e2e-acceptance/TEST-MATRIX.md` o equivalente) —
-  ningún fichero de `test-data/` cambia de contenido por esta microtarea (eso es `UXR-F1-M04`).
+**Ficheros previstos** (reales — implementados)
+- `docs/audits/ux-remediation-codex-2026-09-baseline-procedure.md` §M06 — ningún fichero de
+  `test-data/` cambia de contenido por esta microtarea (eso es `UXR-F1-M04`).
 
 **DO_NOT_BREAK específico**
 - N/A (harness).
@@ -290,7 +307,8 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 **Evidencia requerida para cerrar**
 - Automatizado: ejecución de al menos un escenario de subida end-to-end con la ruta corregida.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — 48/48 tests de `UXR-F0-M08` suben fixtures con ruta resuelta por
+`join(__dirname, ...)` sin error; fixture de `CX-E01` verificado existente para Fase 1.
 
 ---
 
@@ -319,9 +337,9 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 3. Poblar historial de turnos e importar al menos un `FormatProfile` aprendido para que las cuentas no
    arranquen en estado vacío.
 
-**Ficheros previstos**
-- Ninguno en `src/`/`api/` — sólo datos sintéticos vía la UI real o scripts de seed existentes del
-  repo (`qa/e2e-acceptance/local-setup.ts` como patrón, si aplica).
+**Ficheros previstos** (reales — implementados)
+- `qa/e2e-acceptance/local-setup.ts` (añade seed de `format_profiles` para orgA; el resto de
+  memberships OWNER/PLANNER ya existía en el fichero).
 
 **DO_NOT_BREAK específico**
 - Aislamiento organización (esta org sintética no debe interferir con datos de otras orgs de
@@ -339,7 +357,10 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 **Evidencia requerida para cerrar**
 - Manual: capturas de la organización sintética con ambos roles operativos.
 
-**Estado**: `PENDING`
+**Estado**: `PARTIAL` — AC-1/AC-2 verificados en vivo contra Neon dev por reproducción SQL fiel de
+`local-setup.ts` (1 OWNER, 1 PLANNER con scope, historial + FormatProfile poblados, org ajena
+intacta); la invocación literal del fichero `.ts` vía `playwright.local.config.ts` (`vercel dev` +
+Neon) no se ejecutó en esta pasada. Ver gate §3.1 para el detalle y el hueco declarado.
 
 ---
 
@@ -365,9 +386,9 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
    1728×1117, 844×390 × {claro, oscuro} × {ES, EN} usando el procedimiento de `UXR-F0-M01` con
    `hide-scrollbars=false`.
 
-**Ficheros previstos**
-- Artefactos de evidencia (fuera de `src/`), ubicación exacta a definir en implementación (candidato
-  `docs/audits/evidence/ux-remediation-codex-2026-09/`).
+**Ficheros previstos** (reales — implementados)
+- `qa/e2e-acceptance/artifacts/ux-remediation-baseline/` (48 PNG + `manifest.json`, gitignored,
+  regenerable con el comando de `UXR-F0-M01`).
 
 **DO_NOT_BREAK específico**
 - N/A (harness).
@@ -382,7 +403,9 @@ Precondición de todas las demás fases. Cierra los 6 `TOOL_COMPATIBILITY_GAPS` 
 **Evidencia requerida para cerrar**
 - Automatizado/manual: 32 capturas archivadas.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — 32/32 combinaciones de `calendar` archivadas; `pricing`/`import-preview`
+añadidas en subconjunto reducido (16 capturas extra) por decisión de alcance documentada en el
+gate §3.4. Total 48 capturas con manifiesto sha256/HEAD/fecha.
 
 ---
 

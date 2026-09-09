@@ -133,6 +133,21 @@ export default async function globalSetup() {
   // One foreign audit row makes the audit endpoint's tenant filter observable.
   await sql`INSERT INTO organization_audit_events (organization_id, actor_user_id, event_type, target_type, target_id, metadata) VALUES (${orgB}, ${ownerBId}, 'AREA_CREATED', 'AREA', ${areaB}, ${JSON.stringify({ marker: 'org-b-only' })}::jsonb)`;
 
+  // UXR-F0-M07: OWNER/PLANNER accounts must not start empty — at least one
+  // learned FormatProfile, so Fase 3/4 journeys exercise a non-empty format
+  // memory state, not just an empty-state screen.
+  const orgAFormatProfileLogicalId = (await sql`SELECT gen_random_uuid() as id`)[0].id;
+  await sql`
+    INSERT INTO format_profiles (
+      organization_id, logical_profile_id, version, status, signature, source_type,
+      display_name, employee_row_strategy, use_count, successful_use_count, last_used_at, created_by_user_id
+    ) VALUES (
+      ${orgA}, ${orgAFormatProfileLogicalId}, 1, 'validated',
+      ${JSON.stringify({ documentType: 'tabular_csv', structureHash: 'e2e-synthetic-fixture-v1' })}::jsonb,
+      'tabular', 'E2E Synthetic Roster Format', 'identifier', 3, 3, NOW(), ${ownerId}
+    )
+  `;
+
   mkdirSync(dirname(FIXTURE_PATH), { recursive: true });
   writeFileSync(FIXTURE_PATH, JSON.stringify({
     password: PASSWORD,

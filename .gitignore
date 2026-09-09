@@ -57,6 +57,13 @@ qa/e2e-acceptance/artifacts/local-fixture.json
 design-reference/
 qa/1.2b-visual/
 
+# UXR-F0-M08: UX remediation baseline captures (regenerable via
+# qa/e2e-acceptance/playwright.uxr-f0-baseline.config.ts) — evidence kept on
+# disk, never committed; only the gate/progress-log tables + sha256 manifest
+# reference are versioned.
+qa/e2e-acceptance/artifacts/ux-remediation-baseline/
+qa/e2e-acceptance/test-results-uxr-f0-baseline/
+
 # Agent task docs (temporary working docs)
 .agent-tasks/
 
