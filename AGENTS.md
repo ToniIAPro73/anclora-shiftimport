@@ -1,9 +1,9 @@
 # AGENTS.md — Anclora ShiftImport
 
 ## Resumen del repositorio
-- Producto Premium B2C: importador inteligente de cuadrantes para trabajadores por turnos.
-- App Vite + React + TypeScript. Persistencia local-first en `localStorage`.
-- Flujo vinculante: importar cuadrante → previsualizar/editar → calendario.
+- Plataforma dual: Producto Premium B2C (modo invitado y plan Personal local-first en `localStorage`) y suite multi-tenant B2B/B2B2E (gestión operativa de turnos por organización, área y empleado con backend Neon).
+- App Vite + React + TypeScript. Persistencia dual: local-first en `localStorage` (invitado/personal) y PostgreSQL multi-tenant remota vía Vercel Functions (con sesión).
+- Flujo vinculante: importar cuadrante (Safe Import) → previsualizar/editar → calendario / planificar → publicar → acuse / solicitudes.
 - Derivado comercial de `anclora-groundsync` (historia Git preservada). GroundSync sigue operativo y NO se modifica desde este repo.
 - Adopción AOS: `.anclora/AOS_ADOPTION.md` (fuente canónica del estado de adopción local).
 

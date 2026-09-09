@@ -6,9 +6,9 @@
 
 # Anclora ShiftImport
 
-### Plataforma B2B/B2B2E de gestión operativa de turnos, con Safe Import como núcleo
+### Plataforma dual B2B/B2B2E y B2C de gestión de turnos, con Safe Import como núcleo
 
-Convierte cuadrantes de trabajo existentes (PDF, imagen, Excel/CSV) en datos operativos fiables — organizados por organización, área y empleado — mediante un pipeline de importación segura, revisable y auditable.
+Convierte cuadrantes de trabajo existentes (PDF, imagen, Excel/CSV) en datos operativos fiables — organizados por organización, área y empleado en modo multi-tenant B2B, o en calendario individual local-first en modo B2C/invitado — mediante un pipeline de importación segura, revisable y auditable.
 
 **Español** · [English](./README.en.md)
 
@@ -27,7 +27,11 @@ Convierte cuadrantes de trabajo existentes (PDF, imagen, Excel/CSV) en datos ope
 
 ## Qué es
 
-Anclora ShiftImport es una plataforma B2B/B2B2E para organizaciones que gestionan turnos de trabajo. Su diferencial funcional es **Safe Import**: un motor de ingestión y normalización premium capaz de leer cuadrantes existentes en distintos formatos (PDF, imagen, Excel, CSV) y convertirlos en datos operativos estructurados, sin volver a teclear nada y sin escribir en el sistema hasta que la organización confirma lo que va a importar.
+Anclora ShiftImport opera en **modo dual**:
+1. **B2B / B2B2E para organizaciones**: plataforma multi-tenant para equipos que gestionan cuadrantes y turnos de trabajo por organización, áreas y roles (OWNER, ADMIN, PLANNER, EMPLOYEE).
+2. **B2C / Personal local-first**: para trabajadores individuales e invitados que importan su propio cuadrante a un calendario personal persistido en `localStorage` sin fricción de registro previa.
+
+Su diferencial funcional es **Safe Import**: un motor de ingestión y normalización premium capaz de leer cuadrantes existentes en distintos formatos (PDF, imagen, Excel, CSV) y convertirlos en datos operativos estructurados, sin volver a teclear nada y sin escribir en el sistema hasta que el usuario u organización confirma lo que va a importar.
 
 El flujo objetivo del producto es:
 
