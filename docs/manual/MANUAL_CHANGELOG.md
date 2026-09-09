@@ -272,3 +272,14 @@ La ejecución del commit, push y promoción autorizados se comunica con su SHA y
 - **Motivo**: Remediación UX/UI de tarjetas de turno en el Planificador semanal. Anteriormente los turnos se mostraban con un tratamiento verde uniforme; tras la corrección, utilizan el color canónico de cada tipo de turno configurado (Regular azul, Libre rojo, Vacaciones verde, etc.) con tinte suave, borde acento izquierdo de 3px y etiqueta textual explícita visible en la tarjeta.
 - **Verificación**: `node scripts/generate-manual-pdf.mjs` completado sin error; PDF regenerado en `public/manuals/anclora-shiftimport-manual-usuario-es.pdf`.
 
+## Corrección puntual — 2026-09-09 (post UXR-F3 Estructura)
+
+- **Alcance**: 5 capturas actualizadas/añadidas (`employee-detail-dark.png`, `equipo-personas-dark.png`, `bulk-users-dark.png`, `calendar-mobile-dark.png`, `planner-responsive-dark.png`) + actualización de texto en capítulos 5, 17, 20, 21, 22, 24, 28 y 29 + regeneración del PDF.
+- **Motivo**: Incorporación de cambios reales de la Fase 3:
+  1. *Employee — Acuse de recibo*: `ShiftModal` expone la acción de confirmación de recepción en turnos publicados autorizados con estados `pending`, `saving`, `acknowledged` y manejo de reintentos por error de red. Eliminación de afirmaciones obsoletas que indicaban su inexistencia (Cap. 20, 21, 28, 29).
+  2. *Equipo — Importación masiva*: `EquipoModal → Personas` establece `Importar CSV` como ruta canónica para el alta de empleados y usuarios, suprimiendo la referencia a la ruta legacy de Ajustes (Cap. 22, 24, 25).
+  3. *Planificador responsive*: explicación del indicador persistente de overflow y navegación accesible por teclado para consultar los siete días en pantallas estrechas (Cap. 17).
+  4. *Calendario / Stats Mobile*: explicación de `MobileSummaryCard` con totales de mes y año en móvil sin desplazamiento accidental (Cap. 5).
+  5. *Preservación de contexto*: conservación de pestaña, filtros y búsqueda en Equipo al cerrar/cancelar la importación masiva (Cap. 24).
+- **Verificación**: `node scripts/generate-manual-pdf.mjs` completado sin error; PDF regenerado en `public/manuals/anclora-shiftimport-manual-usuario-es.pdf`.
+

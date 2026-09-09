@@ -170,9 +170,14 @@ En móvil, abre la navegación desde su botón. Dentro de ventanas con listas la
 
 El calendario mensual empieza en lunes. Las letras y los colores identifican tipos de turno. El color por sí solo no te dice si se cuentan horas: consulta también el nombre y el horario. **Regular**, **Libre**, **Vacaciones** y **Extras** son tipos iniciales; puedes encontrar otros configurados.
 
-### Entender los resúmenes
+### Entender los resúmenes (escritorio y móvil)
 
-**Tot. M.** resume el mes y **Tot. A.** el año. Los grupos **Propios** y **Empresa**, cuando aparecen, distinguen los datos según su clasificación en la aplicación. No sumes las cifras como si fueran categorías salariales: no calculan nóminas, complementos ni certifican la jornada legal.
+- **En pantallas de escritorio:** la barra superior muestra las celdas detalladas con el total del mes (**Tot. M.**) y del año (**Tot. A.**), desglosando los grupos y los tipos individuales con sus horas y días acumulados.
+- **En dispositivos móviles (teléfono / pantallas estrechas):** para que no tengas que desplazarte horizontalmente a ciegas, la barra incorpora automáticamente una tarjeta de resumen móvil (**Resumen del período**). En ella se leen directamente en pantalla los totales principales de horas y días del mes y las horas acumuladas del año, y debajo los distintivos de tipos de turno ajustados en varias líneas sin desbordar el ancho del dispositivo.
+
+![Calendario en móvil: la tarjeta superior resume totales de mes y año legibles sin desplazamiento forzado](screenshots/calendar-mobile-dark.png)
+
+Los grupos **Propios** y **Empresa**, cuando aparecen, distinguen los datos según su clasificación en la aplicación. No sumes las cifras como si fueran categorías salariales: no calculan nóminas, complementos ni certifican la jornada legal.
 
 **Si no ves un turno**, comprueba mes, empleado y área. Si procede de una planificación, confirma que esté publicada. Si procede de una importación, revisa su resultado y su historial.
 
@@ -488,6 +493,16 @@ La intersección de un empleado y un día muestra sus turnos. El control para a�
 
 Un **borrador** es una propuesta editable. Guardar un turno en él todavía no cambia lo que ve el empleado como planificación publicada. Si otra persona trabaja sobre la misma semana, comprueba el estado actual antes de editar.
 
+### Consultar los siete días en pantallas estrechas
+
+En pantallas con menor ancho disponible (tablets en vertical o ventanas reducidas a menos de 980 px), el horario de los siete días de la semana excede el espacio en pantalla:
+
+- **Indicador persistente de desplazamiento:** tanto en la vista de **Cuadrícula** como en la de **Tabla accesible**, la aplicación muestra en la parte superior el aviso permanente `Desplaza horizontalmente para ver todos los días de la semana (L-D)` acompañado de un degradado sutil en el margen derecho, visible sin depender de pasar el ratón por encima.
+- **Desplazamiento táctil o con ratón:** arrastra horizontalmente la tabla o utiliza la barra de desplazamiento inferior para moverte con fluidez de lunes a domingo.
+- **Navegación por teclado:** el contenedor de la tabla cuenta con foco accesible (`Tab`). Al situarte sobre él, utiliza las teclas de flecha (← / →) para desplazarte de columna a columna sin mover horizontalmente el resto de la página.
+
+![Planificador en vista estrecha: el indicador superior avisa del contenido adicional y permite el desplazamiento accesible](screenshots/planner-responsive-dark.png)
+
 ### Si no hay empleados o no hay ámbito
 
 No crees personas de relleno para abrir la cuadrícula. Comprueba el filtro y si existen empleados activos en el contexto. Si aparece un aviso de ámbito, un administrador debe revisar la asignación del planificador. No todos los responsables necesitan un área: el ámbito también puede ser toda la organización o empleados concretos.
@@ -567,13 +582,22 @@ Busca el día de hoy en la cuadrícula. Para otra semana, cambia de mes con **Me
 
 Si no aparece un turno que esperabas, verifica la cuenta, el mes y la comunicación de tu empresa. Puede que la planificación aún esté en borrador. Una casilla vacía no equivale por sí sola a un día libre confirmado ni a vacaciones aprobadas.
 
-### Ver el turno asociado a una solicitud
+### Ver el turno y confirmar su recepción
 
-Desde **Solicitudes**, pulsa **Ver turno asociado**. Se abre el turno y el calendario se sitúa en su mes. Comprueba fecha y horas y cierra la ventana para volver a consultar. El título de esta ventana puede ser **Actualizar Turno**; para pedir cambios sobre un turno oficial utiliza el recorrido de solicitud, sin intentar saltarte los permisos.
+Al pulsar sobre cualquier turno publicado en tu calendario personal (o desde **Solicitudes → Ver turno asociado**), se abre la ventana de detalle del turno.
 
-![Turno asociado: comprueba la fecha y el horario al revisar una solicitud](screenshots/employee-detail-dark.png)
+Comprueba la fecha, el horario y la ubicación o tipo de jornada asignada. Para proteger la planificación oficial de la organización, este detalle es de solo lectura y no permite editar directamente el horario publicado.
 
-En esta navegación no se ofrece un control de **Confirmar recepción**. No confundas **Confirmar**, en un formulario de alta o edición, con dejar constancia de haber visto un turno. Tampoco hay un fichaje de entrada o salida en este recorrido.
+#### Cómo confirmar la recepción de tu turno
+
+1. Al abrir el turno, si aún está pendiente de acuse, verás el botón dorado **Confirmar recepción**.
+2. Pulsa el botón: mientras el sistema registra el acuse, se mostrará el mensaje **Confirmando recepción…**.
+3. Una vez registrado, el botón se sustituye por el estado **Recepción confirmada** en verde, dejando constancia de que has revisado tu horario oficial.
+4. Si ocurre una incidencia temporal de red, verás el aviso **Error al confirmar la recepción. Inténtalo de nuevo**, manteniendo el turno intacto y permitiéndote reintentar la acción sin duplicar peticiones.
+
+![Detalle del turno del empleado: fecha, horario y botón para confirmar la recepción del turno publicado](screenshots/employee-detail-dark.png)
+
+> **NOTA:** confirmar recepción registra que has sido informado de tu turno publicado. Si necesitas solicitar una modificación de tu horario, no pulses únicamente el acuse: abre **Solicitudes → Nueva solicitud**.
 
 ### Importar tus turnos o registrar uno pasado
 
@@ -602,7 +626,7 @@ En esta navegación no se ofrece un control de **Confirmar recepción**. No conf
 
 ### Consultar o cancelar
 
-En **Solicitudes**, filtra por estado y abre la petición. Revisa **Pendiente**, **Aprobada**, **Rechazada** o **Cancelada**, y el motivo de resolución disponible. **Ver turno asociado** permite comprobar el turno correspondiente. Si una petición pendiente ya no hace falta, usa **Cancelar solicitud** cuando esté disponible.
+En **Solicitudes**, filtra por estado y abre la petición. Revisa **Pendiente**, **Aprobada**, **Rechazada** o **Cancelada**, y el motivo de resolución disponible. **Ver turno asociado** permite abrir el detalle del turno afectado, comprobar su horario oficial y confirmar su recepción si aún estaba pendiente. Si una petición pendiente ya no hace falta, usa **Cancelar solicitud** cuando esté disponible.
 
 ![Solicitudes del empleado: revisa el estado antes de enviar otra petición sobre el mismo turno](screenshots/request-pending-dark.png)
 
@@ -632,19 +656,19 @@ En un cambio de horario aprobado, comprueba las horas resultantes. «Otro motivo
 
 No crees otra ficha de María solo porque ahora necesita una contraseña. Vincula su acceso con la ficha existente para que consulte los turnos que le corresponden.
 
-### Añadir una persona
+### Añadir una persona o varias
 
 **Quién puede hacerlo:** propietario o administrador. **Antes de empezar:** comprueba si la persona ya aparece en la búsqueda y ten su nombre, correo si va a tener acceso e identificador si lo usa el cuadrante.
 
-1. Abre **Equipo → Personas** y pulsa **Añadir persona**.
-2. En **Identidad**, indica el nombre.
-3. En **Acceso**, decide si necesita una cuenta.
-4. En **Empleo**, decide si necesita ficha de empleado y completa sus datos.
-5. Revisa el rol y su ámbito; el paso puede mostrarse como **Scope**.
-6. Revisa **Confirmación** y confirma el alta.
-7. Si aparecen credenciales, guárdalas antes de cerrar.
+- **Alta individual:** en **Equipo → Personas**, pulsa **Añadir persona** para abrir el asistente paso a paso:
+  1. En **Identidad**, indica el nombre.
+  2. En **Acceso**, decide si necesita una cuenta.
+  3. En **Empleo**, decide si necesita ficha de empleado y completa sus datos.
+  4. Revisa el rol y su ámbito (área o global).
+  5. Revisa la confirmación y confirma el alta. Guarda las credenciales si se muestran.
+- **Alta masiva mediante CSV:** en la barra de herramientas de **Equipo → Personas**, pulsa directamente **Importar CSV** para cargar un lote de empleados o de usuarios desde un archivo sin salir del workspace (detallado en el capítulo 24).
 
-![Personas: una sola lista permite distinguir acceso activo, ficha vinculada y acceso pendiente](screenshots/equipo-personas-dark.png)
+![Personas: la barra de herramientas reúne búsqueda, filtros, Añadir persona e Importar CSV](screenshots/equipo-personas-dark.png)
 
 ![Añadir persona: empieza por la identidad y revisa después acceso, empleo y permisos](screenshots/team-add-person-dark.png)
 
@@ -696,7 +720,11 @@ No transfieras la titularidad para dar permisos temporales. Para eso, utiliza lo
 
 ## 24. Dar de alta muchos empleados o usuarios mediante CSV
 
-**Quién puede hacerlo:** propietario o administrador con la gestión de equipo habilitada. **Ruta:** **Ajustes → Equipo → Abrir Usuarios** abre **Usuarios de la organización**, con pestañas **Usuarios** y **Empleados**.
+**Quién puede hacerlo:** propietario o administrador con la gestión de equipo habilitada. **Ruta principal:** abre el menú lateral **Equipo** (o pulsa el botón **Equipo** en el encabezado) y, dentro de la pestaña **Personas**, pulsa el botón **Importar CSV**.
+
+La ventana **Carga masiva mediante CSV** te permite cargar tanto archivos de empleados (fichas del cuadrante) como de usuarios (cuentas de acceso), con validación automática y vista previa antes de guardar cambios. Si necesitas incorporar ambos, realiza la carga en dos pasos: primero los empleados y después los usuarios para que queden vinculados automáticamente mediante su identificador.
+
+Al cerrar o cancelar el proceso de importación masiva en cualquier momento, la ventana de **Equipo** conserva intactos la pestaña activa, el texto de búsqueda y los filtros que tuvieras seleccionados.
 
 ### Primero: importar fichas de empleados
 
@@ -707,12 +735,12 @@ Prepara un CSV con las cabeceras **external_employee_id** y **name**. La columna
 | ANA01 | Ana Demo | Recepción |
 | CAR02 | Carlos Demo | Recepción |
 
-1. Abre la pestaña **Empleados**.
-2. Pulsa **Importar empleados CSV** y selecciona el archivo.
-3. Revisa filas nuevas, existentes y con error.
-4. Corrige en el archivo las filas erróneas y vuelve a cargarlo si es necesario.
+1. En **Equipo → Personas**, pulsa **Importar CSV**.
+2. Pulsa **Seleccionar archivo CSV** (o arrastra el archivo) y elige tu CSV de empleados.
+3. Comprueba la vista previa con el recuento de filas nuevas, existentes y con error.
+4. Si hay errores, corrígelos en el archivo CSV y vuelve a seleccionarlo.
 5. Pulsa **Confirmar importación** cuando el resumen sea correcto.
-6. Lee creados, actualizados y filas con error.
+6. Revisa el mensaje de éxito con los empleados creados.
 
 ![Alta masiva de empleados: comprueba identificador, nombre y estado de cada fila](screenshots/bulk-employees-dark.png)
 
@@ -727,12 +755,12 @@ Prepara un CSV con **email** y **role**. Puedes añadir **name** y **external_em
 | ana@example.test | Ana Demo | EMPLOYEE | ANA01 |
 | carlos@example.test | Carlos Demo | PLANNER | CAR02 |
 
-1. En **Usuarios**, pulsa **Importar CSV**.
-2. Comprueba correo, rol y empleado vinculado en la vista previa.
-3. Corrige correos incompletos, roles no válidos o vínculos que no correspondan.
-4. Pulsa **Confirmar importación**.
-5. Lee usuarios creados, existentes, vinculados y errores.
-6. Descarga las credenciales generadas antes de cerrar.
+1. En **Equipo → Personas**, pulsa **Importar CSV**.
+2. Selecciona tu archivo CSV de usuarios.
+3. Comprueba correo, nombre, rol y el vínculo con el empleado en la tabla de vista previa.
+4. Revisa los totales: cuentas nuevas, ya miembros y errores.
+5. Pulsa **Confirmar importación**.
+6. En la pantalla de confirmación, pulsa **Descargar credenciales (.txt)** para guardar las contraseñas temporales generadas antes de cerrar la ventana.
 
 ![Alta masiva de usuarios: el correo da acceso y el identificador enlaza con la ficha existente](screenshots/bulk-users-dark.png)
 
@@ -846,6 +874,7 @@ Empieza por comprobar **sesión, organización, empleado, área y periodo**. Lee
 | No veo Equipo | Rol, plan o navegación distinta | Comprueba tu perfil; no todos los usuarios gestionan personas |
 | No puedo resolver una solicitud | Es propia, queda fuera del ámbito o la política no lo permite | Debe resolverla otro gestor habilitado |
 | El portal no carga | Conexión o sesión | Usa Reintentar y vuelve a entrar si es necesario |
+| Falla el acuse de recibo de un turno | Corte temporal de conexión o sesión expirada | Comprueba la red y pulsa de nuevo en Confirmar recepción; el turno se conserva intacto |
 | No tengo la contraseña temporal | Se cerró la ventana sin guardar | Busca la descarga; si no existe, consulta soporte |
 
 Si necesitas soporte, indica la tarea, la fecha aproximada, el mensaje literal y si estabas en modo invitado o con cuenta. Nunca adjuntes contraseñas. Evita incluir datos personales de compañeros en una captura de ayuda.
@@ -934,7 +963,7 @@ La planificación ya publicada, si existe. Los nuevos cambios que solo están en
 
 ### ¿Dónde confirmo que he visto mi turno?
 
-La navegación actual del empleado no muestra Confirmar recepción. El botón Confirmar de un formulario tiene otra finalidad. Para pedir una modificación, abre Solicitudes.
+Pulsa sobre cualquier turno publicado en tu calendario personal. En la ventana de detalle que se abre, pulsa el botón dorado **Confirmar recepción**. El estado cambiará a **Recepción confirmada**. Si necesitas solicitar una modificación del horario publicado, abre **Solicitudes → Nueva solicitud**.
 
 ### ¿Cómo añado muchas personas?
 
