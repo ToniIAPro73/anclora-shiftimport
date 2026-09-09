@@ -100,6 +100,9 @@ async function renderPdf(sectionPages) {
   const page = await browser.newPage();
   await page.setContent(buildHtml(sectionPages), { waitUntil: 'networkidle' });
   await page.emulateMedia({ media: 'print' });
+  await page.evaluate(() => document.fonts.ready);
+  const broken = await page.locator('img').evaluateAll(images => images.filter(img => !img.complete || !img.naturalWidth).map(img => img.alt));
+  if (broken.length) throw new Error(`Imágenes no cargadas: ${broken.join(', ')}`);
 
   const isFinalPass = Object.keys(sectionPages).length > 0;
   const outFile = isFinalPass ? outputPath : passPdfPath;
@@ -108,7 +111,7 @@ async function renderPdf(sectionPages) {
     path: outFile,
     format: 'A4',
     printBackground: true,
-    margin: { top: '24mm', bottom: '20mm', left: '18mm', right: '18mm' },
+    margin: { top: '20mm', bottom: '18mm', left: '18mm', right: '18mm' },
     displayHeaderFooter: isFinalPass,
     headerTemplate: '<span></span>',
     footerTemplate: isFinalPass ? footerTemplate() : '<span></span>',
@@ -169,7 +172,7 @@ function buildHtml(sectionPages) {
   }).join('\n');
 
   const body = manual.sections.map((section) => `
-    <section id="section-${section.number}" class="manual-section">
+    <section id="section-${section.number}" class="manual-section ${section.number === '1' ? 'major-section' : ''}">
       <h2>${section.number}. ${escapeHtml(section.title)}</h2>
       ${markdownToHtml(section.lines.join('\n'))}
     </section>
@@ -330,6 +333,7 @@ function tableToHtml(lines) {
 
 function inline(value) {
   return escapeHtml(value)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
@@ -350,8 +354,9 @@ function escapeAttribute(value) {
 // ─── Estilos (paleta real de Anclora ShiftImport) ───────────────────────────
 function styles() {
   return `
+@font-face { font-family: Fraunces; src: url(data:font/woff2;base64,${readFileSync(path.join(root, 'public/fonts/Fraunces-600.woff2')).toString('base64')}); font-weight: 600; }
 /* El margen de página real lo controla la opción "margin" de
-   page.pdf() (24mm/18mm/20mm/18mm), no una regla @page — evita el
+   page.pdf() (20mm/18mm/18mm/18mm), no una regla @page — evita el
    conflicto entre ambos mecanismos en Chromium. */
 * { box-sizing: border-box; }
 body {
@@ -517,7 +522,7 @@ a { color: inherit; text-decoration: none; }
   align-items: baseline;
   gap: 2.5mm;
   min-height: 3.8mm;
-  padding: 1.0mm 0;
+  padding: 0.65mm 0;
   border-bottom: 1px solid #e4ddd1;
   color: #0f1a2e;
 }
@@ -527,25 +532,31 @@ a { color: inherit; text-decoration: none; }
 .toc-pageno { color: #0f1a2e; font-size: 9.5pt; font-weight: 800; text-align: right; }
 
 /* ─── SECCIONES ───────────────────────────────────────────────────────────── */
-.manual-section { page-break-before: always; }
+.manual-section { margin-top: 9mm; }
+.major-section { break-before: page; margin-top: 0; }
 .manual-section h2 {
-  margin: 0 0 8mm;
+  margin: 0 0 4mm;
   padding: 0 0 4mm;
   color: #0f1a2e;
   border-bottom: 1px solid #c7a451;
   font-family: Fraunces, Georgia, serif;
-  font-size: 23pt;
+  font-size: 21pt;
   line-height: 1.1;
   font-weight: 600;
 }
-h3 { margin: 7mm 0 3mm; color: #192350; font-size: 13pt; line-height: 1.2; }
+h2, h3 { break-after: avoid-page; }
+p { orphans: 3; widows: 3; }
+h3 { margin: 5mm 0 2.5mm; color: #192350; font-size: 13pt; line-height: 1.2; }
 p { margin: 0 0 3.6mm; }
 strong { color: #0f1a2e; font-weight: 800; }
 ul, ol { margin: 1mm 0 4mm 6mm; padding-left: 4mm; }
 li { margin: 1.4mm 0; }
-table { width: 100%; margin: 4mm 0 6mm; border-collapse: collapse; page-break-inside: avoid; font-size: 8.8pt; }
+table { width: 100%; margin: 4mm 0 6mm; border-collapse: collapse; font-size: 9pt; }
 th { color: #0f1a2e; background: #f3ead8; border-top: 1px solid #c7a451; border-bottom: 1px solid #c7a451; font-weight: 800; }
-td, th { padding: 2.5mm 3mm; border-bottom: 1px solid #dfe5e8; vertical-align: top; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th { word-break: normal; overflow-wrap: normal; }
+td, th { overflow-wrap: break-word; padding: 2mm 3mm; border-bottom: 1px solid #dfe5e8; vertical-align: top; }
 td:first-child, th:first-child { border-left: 1px solid #e7ecef; }
 td:last-child, th:last-child { border-right: 1px solid #e7ecef; }
 blockquote {
@@ -554,11 +565,11 @@ blockquote {
 }
 
 /* ─── IMÁGENES ────────────────────────────────────────────────────────────── */
-figure { margin: 5mm 0 7mm; page-break-inside: avoid; }
+figure { margin: 4mm 0 5mm; page-break-inside: avoid; }
 figure img {
-  display: block; width: 100%; height: auto; border-radius: 2mm;
+  display: block; width: auto; max-width: 100%; max-height: 105mm; height: auto; margin: 0 auto; border-radius: 2mm;
   border: 1.5px solid #182a4a;
-  box-shadow: 0 4mm 16mm rgba(6, 12, 30, 0.32), 0 1mm 4mm rgba(6, 12, 30, 0.2);
+  box-shadow: none;
 }
 figcaption { margin-top: 1.8mm; padding: 0 1mm; color: #5a6a7c; font-size: 8pt; line-height: 1.35; }
 
