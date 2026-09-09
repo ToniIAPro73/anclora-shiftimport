@@ -22,6 +22,7 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     createRemoteArea: vi.fn(),
     updateRemoteArea: vi.fn(),
     bulkMoveRemoteEmployeesArea: vi.fn(),
+    updateRemoteEmployee: vi.fn(),
   };
 });
 
@@ -41,6 +42,7 @@ const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
 const mockedCreateRemoteArea = vi.mocked(remote.createRemoteArea);
 const mockedUpdateRemoteArea = vi.mocked(remote.updateRemoteArea);
 const mockedBulkMoveRemoteEmployeesArea = vi.mocked(remote.bulkMoveRemoteEmployeesArea);
+const mockedUpdateRemoteEmployee = vi.mocked(remote.updateRemoteEmployee);
 
 const areasFixture: RemoteArea[] = [
   { id: 'area-ops', name: 'Operaciones', code: 'OPS', active: true, createdAt: '2026-01-01' },
@@ -96,6 +98,7 @@ function renderModal(
   role: 'OWNER' | 'ADMIN' = 'OWNER',
   currentUserId = 'usr-owner',
   areas: RemoteArea[] = areasFixture,
+  initialEmployeeId: string | null = null,
 ) {
   const onChanged = vi.fn();
   const onClose = vi.fn();
@@ -109,6 +112,7 @@ function renderModal(
         areas={areas}
         currentUserId={currentUserId}
         currentUserRole={role}
+        initialEmployeeId={initialEmployeeId}
         onChanged={onChanged}
       />
     </I18nProvider>,
@@ -729,3 +733,87 @@ describe('EquipoModal — Tab 4: ASIGNACIONES & Bulk Operations', () => {
     });
   });
 });
+
+describe('EquipoModal — initialEmployeeId & Import Recovery', () => {
+  it('focuses the target employee and automatically opens the edit employee sheet', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    renderModal('ADMIN', 'usr-admin', areasFixture, 'emp-dave');
+
+    // Tab should be personas
+    expect(screen.getByTestId('tab-personas')).toHaveClass('is-active');
+
+    // Wait for members and employees to render
+    await waitFor(() => {
+      expect(screen.getByTestId('persona-row-emp-emp-dave')).toBeInTheDocument();
+    });
+
+    // Target employee row should have data-focused="true" and recovery badge
+    const targetRow = screen.getByTestId('persona-row-emp-emp-dave');
+    expect(targetRow).toHaveAttribute('data-focused', 'true');
+    expect(screen.getByTestId('target-recovery-badge')).toBeInTheDocument();
+
+    // The edit modal should open automatically
+    expect(screen.getByTestId('edit-employee-modal')).toBeInTheDocument();
+    expect(screen.getByLabelText(/nombre y apellidos/i)).toHaveValue('Dave Worker');
+    expect(screen.getByLabelText(/identificador externo/i)).toHaveValue('EMP-002');
+  });
+
+  it('allows saving updated employee data from edit sheet and triggers onChanged', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedUpdateRemoteEmployee.mockResolvedValue({
+      id: 'emp-dave',
+      organizationId: 'org-1',
+      name: 'Dave Worker Completo',
+      userId: null,
+      externalEmployeeId: 'EMP-002-FIXED',
+      areaId: 'area-ops',
+      status: 'active',
+    });
+
+    const { onChanged } = renderModal('ADMIN', 'usr-admin', areasFixture, 'emp-dave');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('edit-employee-modal')).toBeInTheDocument();
+    });
+
+    // Update name
+    fireEvent.change(screen.getByLabelText(/nombre y apellidos/i), {
+      target: { value: 'Dave Worker Completo' },
+    });
+    // Update external ID
+    fireEvent.change(screen.getByLabelText(/identificador externo/i), {
+      target: { value: 'EMP-002-FIXED' },
+    });
+    // Update area
+    fireEvent.change(screen.getByLabelText(/área asignada/i), {
+      target: { value: 'area-ops' },
+    });
+    // Update status
+    fireEvent.change(screen.getByLabelText(/estado operativo/i), {
+      target: { value: 'active' },
+    });
+
+    // Save
+    fireEvent.click(screen.getByTestId('save-employee-button'));
+
+    await waitFor(() => {
+      expect(mockedUpdateRemoteEmployee).toHaveBeenCalledWith({
+        id: 'emp-dave',
+        name: 'Dave Worker Completo',
+        externalEmployeeId: 'EMP-002-FIXED',
+        areaId: 'area-ops',
+        status: 'active',
+      });
+    });
+
+    await waitFor(() => {
+      expect(onChanged).toHaveBeenCalledTimes(1);
+    });
+
+    // The edit sheet should now be closed
+    await waitFor(() => {
+      expect(screen.queryByTestId('edit-employee-modal')).not.toBeInTheDocument();
+    });
+  });
+});
+

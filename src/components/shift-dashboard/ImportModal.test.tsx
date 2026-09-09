@@ -907,6 +907,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       // Step 2: blue -> Ignorar
       fireEvent.click(ignoreButtons[1]);
       expect(confirmBtn.disabled).toBe(false);
+      await new Promise((r) => setTimeout(r, 100));
     });
   });
 

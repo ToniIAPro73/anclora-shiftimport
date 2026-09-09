@@ -366,3 +366,24 @@ describe('SettingsModal — organization name (R2-M01)', () => {
     await waitFor(() => expect(screen.getByText('Guardado ✓')).toBeTruthy());
   });
 });
+
+describe('SettingsModal — Equipo navigation (SETTINGS_OPENS_EQUIPO_MODAL)', () => {
+  it('renders "Abrir gestión de equipo" button and fires onOpenTeam when clicked', () => {
+    const onOpenTeam = vi.fn();
+    renderSettings({ session: makeSession(), onOpenTeam });
+
+    // Open team tab
+    fireEvent.click(screen.getByText('Equipo'));
+
+    // Should NOT render legacy "Abrir Usuarios"
+    expect(screen.queryByText('Abrir Usuarios')).toBeNull();
+
+    // Should render canonical button
+    const openTeamBtn = screen.getByTestId('settings-open-team');
+    expect(openTeamBtn.textContent).toContain('Abrir gestión de equipo');
+
+    fireEvent.click(openTeamBtn);
+    expect(onOpenTeam).toHaveBeenCalledTimes(1);
+  });
+});
+

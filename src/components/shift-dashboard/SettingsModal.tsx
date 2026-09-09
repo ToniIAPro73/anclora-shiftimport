@@ -33,8 +33,8 @@ interface SettingsModalProps {
   selectedEmployeeId?: string | null;
   /** Callback when employee name changes (to refresh header). */
   onEmployeeNameChange?: () => void;
-  /** Opens the members management modal (closes settings first). */
-  onOpenMembers?: () => void;
+  /** Opens the team management modal (closes settings first). */
+  onOpenTeam?: () => void;
   /** Callback when the account display name changes (to refresh session). */
   onAccountNameChange?: () => void;
   /** Callback after a successful organization reset (reload org data). */
@@ -323,14 +323,14 @@ function TeamSection({
   session,
   employees,
   selectedEmployeeId,
-  onOpenMembers,
+  onOpenTeam,
   onOrganizationReset,
   onOrganizationNameChange,
 }: {
   session: SettingsModalProps['session'];
   employees: RemoteEmployee[];
   selectedEmployeeId: string | null;
-  onOpenMembers?: () => void;
+  onOpenTeam?: () => void;
   onOrganizationReset?: () => void;
   onOrganizationNameChange?: () => void;
 }) {
@@ -521,8 +521,13 @@ function TeamSection({
           <p style={{ margin: '0 0 var(--space-md)', fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
             {t('settings.teamManagementDesc')}
           </p>
-          <button className="btn-gold" style={{ width: 'fit-content' }} onClick={onOpenMembers}>
-            {t('settings.openMembers')}
+          <button
+            className="btn-gold"
+            style={{ width: 'fit-content' }}
+            onClick={onOpenTeam}
+            data-testid="settings-open-team"
+          >
+            {t('settings.openTeam')}
           </button>
         </div>
 
@@ -804,7 +809,7 @@ export const SettingsModal = ({
   employees = [],
   selectedEmployeeId = null,
   onEmployeeNameChange,
-  onOpenMembers,
+  onOpenTeam,
   onAccountNameChange,
   onOrganizationReset,
   onOrganizationNameChange,
@@ -872,7 +877,7 @@ export const SettingsModal = ({
             session={session}
             employees={employees}
             selectedEmployeeId={selectedEmployeeId}
-            onOpenMembers={onOpenMembers}
+            onOpenTeam={onOpenTeam}
             onOrganizationReset={onOrganizationReset}
             onOrganizationNameChange={onOrganizationNameChange}
           />

@@ -24,8 +24,7 @@ function renderShell(role: 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE' | null = '
     onHistory: vi.fn(),
     onPlanner: vi.fn(),
     onApprovals: vi.fn(),
-    onMembers: vi.fn(),
-    onAreas: vi.fn(),
+    onTeam: vi.fn(),
     onFormatProfiles: vi.fn(),
     onSettings: vi.fn(),
     onLogout: vi.fn(),
@@ -60,8 +59,9 @@ describe('AppShell', () => {
     expect(screen.getByTestId('sidebar-history')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-planner')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-approvals')).toBeInTheDocument();
-    expect(screen.getByTestId('sidebar-members')).toBeInTheDocument();
-    expect(screen.getByTestId('sidebar-areas')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-team')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-members')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-areas')).not.toBeInTheDocument();
     expect(screen.getByTestId('sidebar-formats')).toBeInTheDocument();
     expect(screen.getByTestId('sidebar-settings')).toBeInTheDocument();
     expect(screen.queryByTestId('app-shell-main-context')).not.toBeInTheDocument();
@@ -93,6 +93,7 @@ describe('AppShell', () => {
     expect(screen.queryByTestId('sidebar-history')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-planner')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-approvals')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-team')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-members')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-areas')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-formats')).not.toBeInTheDocument();

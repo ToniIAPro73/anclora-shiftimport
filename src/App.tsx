@@ -50,9 +50,7 @@ import { SettingsModal } from './components/shift-dashboard/SettingsModal';
 import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal';
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
 import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
-import { MembersModal } from './components/shift-dashboard/MembersModal';
 import { EquipoModal } from './components/team/EquipoModal';
-import { AreasModal } from './components/shift-dashboard/AreasModal';
 import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryModal';
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
@@ -216,11 +214,9 @@ function App() {
   // Fase 1.1: explicit organization choice for multi-org accounts.
   const [needsOrgChoice, setNeedsOrgChoice] = useState(false);
   const [formatProfileMigrationOpen, setFormatProfileMigrationOpen] = useState(false);
-  const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [isEquipoOpen, setIsEquipoOpen] = useState(false);
-  const [membersInitialEmployeeId, setMembersInitialEmployeeId] = useState<string | null>(null);
-  const [membersRecoveryResult, setMembersRecoveryResult] = useState<ImportOutcomeReport | null>(null);
-  const [isAreasOpen, setIsAreasOpen] = useState(false);
+  const [equipoInitialEmployeeId, setEquipoInitialEmployeeId] = useState<string | null>(null);
+  const [equipoRecoveryResult, setEquipoRecoveryResult] = useState<ImportOutcomeReport | null>(null);
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
@@ -521,8 +517,7 @@ function App() {
       setAreas([]);
       setSelectedAreaId(null);
       setNeedsOrgChoice(false);
-      setIsMembersOpen(false);
-      setIsAreasOpen(false);
+      setIsEquipoOpen(false);
       setIsAuthOpen(false);
     });
     clearAnonymousShiftDraft();
@@ -680,14 +675,6 @@ function App() {
       setShifts([]);
     }
   }, [session, visibleEmployees, selectedEmployeeId]);
-
-  const refreshAreas = useCallback(async () => {
-    try {
-      setAreas(await listRemoteAreas());
-    } catch (error) {
-      console.error('Failed to refresh areas', error);
-    }
-  }, []);
 
   /** Persist changes through the right backend: remote when authenticated,
    * localStorage for guests. */
@@ -994,7 +981,7 @@ function App() {
     // blocked/offered for inline registration there, never silently reused.
     if (adminIndividualImport) {
       if (adminIndividualImport.employeeId) {
-        // Recovery may return from MembersModal immediately after its link
+        // Recovery may return from EquipoModal immediately after its link
         // request while the parent hydration is still in flight. Re-read the
         // authoritative employee row so a just-linked employee is not
         // mistaken for the previous pending_access snapshot.
@@ -1923,8 +1910,6 @@ function App() {
           onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
           pendingRequestsCount={pendingApprovalsCount}
           onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
-          onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
-          onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
           onSettings={isAdminRole(session.role) ? () => setIsSettingsOpen(true) : undefined}
           onLogout={() => void handleLogout()}
@@ -1960,8 +1945,6 @@ function App() {
           onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
           pendingRequestsCount={pendingApprovalsCount}
           onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
-          onMembers={isAdminRole(session.role) ? () => setIsMembersOpen(true) : undefined}
-          onAreas={isAdminRole(session.role) ? () => setIsAreasOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
           onSettings={isAdminRole(session.role) ? () => setIsSettingsOpen(true) : undefined}
           onLogout={() => void handleLogout()}
@@ -2026,8 +2009,6 @@ function App() {
       onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
       pendingRequestsCount={pendingApprovalsCount}
       onTeam={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsEquipoOpen(true); } : undefined}
-      onMembers={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsMembersOpen(true); } : undefined}
-      onAreas={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsAreasOpen(true); } : undefined}
       onFormatProfiles={session ? () => { if (!isImporting) setIsFormatProfilesOpen(true); } : undefined}
       onSettings={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsSettingsOpen(true); } : undefined}
       onLogout={session ? () => { if (!isImporting) void handleLogout(); } : undefined}
@@ -2205,9 +2186,9 @@ function App() {
             void hydrateAuthenticated(session);
           }
         }}
-        onOpenMembers={() => {
+        onOpenTeam={() => {
           setIsSettingsOpen(false);
-          setIsMembersOpen(true);
+          setIsEquipoOpen(true);
         }}
         onAccountNameChange={() => {
           // The session object is held in App state and hydrateAuthenticated
@@ -2339,17 +2320,17 @@ function App() {
           onClose={() => {
             setImportResult(null);
             setPendingImportRetry(null);
-            setMembersRecoveryResult(null);
+            setEquipoRecoveryResult(null);
           }}
           report={importResult}
           onViewPlanning={importPlanningTarget ? openImportPlanning : undefined}
           onCompleteEmployee={(employeeId) => {
             if (importResult && 'status' in importResult && importResult.status !== 'PASS' && importResult.status !== 'FAIL') {
-              setMembersRecoveryResult(importResult as ImportOutcomeReport);
+              setEquipoRecoveryResult(importResult as ImportOutcomeReport);
             }
             setImportResult(null);
-            setMembersInitialEmployeeId(employeeId);
-            setIsMembersOpen(true);
+            setEquipoInitialEmployeeId(employeeId);
+            setIsEquipoOpen(true);
           }}
           onRetry={pendingImportRetry ? () => {
             const retry = pendingImportRetry;
@@ -2437,38 +2418,22 @@ function App() {
         onCancel={() => setFormatProfileMigrationOpen(false)}
       />
 
-      <MembersModal
-        isOpen={isMembersOpen && !isImporting}
-        onClose={() => {
-          setIsMembersOpen(false);
-          setMembersInitialEmployeeId(null);
-          if (membersRecoveryResult) {
-            setImportResult(membersRecoveryResult);
-            setMembersRecoveryResult(null);
-          }
-        }}
-        employees={employees}
-        areas={activeAreas}
-        currentUserId={session?.user.id ?? ''}
-        currentPlan={session?.plan ?? null}
-        initialEmployeeId={membersInitialEmployeeId}
-        organizationName={session?.memberships.find((m) => m.organizationId === session.organizationId)?.organizationName ?? ''}
-        onSwitchOrg={(organizationId) => void handleSwitchOrganization(organizationId)}
-        onChanged={() => {
-          if (session) {
-            void hydrateAuthenticated(session);
-          }
-        }}
-      />
-
       {isEquipoOpen && session && (
         <EquipoModal
           isOpen={isEquipoOpen && !isImporting}
-          onClose={() => setIsEquipoOpen(false)}
+          onClose={() => {
+            setIsEquipoOpen(false);
+            setEquipoInitialEmployeeId(null);
+            if (equipoRecoveryResult) {
+              setImportResult(equipoRecoveryResult);
+              setEquipoRecoveryResult(null);
+            }
+          }}
           employees={employees}
           areas={areas}
           currentUserId={session.user.id}
           currentUserRole={session.role}
+          initialEmployeeId={equipoInitialEmployeeId}
           onChanged={() => {
             if (session) {
               void hydrateAuthenticated(session);
@@ -2476,12 +2441,6 @@ function App() {
           }}
         />
       )}
-
-      <AreasModal
-        isOpen={isAreasOpen && !isImporting}
-        onClose={() => setIsAreasOpen(false)}
-        onChanged={() => void refreshAreas()}
-      />
 
       <ImportHistoryModal
         isOpen={isImportHistoryOpen && !isImporting}

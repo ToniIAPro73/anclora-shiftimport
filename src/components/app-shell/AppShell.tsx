@@ -6,7 +6,6 @@ import {
   FileCog,
   History,
   LogOut,
-  Map,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -110,8 +109,6 @@ export interface AppShellProps {
   onPlanner?: () => void;
   onApprovals?: () => void;
   onTeam?: () => void;
-  onMembers?: () => void;
-  onAreas?: () => void;
   onFormatProfiles?: () => void;
   onSettings?: () => void;
   onLogout?: () => void;
@@ -247,8 +244,6 @@ export function AppShell({
   onPlanner,
   onApprovals,
   onTeam,
-  onMembers,
-  onAreas,
   onFormatProfiles,
   onSettings,
   onLogout,
@@ -363,24 +358,6 @@ export function AppShell({
                     collapsed={!expanded}
                     onClick={() => runAction(onTeam)}
                     testId="sidebar-team"
-                  />
-                )}
-                {canManage && !onTeam && onMembers && (
-                  <SidebarItem
-                    label={t('members.title')}
-                    icon={<UsersRound size={18} />}
-                    collapsed={!expanded}
-                    onClick={() => runAction(onMembers)}
-                    testId="sidebar-members"
-                  />
-                )}
-                {canManage && !onTeam && onAreas && (
-                  <SidebarItem
-                    label={t('areas.manage')}
-                    icon={<Map size={18} />}
-                    collapsed={!expanded}
-                    onClick={() => runAction(onAreas)}
-                    testId="sidebar-areas"
                   />
                 )}
                 {onHistory && (

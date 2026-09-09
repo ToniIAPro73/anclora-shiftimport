@@ -21,6 +21,7 @@ import {
   removeRemoteMember,
   transferRemoteOwnership,
   updateRemoteArea,
+  updateRemoteEmployee,
   updateRemoteMemberRole,
 } from '../../lib/remote';
 import type { Role } from '../../lib/session';
@@ -39,6 +40,7 @@ export interface EquipoModalProps {
   currentUserRole?: Role | null;
   onChanged: () => void;
   initialTab?: 'personas' | 'roles' | 'areas' | 'assignments';
+  initialEmployeeId?: string | null;
 }
 
 export function EquipoModal({
@@ -50,6 +52,7 @@ export function EquipoModal({
   currentUserRole = 'ADMIN',
   onChanged,
   initialTab = 'personas',
+  initialEmployeeId = null,
 }: EquipoModalProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<'personas' | 'roles' | 'areas' | 'assignments'>(initialTab);
@@ -114,6 +117,67 @@ export function EquipoModal({
   const [areaCode, setAreaCode] = useState('');
   const [areaActive, setAreaActive] = useState(true);
   const [areaSubmitting, setAreaSubmitting] = useState(false);
+
+  // Employee editing modal state
+  const [editingEmployee, setEditingEmployee] = useState<RemoteEmployee | null>(null);
+  const [editEmployeeName, setEditEmployeeName] = useState('');
+  const [editEmployeeExternalId, setEditEmployeeExternalId] = useState('');
+  const [editEmployeeAreaId, setEditEmployeeAreaId] = useState('');
+  const [editEmployeeStatus, setEditEmployeeStatus] = useState<'active' | 'inactive'>('active');
+  const [editEmployeeSubmitting, setEditEmployeeSubmitting] = useState(false);
+  const [editEmployeeError, setEditEmployeeError] = useState<string | null>(null);
+
+  const handleOpenEditEmployee = useCallback((emp: RemoteEmployee) => {
+    setEditingEmployee(emp);
+    setEditEmployeeName(emp.name);
+    setEditEmployeeExternalId(emp.externalEmployeeId || '');
+    setEditEmployeeAreaId(emp.areaId || '');
+    setEditEmployeeStatus(emp.status === 'inactive' ? 'inactive' : 'active');
+    setEditEmployeeError(null);
+  }, []);
+
+  const handleSaveEmployee = async () => {
+    if (!editingEmployee) return;
+    const trimmed = editEmployeeName.trim();
+    if (!trimmed) {
+      setEditEmployeeError('El nombre del empleado no puede estar vacío.');
+      return;
+    }
+    setEditEmployeeSubmitting(true);
+    setEditEmployeeError(null);
+    try {
+      await updateRemoteEmployee({
+        id: editingEmployee.id,
+        name: trimmed,
+        externalEmployeeId: editEmployeeExternalId.trim() || undefined,
+        areaId: editEmployeeAreaId || null,
+        status: editEmployeeStatus,
+      });
+      onChanged();
+      setEditingEmployee(null);
+    } catch (err) {
+      setEditEmployeeError(err instanceof Error ? err.message : 'Error al actualizar empleado');
+    } finally {
+      setEditEmployeeSubmitting(false);
+    }
+  };
+
+  // Focus and handle initialEmployeeId from recovery flow
+  useEffect(() => {
+    if (!isOpen || !initialEmployeeId) {
+      return;
+    }
+    setActiveTab('personas');
+    setFilterAccess('all');
+    setFilterRole('all');
+    setFilterArea('all');
+    setFilterStatus('all');
+    const target = employees.find((e) => e.id === initialEmployeeId);
+    if (target) {
+      setSearch(target.name);
+      handleOpenEditEmployee(target);
+    }
+  }, [isOpen, initialEmployeeId, employees, handleOpenEditEmployee]);
 
   // Tab 4: Asignaciones state
   const [assignmentSubTab, setAssignmentSubTab] = useState<'employees_to_area' | 'planner_scopes'>('employees_to_area');
@@ -639,8 +703,15 @@ export function EquipoModal({
                   <tbody>
                     {filteredPersonas.map((p) => {
                       const initials = (p.name || 'U').slice(0, 2).toUpperCase();
+                      const matchingEmp = p.employeeId ? employees.find((e) => e.id === p.employeeId) : null;
+                      const isTargetEmployee = Boolean(initialEmployeeId && p.employeeId === initialEmployeeId);
                       return (
-                        <tr key={p.id} data-testid={`persona-row-${p.id}`}>
+                        <tr
+                          key={p.id}
+                          data-testid={`persona-row-${p.id}`}
+                          data-focused={isTargetEmployee ? 'true' : undefined}
+                          style={isTargetEmployee ? { background: 'rgba(234, 179, 8, 0.12)', outline: '2px solid var(--accent, #eab308)' } : undefined}
+                        >
                           <td>
                             <div className="equipo-persona-cell">
                               <span className="equipo-avatar">{initials}</span>
@@ -649,6 +720,15 @@ export function EquipoModal({
                                 {p.isCurrentUser && (
                                   <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'var(--accent)' }}>
                                     (Tú)
+                                  </span>
+                                )}
+                                {isTargetEmployee && (
+                                  <span
+                                    className="equipo-badge equipo-badge--warning"
+                                    style={{ marginLeft: '6px', fontSize: '0.72rem' }}
+                                    data-testid="target-recovery-badge"
+                                  >
+                                    Completar ficha
                                   </span>
                                 )}
                               </div>
@@ -703,6 +783,17 @@ export function EquipoModal({
                           </td>
                           <td>
                             <div className="equipo-actions-cell">
+                              {matchingEmp && (
+                                <button
+                                  type="button"
+                                  className="equipo-btn equipo-btn--secondary"
+                                  onClick={() => handleOpenEditEmployee(matchingEmp)}
+                                  data-testid={isTargetEmployee ? 'target-edit-employee-btn' : `edit-employee-${p.id}`}
+                                  title="Editar ficha de empleado"
+                                >
+                                  Editar ficha
+                                </button>
+                              )}
                               {!p.hasAccess && p.employeeId && (
                                 <button
                                   type="button"
@@ -2037,6 +2128,111 @@ export function EquipoModal({
                   data-testid="save-area-button"
                 >
                   {areaSubmitting ? t('teamWorkspace.saving') : t('teamWorkspace.saveArea')}
+                </button>
+              </div>
+            </div>
+          </ModalShell>
+        )}
+
+        {/* EDIT EMPLOYEE MODAL */}
+        {editingEmployee && (
+          <ModalShell
+            isOpen={Boolean(editingEmployee)}
+            onClose={() => setEditingEmployee(null)}
+            title={`Editar ficha de ${editingEmployee.name}`}
+            closeAriaLabel="Cerrar"
+            maxWidth="480px"
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }} data-testid="edit-employee-modal">
+              {editEmployeeError && (
+                <div className="card card--error" role="alert" style={{ padding: '8px 12px' }}>
+                  <span style={{ color: 'var(--danger, #ef4444)', fontSize: '0.85rem' }}>{editEmployeeError}</span>
+                </div>
+              )}
+              <div>
+                <label htmlFor="edit-emp-name" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
+                  Nombre y apellidos:
+                </label>
+                <input
+                  id="edit-emp-name"
+                  type="text"
+                  className="equipo-modal__search"
+                  style={{ width: '100%' }}
+                  value={editEmployeeName}
+                  onChange={(e) => setEditEmployeeName(e.target.value)}
+                  data-testid="edit-employee-name-input"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit-emp-external-id" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
+                  Identificador externo (opcional):
+                </label>
+                <input
+                  id="edit-emp-external-id"
+                  type="text"
+                  className="equipo-modal__search"
+                  style={{ width: '100%' }}
+                  value={editEmployeeExternalId}
+                  onChange={(e) => setEditEmployeeExternalId(e.target.value)}
+                  placeholder="Ej. EMP-042"
+                  data-testid="edit-employee-external-id-input"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="edit-emp-area" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
+                  Área asignada:
+                </label>
+                <select
+                  id="edit-emp-area"
+                  className="equipo-modal__select"
+                  style={{ width: '100%' }}
+                  value={editEmployeeAreaId}
+                  onChange={(e) => setEditEmployeeAreaId(e.target.value)}
+                  data-testid="edit-employee-area-select"
+                >
+                  <option value="">Sin área</option>
+                  {areas.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="edit-emp-status" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
+                  Estado operativo:
+                </label>
+                <select
+                  id="edit-emp-status"
+                  className="equipo-modal__select"
+                  style={{ width: '100%' }}
+                  value={editEmployeeStatus}
+                  onChange={(e) => setEditEmployeeStatus(e.target.value as 'active' | 'inactive')}
+                  data-testid="edit-employee-status-select"
+                >
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  className="equipo-btn equipo-btn--secondary"
+                  onClick={() => setEditingEmployee(null)}
+                  disabled={editEmployeeSubmitting}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="equipo-btn equipo-btn--primary"
+                  onClick={() => void handleSaveEmployee()}
+                  disabled={editEmployeeSubmitting}
+                  data-testid="save-employee-button"
+                >
+                  {editEmployeeSubmitting ? 'Guardando…' : 'Guardar ficha'}
                 </button>
               </div>
             </div>
