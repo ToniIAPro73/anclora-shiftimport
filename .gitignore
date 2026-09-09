@@ -45,6 +45,7 @@ qa/e2e-acceptance/test-results/
 src/ingestion/fixtures/real/
 
 .vercel
+.neon
 .env*
 
 # Local E2E (Fase 1.1) artifacts
