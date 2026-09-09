@@ -66,3 +66,5 @@ docs/manual/screenshots/
 # Manual build scratch (seed fixture, intermediate pass PDF)
 tmp/
 node_modules
+
+evidence/
