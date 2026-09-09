@@ -252,3 +252,16 @@ La última iteración se comparó por hash de cada página renderizada con la ve
 **Pregunta final:** sí, una persona nueva dispone de instrucciones para aprender las funciones accesibles de su perfil, reconocer el resultado y resolver los problemas habituales sin conocer términos internos ni experimentar a ciegas. Una limitación de permisos, un problema de acceso o una recuperación que requiera soporte no puede resolverse mediante el manual; se indica claramente cuándo ocurre.
 
 La ejecución del commit, push y promoción autorizados se comunica con su SHA y verificación de ramas en la entrega final. No se afirma aquí un resultado remoto antes de ejecutarlo.
+
+## Corrección puntual — 2026-09-09 (post UXR-F1)
+
+- **Alcance**: 1 captura (`screenshots/pricing-dark.png`) + regeneración del PDF. Ninguna otra
+  captura ni el texto en prosa se modificaron.
+- **Motivo**: `UXR-F1-M03` (commit `cbd642d`, Fase 1 de la remediación UX Codex 2026-09-09) corrigió
+  el sufijo de intervalo duplicado en Precios (`4,99 €/mes /mes` → `4,99 €/mes`) y la terminología de
+  roles (`Admin/Manager` → `Admin/Planificador`). La captura anterior (generada antes de ese commit)
+  mostraba ambos defectos; ya no representaba el producto.
+- **No se cambió**: el número de versión de portada (sigue en 3.0) — esto es una corrección de un
+  artefacto obsoleto, no una nueva edición del manual.
+- **Verificación**: `node scripts/generate-manual-pdf.mjs` completado sin error; PDF revisado
+  visualmente en la sección 27.
