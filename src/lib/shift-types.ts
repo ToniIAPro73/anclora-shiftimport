@@ -235,13 +235,42 @@ export const resolveShiftTypeId = (token: string): string | null => {
   )?.id ?? null;
 };
 
+export const isValidColor = (color: unknown): color is string => {
+  if (typeof color !== 'string') return false;
+  const trimmed = color.trim();
+  if (!trimmed) return false;
+  return (
+    /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(trimmed) ||
+    /^(rgb|hsl)a?\(.+\)$/i.test(trimmed)
+  );
+};
+
 // Includes archived types so shifts already recorded under an archived type
 // still render with their correct color/countsAsWork.
 export const getShiftTypeDefinition = (typeId: string): ShiftTypeDefinition | undefined =>
   getAllShiftTypesForManagement().find((type) => type.id === typeId);
 
-export const getShiftTypeColor = (typeId: string): string =>
-  getShiftTypeDefinition(typeId)?.color ?? FALLBACK_SHIFT_TYPE_COLOR;
+export const getShiftTypeColor = (typeId: string): string => {
+  const normalized = typeof typeId === 'string' ? typeId.trim() : '';
+  if (!normalized) return FALLBACK_SHIFT_TYPE_COLOR;
+
+  // Direct lookup first (handles canonical IDs, custom types, and archived types)
+  const directDef = getShiftTypeDefinition(normalized);
+  if (directDef && isValidColor(directDef.color)) {
+    return directDef.color;
+  }
+
+  // Fallback to alias / case-insensitive resolution (e.g. 'off' -> 'Libre', 'dl' -> 'Libre')
+  const resolvedId = resolveShiftTypeId(normalized);
+  if (resolvedId && resolvedId !== normalized) {
+    const resolvedDef = getShiftTypeDefinition(resolvedId);
+    if (resolvedDef && isValidColor(resolvedDef.color)) {
+      return resolvedDef.color;
+    }
+  }
+
+  return FALLBACK_SHIFT_TYPE_COLOR;
+};
 
 export const shiftTypeCountsAsWork = (typeId: string): boolean =>
   getShiftTypeDefinition(typeId)?.countsAsWork ?? true;

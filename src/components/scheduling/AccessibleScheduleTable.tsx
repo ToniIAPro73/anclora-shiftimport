@@ -1,8 +1,10 @@
 import { FormEvent } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { Locale } from '../../lib/i18n';
+import { Locale, translateShiftTypeLabel } from '../../lib/i18n';
 import { ScheduleSnapshot, ShiftAssignment } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
+import { getAssignmentShiftType } from '../../lib/shifts';
+import { getShiftTypeDefinition } from '../../lib/shift-types';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
 
 interface AccessibleScheduleTableProps {
@@ -84,9 +86,22 @@ export function AccessibleScheduleTable({
                   </th>
                   <td><time dateTime={day}>{formatDay(day, locale)}</time></td>
                   <td>
-                    {assignment ? <strong>{assignment.startTime && assignment.endTime
-                      ? `${assignment.startTime.slice(0, 5)}–${assignment.endTime.slice(0, 5)}`
-                      : assignment.shiftType ?? t('planner.nonWorkingAssignment')}</strong> : <span className="weekly-planner__table-muted">{t('planner.noAssignment')}</span>}
+                    {assignment ? (() => {
+                      const shiftTypeId = getAssignmentShiftType(assignment);
+                      const displayType = translateShiftTypeLabel(
+                        shiftTypeId,
+                        locale,
+                        getShiftTypeDefinition(shiftTypeId)?.label ?? shiftTypeId,
+                      );
+                      const hasTimes = Boolean(assignment.startTime && assignment.endTime);
+                      return (
+                        <strong>
+                          {hasTimes
+                            ? `${displayType} (${assignment.startTime!.slice(0, 5)}–${assignment.endTime!.slice(0, 5)})`
+                            : displayType}
+                        </strong>
+                      );
+                    })() : <span className="weekly-planner__table-muted">{t('planner.noAssignment')}</span>}
                   </td>
                   <td>{assignment?.location || <span className="weekly-planner__table-muted">{t('planner.noLocation')}</span>}</td>
                   <td>

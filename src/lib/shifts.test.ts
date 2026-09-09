@@ -4,6 +4,7 @@ import {
   aggregateWeeklyStats,
   computeShiftCategory,
   enrichShift,
+  getAssignmentShiftType,
   getShiftOrigin,
   getShiftType,
   hasShiftTimes,
@@ -110,5 +111,25 @@ describe('aggregateWeeklyStats', () => {
     expect(stats.totalWorkedDays).toBe(2);
     expect(stats.hoursByType.Regular).toBe(14);
     expect(stats.freeDays).toBe(6);
+  });
+});
+
+describe('getAssignmentShiftType', () => {
+  it('resolves explicit canonical and custom shift types', () => {
+    expect(getAssignmentShiftType({ shiftType: 'Regular', startTime: '09:00', endTime: '17:00' })).toBe('Regular');
+    expect(getAssignmentShiftType({ shiftType: 'Libre' })).toBe('Libre');
+    expect(getAssignmentShiftType({ shiftType: 'Vacaciones' })).toBe('Vacaciones');
+
+    upsertShiftType({ id: 'Baja', label: 'Baja', shortLabel: 'Baja', color: '#8b5cf6', countsAsWork: false });
+    expect(getAssignmentShiftType({ shiftType: 'Baja' })).toBe('Baja');
+  });
+
+  it('falls back to Libre when no times and no type are present', () => {
+    expect(getAssignmentShiftType({})).toBe('Libre');
+    expect(getAssignmentShiftType({ startTime: null, endTime: null })).toBe('Libre');
+  });
+
+  it('falls back to Regular when times are present without explicit type', () => {
+    expect(getAssignmentShiftType({ startTime: '09:00', endTime: '17:00' })).toBe('Regular');
   });
 });

@@ -4226,26 +4226,77 @@ button[aria-busy='true'] {
   place-items: center;
 }
 
-.weekly-planner__assignment,
-.weekly-planner__add-cell {
+.weekly-planner__assignment {
+  --assignment-accent: var(--assignment-color, var(--color-accent));
   display: grid;
   gap: 3px;
   width: 100%;
-  padding: 8px 9px;
+  padding: 7px 9px;
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--color-accent) 13%, var(--panel-muted-bg));
-  border: 1px solid color-mix(in srgb, var(--color-accent) 34%, var(--glass-border));
+  background: color-mix(in srgb, var(--assignment-accent) 13%, var(--panel-muted-bg));
+  border: 1px solid color-mix(in srgb, var(--assignment-accent) 26%, var(--glass-border));
+  border-left: 3px solid var(--assignment-accent);
   border-radius: 9px;
   font-size: 0.72rem;
   text-align: left;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  position: relative;
+  outline: none;
 }
 
 .weekly-planner__assignment:hover:not(:disabled) {
-  border-color: var(--color-accent);
+  border-color: color-mix(in srgb, var(--assignment-accent) 70%, var(--glass-border));
+  border-left-color: var(--assignment-accent);
+  background: color-mix(in srgb, var(--assignment-accent) 18%, var(--panel-muted-bg));
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--assignment-accent) 20%, transparent);
   transform: translateY(-1px);
 }
 
-.weekly-planner__assignment span {
+.weekly-planner__assignment:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+  z-index: 2;
+}
+
+.weekly-planner__assignment[data-selected='true'] {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-gold) 35%, transparent);
+  z-index: 2;
+}
+
+.weekly-planner__assignment:disabled {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.weekly-planner__assignment-type {
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--assignment-accent);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme='light'] .weekly-planner__assignment-type {
+  color: color-mix(in srgb, var(--assignment-accent) 78%, black 22%);
+}
+
+.weekly-planner__assignment strong {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekly-planner__assignment span:not(.weekly-planner__assignment-type) {
   overflow: hidden;
   color: var(--text-muted);
   font-size: 0.66rem;
@@ -4253,9 +4304,18 @@ button[aria-busy='true'] {
   white-space: nowrap;
 }
 
-.weekly-planner__assignment:disabled {
-  cursor: default;
-  opacity: 0.82;
+/* Conflict & validation warning state overrides (operational priority) */
+.weekly-planner__assignment[data-has-conflict='true'],
+.weekly-planner__assignment.has-conflict {
+  border-color: #ef4444 !important;
+  border-left-color: #ef4444 !important;
+  background: color-mix(in srgb, #ef4444 16%, var(--panel-muted-bg)) !important;
+}
+
+.weekly-planner__assignment[data-has-warning='true'],
+.weekly-planner__assignment.has-warning {
+  border-color: var(--color-gold) !important;
+  border-left-color: var(--color-gold) !important;
 }
 
 .weekly-planner__add-cell {
@@ -4267,7 +4327,9 @@ button[aria-busy='true'] {
   padding: 0;
   color: var(--text-subtle);
   background: transparent;
-  border-style: dashed;
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 34%, var(--glass-border));
+  border-radius: 9px;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .weekly-planner__add-cell:hover {

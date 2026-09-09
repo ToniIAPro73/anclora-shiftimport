@@ -18,7 +18,9 @@ import {
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference, PLANNER_WEEK_START_PREFERENCE_KEY } from '../../lib/week';
-import { shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getShiftTypeColor, getShiftTypeDefinition, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getAssignmentShiftType } from '../../lib/shifts';
+import { translateShiftTypeLabel } from '../../lib/i18n';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
 import { ModalShell } from '../ui/ModalShell';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -665,22 +667,38 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                             return (
                               <td key={day} data-selected={isSelected || undefined} data-active-day={activeDay === day || undefined}>
                                 <div className="weekly-planner__cell" data-empty={cellAssignments.length === 0}>
-                                  {cellAssignments.map((assignment) => (
-                                    <button
-                                      type="button"
-                                      className="weekly-planner__assignment"
-                                      key={assignment.id}
-                                      onClick={() => { if (editable && day >= today) handleEdit(employee.id, day, assignment); }}
-                                      disabled={!editable || day < today}
-                                      data-editor-target={`${employee.id}:${day}`}
-                                      title={editable ? t('planner.editAssignment') : t('planner.locked')}
-                                    >
-                                      <strong>{assignment.startTime && assignment.endTime
-                                        ? `${assignment.startTime.slice(0, 5)}–${assignment.endTime.slice(0, 5)}`
-                                        : assignment.shiftType ?? t('planner.nonWorkingAssignment')}</strong>
-                                      {assignment.location && <span>{assignment.location}</span>}
-                                    </button>
-                                  ))}
+                                  {cellAssignments.map((assignment) => {
+                                    const shiftTypeId = getAssignmentShiftType(assignment);
+                                    const accentColor = getShiftTypeColor(shiftTypeId);
+                                    const displayType = translateShiftTypeLabel(
+                                      shiftTypeId,
+                                      locale,
+                                      getShiftTypeDefinition(shiftTypeId)?.label ?? shiftTypeId,
+                                    );
+                                    const hasTimes = Boolean(assignment.startTime && assignment.endTime);
+                                    const isAssignmentSelected = editor?.id === assignment.id;
+
+                                    return (
+                                      <button
+                                        type="button"
+                                        className="weekly-planner__assignment"
+                                        key={assignment.id}
+                                        style={{ '--assignment-color': accentColor } as React.CSSProperties}
+                                        data-shift-type={shiftTypeId}
+                                        data-selected={isAssignmentSelected || undefined}
+                                        onClick={() => { if (editable && day >= today) handleEdit(employee.id, day, assignment); }}
+                                        disabled={!editable || day < today}
+                                        data-editor-target={`${employee.id}:${day}`}
+                                        title={editable ? t('planner.editAssignment') : t('planner.locked')}
+                                      >
+                                        {hasTimes && <span className="weekly-planner__assignment-type">{displayType}</span>}
+                                        <strong>{hasTimes
+                                          ? `${assignment.startTime!.slice(0, 5)}–${assignment.endTime!.slice(0, 5)}`
+                                          : displayType}</strong>
+                                        {assignment.location && <span>{assignment.location}</span>}
+                                      </button>
+                                    );
+                                  })}
                                   {editable && day >= today && (
                                     <button type="button" className="weekly-planner__add-cell" onClick={() => handleAdd(employee.id, day)} aria-label={t('planner.addAssignment', { employee: employee.name, date: day })} data-editor-target={`${employee.id}:${day}`}>
                                       <Plus size={16} aria-hidden="true" />

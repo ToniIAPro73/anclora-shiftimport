@@ -8,6 +8,7 @@ import { ThemeProvider } from '../../lib/theme-react';
 import * as remote from '../../lib/remote';
 import { ScheduleSnapshot, ScheduleVersion, ShiftAssignment } from '../../lib/remote';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
+import { upsertShiftType } from '../../lib/shift-types';
 import { WeeklyPlanner } from './WeeklyPlanner';
 
 setupLocalStorageMock();
@@ -360,4 +361,153 @@ describe('WeeklyPlanner', () => {
     expect(screen.getByText('Volver a la versión actual')).toBeInTheDocument();
     expect(screen.getByText('Solo lectura')).toBeInTheDocument();
   });
+
+  describe('canonical shift type colors & visual representation', () => {
+    it('applies canonical colors and visible textual labels for regular, libre, vacaciones, baja, custom and fallback types', async () => {
+      // 1. Configure custom shift types: Baja (countsAsWork: false) and Guardia
+      upsertShiftType({
+        id: 'baja',
+        label: 'Baja',
+        shortLabel: 'BAJA',
+        color: '#8b5cf6',
+        countsAsWork: false,
+      });
+      upsertShiftType({
+        id: 'guardia',
+        label: 'Guardia',
+        shortLabel: 'GUARDIA',
+        color: '#ec4899',
+        countsAsWork: true,
+      });
+      upsertShiftType({
+        id: 'broken',
+        label: 'Broken',
+        shortLabel: 'BROKEN',
+        color: 'invalid-hex-color',
+        countsAsWork: true,
+      });
+
+      const regularShift = assignment({
+        id: 'shift-regular',
+        date: '2026-09-28',
+        shiftType: 'regular',
+        startTime: '08:00',
+        endTime: '16:00',
+      });
+      const libreShift = assignment({
+        id: 'shift-libre',
+        date: '2026-09-29',
+        shiftType: 'libre',
+        startTime: undefined,
+        endTime: undefined,
+      });
+      const vacacionesShift = assignment({
+        id: 'shift-vacaciones',
+        date: '2026-09-30',
+        shiftType: 'vacaciones',
+        startTime: undefined,
+        endTime: undefined,
+      });
+      const bajaShift = assignment({
+        id: 'shift-baja',
+        date: '2026-10-01',
+        shiftType: 'baja',
+        startTime: undefined,
+        endTime: undefined,
+      });
+      const customShift = assignment({
+        id: 'shift-guardia',
+        date: '2026-10-02',
+        shiftType: 'guardia',
+        startTime: '16:00',
+        endTime: '00:00',
+      });
+      const brokenShift = assignment({
+        id: 'shift-broken',
+        date: '2026-10-03',
+        shiftType: 'broken',
+        startTime: '10:00',
+        endTime: '14:00',
+      });
+
+      mockedList.mockResolvedValue([version()]);
+      mockedLoad.mockResolvedValue(snapshot({
+        assignments: [regularShift, libreShift, vacacionesShift, bajaShift, customShift, brokenShift],
+      }));
+
+      renderPlanner();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: /Regular/ })).toBeInTheDocument());
+
+      // 1. REGULAR_COLOR (#3b82f6)
+      const regBtn = screen.getByRole('button', { name: /Regular/ });
+      expect(regBtn).toHaveAttribute('data-shift-type', 'Regular');
+      expect(regBtn.style.getPropertyValue('--assignment-color')).toBe('#3b82f6');
+      expect(within(regBtn).getByText('Regular')).toBeInTheDocument();
+      expect(within(regBtn).getByText('08:00–16:00')).toBeInTheDocument();
+
+      // 2. LIBRE_COLOR (#ef4444)
+      const libreBtn = screen.getByRole('button', { name: /Libre/ });
+      expect(libreBtn).toHaveAttribute('data-shift-type', 'Libre');
+      expect(libreBtn.style.getPropertyValue('--assignment-color')).toBe('#ef4444');
+      expect(within(libreBtn).getByText('Libre')).toBeInTheDocument();
+
+      // 3. VACACIONES_COLOR (#16a34a)
+      const vacBtn = screen.getByRole('button', { name: /Vacaciones/ });
+      expect(vacBtn).toHaveAttribute('data-shift-type', 'Vacaciones');
+      expect(vacBtn.style.getPropertyValue('--assignment-color')).toBe('#16a34a');
+      expect(within(vacBtn).getByText('Vacaciones')).toBeInTheDocument();
+
+      // 4. BAJA_COLOR (#8b5cf6) with countsAsWork: false
+      const bajaBtn = screen.getByRole('button', { name: /Baja/ });
+      expect(bajaBtn).toHaveAttribute('data-shift-type', 'baja');
+      expect(bajaBtn.style.getPropertyValue('--assignment-color')).toBe('#8b5cf6');
+      expect(within(bajaBtn).getByText('Baja')).toBeInTheDocument();
+
+      // 5. CUSTOM_SHIFT_TYPE_COLOR (#ec4899)
+      const customBtn = screen.getByRole('button', { name: /Guardia/ });
+      expect(customBtn).toHaveAttribute('data-shift-type', 'guardia');
+      expect(customBtn.style.getPropertyValue('--assignment-color')).toBe('#ec4899');
+      expect(within(customBtn).getByText('Guardia')).toBeInTheDocument();
+      expect(within(customBtn).getByText('16:00–00:00')).toBeInTheDocument();
+
+      // 6. INVALID_COLOR_FALLBACK (#3b82f6)
+      const brokenBtn = screen.getByRole('button', { name: /Broken/ });
+      expect(brokenBtn).toHaveAttribute('data-shift-type', 'broken');
+      expect(brokenBtn.style.getPropertyValue('--assignment-color')).toBe('#3b82f6');
+      expect(within(brokenBtn).getByText('Broken')).toBeInTheDocument();
+    });
+
+    it('displays shift type name in accessible table view', async () => {
+      upsertShiftType({
+        id: 'baja',
+        label: 'Baja',
+        shortLabel: 'BAJA',
+        color: '#8b5cf6',
+        countsAsWork: false,
+      });
+
+      const bajaShift = assignment({
+        id: 'shift-baja-table',
+        date: '2026-09-28',
+        shiftType: 'baja',
+        startTime: undefined,
+        endTime: undefined,
+      });
+
+      mockedList.mockResolvedValue([version()]);
+      mockedLoad.mockResolvedValue(snapshot({
+        assignments: [bajaShift],
+      }));
+
+      renderPlanner();
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Tabla accesible' })).toBeInTheDocument());
+      fireEvent.click(screen.getByRole('button', { name: 'Tabla accesible' }));
+
+      await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+      expect(screen.getByRole('cell', { name: 'Baja' })).toBeInTheDocument();
+    });
+  });
 });
+

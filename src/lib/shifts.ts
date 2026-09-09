@@ -1,6 +1,6 @@
 import { Shift, ShiftCategory, ShiftOrigin, ShiftWithDerived, WeeklyStats } from './types';
 import { durationMinutes, parseHHMM } from './time';
-import { getShiftTypes, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
+import { getShiftTypeDefinition, getShiftTypes, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
 
 const isEmptyTime = (value: string): boolean => value.trim() === '';
 
@@ -28,6 +28,31 @@ export const getShiftType = (shift: Shift): string => {
   }
 
   if (isEmptyTime(shift.startTime) && isEmptyTime(shift.endTime)) {
+    return 'Libre';
+  }
+
+  return 'Regular';
+};
+
+export const getAssignmentShiftType = (assignment: {
+  shiftType?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+}): string => {
+  const explicitType = assignment.shiftType?.trim();
+  if (explicitType) {
+    const resolved = resolveShiftTypeId(explicitType);
+    if (resolved) {
+      return resolved;
+    }
+    const def = getShiftTypeDefinition(explicitType);
+    if (def) {
+      return def.id;
+    }
+    return explicitType;
+  }
+
+  if (isEmptyTime(assignment.startTime ?? '') && isEmptyTime(assignment.endTime ?? '')) {
     return 'Libre';
   }
 

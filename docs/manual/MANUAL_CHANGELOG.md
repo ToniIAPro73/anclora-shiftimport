@@ -265,3 +265,10 @@ La ejecución del commit, push y promoción autorizados se comunica con su SHA y
   artefacto obsoleto, no una nueva edición del manual.
 - **Verificación**: `node scripts/generate-manual-pdf.mjs` completado sin error; PDF revisado
   visualmente en la sección 27.
+
+## Corrección puntual — 2026-09-09 (post FIX UX/UI colores Planificador)
+
+- **Alcance**: 2 capturas (`screenshots/planner-dark.png` y `screenshots/planner-published-dark.png`) + regeneración del PDF.
+- **Motivo**: Remediación UX/UI de tarjetas de turno en el Planificador semanal. Anteriormente los turnos se mostraban con un tratamiento verde uniforme; tras la corrección, utilizan el color canónico de cada tipo de turno configurado (Regular azul, Libre rojo, Vacaciones verde, etc.) con tinte suave, borde acento izquierdo de 3px y etiqueta textual explícita visible en la tarjeta.
+- **Verificación**: `node scripts/generate-manual-pdf.mjs` completado sin error; PDF regenerado en `public/manuals/anclora-shiftimport-manual-usuario-es.pdf`.
+
