@@ -10,6 +10,7 @@ import { ScheduleSnapshot, ScheduleVersion, ShiftAssignment } from '../../lib/re
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { upsertShiftType } from '../../lib/shift-types';
 import { WeeklyPlanner } from './WeeklyPlanner';
+import { getOperationalDate } from '../../lib/operational-date';
 
 setupLocalStorageMock();
 
@@ -210,6 +211,25 @@ describe('WeeklyPlanner', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Inicio de semana' }));
     fireEvent.click(screen.getByRole('option', { name: 'Lunes' }));
     await waitFor(() => expect(screen.getByText('lun, 28 sept – dom, 4 oct')).toBeInTheDocument());
+  });
+
+  it('marks only the current day column for the scoped hover treatment', async () => {
+    const today = getOperationalDate();
+    const currentWeek = version({ periodStart: today, periodEnd: today });
+    mockedList.mockResolvedValue([currentWeek]);
+    mockedLoad.mockResolvedValue(snapshot({ version: currentWeek, assignments: [] }));
+    render(
+      <ThemeProvider>
+        <I18nProvider>
+          <WeeklyPlanner areaId="area-1" canEdit initialPeriodStart={today} onBack={() => {}} />
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument());
+    const headers = screen.getAllByRole('columnheader');
+    expect(headers.filter((header) => header.getAttribute('data-today') === 'true')).toHaveLength(1);
+    expect(document.querySelectorAll('.weekly-planner__grid td[data-today="true"]')).toHaveLength(1);
   });
 
   it('changes the active grid day without changing week, filter, or editor state', async () => {
@@ -510,4 +530,3 @@ describe('WeeklyPlanner', () => {
     });
   });
 });
-

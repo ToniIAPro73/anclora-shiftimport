@@ -87,7 +87,7 @@ export function AccessibleScheduleTable({
                     <span>{employee.name}</span>
                     {employee.externalEmployeeId && <small>{employee.externalEmployeeId}</small>}
                   </th>
-                  <td><time dateTime={day}>{formatDay(day, locale)}</time></td>
+                  <td data-today={day === today || undefined}><time dateTime={day}>{formatDay(day, locale)}</time></td>
                   <td>
                     {assignment ? (() => {
                       const shiftTypeId = getAssignmentShiftType(assignment);

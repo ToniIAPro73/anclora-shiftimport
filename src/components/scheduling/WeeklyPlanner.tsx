@@ -655,7 +655,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                     <thead>
                       <tr>
                         <th scope="col">{t('planner.employeeColumn')}</th>
-                        {days.map((day) => <th scope="col" key={day} data-day={day} data-active-day={activeDay === day || undefined} aria-current={activeDay === day ? 'date' : undefined}>{formatDay(day, locale)}</th>)}
+                        {days.map((day) => <th scope="col" key={day} data-day={day} data-active-day={activeDay === day || undefined} data-today={day === today || undefined} aria-current={activeDay === day ? 'date' : undefined}>{formatDay(day, locale)}</th>)}
                       </tr>
                     </thead>
                     <tbody>
@@ -669,7 +669,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                             const cellAssignments = assignmentsByCell.get(`${employee.id}:${day}`) ?? [];
                             const isSelected = selectedCell?.employeeId === employee.id && selectedCell.date === day;
                             return (
-                              <td key={day} data-selected={isSelected || undefined} data-active-day={activeDay === day || undefined}>
+                              <td key={day} data-selected={isSelected || undefined} data-active-day={activeDay === day || undefined} data-today={day === today || undefined}>
                                 <div className="weekly-planner__cell" data-empty={cellAssignments.length === 0}>
                                   {cellAssignments.map((assignment) => {
                                     const shiftTypeId = getAssignmentShiftType(assignment);

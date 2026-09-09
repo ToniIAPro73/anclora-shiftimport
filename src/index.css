@@ -2713,11 +2713,15 @@ select:disabled {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  box-shadow: inset 0 1px 0 var(--inner-highlight);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.month-day-cell:hover {
-  border-color: color-mix(in srgb, var(--color-accent) 44%, var(--border-soft));
-  box-shadow: inset 0 1px 0 var(--inner-highlight), 0 8px 20px rgba(3, 8, 24, 0.12);
+@media (hover: hover) and (pointer: fine) {
+  .month-day-cell[data-today='true']:hover {
+    box-shadow: inset 0 1px 0 var(--inner-highlight), 0 7px 18px rgba(3, 8, 24, 0.16);
+    transform: translateY(-1px);
+  }
 }
 
 .month-day-header {
@@ -4173,6 +4177,46 @@ button[aria-busy='true'] {
 .weekly-planner__grid thead th[data-active-day='true'] {
   color: var(--text-primary);
   box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+
+.weekly-planner__grid thead th[data-today='true'] {
+  color: var(--color-gold);
+  box-shadow: inset 0 -2px 0 var(--color-gold);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.weekly-planner__grid td[data-today='true'] {
+  background: color-mix(in srgb, var(--day-today-bg) 72%, var(--glass-bg));
+}
+
+.weekly-planner__grid td[data-today='true'] .weekly-planner__cell {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .weekly-planner__grid thead th[data-today='true']:hover {
+    box-shadow: inset 0 -2px 0 var(--color-gold), 0 5px 12px rgba(3, 8, 24, 0.14);
+    transform: translateY(-1px);
+  }
+
+  .weekly-planner__grid td[data-today='true']:hover .weekly-planner__cell {
+    box-shadow: 0 5px 14px rgba(3, 8, 24, 0.14);
+    transform: translateY(-1px);
+  }
+}
+
+.weekly-planner__table td[data-today='true'] {
+  background: color-mix(in srgb, var(--day-today-bg) 72%, var(--glass-bg));
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .weekly-planner__table td[data-today='true']:hover {
+    box-shadow: 0 5px 14px rgba(3, 8, 24, 0.14);
+    position: relative;
+    transform: translateY(-1px);
+    z-index: 1;
+  }
 }
 
 .weekly-planner__grid thead th:first-child {

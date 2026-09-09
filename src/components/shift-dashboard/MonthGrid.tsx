@@ -164,6 +164,7 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, rol
               <div
                 key={day}
                 className={hasVacationShift ? 'month-day-cell has-add-disabled' : 'month-day-cell'}
+                data-today={isToday || undefined}
                 onClick={() => {
                   if (expandedShiftId) {
                     setExpandedShiftId(null);
@@ -172,7 +173,6 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, rol
                 style={{
                   background: isToday ? 'var(--day-today-bg)' : 'var(--glass-bg)',
                   border: isToday ? '1px solid var(--color-gold)' : '1px solid var(--border-soft)',
-                  boxShadow: 'inset 0 1px 0 var(--inner-highlight)',
                 }}
               >
                 <div className="month-day-header">

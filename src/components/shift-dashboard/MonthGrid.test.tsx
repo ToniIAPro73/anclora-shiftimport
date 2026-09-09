@@ -5,11 +5,12 @@ import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { MonthGrid } from './MonthGrid';
 import { Shift } from '../../lib/types';
+import { getOperationalDate } from '../../lib/operational-date';
 
 setupLocalStorageMock();
 afterEach(cleanup);
 
-function renderGrid(locale: 'es' | 'en', shifts: Shift[] = []) {
+function renderGrid(locale: 'es' | 'en', shifts: Shift[] = [], year = 2026, month = 7) {
   if (locale === 'en') {
     localStorage.setItem('anclora_shiftimport_locale_v1', 'en');
   } else {
@@ -17,7 +18,7 @@ function renderGrid(locale: 'es' | 'en', shifts: Shift[] = []) {
   }
   return render(
     <I18nProvider>
-      <MonthGrid year={2026} month={7} shifts={shifts} onEditShift={() => {}} onCreateShift={() => {}} />
+      <MonthGrid year={year} month={month} shifts={shifts} onEditShift={() => {}} onCreateShift={() => {}} />
     </I18nProvider>,
   );
 }
@@ -54,5 +55,17 @@ describe('MonthGrid week-start policy', () => {
 
     // Same underlying date, same grid position regardless of locale.
     expect(esDayNumber).toBe(enDayNumber);
+  });
+
+  it('marks only today for the scoped hover treatment', () => {
+    const today = getOperationalDate();
+    const [year, month] = today.split('-').map(Number);
+    renderGrid('es', [], year, month - 1);
+
+    const todayCells = Array.from(document.querySelectorAll('.month-day-cell[data-today="true"]'));
+    expect(todayCells).toHaveLength(1);
+    expect(document.querySelectorAll('.month-day-cell:not([data-today="true"])')).toHaveLength(
+      document.querySelectorAll('.month-day-cell').length - 1,
+    );
   });
 });
