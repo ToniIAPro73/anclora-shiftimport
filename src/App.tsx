@@ -2105,6 +2105,17 @@ function App() {
         defaultDate={draftShiftDate}
         maxDate={getPreviousOperationalDate()}
         isSaving={isSavingShift}
+        sessionRole={session?.role}
+        currentEmployeeId={session?.employeeId}
+        onAcknowledged={(shiftId, acknowledgedAt) => {
+          setShifts((prev) =>
+            prev.map((s) =>
+              s.id === shiftId
+                ? { ...s, acknowledgementStatus: 'ACKNOWLEDGED', acknowledgedAt }
+                : s
+            )
+          );
+        }}
         onClose={() => {
           if (isImporting || isSavingShift) {
             return;

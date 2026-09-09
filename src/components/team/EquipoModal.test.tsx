@@ -23,6 +23,8 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     updateRemoteArea: vi.fn(),
     bulkMoveRemoteEmployeesArea: vi.fn(),
     updateRemoteEmployee: vi.fn(),
+    bulkAddRemoteMembers: vi.fn(),
+    bulkCreateRemoteEmployees: vi.fn(),
   };
 });
 
@@ -816,4 +818,113 @@ describe('EquipoModal — initialEmployeeId & Import Recovery', () => {
     });
   });
 });
+
+describe('EquipoModal — bulk provisioning in Personas workspace (UXR-F3-M05 / UXR-F3-M06)', () => {
+  it('discovers the bulk import action directly inside the Personas tab toolbar (M05)', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    renderModal('ADMIN');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('equipo-modal')).toBeInTheDocument();
+    });
+
+    // Bulk import button is directly visible in Personas toolbar next to Add Persona
+    const bulkBtn = screen.getByTestId('bulk-import-button');
+    expect(bulkBtn).toBeInTheDocument();
+    expect(bulkBtn).toHaveTextContent('Carga masiva CSV');
+
+    fireEvent.click(bulkBtn);
+
+    // Modal shell opens with bulk import file picker
+    expect(screen.getByTestId('bulk-import-modal')).toBeInTheDocument();
+    expect(screen.getByText('Seleccionar archivo CSV')).toBeInTheDocument();
+  });
+
+  it('preserves tab, search query, and filters when canceling from bulk preview (M06)', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    renderModal('ADMIN');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personas-search')).toBeInTheDocument();
+    });
+
+    // Apply search filter
+    fireEvent.change(screen.getByTestId('personas-search'), { target: { value: 'Dave' } });
+    // Apply access filter
+    fireEvent.change(screen.getByTestId('filter-access'), { target: { value: 'without_access' } });
+
+    expect(screen.getByTestId('personas-search')).toHaveValue('Dave');
+    expect(screen.getByTestId('filter-access')).toHaveValue('without_access');
+
+    // Open bulk import
+    fireEvent.click(screen.getByTestId('bulk-import-button'));
+    expect(screen.getByTestId('bulk-import-modal')).toBeInTheDocument();
+
+    // Cancel from bulk import
+    const cancelBtn = screen.getByLabelText('Cerrar importación');
+    fireEvent.click(cancelBtn);
+
+    // Modal is closed
+    await waitFor(() => {
+      expect(screen.queryByTestId('bulk-import-modal')).not.toBeInTheDocument();
+    });
+
+    // Context is preserved: still on Personas tab with same filters
+    expect(screen.getByTestId('tab-personas')).toHaveClass('is-active');
+    expect(screen.getByTestId('personas-search')).toHaveValue('Dave');
+    expect(screen.getByTestId('filter-access')).toHaveValue('without_access');
+  });
+
+  it('classifies rows in the preview and allows confirming bulk import', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    const mockedBulkAdd = vi.mocked(remote.bulkAddRemoteMembers);
+    mockedBulkAdd.mockResolvedValue({
+      summary: {
+        created: 1,
+        linked: 1,
+        existing: 0,
+        failed: 0,
+      },
+      results: [
+        {
+          key: 'u-0',
+          row: 1,
+          email: 'new@example.com',
+          status: 'created_and_linked',
+          temporaryPassword: 'temp-pass-123',
+        },
+      ],
+    });
+
+    renderModal('ADMIN');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('bulk-import-button')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('bulk-import-button'));
+
+    const csvContent = 'email,name,role,external_employee_id\nnew@example.com,New User,EMPLOYEE,EMP-002';
+    const file = new File([csvContent], 'users.csv', { type: 'text/csv' });
+
+    const fileInput = screen.getByTestId('bulk-file-input');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('bulk-preview-summary')).toBeInTheDocument();
+      expect(screen.getByTestId('bulk-preview-table')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('new@example.com')).toBeInTheDocument();
+
+    // Confirm import
+    fireEvent.click(screen.getByTestId('bulk-confirm-button'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Importación completada: 1 usuarios creados, 1 vinculados/i)).toBeInTheDocument();
+      expect(screen.getByText('temp-pass-123')).toBeInTheDocument();
+    });
+  });
+});
+
 

@@ -24,7 +24,9 @@ navegación, has ido demasiado lejos.
 
 ### Qué puedes tocar
 ✅ `src/components/shift-dashboard/StatsBar.tsx`,
-`src/components/scheduling/AccessibleScheduleTable.tsx`, `src/App.tsx` (wiring de navegación),
+`src/components/scheduling/AccessibleScheduleTable.tsx`,
+**`src/components/scheduling/WeeklyPlanner.tsx`** (añadido — ver §2.1bis, es donde vive el overflow
+real de CX-F02), `src/App.tsx` (wiring de navegación),
 `src/components/shift-dashboard/ShiftModal.tsx`, `src/components/shift-dashboard/MembersModal.tsx`,
 `src/index.css`, y **tests nuevos** (ver §2.1).
 
@@ -37,11 +39,17 @@ dejan de ser el único acceso a la acción de acuse.
 sustituye).
 
 ### Precondición
-Fases 0, 1 y 2 cerradas. En particular:
-- `UXR-F0-M07` (cuentas OWNER/PLANNER verificadas y pobladas) — **dependencia dura de M03**.
+Fases 0, 1 y 2 cerradas — las tres en `PASS_WITH_GAPS`, ninguna en `PASS` limpio; ningún hueco suyo
+bloquea el arranque de ésta. En particular:
+- `UXR-F0-M07` (cuentas OWNER/PLANNER verificadas y pobladas) — **dependencia dura de M03**. Sigue
+  vigente: `owner@e2e.test`, `planner@e2e.test`, `planner-no-area@e2e.test`,
+  `planner-global@e2e.test` verificados en `qa/e2e-acceptance/local-setup.ts`.
 - `UXR-F0-M08` (baseline de viewports) — M01 y M02 se miden contra ella.
 - `UXR-F1-M04`, `UXR-F2-M05`, `UXR-F2-M06` — **dependencia dura de M05**: la acción masiva en Equipo
-  sólo tiene sentido si la clasificación que muestra ya es correcta.
+  sólo tiene sentido si la clasificación que muestra ya es correcta. Cerrado en Fase 2 con evidencia
+  real (`classify-user-row.test.ts`, 4 casos de la auditoría + regresión).
+- El arrastre de etiquetas por fecha (§2.0.1 del prompt de Fase 2) **ya está resuelto** — Fase 2 lo
+  cerró en `ImportModal.tsx` (`rowLabelByDate`/`rowLabelByOrdinal`). No es trabajo tuyo, no lo repitas.
 
 ---
 
@@ -88,16 +96,62 @@ Verificado en el código:
 → El trabajo es **portar la llamada** al punto de montaje activo, reutilizando el patrón de estados
 que `ShiftDetail.tsx` ya implementa. No reescribas la lógica de acuse: cópiala con criterio.
 
-### 2.3 CX-F02 — el precedente de scroll interno ya está resuelto en el repo
+### 2.3 ⚠️ CX-F02 — la spec apunta al fichero equivocado para el overflow real del planificador
+
+**Esto es una corrección de alcance, no un detalle.** `03_IMPLEMENTATION_PLAN.md` lista
+`AccessibleScheduleTable.tsx` como el fichero a tocar para "indicador de overflow + scroll nombrado
+por teclado" (M02). Verificado en el código: **`AccessibleScheduleTable` no es un fallback de
+accesibilidad oculto — es una vista alternativa seleccionable por el usuario**
+(`WeeklyPlanner.tsx:627`, `view === 'table'`), separada de la vista de rejilla por defecto
+(`view !== 'table'`, líneas 648+: `<div ref={gridWrapRef} className="weekly-planner__grid-wrap"
+role="region" aria-label={...} tabIndex={0}><table className="weekly-planner__grid">...`).
+
+El desbordamiento horizontal que la auditoría midió (E021, "el planner deja horario fuera de
+viewport") ocurre en **`weekly-planner__grid-wrap`, dentro de `WeeklyPlanner.tsx`** — un contenedor
+distinto de `AccessibleScheduleTable.tsx`. Si sólo tocas `AccessibleScheduleTable.tsx`, el fix no
+llega al sitio donde el usuario ve el problema en la vista por defecto.
+
+**Además, verifica antes de escribir código nuevo — puede que ya esté parcialmente hecho:**
+- `weekly-planner__grid-wrap` **ya tiene** `role="region"`, `aria-label={t('planner.gridLabel')}` y
+  `tabIndex={0}` (`WeeklyPlanner.tsx:648`) — el nombrado ARIA del AC-2 puede que ya esté cubierto;
+  verifícalo con axe y teclado real antes de reescribirlo.
+- `src/index.css:3997-4015` define un degradado `::after` (`.weekly-planner__grid-wrap::after`,
+  `.weekly-planner__table-wrap::after`) que ya pasa a `opacity: 1` bajo `@media (max-width: 980px)`
+  (línea ~4388) — es decir, **ya existe una indicación visual persistente y sin hover** por debajo de
+  980px. Antes de dar por hecho que hay que construirla desde cero, mide contra el AC-1 literal
+  (*"la interfaz indica cómo alcanzar los siete días"*) si ese degradado estático basta, o si necesita
+  reforzarse (por ejemplo, porque se muestra siempre en ese rango sin comprobar si realmente hay
+  overflow, o porque un degradado sin texto es una señal débil comparada con lo que pide la
+  auditoría). Documenta la decisión con la medición, no la supongas.
+
+`AccessibleScheduleTable.tsx` sigue siendo territorio tuyo — **por el DO_NOT_BREAK** ("Tabla
+alternativa accesible", §4.4), no porque sea la fuente del bug de overflow. Un commit reciente y
+ajeno a esta fase (`3eabe9b`, colores canónicos de tipo de turno) tocó ese fichero: léelo de cero, no
+confíes en tu memoria de la spec original.
+
+**Ficheros previstos reales para M01/M02**: `StatsBar.tsx`, `AccessibleScheduleTable.tsx`,
+**`WeeklyPlanner.tsx`**, `src/index.css`.
+
+### 2.3bis El precedente de scroll interno ya está resuelto en el repo
 `P5.7-M09-PREMIUM-UX-A11Y-GATE.md` documenta cómo se resolvió el mismo problema en `EquipoModal`:
 scroll estrictamente contenido, sin doble scrollbar, tabs con `overflow-x: auto` y
 `white-space: nowrap` en móvil, y ARIA (`role="tablist"`, `aria-label` en filtros). **Es el patrón de
 la casa.** Léelo antes de diseñar el indicador de overflow.
 
 ### 2.4 CX-F07 — la ruta legacy y la nueva coexisten por diseño
-`MembersModal.tsx` (1897 líneas) es la herramienta de provisioning con preview; "Equipo" es el
-workspace nuevo con Personas/Roles/Áreas/Asignaciones. La auditoría **no pide fusionarlos**: pide que
-la acción masiva sea *descubrible* desde Equipo. `MembersModal.test.tsx` existe.
+`MembersModal.tsx` **ya no tiene 1897 líneas — tiene 1840** tras la extracción de Fase 2
+(`classifyUserRow` salió a `src/lib/classify-user-row.ts`). Es la herramienta de provisioning con
+preview; "Equipo" es el workspace nuevo con Personas/Roles/Áreas/Asignaciones. La auditoría **no pide
+fusionarlos**: pide que la acción masiva sea *descubrible* desde Equipo. `MembersModal.test.tsx`
+existe y ya cubre los casos de Fase 2 — no dupliques esa cobertura, añade sólo lo de M05/M06.
+
+### 2.5 Oportunidad menor, no bloqueante: `import-preview` sigue marcada inestable
+`qa/e2e-acceptance/compare-baseline-runs.mjs` sigue declarando la pantalla `import-preview` en
+`DECLARED_UNSTABLE_SCREENS` por el layout sub-píxel que Fase 2 corrigió. Verificado de forma
+independiente tras ese fix: doble corrida con `0 UNSTABLE`, el residuo que antes era una línea de 1px
+(`maxDelta 43`, el defecto sistémico) bajó a `maxDelta 1` (ruido normal). **No es tu alcance
+retirarlo** (no toca CX-F02/F06/F07), pero si generas evidencia visual nueva de esa pantalla para otra
+cosa, ya sabes que la inestabilidad declarada probablemente ya no aplica.
 
 ---
 
@@ -156,14 +210,17 @@ viewport de 390 px no caben; wrap o carrusel-con-indicador son las salidas. **Lo
 esconder métricas en móvil: la auditoría pide que el *total principal* sea legible sin scroll, no que
 desaparezca el resto.
 
-### 4.4 `UXR-F3-M02` — "indicación persistente" significa sin hover
+### 4.4 `UXR-F3-M02` — "indicación persistente" significa sin hover, y hay dos vistas que medir
 El AC-1 pide que la interfaz *indique cómo alcanzar los siete días*. Una scrollbar que sólo aparece al
 pasar el ratón no cumple: en táctil no hay hover. Y el AC-2 exige que **el teclado** alcance horario y
 acciones sin mover la página entera — eso es `tabindex` en el contenedor de scroll más un
 `aria-label`/`role` que lo nombre. Verifica con Axe y con recorrido de teclado real.
 
-⚠️ DO_NOT_BREAK: *"Tabla alternativa accesible"*. `AccessibleScheduleTable` **se conserva y se
-mejora**; no la sustituyas por una vista de agenda que elimine la tabla.
+**Mide las dos vistas por separado** (§2.3): la vista de rejilla por defecto
+(`weekly-planner__grid-wrap`, donde probablemente ya tengas la mayor parte del ARIA hecho y sólo
+tengas que reforzar o confirmar el indicador visual) y la vista de tabla (`AccessibleScheduleTable`,
+donde el DO_NOT_BREAK exige conservarla y mejorarla, no sustituirla por una vista de agenda que
+elimine la tabla). Un AC cumplido en una vista y no verificado en la otra no es un AC cumplido.
 
 ### 4.5 `UXR-F3-M06` — el contexto es pestaña + filtro + posición
 > *"Given vuelta desde preview, When cancela, Then conserva pestaña/filtro/contexto de personas."*
@@ -190,8 +247,8 @@ Actualiza `docs/roadmap/UXR-F3-STRUCTURE-GATE.md`:
    Los dos tests nuevos (§2.1) deben aparecer en la salida.
 4. **§3.4 Matriz visual**:
    - M01: 390×844, 430×932 × {claro, oscuro} de `StatsBar` **con datos poblados** (no vacío).
-   - M02: 390×844, 768×1024 × {claro, oscuro} con el indicador de overflow visible, y
-     `hide-scrollbars=false`.
+   - M02: 390×844, 768×1024 × {claro, oscuro} **de ambas vistas** (rejilla `weekly-planner__grid-wrap`
+     y tabla `AccessibleScheduleTable`) con el indicador de overflow visible, y `hide-scrollbars=false`.
    - M03: 1440×900 y 390×844 × {claro, oscuro} del detalle con la acción de acuse.
    - M05: 1440×900 × {claro, oscuro} del workspace Equipo con la acción masiva visible.
 5. **§3.5 Accesibilidad** — Axe sin violaciones nuevas y **recorrido de teclado completo** de la tabla
@@ -229,3 +286,7 @@ Actualiza `docs/roadmap/UXR-F3-STRUCTURE-GATE.md`:
 5. Resumen de **máximo 20 líneas**: estado por microtarea, gate resultante, si el ciclo
    `publicar→acuse→solicitar→resolver` se ejecutó o quedó `NOT_EVALUATED`, y qué desbloquea para la
    Fase 4 (`UXR-F4-M05`, `M08`, `M10`).
+
+**Nota**: Fase 3 no es la última fase de la spec — le sigue **Fase 4 · Cierre de evidencia**
+(históricos F1/F2/F5/F6/F8/F9 y los 10 flags de cobertura en `false`), con su propio prompt
+(`PROMPT-MAESTRO-FASE-4-CIERRE-EVIDENCIA.md`). No cierres el `UXR-MASTER-GATE.md` desde aquí.

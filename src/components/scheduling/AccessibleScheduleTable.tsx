@@ -61,6 +61,9 @@ export function AccessibleScheduleTable({
 
   return (
     <>
+      <div className="weekly-planner__overflow-hint" aria-hidden="true" data-testid="table-overflow-hint">
+        <span>{t('planner.scrollHint')}</span>
+      </div>
       <div className="weekly-planner__table-wrap" role="region" aria-label={t('planner.tableLabel')} tabIndex={0}>
         <table className="weekly-planner__table">
           <caption className="sr-only">{t('planner.tableCaption')}</caption>

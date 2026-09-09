@@ -21,6 +21,9 @@ export interface Shift {
   location: string;
   origin: ShiftOrigin;
   sourceFormat?: ShiftSourceFormat;
+  employeeId?: string;
+  acknowledgementStatus?: 'PENDING' | 'ACKNOWLEDGED';
+  acknowledgedAt?: string | null;
 }
 
 export interface ShiftWithDerived extends Shift {

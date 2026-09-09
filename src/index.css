@@ -2851,6 +2851,17 @@ select:disabled {
   flex: 1;
 }
 
+.stats-bar-container {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.totals-mobile-container {
+  display: none;
+}
+
 .totals-ribbon {
   position: relative;
   display: grid;
@@ -4385,11 +4396,29 @@ button[aria-busy='true'] {
 
 .weekly-planner__editor--modal { margin: 0; padding: 0; border: 0; background: transparent; }
 
+.weekly-planner__overflow-hint {
+  display: none;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 5px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  background: var(--panel-muted-bg);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border-soft);
+}
+
 @media (max-width: 980px) {
   .totals-ribbon::after,
   .weekly-planner__grid-wrap::after,
   .weekly-planner__table-wrap::after {
     opacity: 1;
+  }
+
+  .weekly-planner__overflow-hint {
+    display: flex;
   }
 }
 
@@ -4856,6 +4885,86 @@ button[aria-busy='true'] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .totals-ribbon--desktop {
+    display: none !important;
+  }
+
+  .totals-mobile-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+  .totals-mobile-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--panel-muted-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    backdrop-filter: var(--glass-blur);
+  }
+
+  .totals-mobile-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .totals-mobile-card__title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .totals-mobile-card__primary-metrics {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .totals-mobile-card__breakdown-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .totals-mobile-card__breakdown {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: var(--glass-border) transparent;
+    padding: 4px 1px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .totals-mobile-card__breakdown:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  .totals-mobile-card__hint {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding-top: 2px;
   }
 
   .totals-ribbon {

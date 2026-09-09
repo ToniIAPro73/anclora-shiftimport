@@ -44,7 +44,9 @@ function formatTokenValue(hours: number, days: number): string {
   return `${hours.toFixed(1)}h / ${days}d`;
 }
 
-function buildTypeCells(stats: WeeklyStats, locale: Locale): StatsCell[] {
+type StatsTokenCell = { kind: 'token'; label: string; value: string; className?: string };
+
+function buildTypeCells(stats: WeeklyStats, locale: Locale): StatsTokenCell[] {
   return getShiftTypes().map((type) => ({
     kind: 'token' as const,
     label: translateShiftTypeLabel(type.id, locale, type.shortLabel),
@@ -154,6 +156,63 @@ function SummaryLine({
   );
 }
 
+function MobileSummaryCard({
+  title,
+  monthStats,
+  yearStats,
+  locale,
+  t,
+}: {
+  title: string;
+  monthStats: WeeklyStats;
+  yearStats: WeeklyStats;
+  locale: Locale;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const monthTypeCells = useMemo(() => buildTypeCells(monthStats, locale), [monthStats, locale]);
+  const yearTypeCells = useMemo(() => buildTypeCells(yearStats, locale), [yearStats, locale]);
+
+  return (
+    <div className="totals-mobile-card" data-testid={`stats-mobile-card-${title.toLowerCase()}`}>
+      <div className="totals-mobile-card__header">
+        <span className="totals-mobile-card__title">{title}</span>
+        <div className="totals-mobile-card__primary-metrics">
+          <TotalToken
+            label={t('stats.month')}
+            value={formatTokenValue(monthStats.totalWorkedHours, monthStats.totalWorkedDays)}
+            className="totals-token--primary"
+          />
+          <TotalToken
+            label={t('stats.year')}
+            value={formatTokenValue(yearStats.totalWorkedHours, yearStats.totalWorkedDays)}
+            className="totals-token--secondary"
+          />
+        </div>
+      </div>
+      <div className="totals-mobile-card__breakdown-wrap">
+        <div
+          className="totals-mobile-card__breakdown"
+          role="region"
+          aria-label={t('stats.breakdownLabel', { title })}
+          tabIndex={0}
+        >
+          <SectionToken label={t('stats.totalMonth')} />
+          {monthTypeCells.map((cell, idx) => (
+            <TotalToken key={`m-${idx}`} label={cell.label} value={cell.value} className={cell.className} />
+          ))}
+          <SectionToken label={t('stats.totalYear')} />
+          {yearTypeCells.map((cell, idx) => (
+            <TotalToken key={`y-${idx}`} label={cell.label} value={cell.value} className={cell.className} />
+          ))}
+        </div>
+        <div className="totals-mobile-card__hint" aria-hidden="true">
+          <span>{t('stats.scrollHint')}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const StatsBar = ({ currentMonthShifts, daysInMonth, currentYearShifts, daysInYear }: StatsBarProps) => {
   const { locale, t } = useI18n();
   const ownMonthStats = useMemo(() => buildOriginStats(currentMonthShifts, daysInMonth, 'MAN'), [currentMonthShifts, daysInMonth]);
@@ -170,9 +229,28 @@ export const StatsBar = ({ currentMonthShifts, daysInMonth, currentYearShifts, d
   );
 
   return (
-    <div className="totals-ribbon" tabIndex={0}>
-      <SummaryLine title={ownTitle} cells={ownCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
-      <SummaryLine title={companyTitle} cells={companyCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
-    </div>
+    <aside className="stats-bar-container" aria-label={t('stats.totalMonth')}>
+      <div className="totals-ribbon totals-ribbon--desktop" tabIndex={0} data-testid="stats-bar-desktop">
+        <SummaryLine title={ownTitle} cells={ownCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
+        <SummaryLine title={companyTitle} cells={companyCells} gridTemplateColumns={gridTemplateColumns} titleColumnWidth={titleColumnWidth} />
+      </div>
+
+      <div className="totals-mobile-container" data-testid="stats-bar-mobile">
+        <MobileSummaryCard
+          title={ownTitle}
+          monthStats={ownMonthStats}
+          yearStats={ownYearStats}
+          locale={locale}
+          t={t}
+        />
+        <MobileSummaryCard
+          title={companyTitle}
+          monthStats={companyMonthStats}
+          yearStats={companyYearStats}
+          locale={locale}
+          t={t}
+        />
+      </div>
+    </aside>
   );
 };

@@ -278,6 +278,9 @@ const toShift = (row: RemoteShiftRow): Shift => ({
   countsAsWork: row.countsAsWork ?? null,
   location: row.location,
   origin: row.origin === 'MAN' ? 'MAN' : 'IMP',
+  employeeId: row.employeeId,
+  acknowledgementStatus: row.acknowledgementStatus,
+  acknowledgedAt: row.acknowledgedAt,
 });
 
 export async function loadRemoteShifts(employeeId: string): Promise<Shift[]> {

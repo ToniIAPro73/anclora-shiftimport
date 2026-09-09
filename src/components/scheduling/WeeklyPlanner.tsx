@@ -645,8 +645,12 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                   onDelete={(assignment) => void handleDelete(assignment)}
                 />
               ) : (
-                <div ref={gridWrapRef} className="weekly-planner__grid-wrap" role="region" aria-label={t('planner.gridLabel')} tabIndex={0}>
-                  <table className="weekly-planner__grid">
+                <>
+                  <div className="weekly-planner__overflow-hint" aria-hidden="true" data-testid="planner-overflow-hint">
+                    <span>{t('planner.scrollHint')}</span>
+                  </div>
+                  <div ref={gridWrapRef} className="weekly-planner__grid-wrap" role="region" aria-label={t('planner.gridLabel')} tabIndex={0}>
+                    <table className="weekly-planner__grid">
                     <caption className="sr-only">{t('planner.gridCaption')}</caption>
                     <thead>
                       <tr>
@@ -713,6 +717,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
 

@@ -3,13 +3,17 @@ import {
   AlertTriangle,
   CheckCircle2,
   Copy,
+  Download,
   Shield,
+  Upload,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { buildPersonas, filterPersonas, Persona } from '../../lib/personas';
 import {
   addRemoteMember,
+  bulkAddRemoteMembers,
+  bulkCreateRemoteEmployees,
   bulkMoveRemoteEmployeesArea,
   createRemoteArea,
   createRemoteEmployee,
@@ -24,6 +28,9 @@ import {
   updateRemoteEmployee,
   updateRemoteMemberRole,
 } from '../../lib/remote';
+import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv } from '../../lib/bulk-import-csv';
+import { classifyUserRow, UserPreviewRow } from '../../lib/classify-user-row';
+import { buildCredentialsTxt, credentialsFileName, downloadTextFile, GeneratedCredential } from '../../lib/credentials-export';
 import type { Role } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -54,7 +61,7 @@ export function EquipoModal({
   initialTab = 'personas',
   initialEmployeeId = null,
 }: EquipoModalProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [activeTab, setActiveTab] = useState<'personas' | 'roles' | 'areas' | 'assignments'>(initialTab);
   const [members, setMembers] = useState<RemoteMember[]>([]);
   const [loading, setLoading] = useState(false);
@@ -83,6 +90,121 @@ export function EquipoModal({
   const [wizardSubmitting, setWizardSubmitting] = useState(false);
   const [wizardGeneratedPassword, setWizardGeneratedPassword] = useState<string | null>(null);
   const [copiedPassword, setCopiedPassword] = useState(false);
+
+  // Bulk import state (UXR-F3-M05 / UXR-F3-M06)
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkKind, setBulkKind] = useState<'users' | 'employees' | null>(null);
+  const [bulkUsersPreview, setBulkUsersPreview] = useState<UserPreviewRow[] | null>(null);
+  const [bulkEmployeesPreview, setBulkEmployeesPreview] = useState<Array<{ row: EmployeeCsvRow; status: 'new' | 'existing' | 'error'; errorMessage?: string }> | null>(null);
+  const [bulkParseError, setBulkParseError] = useState<string | null>(null);
+  const [bulkImportSubmitting, setBulkImportSubmitting] = useState(false);
+  const [bulkImportSuccessMsg, setBulkImportSuccessMsg] = useState<string | null>(null);
+  const [bulkGeneratedCredentials, setBulkGeneratedCredentials] = useState<GeneratedCredential[]>([]);
+  const [bulkCopiedPasswordIdx, setBulkCopiedPasswordIdx] = useState<number | null>(null);
+
+  const resetBulkImport = () => {
+    setBulkFile(null);
+    setBulkKind(null);
+    setBulkUsersPreview(null);
+    setBulkEmployeesPreview(null);
+    setBulkParseError(null);
+    setBulkImportSubmitting(false);
+    setBulkImportSuccessMsg(null);
+    setBulkGeneratedCredentials([]);
+    setBulkCopiedPasswordIdx(null);
+  };
+
+  const handleBulkFileChange = async (file: File) => {
+    resetBulkImport();
+    setBulkFile(file);
+    try {
+      const text = await file.text();
+
+      // Check users CSV format (requires email & role columns)
+      const userRows = parseUsersCsv(text);
+      if (userRows && userRows.length > 0) {
+        setBulkKind('users');
+        const seenEmails = new Map<string, number>();
+        const seenExternalEmployeeIds = new Map<string, number>();
+        const preview = userRows.map((row, idx) =>
+          classifyUserRow(row, idx, seenEmails, seenExternalEmployeeIds, members, employees)
+        );
+        setBulkUsersPreview(preview);
+        return;
+      }
+
+      // Check employees CSV format (requires external_employee_id & name columns)
+      const empRows = parseEmployeesCsv(text);
+      if (empRows && empRows.length > 0) {
+        setBulkKind('employees');
+        const byExternalId = new Map(employees.map((e) => [e.externalEmployeeId ?? '', e]));
+        const preview = empRows.map((row) => {
+          if (!row.externalEmployeeId) {
+            return { row, status: 'error' as const, errorMessage: 'Falta external_employee_id' };
+          }
+          const match = byExternalId.get(row.externalEmployeeId);
+          return match ? { row, status: 'existing' as const } : { row, status: 'new' as const };
+        });
+        setBulkEmployeesPreview(preview);
+        return;
+      }
+
+      setBulkParseError('El archivo no coincide con los formatos admitidos (Usuarios: email,name,role,...; Empleados: external_employee_id,name,...).');
+    } catch (err: unknown) {
+      setBulkParseError(err instanceof Error ? err.message : 'Error al leer el archivo CSV');
+    }
+  };
+
+  const handleBulkConfirm = async () => {
+    setBulkImportSubmitting(true);
+    setBulkParseError(null);
+    try {
+      if (bulkKind === 'users' && bulkUsersPreview) {
+        const rowsToSubmit = bulkUsersPreview
+          .filter((p) => p.status !== 'invalid_email' && p.status !== 'invalid_role')
+          .map((p, idx) => ({
+            key: `u-${idx}`,
+            email: p.row.email,
+            name: p.row.name,
+            role: (p.row.role || 'EMPLOYEE') as 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE',
+            externalEmployeeId: p.row.externalEmployeeId || undefined,
+          }));
+        const res = await bulkAddRemoteMembers(rowsToSubmit);
+        const creds: GeneratedCredential[] = [];
+        res.results.forEach((r, idx) => {
+          if (r.temporaryPassword) {
+            creds.push({
+              email: rowsToSubmit[idx].email,
+              displayName: rowsToSubmit[idx].name,
+              role: rowsToSubmit[idx].role,
+              temporaryPassword: r.temporaryPassword,
+            });
+          }
+        });
+        setBulkGeneratedCredentials(creds);
+        setBulkImportSuccessMsg(`Importación completada: ${res.summary.created} usuarios creados, ${res.summary.linked} vinculados.`);
+        onChanged();
+        void fetchMembers();
+      } else if (bulkKind === 'employees' && bulkEmployeesPreview) {
+        const newRows = bulkEmployeesPreview
+          .filter((p) => p.status === 'new')
+          .map((p, idx) => ({
+            key: `emp-${idx}`,
+            name: p.row.name,
+            externalEmployeeId: p.row.externalEmployeeId,
+            areaName: p.row.areaName,
+          }));
+        const res = await bulkCreateRemoteEmployees(newRows);
+        setBulkImportSuccessMsg(`Importación completada: ${res.length} empleados creados.`);
+        onChanged();
+      }
+    } catch (err: unknown) {
+      setBulkParseError(err instanceof Error ? err.message : 'Error durante la importación');
+    } finally {
+      setBulkImportSubmitting(false);
+    }
+  };
 
   // Ownership transfer state
   const [isTransferOpen, setIsTransferOpen] = useState(false);
@@ -666,15 +788,28 @@ export function EquipoModal({
                 </select>
               </div>
 
-              <button
-                type="button"
-                className="equipo-btn equipo-btn--primary"
-                onClick={() => { resetWizard(); setIsWizardOpen(true); }}
-                data-testid="add-persona-button"
-              >
-                <UserPlus size={16} />
-                {t('teamWorkspace.addPerson')}
-              </button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {(currentUserRole === 'ADMIN' || currentUserRole === 'OWNER') && (
+                  <button
+                    type="button"
+                    className="equipo-btn equipo-btn--secondary"
+                    onClick={() => { resetBulkImport(); setIsBulkImportOpen(true); }}
+                    data-testid="bulk-import-button"
+                  >
+                    <Upload size={16} />
+                    {t('teamWorkspace.bulkImportAction')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="equipo-btn equipo-btn--primary"
+                  onClick={() => { resetWizard(); setIsWizardOpen(true); }}
+                  data-testid="add-persona-button"
+                >
+                  <UserPlus size={16} />
+                  {t('teamWorkspace.addPerson')}
+                </button>
+              </div>
             </div>
 
             <div className="equipo-modal__table-container">
@@ -1454,6 +1589,241 @@ export function EquipoModal({
               </div>
             )}
           </div>
+        )}
+
+        {/* MODAL: CARGA MASIVA CSV (UXR-F3-M05 / UXR-F3-M06) */}
+        {isBulkImportOpen && (
+          <ModalShell
+            isOpen={isBulkImportOpen}
+            onClose={() => { setIsBulkImportOpen(false); resetBulkImport(); }}
+            title={t('teamWorkspace.bulkImportTitle')}
+            closeAriaLabel="Cerrar importación"
+            maxWidth="720px"
+          >
+            <div className="equipo-bulk-import" data-testid="bulk-import-modal">
+              {bulkImportSuccessMsg ? (
+                <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                  <CheckCircle2 size={48} style={{ color: 'var(--success, #16a34a)', marginBottom: '12px' }} />
+                  <h3 style={{ margin: '0 0 8px 0' }}>{t('teamWorkspace.bulkSuccess')}</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{bulkImportSuccessMsg}</p>
+
+                  {bulkGeneratedCredentials.length > 0 && (
+                    <div style={{ margin: '16px 0', textAlign: 'left' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <strong>Credenciales temporales generadas:</strong>
+                        <button
+                          type="button"
+                          className="equipo-btn equipo-btn--secondary"
+                          onClick={() => {
+                            downloadTextFile(
+                              buildCredentialsTxt(locale, 'Organización', bulkGeneratedCredentials, (r) => r),
+                              credentialsFileName(locale)
+                            );
+                          }}
+                        >
+                          <Download size={14} /> {t('teamWorkspace.bulkDownloadCredentials')}
+                        </button>
+                      </div>
+                      <div className="equipo-panel" style={{ maxHeight: '180px', overflowY: 'auto' }}>
+                        {bulkGeneratedCredentials.map((c, i) => (
+                          <div key={c.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}>
+                            <span><strong>{c.email}</strong> ({c.role}): <code style={{ fontFamily: 'monospace' }}>{c.temporaryPassword}</code></span>
+                            <button
+                              type="button"
+                              className="equipo-btn equipo-btn--secondary"
+                              onClick={() => {
+                                void navigator.clipboard.writeText(`${c.email}: ${c.temporaryPassword}`);
+                                setBulkCopiedPasswordIdx(i);
+                                setTimeout(() => setBulkCopiedPasswordIdx(null), 2000);
+                              }}
+                            >
+                              <Copy size={12} /> {bulkCopiedPasswordIdx === i ? 'Copiado' : 'Copiar'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className="equipo-btn equipo-btn--primary"
+                    onClick={() => { setIsBulkImportOpen(false); resetBulkImport(); }}
+                    style={{ marginTop: '16px' }}
+                    data-testid="bulk-finish-button"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    {t('teamWorkspace.bulkImportDescription')}
+                  </p>
+
+                  {bulkParseError && (
+                    <div className="card card--error" role="alert" style={{ padding: '8px 12px' }} data-testid="bulk-parse-error">
+                      <span style={{ color: 'var(--danger, #ef4444)' }}>{bulkParseError}</span>
+                    </div>
+                  )}
+
+                  {!bulkUsersPreview && !bulkEmployeesPreview ? (
+                    <div
+                      style={{
+                        border: '2px dashed var(--glass-border)',
+                        borderRadius: '12px',
+                        padding: '32px 16px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        background: 'var(--panel-muted-bg)',
+                      }}
+                      onClick={() => {
+                        const input = document.getElementById('equipo-bulk-csv-input');
+                        input?.click();
+                      }}
+                    >
+                      <Upload size={32} style={{ color: 'var(--color-accent)', marginBottom: '8px' }} />
+                      <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>{t('teamWorkspace.bulkSelectFile')}</p>
+                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        Archivos .csv con cabeceras estándar
+                      </p>
+                      <input
+                        id="equipo-bulk-csv-input"
+                        type="file"
+                        accept=".csv,text/csv"
+                        style={{ display: 'none' }}
+                        data-testid="bulk-file-input"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void handleBulkFileChange(file);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      {bulkFile && (
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                          {t('teamWorkspace.bulkSelectedFile') || 'Archivo seleccionado'}: <strong>{bulkFile.name}</strong>
+                        </div>
+                      )}
+                      {bulkKind === 'users' && bulkUsersPreview && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div
+                            className="equipo-modal__alert equipo-modal__alert--info"
+                            data-testid="bulk-preview-summary"
+                          >
+                            <span>
+                              {t('teamWorkspace.bulkSummary', {
+                                total: bulkUsersPreview.length,
+                                newCount: bulkUsersPreview.filter((r) => r.status === 'new_and_link' || r.status === 'new_no_employee').length,
+                                existingCount: bulkUsersPreview.filter((r) => r.status === 'existing_and_link' || r.status === 'already_linked' || r.status === 'no_employee').length,
+                                errorCount: bulkUsersPreview.filter((r) => r.status === 'invalid_email' || r.status === 'invalid_role' || r.status === 'employee_not_found' || r.status === 'duplicate_in_file' || r.status === 'duplicate_employee_id_in_file').length,
+                              })}
+                            </span>
+                          </div>
+
+                          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                            <table className="equipo-table" data-testid="bulk-preview-table">
+                              <thead>
+                                <tr>
+                                  <th>Email</th>
+                                  <th>Nombre</th>
+                                  <th>Rol</th>
+                                  <th>ID Externo</th>
+                                  <th>Estado</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {bulkUsersPreview.map((p, idx) => (
+                                  <tr key={`u-${idx}`} data-testid={`bulk-row-${idx}`}>
+                                    <td>{p.row.email || '—'}</td>
+                                    <td>{p.row.name || '—'}</td>
+                                    <td>{p.row.role || '—'}</td>
+                                    <td>{p.row.externalEmployeeId || '—'}</td>
+                                    <td>
+                                      <span className={`equipo-badge equipo-badge--${p.status.includes('invalid') || p.status.includes('duplicate') || p.status.includes('not_found') ? 'error' : p.status.includes('new') ? 'success' : 'neutral'}`}>
+                                        {p.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {bulkKind === 'employees' && bulkEmployeesPreview && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div
+                            className="equipo-modal__alert equipo-modal__alert--info"
+                            data-testid="bulk-preview-summary"
+                          >
+                            <span>
+                              {t('teamWorkspace.bulkSummary', {
+                                total: bulkEmployeesPreview.length,
+                                newCount: bulkEmployeesPreview.filter((r) => r.status === 'new').length,
+                                existingCount: bulkEmployeesPreview.filter((r) => r.status === 'existing').length,
+                                errorCount: bulkEmployeesPreview.filter((r) => r.status === 'error').length,
+                              })}
+                            </span>
+                          </div>
+
+                          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                            <table className="equipo-table" data-testid="bulk-preview-table">
+                              <thead>
+                                <tr>
+                                  <th>ID Externo</th>
+                                  <th>Nombre</th>
+                                  <th>Área</th>
+                                  <th>Estado</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {bulkEmployeesPreview.map((p, idx) => (
+                                  <tr key={`e-${idx}`} data-testid={`bulk-row-${idx}`}>
+                                    <td>{p.row.externalEmployeeId || '—'}</td>
+                                    <td>{p.row.name || '—'}</td>
+                                    <td>{p.row.areaName || '—'}</td>
+                                    <td>
+                                      <span className={`equipo-badge equipo-badge--${p.status === 'new' ? 'success' : p.status === 'existing' ? 'neutral' : 'error'}`}>
+                                        {p.status === 'new' ? 'Nuevo' : p.status === 'existing' ? 'Existente' : p.errorMessage || 'Error'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
+                        <button
+                          type="button"
+                          className="equipo-btn equipo-btn--secondary"
+                          onClick={() => { setIsBulkImportOpen(false); resetBulkImport(); }}
+                          data-testid="bulk-cancel-button"
+                          disabled={bulkImportSubmitting}
+                        >
+                          {t('teamWorkspace.bulkCancel')}
+                        </button>
+                        <button
+                          type="button"
+                          className="equipo-btn equipo-btn--primary"
+                          onClick={() => void handleBulkConfirm()}
+                          disabled={bulkImportSubmitting}
+                          data-testid="bulk-confirm-button"
+                        >
+                          {bulkImportSubmitting ? t('teamWorkspace.bulkImporting') : t('teamWorkspace.bulkConfirm')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </ModalShell>
         )}
 
         {/* WIZARD MODAL: AÑADIR PERSONA */}

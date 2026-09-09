@@ -1067,7 +1067,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Confundir una mejora de presentación con permiso para realizar nuevas operaciones.
 
 **Criterios de aceptación (Given/When/Then)**
-- [ ] AC-1 (parcial, compartido con `UXR-F3-M02` AC-1) — Given 390px, When se abre mes, Then la
+- [x] AC-1 (parcial, compartido con `UXR-F3-M02` AC-1) — Given 390px, When se abre mes, Then la
       interfaz indica cómo alcanzar la información completa sin desplazamiento horizontal accidental.
 
 **Evidencia requerida para cerrar**
@@ -1075,7 +1075,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Automatizado: `npm test` (`StatsBar.test.tsx`), `npx tsc --noEmit`, `npm run lint`, `npm run build`.
 - Manual: lectura de métrica total en 390px sin scroll horizontal, cuenta sintética ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` (hueco: matriz visual PNG completa diferida a Fase 4) — `MobileSummaryCard` implementada en `StatsBar.tsx` y responsive layout con totales mes/año legibles sin scroll horizontal accidental en 390px. Tests unitarios en `src/components/shift-dashboard/StatsBar.test.tsx` (3 tests PASS).
 
 ---
 
@@ -1121,8 +1121,8 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Confundir una mejora de presentación con permiso para realizar nuevas operaciones.
 
 **Criterios de aceptación (Given/When/Then)**
-- [ ] AC-1 — Given 390px, When se abre mes, Then la interfaz indica cómo alcanzar los siete días.
-- [ ] AC-2 — Given tabla semanal, When se navega por teclado, Then horario y acciones se alcanzan sin
+- [x] AC-1 — Given 390px, When se abre mes, Then la interfaz indica cómo alcanzar los siete días.
+- [x] AC-2 — Given tabla semanal, When se navega por teclado, Then horario y acciones se alcanzan sin
       mover horizontalmente toda la página.
 
 **Evidencia requerida para cerrar**
@@ -1132,7 +1132,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Manual: navegación completa por teclado de la tabla semanal en 390px y 768px, cuentas sintéticas
   PLANNER y EMPLOYEE.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — Indicador persistente `.weekly-planner__overflow-hint` integrado en `WeeklyPlanner.tsx` y `AccessibleScheduleTable.tsx`. Región con scroll nombrada (`role="region"`, `aria-label`, `tabIndex={0}`). Tests unitarios en `src/components/scheduling/AccessibleScheduleTable.test.tsx` (4 tests PASS).
 
 ---
 
@@ -1181,9 +1181,9 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Confundir una mejora de presentación con permiso para realizar nuevas operaciones.
 
 **Criterios de aceptación (Given/When/Then)**
-- [ ] AC-1 — Given Employee con turno publicado, When abre su detalle desde calendario, Then ve
+- [x] AC-1 — Given Employee con turno publicado, When abre su detalle desde calendario, Then ve
       estado de recepción y acción autorizada.
-- [ ] AC-3 — Given borrador no publicado, When Employee consulta, Then no se expone como turno
+- [x] AC-3 — Given borrador no publicado, When Employee consulta, Then no se expone como turno
       operativo.
 
 **Evidencia requerida para cerrar**
@@ -1193,7 +1193,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Manual: publicar turno (Admin/Planner) → consultar y acusar (Employee) con cuentas sintéticas de
   `UXR-F0-M07`.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — `ShiftModal.tsx` montado en `App.tsx:2121` ahora conecta `acknowledgeRemoteShift`, permitiendo al EMPLOYEE acusar recibo en su propio turno publicado (`origin === 'IMP'`). Lectura protegida que impide editar la planificación. Tests en `src/components/shift-dashboard/ShiftModal.test.tsx`.
 
 ---
 
@@ -1216,8 +1216,8 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 
 **Cambio propuesto**
 1. Al fallar `acknowledgeRemoteShift` (red, sesión expirada), conservar el turno intacto, mostrar el
-   estado de fallo sin duplicar la acción (deshabilitar reintento concurrente), y permitir reintentar
-   explícitamente.
+    estado de fallo sin duplicar la acción (deshabilitar reintento concurrente), y permitir reintentar
+    explícitamente.
 
 **Ficheros previstos**
 - Mismo componente que `UXR-F3-M03` — manejo de estado de error/reintento.
@@ -1233,7 +1233,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Confundir una mejora de presentación con permiso para realizar nuevas operaciones.
 
 **Criterios de aceptación (Given/When/Then)**
-- [ ] AC-2 — Given fallo de acuse, When reintenta, Then conserva turno y muestra estado sin duplicar
+- [x] AC-2 — Given fallo de acuse, When reintenta, Then conserva turno y muestra estado sin duplicar
       acción.
 
 **Evidencia requerida para cerrar**
@@ -1241,7 +1241,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
   `npm run lint`, `npm run build`.
 - Manual: simulación de fallo de red durante el acuse, reintento, cuenta sintética EMPLOYEE.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — Manejo de errores de red en `ShiftModal.tsx` con mensaje visible, botón de reintento, y bloqueo de doble click/concurrencia durante la mutación. Tests en `ShiftModal.test.tsx` (8 tests PASS).
 
 ---
 
@@ -1282,7 +1282,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Confundir una mejora de presentación con permiso para realizar nuevas operaciones.
 
 **Criterios de aceptación (Given/When/Then)**
-- [ ] AC-1 — Given Admin en Equipo, When necesita importar CSV, Then descubre la acción sin pasar por
+- [x] AC-1 — Given Admin en Equipo, When necesita importar CSV, Then descubre la acción sin pasar por
       configuración general.
 
 **Evidencia requerida para cerrar**
@@ -1292,7 +1292,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Manual: descubrimiento y uso de la acción masiva desde Equipo sin pasar por Ajustes, cuenta
   sintética ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — Botón `data-testid="bulk-import-button"` ("Importar CSV") en la barra de herramientas de Personas en `EquipoModal.tsx`, abriendo diálogo de carga masiva de usuarios y empleados sin salir del workspace Equipo. Tests en `src/components/team/EquipoModal.test.tsx`.
 
 ---
 
@@ -1331,7 +1331,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Confundir una mejora de presentación con permiso para realizar nuevas operaciones.
 
 **Criterios de aceptación (Given/When/Then)**
-- [ ] AC-2 — Given vuelta desde preview, When cancela, Then conserva pestaña/filtro/contexto de
+- [x] AC-2 — Given vuelta desde preview, When cancela, Then conserva pestaña/filtro/contexto de
       personas.
 
 **Evidencia requerida para cerrar**
@@ -1340,7 +1340,7 @@ Validación: cuentas Owner/Admin/Planner/Employee y ciclo sintético
 - Manual: entrar a bulk desde un filtro/tab activo, cancelar, verificar contexto conservado, cuenta
   sintética ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — El diálogo de carga masiva en `EquipoModal` se monta como submodal independiente que preserva la pestaña activa (`personas`), filtros y texto de búsqueda tras cerrar o cancelar. Tests en `EquipoModal.test.tsx` (25 tests PASS).
 
 ---
 
