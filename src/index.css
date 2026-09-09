@@ -5316,7 +5316,8 @@ button[aria-busy='true'] {
 }
 
 .public-header-secondary-sizer,
-.public-header-secondary-action {
+.public-header-secondary-action,
+.public-header-secondary-placeholder {
   grid-area: 1 / 1;
 }
 
@@ -5328,6 +5329,53 @@ button[aria-busy='true'] {
 
 .public-header-secondary-sizer-item {
   grid-area: 1 / 1;
+}
+
+.public-header-secondary-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xs) 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.public-header-secondary-skeleton {
+  display: inline-block;
+  width: 76px;
+  height: 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  animation: public-skeleton-pulse 1.6s ease-in-out infinite;
+}
+
+.public-header-secondary-action {
+  animation: public-action-fade-in 140ms ease;
+}
+
+@keyframes public-skeleton-pulse {
+  0%, 100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@keyframes public-action-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-header-secondary-skeleton,
+  .public-header-secondary-action {
+    animation: none;
+  }
 }
 
 .public-nav-link {
@@ -6057,10 +6105,12 @@ button[aria-busy='true'] {
   }
 
   .public-nav-link,
-  .public-header-secondary-action {
+  .public-header-secondary-action,
+  .public-header-secondary-placeholder {
     width: 100%;
     padding: 8px 0;
     text-align: left;
+    justify-content: flex-start;
   }
 
   .public-header-toggles {

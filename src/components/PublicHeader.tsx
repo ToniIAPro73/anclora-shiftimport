@@ -84,18 +84,21 @@ export const PublicHeader = ({ isAuthenticated }: PublicHeaderProps) => {
           <LanguageToggle />
         </div>
         {/*
-          Secondary action in a fixed-geometry slot: while auth is unknown
-          nothing is shown, but the sizer reserves the max width of either
-          label (login / goToApp) so the nav never shifts on resolution. The
-          primary CTA is always the public one (/signup redirects signed-in
-          users to /app in App), keeping text and width stable.
+          Secondary action in a fixed-geometry slot: while auth resolution is in
+          flight, a reserved placeholder shell matches the final button's exact
+          dimensions (via the dual-label sizer) so there is neither an empty gap
+          nor a layout shift. Once resolved, the contextual button renders
+          smoothly in the reserved slot.
         */}
-        <span className="public-header-secondary-slot">
+        <span
+          className="public-header-secondary-slot"
+          data-auth-state={isAuthenticated === null ? 'unknown' : isAuthenticated ? 'authenticated' : 'anonymous'}
+        >
           <span className="public-header-secondary-sizer" aria-hidden="true">
             <span className="public-nav-link public-header-secondary-sizer-item">{t('landing.nav.login')}</span>
             <span className="public-nav-link public-header-secondary-sizer-item">{t('landing.goToApp')}</span>
           </span>
-          {isAuthenticated !== null && (
+          {isAuthenticated !== null ? (
             <button
               type="button"
               className="public-nav-link public-header-secondary-action"
@@ -103,6 +106,14 @@ export const PublicHeader = ({ isAuthenticated }: PublicHeaderProps) => {
             >
               {isAuthenticated ? t('landing.goToApp') : t('landing.nav.login')}
             </button>
+          ) : (
+            <span
+              className="public-header-secondary-placeholder"
+              aria-hidden="true"
+              data-testid="public-header-secondary-placeholder"
+            >
+              <span className="public-header-secondary-skeleton" />
+            </span>
           )}
         </span>
         <button

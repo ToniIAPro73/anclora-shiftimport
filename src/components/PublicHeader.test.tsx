@@ -33,32 +33,54 @@ function renderHeader(isAuthenticated: boolean | null) {
 }
 
 describe('PublicHeader auth-state flash (ternary isAuthenticated)', () => {
-  it('unknown (null): stable public CTA, no login/goToApp visible, slot reserves space via sizer', () => {
+  it('ANONYMOUS_INITIAL_RENDER / AUTH_LOADING: stable public CTA, placeholder visible in secondary slot (NO_EMPTY_SLOT), slot reserves space via sizer', () => {
     const { container } = renderHeader(null);
     expect(screen.getByRole('button', { name: 'Empezar gratis' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Iniciar sesión' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Ir a ShiftImport' })).toBeNull();
     const slot = container.querySelector('.public-header-secondary-slot');
     expect(slot).toBeTruthy();
+    expect(slot).toHaveAttribute('data-auth-state', 'unknown');
     expect(slot?.querySelector('.public-header-secondary-sizer')).toBeTruthy();
+    const placeholder = slot?.querySelector('.public-header-secondary-placeholder');
+    expect(placeholder).toBeTruthy();
+    expect(placeholder).toHaveAttribute('aria-hidden', 'true');
+    expect(placeholder?.querySelector('.public-header-secondary-skeleton')).toBeTruthy();
   });
 
-  it('null → false: primary CTA text is identical before/after, login appears', () => {
-    const { rerender } = renderHeader(null);
-    const before = screen.getByRole('button', { name: 'Empezar gratis' }).textContent;
+  it('ANONYMOUS_RESOLVED (null → false): placeholder is replaced by login action, primary CTA stays identical, no layout shift in slot', () => {
+    const { container, rerender } = renderHeader(null);
+    const beforeSlot = container.querySelector('.public-header-secondary-slot');
+    expect(beforeSlot?.querySelector('.public-header-secondary-placeholder')).toBeTruthy();
+    const beforePrimary = screen.getByRole('button', { name: 'Empezar gratis' }).textContent;
+
     rerender(headerTree(false));
-    expect(screen.getByRole('button', { name: 'Empezar gratis' }).textContent).toBe(before);
+    expect(screen.getByRole('button', { name: 'Empezar gratis' }).textContent).toBe(beforePrimary);
     expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Ir a ShiftImport' })).toBeNull();
+    expect(beforeSlot?.querySelector('.public-header-secondary-placeholder')).toBeNull();
+    expect(beforeSlot).toHaveAttribute('data-auth-state', 'anonymous');
   });
 
-  it('null → true: primary CTA text is identical before/after, goToApp appears and login stays absent', () => {
-    const { rerender } = renderHeader(null);
-    const before = screen.getByRole('button', { name: 'Empezar gratis' }).textContent;
+  it('AUTHENTICATED_RESOLVED (null → true): placeholder is replaced by goToApp action, login stays absent, primary CTA stays identical', () => {
+    const { container, rerender } = renderHeader(null);
+    const beforeSlot = container.querySelector('.public-header-secondary-slot');
+    expect(beforeSlot?.querySelector('.public-header-secondary-placeholder')).toBeTruthy();
+    const beforePrimary = screen.getByRole('button', { name: 'Empezar gratis' }).textContent;
+
     rerender(headerTree(true));
-    expect(screen.getByRole('button', { name: 'Empezar gratis' }).textContent).toBe(before);
+    expect(screen.getByRole('button', { name: 'Empezar gratis' }).textContent).toBe(beforePrimary);
     expect(screen.getByRole('button', { name: 'Ir a ShiftImport' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Iniciar sesión' })).toBeNull();
+    expect(beforeSlot?.querySelector('.public-header-secondary-placeholder')).toBeNull();
+    expect(beforeSlot).toHaveAttribute('data-auth-state', 'authenticated');
+  });
+
+  it('AUTH_FAILURE fallback: resolves to guest (false), rendering Iniciar sesión safely', () => {
+    const { rerender } = renderHeader(null);
+    rerender(headerTree(false));
+    expect(screen.getByRole('button', { name: 'Iniciar sesión' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Ir a ShiftImport' })).toBeNull();
   });
 
   it('true from the first render: goToApp as secondary action, stable public CTA', () => {

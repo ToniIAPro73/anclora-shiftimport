@@ -167,9 +167,17 @@ function App() {
   const { locale, t, tl } = useI18n();
   const legalPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+/, '') : '';
   const route = useRoute();
+  const routeRef = useRef(route);
+  useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   // Fase 1: authenticated multi-tenant state. null = guest (local-first flow).
   const [session, setSession] = useState<SessionInfo | null>(null);
+  // Session resolution settles as soon as /api/session/me answers (success, guest 401, or error).
+  // Public surfaces (/ and /pricing) use this instead of authResolved so the header CTA resolves
+  // in milliseconds without waiting seconds for remote shifts/employees hydration.
+  const [sessionResolved, setSessionResolved] = useState(false);
   // The app shell must not render while the first session resolution is still
   // in flight: null conflates "guest" with "not resolved yet", and rendering
   // on an indeterminate state is what produces partial-auth flashes.
@@ -359,6 +367,8 @@ function App() {
           return;
         }
 
+        setSessionResolved(true);
+
         if (resolved) {
           clearAnonymousShiftDraft();
           setSession(resolved.session);
@@ -393,6 +403,7 @@ function App() {
         if (cancelled) {
           return;
         }
+        setSessionResolved(true);
         // Authentication is unknown (network/5xx/invalid response). Do not
         // interpret that state as guest mode: anonymous local drafts must not
         // become visible while the session is unresolved.
@@ -405,7 +416,9 @@ function App() {
         setEmployees([]);
         setAreas([]);
         setShifts([]);
-        navigate('/login');
+        if (routeRef.current !== '/' && routeRef.current !== '/pricing') {
+          navigate('/login');
+        }
       } finally {
         // The /app shell stays behind a loading gate until the first session
         // resolution (and its hydration) settles — success, fallback or guest.
@@ -425,6 +438,7 @@ function App() {
   const handleAuthenticated = useCallback(async (nextSession: SessionInfo) => {
     clearAnonymousShiftDraft();
     setSession(nextSession);
+    setSessionResolved(true);
     // The guest first-run guide may already be scheduled from the pre-auth
     // hydration effect (it runs regardless of route); a real session
     // supersedes it — onboarding here is the org-choice flow, not the
@@ -501,6 +515,7 @@ function App() {
     // and bounces straight back to /app.
     flushSync(() => {
       setSession(null);
+      setSessionResolved(true);
       setEmployees([]);
       setSelectedEmployeeId(null);
       setAreas([]);
@@ -1620,7 +1635,7 @@ function App() {
   if (route === '/') {
     return (
       <>
-        <LandingPage isAuthenticated={authResolved ? Boolean(session) : null} />
+        <LandingPage isAuthenticated={sessionResolved ? Boolean(session) : null} />
         <CookieConsent />
       </>
     );
@@ -1629,7 +1644,7 @@ function App() {
   if (route === '/pricing') {
     return (
       <>
-        <PricingPage isAuthenticated={authResolved ? Boolean(session) : null} />
+        <PricingPage isAuthenticated={sessionResolved ? Boolean(session) : null} />
         <CookieConsent />
       </>
     );
