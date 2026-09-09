@@ -6,14 +6,14 @@
 
 <div class="cover-title">Manual de Usuario</div>
 
-<div class="cover-subtitle">Guía práctica para trabajadores por turnos,<br>administradores de equipo y organizaciones</div>
+<div class="cover-subtitle">Guía práctica para trabajadores por turnos,<br>planificadores y organizaciones</div>
 
 <div class="cover-meta">
-  <div class="cover-version">Versión 1.0</div>
-  <div class="cover-date">27 agosto 2026</div>
+  <div class="cover-version">Versión 2.0</div>
+  <div class="cover-date">9 septiembre 2026</div>
 </div>
 
-<div class="cover-disclaimer">Anclora ShiftImport convierte cuadrantes de turnos (PDF, imagen, CSV o Excel) en un calendario editable. No sustituye el cuadrante oficial de tu empresa ni ningún sistema de nóminas.</div>
+<div class="cover-disclaimer">Anclora ShiftImport convierte cuadrantes de turnos (PDF, imagen, CSV o Excel) en un calendario operativo editable y planificable. No sustituye el cuadrante oficial de tu empresa ni constituye un sistema de nóminas.</div>
 
 </div>
 
@@ -27,20 +27,27 @@ Una guía ordenada para recorrer ShiftImport desde la primera importación hasta
 | --- | --- | ---: |
 | 01 | [Qué es Anclora ShiftImport](#1-qué-es-anclora-shiftimport) | 3 |
 | 02 | [Antes de empezar](#2-antes-de-empezar) | 5 |
-| 03 | [Acceso, cuenta y organización](#3-acceso-cuenta-y-organización) | 6 |
-| 04 | [Modo invitado: primeros pasos sin cuenta](#4-modo-invitado-primeros-pasos-sin-cuenta) | 9 |
-| 05 | [Importar un cuadrante paso a paso](#5-importar-un-cuadrante-paso-a-paso) | 11 |
-| 06 | [Formatos aprendidos](#6-formatos-aprendidos) | 16 |
-| 07 | [Tu calendario de turnos](#7-tu-calendario-de-turnos) | 19 |
-| 08 | [Ajustes de tu cuenta](#8-ajustes-de-tu-cuenta) | 22 |
-| 09 | [Gestión de la organización (solo administradores)](#9-gestión-de-la-organización-solo-administradores) | 25 |
-| 10 | [Importación de equipo (solo administradores)](#10-importación-de-equipo-solo-administradores) | 29 |
-| 11 | [Migrar tus datos locales a una organización](#11-migrar-tus-datos-locales-a-una-organización) | 32 |
-| 12 | [Planes de Anclora ShiftImport](#12-planes-de-anclora-shiftimport) | 34 |
-| 13 | [Privacidad, cookies y tus datos](#13-privacidad-cookies-y-tus-datos) | 36 |
-| 14 | [Preguntas frecuentes](#14-preguntas-frecuentes) | 38 |
-| 15 | [Glosario rápido](#15-glosario-rápido) | 40 |
-| 16 | [Aviso legal](#16-aviso-legal) | 41 |
+| 03 | [Acceso y primeros pasos](#3-acceso-y-primeros-pasos) | 6 |
+| 04 | [Organizaciones, personas, roles y ámbitos](#4-organizaciones-personas-roles-y-ámbitos) | 8 |
+| 05 | [Tu calendario de turnos](#5-tu-calendario-de-turnos) | 11 |
+| 06 | [Importar turnos — Safe Import paso a paso](#6-importar-turnos--safe-import-paso-a-paso) | 13 |
+| 07 | [La frontera temporal: pasado histórico vs planificación futura](#7-la-frontera-temporal-pasado-histórico-vs-planificación-futura) | 16 |
+| 08 | [Resolver un formato desconocido: el Asistente de formato](#8-resolver-un-formato-desconocido-el-asistente-de-formato) | 17 |
+| 09 | [Formatos aprendidos](#9-formatos-aprendidos) | 18 |
+| 10 | [Historial de importaciones](#10-historial-de-importaciones) | 20 |
+| 11 | [Turnos manuales](#11-turnos-manuales) | 22 |
+| 12 | [Planificación de turnos futuros: Planificador semanal](#12-planificación-de-turnos-futuros-planificador-semanal) | 23 |
+| 13 | [Publicar la planificación](#13-publicar-la-planificación) | 25 |
+| 14 | [Portal del empleado y autoservicio](#14-portal-del-empleado-y-autoservicio) | 26 |
+| 15 | [Solicitudes de cambio y gestión de solicitudes](#15-solicitudes-de-cambio-y-gestión-de-solicitudes) | 27 |
+| 16 | [Gestión de equipo: Personas, Roles y Áreas](#16-gestión-de-equipo-personas-roles-y-áreas) | 29 |
+| 17 | [Aprovisionamiento masivo y credenciales temporales](#17-aprovisionamiento-masivo-y-credenciales-temporales) | 33 |
+| 18 | [Tipos de turno personalizados](#18-tipos-de-turno-personalizados) | 35 |
+| 19 | [Ajustes, tema e idioma](#19-ajustes-tema-e-idioma) | 37 |
+| 20 | [Planes, privacidad y seguridad](#20-planes-privacidad-y-seguridad) | 39 |
+| 21 | [Preguntas frecuentes](#21-preguntas-frecuentes) | 41 |
+| 22 | [Glosario de términos](#22-glosario-de-términos) | 42 |
+| 23 | [Aviso legal](#23-aviso-legal) | 43 |
 
 <div class="page-break"></div>
 
@@ -48,30 +55,33 @@ Una guía ordenada para recorrer ShiftImport desde la primera importación hasta
 
 ![Página de inicio de Anclora ShiftImport](screenshots/hero-dark.png)
 
-**Anclora ShiftImport** es una aplicación que convierte el cuadrante de turnos que te entrega tu empresa —en PDF, imagen, CSV o Excel— en un **calendario digital editable**, sin que tengas que copiar los horarios a mano.
+**Anclora ShiftImport** es una plataforma operativa diseñada para transformar los cuadrantes de turnos que entrega tu empresa —en formato PDF, imagen, CSV o Excel— en un **calendario digital estructurado, editable y colaborativo**, eliminando por completo la necesidad de transcribir horarios a mano.
 
-Subes el documento, la aplicación detecta tus turnos automáticamente y te muestra una vista previa que puedes corregir antes de confirmar. Una vez importado, tu calendario queda disponible para consultarlo, añadir turnos manuales o volver a importar el mes siguiente.
+A partir de un documento digital o fotografía de un tablón de anuncios, ShiftImport analiza la estructura visual y tabular, identifica a los trabajadores, clasifica los códigos de turno y presenta una vista previa de validación antes de confirmar cualquier dato. Una vez incorporados los turnos, la aplicación permite gestionar el calendario personal, planificar turnos futuros en equipo, solicitar cambios de jornada y coordinar departamentos enteros.
 
-### Qué puedes hacer
+### Perfiles de uso y capacidades
 
-| Perfil | Qué permite hacer |
+| Perfil | Alcance y capacidades principales |
 | --- | --- |
-| Invitado (sin cuenta) | Importar cuadrantes y llevar tu calendario en este dispositivo, con todos los datos guardados solo en tu navegador |
-| Empleado (con cuenta) | Todo lo anterior más persistencia en la nube, acceso desde cualquier dispositivo y formatos de cuadrante aprendidos compartidos con tu organización |
-| Administrador | Todo lo anterior más gestión de usuarios, empleados, áreas, importación masiva de cuadrantes de equipo y control del ciclo de vida de los formatos aprendidos |
+| **Invitado (sin cuenta)** | Importación local de cuadrantes y uso del calendario personal en el dispositivo actual. Persistencia exclusiva en el navegador. |
+| **Empleado (con cuenta)** | Calendario sincronizado en la nube, autoservicio de importación propia, consulta de turnos publicados, solicitud de cambios de jornada y notas operativas. |
+| **Planificador** | Todo lo anterior más acceso al Planificador semanal, construcción de borradores futuros, validación de descansos y publicación de turnos dentro de su ámbito autorizado. |
+| **Administrador** | Todo lo anterior más gestión integral de equipo (personas, roles, accesos y áreas), importación de cuadrantes de equipo, auditoría de importaciones y gobierno de formatos aprendidos. |
+| **Propietario** | Máxima autoridad de la organización. Todas las facultades del Administrador más la potestad exclusiva de transferir la propiedad de la organización. |
 
-### Lo que hace especial a ShiftImport
+### Principios de diseño del producto
 
-- **Aprende tu formato una sola vez.** Cuando importas un cuadrante con un diseño que la aplicación no reconoce, un asistente te hace un puñado de preguntas sencillas (qué fila eres tú, qué significa cada código de turno). A partir de ahí, tu organización reconoce ese mismo formato automáticamente en cada importación futura, sin volver a preguntar.
-- **Nunca inventa turnos.** Si un código de turno es desconocido, si faltan horas o si no encuentra tu fila en el documento, ShiftImport te lo dice explícitamente en lugar de adivinar o descartar datos en silencio.
-- **La importación nunca escribe directamente en tu calendario.** Siempre hay una vista previa editable: puedes corregir, eliminar filas o cambiar el tipo de turno antes de confirmar.
-- **Funciona sin cuenta.** Puedes usar la aplicación completa como invitado; crear una cuenta solo añade sincronización en la nube y funciones de equipo.
+- **Aprende la estructura una sola vez.** Cuando se importa un formato de cuadrante inédito, un asistente interactivo solicita resolver ambigüedades clave (identificar tu fila o clasificar códigos de turno desconocidos). La organización memoriza dicha estructura y la reutiliza en futuras importaciones sin volver a preguntar.
+- **Transparencia e integridad de datos.** ShiftImport jamás descarta datos ni inventa turnos en silencio. Si un código no es concluyente o una fila resulta ambigua, el sistema lo indica de forma explícita mediante diagnósticos estructurados.
+- **La importación nunca escribe a ciegas.** Siempre interviene una vista previa editable (`Safe Import`). Puedes modificar fechas, horarios y tipos de turno, o descartar filas antes de la confirmación final.
+- **Separación entre histórico y futuro.** Los turnos pasados se registran como histórico consolidado, mientras que los turnos futuros se canalizan hacia el planificador en estado de borrador para evitar publicaciones involuntarias.
+- **Uso flexible sin fricción.** Es posible utilizar la aplicación como invitado desde el primer segundo; crear una cuenta añade sincronización remota y funciones de equipo sin alterar el flujo básico.
 
-### Qué no hace ShiftImport
+### Lo que no hace ShiftImport
 
-- No es un sistema de nóminas ni de fichaje: no calcula pagas, cotizaciones ni horas extra a efectos legales.
-- No sustituye el cuadrante oficial de tu empresa: es una copia de trabajo para consultarlo cómodamente.
-- No comparte datos entre organizaciones distintas: lo que aprende o guarda una organización nunca es visible para otra.
+- **No es un sistema de nóminas ni liquidación salarial:** no calcula complementos por nocturnidad, cotizaciones ni pagas extraordinarias.
+- **No sustituye el cuadrante oficial de la empresa:** actúa como copia de trabajo operativa para facilitar la vida laboral del empleado y la coordinación del equipo.
+- **Aislamiento absoluto:** la información de una organización jamás se comparte ni es accesible por usuarios de otra entidad.
 
 ---
 
@@ -79,505 +89,618 @@ Subes el documento, la aplicación detecta tus turnos automáticamente y te mues
 
 ### Formatos de documento admitidos
 
-| Formato | Extensión | Notas |
+| Formato | Extensiones habituales | Características y recomendaciones |
 | --- | --- | --- |
-| PDF | `.pdf` | El más habitual: cuadrantes en cuadrícula mensual o con leyenda de códigos |
-| Imagen | `.png`, `.jpg`, `.jpeg`, `.webp` | Fotos o capturas de un cuadrante impreso o en pantalla |
-| CSV | `.csv` | Listas de turnos por fila (fecha, empleado, hora) o cuadrículas exportadas |
-| Excel | `.xlsx` | Cuadrantes en hoja de cálculo |
+| **PDF** | `.pdf` | Cuadrantes vectoriales o escaneados, cuadrículas mensuales por trabajador o listados de turnos. |
+| **Imagen** | `.png`, `.jpg`, `.jpeg`, `.webp` | Fotografías nítidas de cuadrantes en papel, capturas de pantalla o exportaciones gráficas. |
+| **CSV** | `.csv` | Hojas de datos tabulares con columnas de empleado, fecha y horario. |
+| **Excel** | `.xlsx` | Libros de cálculo con cuadrículas mensuales o listados por filas. Admite análisis de hojas múltiples. |
+| **Intercambio** | `.json`, `.xml` | Archivos de datos estructurados admitidos en el importador de cuadrantes de equipo. |
 
-Cualquier otro formato (por ejemplo `.docx` o `.txt`) se rechaza explícitamente con un mensaje de error — nunca se procesa a ciegas.
+Cualquier formato no reconocido (como documentos de texto `.docx` o archivos comprimidos `.zip`) se rechaza preventivamente al intentar seleccionarlo, explicando la causa.
 
-### Qué tener a mano antes de importar
+### Requisitos previos para una importación óptima
 
-- El documento del cuadrante, en uno de los formatos anteriores.
-- Tu nombre tal como aparece en el documento, o tu identificador de empleado (si lo usa tu empresa). Lo necesitarás la primera vez para que la aplicación localice tu fila.
-- El mes y el año que corresponden al documento — la aplicación los detecta cuando puede, pero siempre puedes indicarlos tú.
+1. **Documento legible:** asegurarse de que las fechas y los códigos de turno sean visibles sin recortes ni sombras pronunciadas en fotos.
+2. **Identificador o nombre conocido:** tener presente cómo figura tu nombre o tu código de empleado en el encabezado o primera columna del cuadrante.
+3. **Periodo de servicio:** confirmar el mes y año al que corresponden los turnos. El sistema los detecta automáticamente siempre que sea posible, pero siempre permite ajustarlos.
 
-### Requisitos técnicos
+### Compatibilidad y entorno técnico
 
-ShiftImport es una aplicación web: no requiere instalación. Funciona en cualquier navegador moderno (Chrome, Firefox, Edge, Safari), tanto en ordenador como en móvil. Como invitado, tus datos se guardan en el navegador que estés usando; con una cuenta, se guardan en el servidor y están disponibles desde cualquier dispositivo en el que inicies sesión.
-
----
-
-## 3. Acceso, cuenta y organización
-
-### 3.1 Tres formas de empezar
-
-![Pantalla de acceso](screenshots/login-dark.png)
-
-Al abrir ShiftImport puedes elegir entre tres caminos:
-
-1. **Continuar sin cuenta** — accedes directamente a tu calendario local. No hace falta ningún dato personal.
-2. **Iniciar sesión** — si ya tienes una cuenta, entras con tu correo y contraseña.
-3. **Crear cuenta** — te registras con nombre, correo y contraseña para empezar a usar la aplicación con persistencia en la nube.
-
-> Puedes empezar como invitado y crear una cuenta más adelante sin perder tu trabajo: la aplicación te ofrecerá migrar tus turnos locales a la nueva cuenta (ver [sección 11](#11-migrar-tus-datos-locales-a-una-organización)).
-
-### 3.2 Primer acceso: crear tu organización
-
-![Primer acceso tras crear una cuenta](screenshots/onboarding-choice-dark.png)
-
-Nada más crear una cuenta, ShiftImport te pide un único dato obligatorio — el **nombre de tu organización** — y uno opcional, **tu nombre**. Con eso crea tu primera organización y te asigna como **administrador**.
-
-- Si rellenas también tu nombre, ShiftImport crea además tu propio registro de empleado dentro de esa organización, para que puedas llevar tu calendario desde el primer momento.
-- Si dejas tu nombre en blanco, la organización queda lista para que añadas empleados más adelante desde la gestión de usuarios (ver [sección 9](#9-gestión-de-la-organización-solo-administradores)) — útil cuando quien se registra es quien va a administrar el equipo, no quien va a fichar turnos.
-
-Tanto el nombre de la organización como tu propio nombre se pueden cambiar después desde **Ajustes**.
-
-### 3.3 Varias organizaciones con la misma cuenta
-
-Si tu correo pertenece a más de una organización (por ejemplo, trabajas en dos empresas distintas que usan ShiftImport), la aplicación te pedirá elegir explícitamente con cuál quieres trabajar cada vez que haya ambigüedad — nunca selecciona una por ti en silencio. Puedes cambiar de organización en cualquier momento desde el bloque **Contexto** del panel lateral.
-
-### 3.4 Roles dentro de una organización
-
-| Rol | Puede hacer |
-| --- | --- |
-| **Empleado** | Ver y editar su propio calendario, importar sus cuadrantes, enseñar nuevos formatos a la organización, usar formatos ya aprendidos |
-| **Administrador** | Todo lo anterior, más gestionar usuarios y empleados, crear áreas, importar cuadrantes de todo el equipo, confirmar o retirar formatos aprendidos, y restaurar la organización a su estado inicial |
-
-No existen más roles que estos dos. Un administrador puede degradar o promocionar a otros usuarios de la organización desde la gestión de usuarios (ver [sección 9](#9-gestión-de-la-organización-solo-administradores)).
+ShiftImport es una aplicación web moderna que no precisa instalación local. Se ejecuta en cualquier navegador contemporáneo (Google Chrome, Mozilla Firefox, Apple Safari, Microsoft Edge) tanto en ordenadores de sobremesa como en tabletas y teléfonos móviles. La zona horaria operacional de referencia para la consolidación de turnos es `Europe/Madrid`.
 
 ---
 
-## 4. Modo invitado: primeros pasos sin cuenta
+## 3. Acceso y primeros pasos
+
+### 3.1 Modalidades de entrada
+
+![Pantalla de acceso al sistema](screenshots/login-dark.png)
+
+Al acceder a la aplicación existen tres alternativas:
+
+1. **Continuar sin cuenta (Modo Invitado):** abre de inmediato un calendario mensual en tu navegador. No requiere correo, contraseña ni datos de contacto.
+2. **Iniciar sesión:** introduce tus credenciales (correo electrónico y contraseña) para acceder a tu organización y sincronizar tus dispositivos.
+3. **Crear cuenta:** registro rápido para habilitar persistencia remota, copias de seguridad automáticas y colaboración en equipo.
+
+> Si inicias tu experiencia como invitado y decides registrarte posteriormente, ShiftImport detectará los turnos creados en tu navegador y te ofrecerá incorporarlos a tu cuenta de manera ordenada.
+
+### 3.2 Creación de una organización inicial
+
+![Elección de organización en el registro](screenshots/onboarding-choice-dark.png)
+
+Al registrar una cuenta nueva, el asistente de bienvenida solicita:
+
+- **Nombre de la organización:** la denominación de tu empresa, centro de trabajo o departamento.
+- **Tu nombre personal:** crea tu perfil vinculado como primer integrante de la entidad.
+
+La persona que crea la organización recibe automáticamente el rol de **Propietario**, asumiendo la máxima responsabilidad administrativa sobre los datos y la configuración del equipo.
+
+### 3.3 Trabajo con múltiples organizaciones
+
+Si tu dirección de correo electrónico está invitada a varias empresas o centros, puedes alternar entre ellos en cualquier momento desde el selector de **Organización** ubicado en el panel lateral o en la barra superior. ShiftImport nunca mezcla datos entre distintas organizaciones ni realiza selecciones automáticas ambiguas.
+
+---
+
+## 4. Organizaciones, personas, roles y ámbitos
+
+Para facilitar una gestión transparente y ordenada tanto en pequeños negocios como en empresas con cientos de trabajadores, ShiftImport adopta un modelo conceptual claro:
+
+> **Concepto clave:**
+> **Persona** = **Identidad** + **Acceso (Usuario)** + **Ficha operativa (Empleado)**
+
+### 4.1 La distinción entre Usuario y Empleado
+
+Un **Usuario** y un **Empleado** no son la misma entidad:
+
+- **Usuario:** es una cuenta de acceso con credenciales (`correo`, `contraseña` y sesión activa). Permite autenticarse en la aplicación.
+- **Empleado:** es una ficha operativa que figura en los cuadrantes de turnos (`nombre`, `código externo`, asignación a un área). Puede recibir turnos y figurar en la planificación.
+
+Esta distinción permite tres situaciones naturales:
+
+1. **Usuario sin Empleado:** por ejemplo, un asesor externo o gestor de recursos humanos que administra la plataforma pero no realiza turnos de guardia ni figura en el cuadrante.
+2. **Empleado sin Usuario:** un trabajador que figura en los cuadrantes de la empresa pero no utiliza la aplicación móvil ni web. Sus turnos se importan y planifican con total normalidad.
+3. **Usuario vinculado a Empleado:** un trabajador o responsable que accede a la aplicación con su cuenta para ver sus turnos propios o gestionar los de su equipo.
+
+### 4.2 Matriz de Roles
+
+La plataforma contempla cuatro roles con responsabilidades nítidas:
+
+| Rol | Qué puede ver | Qué puede hacer | Qué no puede hacer |
+| --- | --- | --- | --- |
+| **Propietario** | Toda la organización, calendarios de todos los empleados, solicitudes, histórico y ajustes. | Todas las funciones de administración, planificación, importación masiva, y la potestad exclusiva de **Transferir la propiedad**. | No puede auto-aprobar sus propias solicitudes de cambio de turno si tiene ficha de empleado vinculada. |
+| **Administrador** | Toda la organización, todos los calendarios, gestión de equipo y registros de auditoría. | Crear personas, gestionar accesos y roles, crear áreas, importar cuadrantes de equipo, planificar, publicar y eliminar importaciones erróneas. | No puede transferir la propiedad ni modificar el estatus del Propietario. Tampoco auto-aprueba solicitudes propias. |
+| **Planificador** | El calendario y los turnos de su ámbito autorizado (toda la empresa, sus áreas o sus empleados asignados). | Crear y modificar borradores semanales en el Planificador, publicar turnos planificados y resolver solicitudes de cambio de su ámbito. | No puede alterar la configuración de usuarios, no puede crear áreas ni eliminar importaciones globales. No auto-aprueba solicitudes propias. |
+| **Empleado** | Su propio calendario personal, sus turnos publicados y el estado de sus solicitudes. | Importar sus propios turnos históricos, registrar turnos manuales pasados y emitir solicitudes de cambio de jornada o notas. | No accede al menú de Gestión de Equipo, no puede planificar turnos futuros ajenos ni publicar horarios. |
+
+### 4.3 Ámbitos de gestión del Planificador (Planner Scopes)
+
+En organizaciones con múltiples turnos o delegaciones, un Planificador puede operar bajo tres modalidades de ámbito:
+
+1. **Toda la organización:** planifica turnos de cualquier empleado de la empresa (idóneo para organizaciones sin departamentos formales).
+2. **Áreas específicas:** acotado a una o varias áreas operativas (por ejemplo, «Recepción» y «Conserjería»). Solo puede ver y asignar turnos a trabajadores adscritos a esas áreas.
+3. **Empleados específicos:** acotado a un grupo nominal de trabajadores concretos, con independencia del área en la que trabajen.
+
+### 4.4 Navegación de la aplicación (Sidebar)
+
+La barra lateral organiza las opciones de trabajo agrupadas según su naturaleza:
+
+```
+OPERACIÓN
+- Calendario                 (Vista mensual de turnos operativos)
+- Planificar                 (Borrador semanal; Propietario, Admin y Planificador)
+- Importar turnos            (Safe Import: individual o de equipo)
+- Añadir turno               (Alta manual de turnos pasados)
+- Solicitudes                (Tus solicitudes para empleados / Solicitudes pendientes para gestores)
+
+GESTIÓN                      (Solo Propietario, Administrador y Planificador autorizado)
+- Equipo                     (Espacio unificado: Personas, Roles y acceso, Áreas, Asignaciones)
+- Historial de importaciones (Registro de auditoría y revocación)
+- Formatos aprendidos        (Biblioteca de formatos reconocidos)
+
+CONFIGURACIÓN
+- Ajustes                    (Perfil personal, Tipos de turno y opciones avanzadas)
+```
+
+La barra lateral puede contraerse mediante el botón inferior para maximizar la superficie útil del calendario en pantallas de escritorio.
+
+---
+
+## 5. Tu calendario de turnos
+
+![Calendario mensual con turnos registrados](screenshots/calendar-month-dark.png)
+
+### 5.1 Cuadrícula mensual
+
+El calendario presenta el mes completo estructurado de lunes a domingo. Cada día muestra:
+
+- Los turnos programados con su **código identificativo** (por ejemplo, `M`, `T`, `N` o `08:00`), hora de inicio y hora de fin.
+- Una **distinción cromática** según el tipo de turno (laborable, guardia, libre o vacaciones).
+- La ubicación o departamento si figura en la planificación.
+
+### 5.2 Barra de estadísticas operativas
+
+En la franja superior del calendario se resumen las métricas clave del periodo:
+
+- **Propios:** número de turnos y cómputo de horas del trabajador seleccionado.
+- **Tot. M. (Total Mes):** suma de horas efectivas registradas durante el mes visible.
+- **Tot. A. (Total Año):** acumulado anual de horas trabajadas para el seguimiento del cómputo laboral.
+
+### 5.3 Modo Invitado
 
 ![Calendario vacío en modo invitado](screenshots/guest-empty-calendar-dark.png)
 
-Elegir **Continuar sin cuenta** te lleva directamente a un calendario vacío del mes actual, listo para importar tu primer cuadrante.
-
-### Qué guarda el modo invitado
-
-Todo lo que hagas como invitado —turnos, tipos de turno personalizados, formatos de cuadrante aprendidos y tus preferencias— se guarda **únicamente en el navegador que estés usando**, mediante `localStorage`. Esto significa:
-
-- Los datos sobreviven a cerrar y volver a abrir el navegador.
-- Los datos **no** se sincronizan entre dispositivos ni navegadores distintos.
-- Si borras los datos de navegación de tu navegador, los turnos guardados se pierden.
-- Nadie más puede ver tus datos: no hay ningún servidor implicado en el modo invitado.
-
-### Cuándo conviene crear una cuenta
-
-El modo invitado es perfectamente funcional para un uso puntual o personal en un solo dispositivo. Conviene crear una cuenta cuando quieras:
-
-- Acceder a tu calendario desde el móvil y el ordenador con los mismos datos.
-- Que tu organización comparta los formatos de cuadrante ya aprendidos entre varios compañeros.
-- Formar parte de un equipo gestionado por un administrador.
+En ausencia de sesión iniciada, el calendario opera en modo local-first. Los datos se almacenan de forma segura en la memoria de tu navegador (`localStorage`). Puedes utilizarlo como tu agenda de turnos habitual; si limpias los datos del navegador sin haber creado una cuenta, la información local se restablecerá.
 
 ---
 
-## 5. Importar un cuadrante paso a paso
+## 6. Importar turnos — Safe Import paso a paso
 
-Este es el flujo central de ShiftImport. Funciona igual para invitados y para usuarios con cuenta; la única diferencia es dónde se guarda el resultado.
+El protocolo **Safe Import** es el núcleo de ShiftImport. Garantiza que ningún dato entre en tu calendario sin haber sido inspeccionado y validado previamente.
 
-### 5.1 Abrir el importador
+![Subida de un documento de cuadrante](screenshots/import-upload-dark.png)
 
-Pulsa **Importar** en el panel lateral de la aplicación. Se abre una ventana con:
+### 6.1 Subida del archivo
 
-- Un selector de **mes** y **año** del calendario (rellenado por defecto con el mes en curso).
-- Una zona para **subir el archivo** del cuadrante.
-- Si tu organización tiene varias áreas activas, un selector de **área** (ver [sección 9.3](#93-áreas-de-la-organización)).
+1. Pulsa **Importar turnos** en el panel lateral.
+2. Selecciona el **mes** y el **año** del calendario al que corresponde el documento.
+3. Si perteneces a una organización con áreas, selecciona el **área de trabajo** si procede.
+4. Arrastra tu documento (PDF, imagen, CSV o XLSX) o pulsa **Subir archivo** y presiona **Procesar archivo**.
 
-> **Importante:** si el mes/año que seleccionas no coincide con el que detecta el documento, ShiftImport te avisa y te deja elegir explícitamente cuál usar — nunca importa turnos en un mes distinto al que has confirmado.
+> **Control de periodo:** si el mes seleccionado en la aplicación no coincide con las fechas detectadas en el documento, ShiftImport te alertará de la discrepancia y te permitirá decidir qué periodo prevalece. Nunca se importarán turnos en un mes diferente al acordado.
 
-### 5.2 Subir el documento
+### 6.2 Detección de identidad
 
-![Subida de un cuadrante](screenshots/import-upload-dark.png)
+- **En cuenta con empleado vinculado:** la aplicación busca de forma automática tu nombre o identificador externo en el documento.
+- **En cuadrantes multi-empleado:** si el sistema detecta varias personas y existe ambigüedad, te mostrará una lista para que pulses sobre tu fila.
 
-Pulsa **Subir archivo**, elige tu documento (PDF, imagen, CSV o Excel) y después **Procesar archivo**. La aplicación analiza el documento y localiza tu fila:
+### 6.3 Vista previa editable
 
-- Si tienes una cuenta vinculada a un empleado, ShiftImport ya conoce tu nombre y tu identificador y busca tu fila automáticamente.
-- Si es un documento con varias personas y no puede identificarte con certeza, te pregunta cuál de las filas detectadas eres tú.
+![Vista previa y validación de turnos detectados](screenshots/import-preview-dark.png)
 
-### 5.3 El asistente de formato (solo si hace falta)
+Antes de persistir los datos, ShiftImport despliega una tabla con todos los turnos identificados:
 
-![Asistente de formato resolviendo un código de turno](screenshots/import-assistant-dark.png)
+- **Fecha:** día asignado al turno.
+- **Tipo de turno:** clasificación (Regular, Libre, Vacaciones, etc.). Puedes cambiar el tipo con un clic.
+- **Horario:** hora de inicio y fin, editables directamente en la celda.
+- **Estado de validación:** indicador de calidad de la fila.
+- **Acciones:** botón para eliminar filas individuales que no desees incorporar.
 
-Si el documento tiene un formato que la organización todavía no conoce, aparece el **asistente de formato** dentro de la misma ventana. Te pregunta, con opciones a un clic:
+El botón principal de confirmación refleja en todo momento el balance de calidad (por ejemplo, `Confirmar Importación (28/31 listos)`).
 
-| Pregunta | Cuándo aparece |
+### 6.4 Estados de importación
+
+| Estado | Significado y actuación requerida |
 | --- | --- |
-| ¿Cuál de estas filas eres tú? | El documento tiene varias personas y no se pudo identificar tu fila automáticamente |
-| ¿Qué turno representa «X»? | Hay un código corto (por ejemplo `M`, `T`, `L`) que la organización todavía no ha clasificado |
-| ¿Qué significa «X»? | Hay un texto más largo sin clasificar (por ejemplo, una anotación de la leyenda) |
-| ¿Esta columna corresponde al día X? | La aplicación necesita confirmar a qué día del mes corresponde una columna del cuadrante |
+| **Listo (Ready)** | Todas las filas disponen de fecha, horario y código clasificado. Se puede importar de inmediato. |
+| **Parcial (Partial)** | Existen algunas filas con incidencias menores o códigos dudosos. Puedes confirmar los turnos válidos y descartar el resto. |
+| **Necesita respuesta** | El asistente requiere clasificar un código nuevo o confirmar la fila antes de generar la vista previa. |
+| **Bloqueado (Blocked)** | Se detectó una inconsistencia crítica (por ejemplo, cero turnos leídos o conflicto irresoluble). Requiere subsanación previa. |
 
-Para cada código desconocido eliges si es **turno de trabajo** (indicando hora de inicio y fin), **descanso**, **vacaciones** u **otro**. Cuando terminas y pulsas **Aplicar y continuar**, ShiftImport guarda automáticamente lo que acabas de enseñarle como un **formato aprendido** de tu organización (ver [sección 6](#6-formatos-aprendidos)) — así nadie tendrá que volver a responder estas preguntas para el mismo formato.
+### 6.5 Confirmación e Idempotencia
 
-> El asistente nunca guarda nombres, identificadores ni el contenido de las celdas del documento: solo la estructura (qué columna es cada día, qué significa cada código). Ver [sección 13.3](#133-qué-guarda-shiftimport-de-tus-documentos).
-
-### 5.4 Vista previa editable
-
-![Vista previa de turnos detectados](screenshots/import-preview-dark.png)
-
-Antes de guardar nada, ves una tabla con todos los turnos detectados: fecha, tipo, hora de inicio y fin. Cada fila indica si está **lista** para importar o si necesita tu atención. Puedes:
-
-- Editar el tipo de turno, la hora de inicio o la hora de fin de cualquier fila.
-- Eliminar filas que no quieras importar.
-- Ver cuántos turnos están listos frente al total detectado, en el propio botón de confirmación (por ejemplo, «Confirmar Importación (28/31 listos)»).
-
-Un indicador de estado resume la calidad de la importación: **Listo** (todo correcto), **Parcial** (algunas filas necesitan revisión pero puedes importar el resto), **Necesita tu respuesta** (falta resolver alguna pregunta del asistente) o **Bloqueado** (no se puede importar hasta corregir algo, por ejemplo cero turnos detectados).
-
-### 5.5 Confirmar
-
-Al pulsar **Confirmar Importación**, ShiftImport guarda los turnos listos en tu calendario. Si ya existían turnos en las mismas fechas de una importación anterior, se te muestra un resumen de cuántos son nuevos, cuántos han cambiado y cuántos se mantienen igual, y —si hay un conflicto real en una fecha concreta— se te pregunta si quieres mantener el turno existente o sustituirlo por el nuevo. La importación nunca sobrescribe datos en silencio.
-
-### 5.6 Reimportar el mismo formato más adelante
-
-La siguiente vez que tú, o cualquier compañero de tu organización con cuenta, importéis un documento con el mismo diseño, ShiftImport lo reconoce automáticamente: no vuelve a aparecer el asistente, y la vista previa se genera directamente. La validación y la vista previa editable siguen ejecutándose siempre — reconocer el formato acelera el proceso, pero nunca se salta la revisión.
+Al presionar **Confirmar Importación**, los turnos listos se consolidan en el calendario. Si importas el mismo documento dos veces, ShiftImport reconoce los turnos idénticos y no genera duplicados. Si detecta un conflicto en una fecha (un turno preexistente con horario diferente), te presenta las dos opciones: conservar el turno actual o reemplazarlo con el del archivo.
 
 ---
 
-## 6. Formatos aprendidos
+## 7. La frontera temporal: pasado histórico vs planificación futura
 
-![Panel de formatos aprendidos de la organización](screenshots/format-profiles-dark.png)
+ShiftImport establece una distinción estricta y transparente en el tratamiento de las fechas según el momento en que ocurren (`Europe/Madrid`):
 
-Cada vez que enseñas a ShiftImport cómo leer un cuadrante nuevo, esa configuración queda guardada como un **formato aprendido**. Si tienes una cuenta, el formato se guarda en tu organización y lo puede reutilizar cualquier compañero — no hace falta que cada persona enseñe el mismo cuadrante por separado.
+> **Regla de oro temporal:**
+> - **Fecha < Hoy** ➔ **Histórico consolidado:** se registra directamente como turno cerrado en el calendario.
+> - **Fecha ≥ Hoy** ➔ **Planificación operativa:** requiere validación previa y se canaliza hacia el Planificador semanal.
 
-### 6.1 Abrir «Formatos aprendidos»
+### 7.1 Consentimiento de importación futura (`FutureImportConsent`)
 
-Pulsa **Formatos aprendidos** en el panel lateral. Verás la lista de formatos de tu organización, cada uno con:
+Cuando un archivo contiene turnos que abarcan tanto días pasados como días futuros, el sistema no toma decisiones unilaterales:
 
-- Un **nombre** descriptivo (por ejemplo, «Cuadrante mensual recepción»).
-- El **tipo de origen**: PDF/imagen o CSV/tabla.
-- Su **estado** (ver siguiente apartado).
-- La **versión**, el **último uso** y el número de **usos correctos**.
-
-Cualquier persona de la organización puede consultar esta lista; solo un **administrador** puede confirmar, renombrar, reactivar o desactivar un formato.
-
-### 6.2 Ciclo de vida de un formato
-
-| Estado | Qué significa |
-| --- | --- |
-| **Candidato** | Recién enseñado. Ya se puede reutilizar automáticamente, pero todavía no ha sido revisado por un administrador |
-| **Validado** | Un administrador lo ha confirmado como fiable para la organización |
-| **Verificado** | Validado y con un historial amplio de usos correctos |
-| **Anterior** | Ha sido sustituido por una versión más reciente del mismo formato (ver más abajo), pero se conserva por si hace falta volver a él |
-| **Desactivado** | Retirado manualmente por un administrador; nunca se vuelve a seleccionar en automático |
-
-Un administrador confirma un formato candidato pulsando **Confirmar** en su fila. Para retirarlo, pulsa **Desactivar**; para recuperar un formato anterior o desactivado, pulsa **Reactivar**.
-
-### 6.3 Qué pasa si la plantilla de tu empresa cambia
-
-Si tu empresa cambia ligeramente el diseño de su cuadrante (por ejemplo, añade una columna), ShiftImport lo detecta como una variación del formato ya conocido. En lugar de sobrescribir el formato existente —arriesgando romper el reconocimiento de las versiones antiguas del documento—, crea una **nueva versión candidata** enlazada a la anterior. El formato original se conserva intacto hasta que un administrador confirme la nueva versión; en ese momento, la anterior pasa a estado **Anterior** (nunca se borra, y se puede reactivar en cualquier momento).
-
-### 6.4 Qué nunca guarda un formato aprendido
-
-Un formato aprendido describe **la estructura** del documento, nunca su contenido:
-
-- Nunca contiene nombres de personas, identificadores de empleado, correos ni ningún dato personal.
-- Nunca contiene el texto o las imágenes del documento original.
-- Solo guarda: qué columna corresponde a qué día, qué significa cada código de turno corto (por ejemplo, que `M` es un turno de mañana con esas horas), y la estrategia usada para encontrar la fila del empleado (nunca el contenido de esa fila).
+1. **Para Administradores y Planificadores:** la aplicación muestra un aviso explícito con dos opciones claras:
+   - *Opción A:* Importar exclusivamente los turnos históricos pasados en el calendario.
+   - *Opción B:* Importar el histórico y volcar automáticamente los turnos de hoy y futuros en el **Planificador semanal en modo borrador**, para que puedan ser revisados antes de publicarse.
+2. **Para Empleados (autoservicio):** los turnos futuros se excluyen por seguridad para evitar que un trabajador sobrescriba la planificación oficial de la empresa. El empleado recibe un resumen claro informando de cuántos turnos pasados se han guardado y cuántas filas futuras han quedado fuera.
 
 ---
 
-## 7. Tu calendario de turnos
+## 8. Resolver un formato desconocido: el Asistente de formato
 
-![Calendario mensual con turnos](screenshots/calendar-month-dark.png)
+![Asistente de formato resolviendo un código](screenshots/import-assistant-dark.png)
 
-### 7.1 Navegación
+Cuando subes un documento cuyo diseño visual o códigos no coinciden con ninguna plantilla conocida, entra en acción el **Asistente de formato**. En lugar de fallar con un error críptico, te formula un conjunto de preguntas breves e intuitivas:
 
-La cabecera del calendario muestra el mes y el año actuales, con flechas para moverte al mes anterior o siguiente. Cada día del mes aparece como una celda con los turnos programados ese día.
+1. **Identificación de fila:** *«¿Cuál de estas filas eres tú?»* (cuando hay varios nombres en el cuadrante).
+2. **Clasificación de códigos cortos:** *«¿Qué turno representa "M"?»* — seleccionas si corresponde a turno de trabajo (definiendo horario habitual), guardia, descanso o vacaciones.
+3. **Aclaración de leyendas:** *«¿Qué significa "RC"?»* — asocias abreviaturas internas a tipos de turno conocidos.
+4. **Correspondencia de columnas:** confirmación de a qué día numérico del mes corresponde una columna de la tabla.
 
-### 7.2 Estadísticas del mes
-
-Justo encima del calendario, una barra de estadísticas resume, para el mes visible:
-
-- **Propios** — tus turnos (si eres administrador viendo el calendario de un empleado, también puede mostrar los de la **Empresa**).
-- **Tot. M.** — total de horas o turnos del mes.
-- **Tot. A.** — total acumulado del año.
-
-### 7.3 Añadir un turno manualmente
-
-Pulsa sobre un día vacío anterior a hoy (o el botón **Añadir turno**) para abrir la ventana
-**Programar Turno**: eliges fecha, hora de inicio, hora de fin y tipo de turno, y confirmas. La
-fecha está limitada al día anterior; los turnos de hoy y futuros se gestionan desde **Planificar**.
-Los turnos añadidos a mano conviven sin problema con los importados — cada uno conserva su origen
-(manual o importado) internamente.
-
-### 7.4 Editar o eliminar un turno
-
-Pulsa sobre un turno ya existente para abrir la misma ventana en modo edición (**Actualizar Turno**), con opción de eliminarlo.
-
-### 7.5 Vista en móvil
-
-El calendario se adapta a pantallas pequeñas: en móvil, la navegación global se abre desde el botón
-de menú como un panel lateral, mientras la cuadrícula mensual se reorganiza para que cada día siga
-siendo legible y los turnos táctiles fáciles de abrir.
+Al completar las preguntas y pulsar **Aplicar y continuar**, el sistema genera la vista previa y almacena internamente la lógica de lectura como un **Formato aprendido** para tu organización.
 
 ---
 
-## 8. Ajustes de tu cuenta
+## 9. Formatos aprendidos
 
-![Ajustes: pestaña de perfil](screenshots/settings-profile-dark.png)
+![Biblioteca de formatos aprendidos](screenshots/format-profiles-dark.png)
 
-Abre **Ajustes** desde el panel lateral. Encontrarás distintas pestañas según tu situación (invitado, empleado o administrador).
+Un **Formato aprendido** es la memoria estructural que permite a ShiftImport recordar cómo interpretar un modelo de cuadrante específico. Cuando un integrante de la organización enseña un formato, todos sus compañeros se benefician de ese aprendizaje en sus importaciones posteriores.
 
-### 8.1 Perfil
+### 9.1 Ciclo de vida del formato
 
-- **Nombre** — el que se muestra en la cabecera y en el calendario. Si tienes una cuenta vinculada a un empleado, cambiarlo aquí actualiza tu nombre de empleado en la organización.
-- **Identificadores de empleado** — los códigos con los que apareces en tus cuadrantes (por ejemplo, `EMP-101`). Se usan para que ShiftImport te reconozca automáticamente al importar un documento con varias personas.
-- **Zona horaria** — usada para interpretar correctamente las horas de tus turnos.
-- **Empresa (opcional)** — un campo libre informativo.
+Los formatos aprendidos se gestionan desde **Formatos aprendidos** en el panel lateral y atraviesan distintos estados de confianza:
 
-### 8.2 Tipos de turno
+```
+[ Candidato ]  ──(Confirmación por Admin)──>  [ Validado ]  ──(Uso continuado)──>  [ Verificado ]
+      │                                             │
+      └──(Variación de plantilla detectada)─────────┴──>  [ Anterior ] / [ Desactivado ]
+```
 
-![Ajustes: pestaña de tipos de turno](screenshots/settings-shifttypes-dark.png)
+- **Candidato:** formato recién aprendido mediante el asistente. Es operativo de inmediato, pero está pendiente de validación formal por un administrador.
+- **Validado:** un administrador ha certificado que la lectura de turnos y códigos es exacta.
+- **Verificado:** formato consolidado con un historial amplio de importaciones libres de errores.
+- **Anterior:** versión previa de una plantilla que ha sufrido cambios. Se conserva en archivo histórico por si se importan cuadrantes antiguos.
+- **Desactivado:** formato retirado manualmente por el administrador para impedir su selección automática.
 
-ShiftImport viene con cuatro tipos de turno neutros: **Regular**, **Libre**, **Vacaciones** y **Extras**. Desde esta pestaña puedes:
+### 9.2 Qué información guarda un formato aprendido
 
-- Crear un tipo de turno nuevo, con su propio identificador, etiqueta, etiqueta corta y color.
-- Marcar si un tipo **cuenta como trabajo** a efectos de estadísticas.
-- **Archivar** un tipo que ya no uses (los turnos ya guardados con ese tipo conservan su etiqueta y color) o **restaurarlo** más adelante.
+Por razones estrictas de privacidad y seguridad:
 
-Estos tipos son los que usa el selector de turnos, las estadísticas y el asistente de formato al preguntarte qué significa un código nuevo.
-
-### 8.3 Equipo (solo si tienes una organización de empresa)
-
-La barra superior muestra de forma compacta la organización, tu rol y el Employee cuyo calendario
-estás visualizando. Al abrir el menú de contexto puedes cambiar organización, área o empleado. La
-barra lateral concentra la navegación y las acciones autorizadas; puede contraerse para liberar
-espacio al calendario. El acceso a usuarios y empleados está en **Usuarios y empleados** (ver
-[sección 9](#9-gestión-de-la-organización-solo-administradores)).
-
-### 8.4 Borrar tus datos locales
-
-Si usas ShiftImport como invitado, Ajustes incluye la opción **Borrar todos mis datos locales**, que elimina de este dispositivo tus turnos, tipos de turno personalizados, perfil y preferencias. Es irreversible y se pide confirmación explícita antes de ejecutarla.
+- **Guarda:** relaciones de columnas con días del mes, equivalencias de códigos (`T` = 15:00 a 23:00) y criterios geométricos de detección de filas.
+- **Nunca guarda:** nombres de trabajadores, identificadores personales, correos, fotografías ni el texto original del cuadrante.
 
 ---
 
-## 9. Gestión de la organización (solo administradores)
+## 10. Historial de importaciones
 
-### 9.1 Usuarios
+![Historial de importaciones confirmadas](screenshots/history-dark.png)
 
-![Gestión de usuarios de la organización](screenshots/members-dark.png)
+El **Historial de importaciones** registra la trazabilidad completa de cada archivo incorporado a la organización activa. Cualquier miembro con sesión puede consultarlo; las acciones de revocación están reservadas a los Administradores.
 
-Desde el botón **Usuarios de la organización**, un administrador puede:
+### 10.1 Información registrada por importación
 
-- **Añadir un usuario** indicando su correo, un nombre opcional y su rol (Empleado o Administrador). Si el correo no tiene cuenta todavía y dejas la contraseña en blanco, ShiftImport genera una contraseña temporal que se muestra **una sola vez** para que se la entregues de forma segura — todavía no existe invitación automática por correo.
-- **Vincular** el usuario a un empleado ya existente, para que sus importaciones se guarden bajo esa persona.
-- **Quitar** un usuario de la organización.
-- **Importar varios usuarios a la vez** mediante un archivo CSV.
+- **Fecha y hora:** instante exacto en que se confirmó la operación y usuario que la llevó a cabo.
+- **Tipo y Formato:** Individual o Equipo; archivo de origen (PDF, CSV o XLSX).
+- **Alcance y Ámbito:** Global o Área asignada (con el nombre histórico fijado en ese momento).
+- **Período:** mes y año del cuadrante (o rango de meses en cuadrantes plurimensuales).
+- **Balance de turnos:** turnos detectados en el archivo, turnos nuevos creados y turnos existentes respetados.
+- **Estado:** *Completada* o *Eliminada*.
 
-### 9.2 Empleados
+### 10.2 Eliminar una importación concreta
 
-En la pestaña **Empleados** de la misma ventana, un administrador puede añadir empleados uno a uno (nombre, identificador externo opcional y área) o importar una lista completa mediante CSV, con una vista previa antes de confirmar que indica cuántas filas son nuevas, cuántas ya existen y cuántas tienen errores.
+Si se subió un archivo equivocado o desactualizado, un Administrador puede pulsar **Eliminar** en la fila correspondiente del historial:
 
-### 9.3 Áreas de la organización
+- Se borran **únicamente los turnos generados por esa importación específica**.
+- **Los turnos manuales se conservan intactos siempre**, aunque coincidan en la misma fecha y horario.
+- Los turnos de otras importaciones no sufren ninguna alteración.
+- La fila permanece en el historial señalizada como **Eliminada** para fines de auditoría.
 
-![Gestión de áreas](screenshots/areas-dark.png)
+### 10.3 Diferencia con «Restablecer la organización»
 
-Las **áreas** son opcionales y sirven para segmentar empleados, importaciones y turnos dentro de una misma organización (por ejemplo, «Recepción» y «Cocina» en un hotel). Desde el botón **Áreas**, un administrador puede:
-
-- Crear un área con nombre y, opcionalmente, un código corto.
-- Renombrar un área o cambiar su código.
-- **Desactivar** un área — no se elimina nunca: los empleados, turnos e importaciones que ya la usaban conservan la referencia, y simplemente deja de estar disponible para altas nuevas.
-
-Si una organización no tiene ninguna área activa, todo funciona igual pero sin ese nivel de segmentación — las áreas nunca son obligatorias.
-
-### 9.4 Restaurar la organización a su estado inicial
-
-Dentro de Ajustes, en la sección **Zona de peligro**, un administrador puede **restaurar el estado inicial** de la organización. Esta acción:
-
-- Elimina permanentemente los empleados, los turnos, las importaciones y los vínculos usuario↔empleado.
-- **Conserva** la organización, tu cuenta de administrador, las áreas creadas y los formatos de cuadrante aprendidos — se consideran configuración de la organización, no datos operativos de un mes concreto.
-- Exige escribir la palabra **RESTABLECER** para confirmar, precisamente porque no se puede deshacer.
-
-### 9.5 Historial de importaciones
-
-Desde **Historial** en el panel lateral se abre el **Historial de importaciones**: la lista de todas las importaciones confirmadas en la organización activa. Cualquier usuario con sesión iniciada puede consultarlo; **eliminar** una importación concreta está reservado a los administradores (un empleado ve la misma lista en modo solo lectura, sin el botón de eliminar).
-
-Cada fila del historial muestra:
-
-- **Fecha y hora** en que se confirmó la importación, y **quién** la ejecutó.
-- **Empleados**: cuántos empleados venían en el archivo importado (no el total de la organización).
-- **Turnos del archivo**: cuántos turnos contenía el documento en total.
-- **Turnos nuevos**: cuántos de esos turnos se crearon realmente (los que no existían todavía).
-- **Ya existentes**: cuántos turnos del archivo coincidían con turnos ya guardados y no se tocaron.
-- **Período**: el mes, o el rango de meses si fue una importación plurimensual.
-- **Tipo**: *Individual* (una persona) o *Equipo* (varios empleados en la misma operación, ver [sección 10](#10-importación-de-equipo-solo-administradores)).
-- **Formato** del documento original (PDF, CSV o XLSX).
-- **Ámbito**: *Global* si la importación no estaba limitada a un área, o *Área: nombre* si lo estaba. Ese nombre queda fijado en el momento de importar — si el área se renombra o se desactiva más adelante, el historial sigue mostrando el nombre que tenía entonces.
-- **Estado**: *Completada* o *Eliminada*.
-
-Puedes acotar la lista con filtros compactos de ámbito, tipo, formato y estado. El encabezado, los filtros y la paginación permanecen fijos; solo la lista de importaciones se desplaza internamente cuando hay más resultados de los que caben en pantalla.
-
-#### Eliminar una importación concreta
-
-Un administrador puede eliminar cualquier importación no eliminada todavía desde su propia fila. Al confirmar:
-
-- Se eliminan **únicamente los turnos creados por esa importación** — nunca por coincidencia de fecha, horario, empleado o área.
-- **Los turnos añadidos manualmente se conservan siempre**, aunque tengan la misma fecha y horario que un turno importado que se está eliminando. Un turno manual nunca pertenece a una importación.
-- Los turnos de **otras** importaciones no se ven afectados.
-- No se elimina ningún empleado, usuario ni área — solo los turnos de esa importación.
-- El cuadro de confirmación muestra la fecha, el usuario, el período, el ámbito y el número exacto de turnos que se van a eliminar, y avisa de que **la acción no puede deshacerse**.
-- La fila queda deshabilitada mientras se elimina («Eliminando…») para impedir una doble confirmación.
-
-La importación eliminada sigue apareciendo en el historial marcada como **Eliminada**, como registro de lo ocurrido — solo desaparecen sus turnos del calendario.
-
-#### Diferencia con «Restaurar la organización a su estado inicial»
-
-El historial de importaciones y **Restablecer la situación inicial** (sección 9.4) resuelven problemas distintos:
-
-| | Eliminar una importación | Restablecer la situación inicial |
-| --- | --- | --- |
-| Alcance | Una importación concreta | Toda la organización |
-| Qué borra | Solo los turnos creados por esa importación | Todos los empleados, turnos e importaciones |
-| Turnos manuales | Se conservan siempre | Se eliminan (junto con todo lo demás) |
-| Cuándo usarlo | Corregir un archivo importado por error, sin tocar el resto | Empezar de cero por completo |
-
-Si importaste un archivo equivocado, usa siempre **Eliminar esta importación** — «Restablecer la situación inicial» borra muchísimo más de lo necesario para corregir un solo error de importación.
+| Acción | Alcance | Efecto sobre turnos manuales | Cuándo utilizarla |
+| --- | --- | --- | --- |
+| **Eliminar una importación** | Una sola carga de archivo | Se respetan y conservan siempre | Para corregir un cuadrante subido por error |
+| **Restablecer organización** | Toda la entidad | Se eliminan junto con todo lo demás | Para reiniciar la empresa desde cero |
 
 ---
 
-## 10. Importación de equipo (solo administradores)
+## 11. Turnos manuales
+
+### 11.1 Registro de turnos pasados
+
+Para añadir un turno puntual no recogido en el cuadrante oficial:
+
+1. Pulsa **Añadir turno** en la barra lateral o haz clic sobre un día vacío anterior a hoy en el calendario.
+2. En la ventana **Programar Turno**, indica la fecha, hora de inicio, hora de fin y tipo de turno.
+3. Confirma la operación para guardarlo en el calendario.
+
+> **Regla de integridad:** la función *Añadir turno* está restringida exclusivamente a fechas pasadas (`date < today`). La asignación de turnos presentes y futuros se realiza a través del **Planificador**.
+
+### 11.2 Modificar o suprimir turnos
+
+Al pulsar sobre cualquier turno existente en el calendario se abre la ventana de edición (**Actualizar Turno**), permitiendo corregir el horario, cambiar la tipología o pulsar **Eliminar** para suprimirlo. Los turnos manuales e importados conviven con normalidad identificando internamente su procedencia.
+
+---
+
+## 12. Planificación de turnos futuros: Planificador semanal
+
+![Planificador semanal de turnos futuros](screenshots/planner-dark.png)
+
+El **Planificador semanal** (`Weekly Planner`) es el entorno donde los Propietarios, Administradores y Planificadores diseñan, ajustan y coordinan los cuadrantes de las semanas en curso y futuras antes de hacerlos visibles a los empleados.
+
+### 12.1 Conceptos fundamentales de planificación
+
+- **Cuadrante (Schedule):** contenedor de planificación para una semana concreta (de lunes a domingo o de domingo a sábado según preferencia).
+- **Versión en Borrador (ScheduleVersion DRAFT):** espacio de trabajo editable. Solo puede existir un borrador activo por semana y área.
+- **Asignación de turno (ShiftAssignment):** propuesta de turno asignada a un empleado para un día y horario determinados dentro del borrador.
+
+### 12.2 Interfaz del Planificador
+
+1. **Navegación semanal:** controles para desplazarse entre semanas futuras. El sistema advierte si se intenta retroceder a semanas completamente concluidas en el pasado.
+2. **Selector de presentación:**
+   - *Cuadrícula:* vista visual tipo matriz con empleados en filas y días de la semana en columnas.
+   - *Tabla accesible:* formato lineal optimizado para lectura secuencial y lectores de pantalla.
+3. **Filtro de empleados:** búsqueda y filtrado ágil para concentrarse en trabajadores o puestos concretos.
+4. **Validaciones ergonómicas en tiempo real:** al crear o mover una asignación, ShiftImport verifica que no existan **solapamientos horarios** y alerta si no se respeta el **descanso mínimo legal de 11 horas** entre jornadas consecutivas.
+
+---
+
+## 13. Publicar la planificación
+
+Mientras un cuadrante permanece en estado de borrador, sus turnos solo son visibles para los gestores en el Planificador; ningún empleado ve alterado su calendario personal.
+
+### 13.1 El acto de publicación
+
+Cuando la planificación semanal está lista:
+
+1. Pulsa el botón **Publicar** en la cabecera del Planificador.
+2. El sistema muestra un diálogo de confirmación indicando el número exacto de turnos que van a materializarse y verifica que los trabajadores asignados sigan activos.
+3. Al pulsar **Confirmar publicación**, los turnos pasan de forma atómica al calendario operativo general con origen planificado (`origin = 'schedule'`).
+
+### 13.2 Historial de versiones y modificaciones posteriores
+
+Una vez publicada, la versión queda congelada como registro histórico inalterable. Si surgen cambios imprevistos:
+
+- Se pulsa **Crear nueva versión**, lo que genera un nuevo borrador editable manteniendo las asignaciones previas como punto de partida.
+- El panel **Historial de versiones** permite auditar cuándo se publicó cada versión y qué cambios se introdujeron respecto a la anterior.
+
+---
+
+## 14. Portal del empleado y autoservicio
+
+El **Portal del empleado** ofrece a los trabajadores con rol `EMPLOYEE` una experiencia despejada, centrada exclusivamente en su jornada laboral y libre de complejidades administrativas.
+
+### 14.1 Vistas especializadas del trabajador
+
+- **Hoy:** tarjeta con el turno de la jornada actual, horario exacto, área asignada y botón para **Confirmar recepción** (reconocimiento formal de haber visto el turno).
+- **Mi semana:** agenda semanal completa donde alternan turnos de trabajo y descansos programados.
+- **Detalle de turno y notas:** espacio para consultar pormenores y añadir notas o comentarios de seguimiento personal sobre la guardia.
+
+### 14.2 Acciones de autoservicio autorizadas
+
+Desde el panel lateral, el empleado dispone de:
+
+- **Importar mis turnos:** permite al trabajador subir su cuadrante personal; el sistema filtra automáticamente sus líneas y excluye turnos ajenos o futuros no autorizados.
+- **Añadir turno pasado:** registro de turnos históricos no reflejados previamente.
+- **Solicitudes:** acceso directo al buzón de solicitudes de cambio.
+
+---
+
+## 15. Solicitudes de cambio y gestión de solicitudes
+
+![Buzón de gestión de solicitudes](screenshots/requests-dark.png)
+
+ShiftImport unifica el ciclo de vida de las incidencias horarias bajo la denominación neutra de **Solicitudes**, evitando sesgos previos de aprobación obligatoria.
+
+### 15.1 Emisión de una solicitud (Empleado)
+
+Si un trabajador necesita permutar o modificar un turno ya publicado:
+
+1. Accede al detalle del turno en su calendario o pulsa **Solicitudes → Nueva solicitud**.
+2. Selecciona el tipo de petición (*Cambio de horario* u *Otro motivo*).
+3. Indica el horario propuesto y redacta una breve exposición justificativa.
+4. Pulsa **Enviar solicitud**. La petición queda registrada en estado *Pendiente*.
+
+### 15.2 Resolución de solicitudes (Gestores)
+
+Los Propietarios, Administradores y Planificadores asignados ven un contador en tiempo real en el menú lateral y en la barra superior (**Solicitudes pendientes**):
+
+1. Al abrir la solicitud se examina el empleado solicitante, el turno afectado y la justificación aportada.
+2. Opciones de resolución:
+   - **Aprobar:** valida la petición e introduce el ajuste correspondiente.
+   - **Rechazar:** exige obligatoriamente introducir un **motivo de rechazo** para que el trabajador conozca la razón organizativa de la negativa.
+
+### 15.3 Principio de no auto-aprobación (Anti-Self-Approval)
+
+Por estrictas razones de gobernanza y control interno:
+
+> **Regla de oro:** si un Administrador o Planificador tiene a su vez una ficha de empleado vinculada y emite una solicitud sobre sus propios turnos, **no puede aprobarla ni rechazarla él mismo**. El sistema deshabilita las acciones de decisión para su usuario y exige que sea otro gestor de la organización quien resuelva la petición.
+
+---
+
+## 16. Gestión de equipo: Personas, Roles y Áreas
+
+El espacio de trabajo **Equipo** (accesible desde el menú de Gestión) unifica en un solo entorno de alta densidad las antiguas pantallas fragmentadas de miembros y departamentos. Dispone de cuatro pestañas operativas:
+
+![Pestaña Personas del espacio Equipo](screenshots/equipo-personas-dark.png)
+
+### 16.1 Pestaña 1: Personas
+
+Reúne a todos los integrantes de la entidad con herramientas de búsqueda y filtros combinados por nivel de acceso, rol, área asignada y estado (activo/inactivo).
+
+- **Añadir persona:** abre un asistente estructurado en cinco pasos:
+  1. *Identidad:* nombre y apellidos.
+  2. *Acceso:* decidir si dispondrá de credenciales de inicio de sesión o si será únicamente ficha operativa.
+  3. *Empleo:* creación de ficha de empleado, asignación de código externo y área inicial.
+  4. *Rol y Ámbito:* asignación de rol (Empleado, Planificador o Administrador) y ámbito operativo.
+  5. *Confirmación:* resumen final y generación de contraseña inicial si procede.
+
+![Pestaña Roles y acceso](screenshots/equipo-roles-dark.png)
+
+### 16.2 Pestaña 2: Roles y acceso
+
+Espacio dedicado al control de autoridad y seguridad:
+
+- **Modificación de roles:** asignación dinámica entre Empleado, Planificador y Administrador.
+- **Concesión y revocación de acceso:** habilita o inhabilita el inicio de sesión a un empleado sin borrar su histórico de turnos.
+- **Gestión de ámbito del Planificador:** configuración del alcance (Organización, Áreas o Empleados).
+- **Transferir propiedad:** flujo reservado exclusivamente al **Propietario activo** para ceder la titularidad de la organización a otro usuario de forma segura y atómica.
+
+![Pestaña Áreas de la organización](screenshots/equipo-areas-dark.png)
+
+### 16.3 Pestaña 3: Áreas
+
+Las **Áreas** son divisiones organizativas opcionales (por ejemplo, «Planta 1», «Mantenimiento» o «Urgencias»).
+
+- Si tu empresa no requiere departamentos, la pestaña muestra un estado informativo y todo funciona sin áreas de manera transparente.
+- Si se crean áreas, permiten acotar la importación de cuadrantes, filtrar el calendario y limitar el campo de actuación de los planificadores.
+- Las áreas no se eliminan físicamente para preservar el histórico de cuadrantes pasados; en su lugar se **desactivan**, impidiendo nuevas altas.
+
+![Pestaña Asignaciones operativas](screenshots/equipo-asignaciones-dark.png)
+
+### 16.4 Pestaña 4: Asignaciones
+
+Permite coordinar movimientos operativos masivos con fecha de entrada en vigor:
+
+- **Asignar empleados a un área:** selección múltiple de trabajadores para trasladarlos a un departamento con fecha de efectividad temporal (`valid_from`), garantizando que los turnos pasados conserven su adscripción original.
+- **Asignar áreas o empleados a planificadores:** configuración visual de los grupos tutelados por cada planificador.
+
+---
+
+## 17. Aprovisionamiento masivo y credenciales temporales
 
 ![Importación de cuadrante de equipo](screenshots/team-import-dark.png)
 
-Cuando un administrador pulsa **Importar**, en lugar del importador individual se abre el importador de equipo, pensado para cuadrantes con varias personas a la vez.
+Para poner en marcha organizaciones medianas o grandes sin cargar datos uno a uno, ShiftImport admite la ingesta de archivos tabulares masivos.
 
-### 10.1 Subir el cuadrante del equipo
+### 17.1 Alta masiva de trabajadores
 
-Admite un CSV con columnas de empleado y fecha, o un PDF de cuadrante con varios empleados. ShiftImport compara cada nombre o identificador detectado con los empleados ya existentes en la organización y los clasifica:
+Desde el espacio de gestión se puede suministrar un archivo CSV con las columnas correspondientes (nombre, identificador externo y área opcional). El sistema realiza una validación previa señalando filas válidas, posibles coincidencias con empleados existentes y registros duplicados antes de confirmar el alta en bloque.
 
-| Estado | Significado |
+### 17.2 Generación y entrega de credenciales temporales
+
+Cuando se crea acceso para usuarios nuevos que aún no disponen de contraseña:
+
+1. El sistema genera de forma automática una **contraseña temporal segura de un solo uso**.
+2. Al finalizar el proceso masivo, se ofrece la descarga de un archivo seguro que asocia cada correo con su contraseña provisional.
+3. **Advertencia de seguridad:** esta clave provisional solo se exhibe en el momento de su creación y no vuelve a almacenarse en texto claro. El administrador debe distribuirla por un canal seguro al trabajador, quien deberá actualizarla en su primer inicio de sesión.
+
+---
+
+## 18. Tipos de turno personalizados
+
+![Gestión de tipos de turno](screenshots/settings-shifttypes-dark.png)
+
+ShiftImport incorpora un registro de tipos de turno neutro que se adapta a los convenios laborales de cualquier sector.
+
+### 18.1 Tipos predeterminados y personalizados
+
+El sistema incluye de fábrica cuatro clasificaciones esenciales:
+
+- **Regular:** jornada laboral estándar (computa en estadísticas).
+- **Libre:** día de descanso semanal.
+- **Vacaciones:** periodo vacacional retribuido.
+- **Extras:** turnos extraordinarios o refuerzos.
+
+Desde **Ajustes → Tipos de turno**, un gestor puede añadir nuevos tipos (por ejemplo, «Guardia 24h», «Turno Noche» o «Formación»), configurando su nombre, código abreviado, color distintivo y si computa como tiempo de trabajo efectivo.
+
+### 18.2 Archivado y resolución de alias
+
+- **Archivar un tipo:** los turnos del pasado mantienen su color y leyenda, pero el tipo deja de aparecer en los selectores para nuevas asignaciones.
+- **Resolución de alias:** cuando el asistente de importación aprende que la letra `M` corresponde al tipo *Mañana*, el catálogo de alias relaciona automáticamente ambas referencias en importaciones sucesivas.
+
+---
+
+## 19. Ajustes, tema e idioma
+
+![Panel de ajustes de usuario](screenshots/settings-profile-dark.png)
+
+### 19.1 Perfil y preferencias
+
+Desde el menú **Ajustes** puedes consultar y afinar:
+
+- **Nombre para mostrar:** nombre visible en el calendario y la cabecera.
+- **Identificadores de empleado:** códigos personales que utiliza tu empresa para identificarte en los cuadrantes impresos.
+- **Zona horaria:** huso horario para el cálculo de jornadas (`Europe/Madrid`).
+
+### 19.2 Tema visual e idioma
+
+En la barra superior de la aplicación dispones de controles rápidos:
+
+- **Tema visual:** alternancia entre **Modo Oscuro** (interfaz relajada y de alto contraste, recomendada) y **Modo Claro**.
+- **Idioma:** selector entre Español (`ES`) e Inglés británico (`EN`). En ambos idiomas la semana se inicia normativamente en lunes.
+
+### 19.3 Zona de peligro: Restablecer la organización
+
+En el pie de los ajustes de organización, un Administrador o Propietario dispone de la opción de **Restablecer la situación inicial**:
+
+- Suprime todos los turnos, asignaciones, empleados y vinculaciones de la entidad.
+- **Conserva** la organización, la cuenta de administrador, las áreas y los formatos aprendidos.
+- Requiere escribir la palabra exacta **RESTABLECER** en el cuadro de diálogo para evitar ejecuciones accidentales.
+
+---
+
+## 20. Planes, privacidad y seguridad
+
+![Información sobre planes y modalidades](screenshots/pricing-dark.png)
+
+### 20.1 Modalidades de suscripción
+
+ShiftImport ofrece tres niveles de servicio orientados a diferentes necesidades operativas:
+
+| Característica | Plan Free | Plan Personal | Plan Team |
+| --- | :---: | :---: | :---: |
+| **Límite de empleados** | 1 | 1 | Ilimitados |
+| **Importaciones mensuales** | 5 | Ilimitadas | Ilimitadas |
+| **Historial y auditoría** | Básico | Completo | Completo |
+| **Planificador semanal** | No | No | Sí |
+| **Gestión de equipo y áreas** | No | No | Sí |
+| **Importación de cuadrante de equipo** | No | No | Sí |
+
+### 20.2 Gestión de cookies y privacidad
+
+![Configuración de cookies](screenshots/cookies-dark.png)
+
+Al ingresar en la web, el banner de consentimiento permite aceptar o personalizar las cookies según su finalidad:
+
+- **Necesarias:** indispensables para mantener tu sesión activa y tus preferencias de tema e idioma.
+- **Analíticas:** métricas funcionales internas anónimas para evaluar el rendimiento de la aplicación.
+- **Marketing:** desactivadas por defecto; orientadas a avisos de producto relevantes.
+
+### 20.3 Seguridad y tratamiento de documentos
+
+- **Sin almacenamiento de originales:** los archivos PDF o imágenes que subes se procesan en memoria en el momento de la ingesta y se descartan de inmediato. ShiftImport jamás almacena copias de tus documentos de cuadrante.
+- **Aislamiento multi-inquilino:** cada petición se valida rigurosamente en el servidor en función de tu organización y rol activo. Es técnicamente imposible acceder a los turnos o formatos de otra empresa.
+
+---
+
+## 21. Preguntas frecuentes
+
+**¿Es obligatorio registrar una cuenta para usar ShiftImport?**
+No. Puedes utilizar la aplicación completa en modo invitado. Tus turnos y preferencias se conservarán en el navegador de tu dispositivo. Crear una cuenta es necesario únicamente para sincronizar varios terminales o trabajar en equipo.
+
+**He importado mi cuadrante pero no veo reflejados mis turnos futuros. ¿Qué ha ocurrido?**
+Si eres empleado, los turnos futuros se excluyen de la importación directa para respetar la planificación de la empresa. Si eres administrador o planificador, comprueba si en el diálogo de consentimiento elegiste incorporar los turnos futuros al Planificador en modo borrador.
+
+**¿Por qué el sistema no me permite aprobar mi propia solicitud de cambio?**
+ShiftImport aplica el principio de no auto-aprobación (*Anti-Self-Approval*). Si tienes rol de gestor pero la solicitud afecta a tu propia ficha de empleado, la resolución debe realizarla otro administrador o planificador de la entidad.
+
+**¿Qué ocurre si vuelvo a importar el mismo archivo de turnos?**
+El proceso es estrictamente idempotente. ShiftImport reconocerá los turnos idénticos ya existentes y no creará duplicados. Si algún turno discrepa en horario, te permitirá decidir si deseas mantener el previo o sustituirlo.
+
+**¿Se borran mis turnos manuales si elimino una importación del historial?**
+No. Eliminar una importación solo suprime los turnos generados por ese archivo específico. Los turnos introducidos manualmente se conservan siempre.
+
+**¿Qué diferencia existe entre un Usuario y un Empleado?**
+Un Usuario es una cuenta con correo y contraseña para entrar a la plataforma. Un Empleado es el registro de la persona que trabaja y figura en el cuadrante. Un trabajador puede existir como empleado sin necesidad de tener acceso informático creado.
+
+**¿Cómo recupero una contraseña temporal generada durante un alta masiva?**
+Las contraseñas temporales se muestran una única vez y se descargan en el archivo de credenciales del momento. Si se extravía, el administrador puede revocar y conceder acceso nuevamente a la persona para generar una clave nueva.
+
+---
+
+## 22. Glosario de términos
+
+| Término | Definición operativa |
 | --- | --- |
-| Reconocido | Coincide con un empleado activo existente |
-| Existente — Inactivo | Coincide con un empleado desactivado; se puede reactivar desde aquí |
-| Nuevo | No hay ningún empleado coincidente; se puede crear |
-| Ambiguo | Hay más de una coincidencia posible; hay que elegir manualmente |
-
-### 10.2 Seleccionar y crear empleados
-
-El administrador marca qué personas del cuadrante quiere importar. Para las filas «Nuevo» puede crear el empleado sobre la marcha, o crear varios empleados nuevos de una sola vez con un resumen de creados, ya existentes y errores.
-
-### 10.3 Resumen antes de importar
-
-Antes de confirmar, se muestra un resumen con los empleados seleccionados, cuántos turnos nuevos se van a crear y cuántos conflictos hay con turnos ya existentes (que nunca se sobrescriben sin confirmación). Al confirmar, ShiftImport importa los turnos de todos los empleados seleccionados y verifica que se hayan guardado correctamente antes de mostrar la confirmación final.
+| **Cuadrante** | Documento oficial expedido por la empresa con la distribución de turnos de trabajo y descansos del equipo. |
+| **Safe Import** | Protocolo de ingesta protegida que antepone el análisis y la vista previa editable antes de escribir cualquier dato. |
+| **Formato aprendido** | Perfil estructural que memoriza la equivalencia de columnas y códigos de turno de una plantilla de cuadrante concreta. |
+| **Borrador (Draft)** | Estado editable de una semana de planificación en el Planificador; invisible para los empleados hasta su publicación. |
+| **Publicar** | Acción mediante la cual una planificación semanal en borrador se consolida como turnos oficiales en el calendario de los trabajadores. |
+| **Persona** | Entidad integral que engloba la identidad humana, su usuario de acceso y su ficha operativa de empleado. |
+| **Ámbito (Scope)** | Límite organizativo (toda la empresa, áreas concretas o empleados específicos) dentro del cual puede actuar un Planificador. |
+| **Área** | Departamento, delegación o sección operativa opcional dentro de una organización. |
 
 ---
 
-## 11. Migrar tus datos locales a una organización
+## 23. Aviso legal
 
-Si empezaste como invitado y después creas una cuenta o te añaden a una organización, ShiftImport detecta que tienes datos guardados en este dispositivo y te ofrece migrarlos.
+Anclora ShiftImport es una herramienta de asistencia tecnológica diseñada para facilitar la consulta personal y la coordinación operativa de calendarios de trabajo.
 
-### 11.1 Migrar tus turnos
+### Límites de responsabilidad
 
-La aplicación te muestra cuántos turnos locales ha encontrado y a qué organización/empleado se importarían. Puedes:
-
-- **Importar a mi cuenta** — sube esos turnos a tu cuenta.
-- **Mantener solo en este dispositivo** — no migra nada; no se te volverá a preguntar en esta sesión.
-- **Cancelar** — se te preguntará de nuevo la próxima vez.
-
-La operación es **idempotente**: repetirla no crea turnos duplicados, y tu copia local nunca se borra automáticamente, ni al migrar ni al declinar.
-
-### 11.2 Migrar tus formatos aprendidos
-
-Del mismo modo, si tienes formatos de cuadrante aprendidos como invitado, ShiftImport te ofrece migrarlos a tu organización por separado. Se explica claramente qué se sube (la configuración estructural del formato) y qué no (ningún documento original ni dato personal), y tampoco se elimina la copia local al migrar.
-
----
-
-## 12. Planes de Anclora ShiftImport
-
-![Página de planes](screenshots/pricing-dark.png)
-
-ShiftImport ofrece tres planes con distintos límites y funciones de equipo. Los precios son orientativos y están pendientes de validación comercial, tal como indica la propia página de precios; los límites y funciones sí son los que aplica la aplicación hoy.
-
-| Plan | Empleados | Importaciones al mes | Historial completo | Gestión de equipo | Importación de varios empleados |
-| --- | --- | --- | --- | --- | --- |
-| **Free** | 1 | 5 | No | No | No |
-| **Personal** | 1 | Sin límite | Sí | No | No |
-| **Team** | Sin límite | Sin límite | Sí | Sí | Sí |
-
-- Los planes **Free** y **Personal** están pensados para un único empleado (tu propio calendario).
-- El plan **Team** añade gestión de usuarios, áreas e importación de cuadrantes de equipo — es el plan necesario para las funciones descritas en las [secciones 9](#9-gestión-de-la-organización-solo-administradores) y [10](#10-importación-de-equipo-solo-administradores).
-- Un intento de superar un límite de tu plan (por ejemplo, añadir un segundo empleado en el plan Free) se rechaza explícitamente, indicando qué límite lo impide.
-
----
-
-## 13. Privacidad, cookies y tus datos
-
-### 13.1 Cookies
-
-![Preferencias de cookies](screenshots/cookies-dark.png)
-
-Al usar ShiftImport por primera vez, un aviso te permite **Aceptar todas** las cookies, **Rechazar opcionales** o entrar en **Configuración** para decidir categoría por categoría:
-
-| Categoría | Se puede desactivar | Para qué se usa |
-| --- | --- | --- |
-| Necesarias | No | Funcionamiento básico y tus preferencias (tema, idioma) |
-| Análisis | Sí | Medición funcional interna de uso |
-| Marketing | Sí | Reservadas para comunicaciones relevantes |
-
-Puedes volver a abrir esta configuración en cualquier momento desde el enlace **Cookies** del pie de página.
-
-### 13.2 Aislamiento entre organizaciones
-
-Todo lo que guardas en una organización —empleados, turnos, importaciones, formatos aprendidos— es visible únicamente para los miembros de esa organización. Ninguna otra organización, aunque use ShiftImport, puede consultar ni reutilizar tus datos. Esta separación se aplica siempre en el servidor, nunca depende de la aplicación que se ejecuta en tu navegador.
-
-### 13.3 Qué guarda ShiftImport de tus documentos
-
-ShiftImport nunca almacena el documento original que subes (el PDF, la imagen o el CSV) — se procesa en el momento de la importación y no se conserva. De ese documento, solo se guardan permanentemente:
-
-- Los **turnos** que confirmas en la vista previa (fecha, hora de inicio, hora de fin y tipo).
-- Si enseñas un formato nuevo, la **estructura** del documento (qué columna es cada día, qué significan los códigos de turno cortos) — nunca nombres, identificadores ni el texto original. Ver [sección 6.4](#64-qué-nunca-guarda-un-formato-aprendido).
-
-### 13.4 Borrar tus datos
-
-- Como invitado, puedes borrar todos tus datos locales desde **Ajustes** (ver [sección 8.4](#84-borrar-tus-datos-locales)).
-- Como administrador, puedes restaurar tu organización a su estado inicial, eliminando empleados, turnos e importaciones (ver [sección 9.4](#94-restaurar-la-organización-a-su-estado-inicial)).
-
----
-
-## 14. Preguntas frecuentes
-
-**¿Necesito crear una cuenta para usar ShiftImport?**
-No. Puedes usar la aplicación completa como invitado; tus datos se guardan en tu navegador. Crear una cuenta añade sincronización en la nube y funciones de equipo.
-
-**Importé un cuadrante y algunos turnos no aparecen. ¿Por qué?**
-ShiftImport nunca descarta turnos en silencio. Si faltan filas, revisa el indicador de estado de la importación (Parcial, Necesita tu respuesta o Bloqueado): siempre indica el motivo exacto, como un código de turno todavía sin clasificar o una fila que no se pudo identificar como tuya.
-
-**¿Por qué me sigue preguntando el asistente de formato si ya enseñé este cuadrante?**
-Comprueba que el mes/año seleccionado coincide con el documento y que estás en la misma organización con la que enseñaste el formato la primera vez. Si la plantilla de tu empresa ha cambiado ligeramente (por ejemplo, una columna nueva), ShiftImport lo trata como una variación del formato y te pedirá confirmarla una vez (ver [sección 6.3](#63-qué-pasa-si-la-plantilla-de-tu-empresa-cambia)).
-
-**¿Puedo importar el mismo cuadrante dos veces sin duplicar turnos?**
-Sí. Si vuelves a importar un documento que ya habías importado, ShiftImport detecta los turnos que coinciden y te avisa de los que difieren, dejándote elegir si mantener o sustituir cada uno — nunca duplica en silencio.
-
-**¿Qué pasa con mis formatos aprendidos si mi empresa restaura la organización?**
-Se conservan. Restaurar la organización elimina datos operativos (empleados, turnos, importaciones) pero mantiene la configuración, incluidos los formatos de cuadrante aprendidos y las áreas.
-
-**¿Puedo usar ShiftImport en el móvil?**
-Sí, tanto el calendario como el importador se adaptan a pantallas pequeñas. Puedes fotografiar tu cuadrante directamente con el móvil y subir la imagen.
-
-**¿Se comparten mis formatos aprendidos con otras empresas?**
-No. Cada organización tiene sus propios formatos aprendidos, completamente aislados del resto.
-
----
-
-## 15. Glosario rápido
-
-| Término | Significado |
-| --- | --- |
-| Cuadrante | El documento (PDF, imagen, CSV o Excel) que reparte tu empresa con los turnos del mes |
-| Turno | Un bloque de trabajo o descanso con fecha, hora de inicio, hora de fin y tipo |
-| Formato aprendido | La configuración que ShiftImport guarda tras enseñarle a leer un diseño de cuadrante concreto |
-| Candidato / Validado / Verificado | Estados de confianza de un formato aprendido, de menor a mayor revisión |
-| Área | Segmento opcional dentro de una organización (por ejemplo, un departamento) |
-| Organización | El espacio de trabajo compartido: personal (un empleado) o de empresa (varios empleados y administradores) |
-| Invitado | Sesión sin cuenta, con los datos guardados solo en el navegador |
-| Empleado | Persona real cuyo calendario se gestiona en ShiftImport, con o sin cuenta de usuario vinculada |
-
----
-
-## 16. Aviso legal
-
-Anclora ShiftImport es una herramienta de apoyo para consultar y organizar tus turnos a partir de los cuadrantes que te entrega tu empresa. No sustituye el documento oficial de tu empresa, ni ningún sistema de fichaje, nómina o control horario con validez legal.
-
-### Limitaciones importantes
-
-- Los turnos mostrados en ShiftImport son una copia de trabajo derivada del documento que importaste; en caso de discrepancia, prevalece siempre el cuadrante oficial de tu empresa.
-- ShiftImport no garantiza la exactitud de la detección automática de turnos: la vista previa editable existe precisamente para que revises y corrijas cualquier dato antes de confirmarlo.
-- El uso de la aplicación está sujeto a los Términos de uso y la Política de privacidad, accesibles desde el pie de página de la aplicación.
+1. **Naturaleza del servicio:** los turnos calculados y visualizados constituyen una copia de trabajo auxiliar. En caso de contradicción con las comunicaciones formales de tu empresa, prevalecerá en todo momento el cuadrante oficial expedido por el empleador.
+2. **Revisión del usuario:** la existencia de la vista previa editable responde al deber del usuario de verificar la fidelidad de los turnos detectados antes de prestar su conformidad.
+3. **Ámbito normativo:** ShiftImport no realiza cómputos salariales vinculantes, liquidaciones de cotización a la Seguridad Social ni certificaciones legales de jornada a efectos de inspección laboral.
 
 <div class="footer-brand">
-© 2026 Anclora Group — Anclora ShiftImport es un producto del ecosistema Anclora Group.
+© 2026 Anclora Group — Anclora ShiftImport es un producto del ecosistema Anclora Group. Todos los derechos reservados.
 </div>

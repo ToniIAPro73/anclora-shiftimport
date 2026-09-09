@@ -508,23 +508,23 @@ a { color: inherit; text-decoration: none; }
 /* ─── ÍNDICE ──────────────────────────────────────────────────────────────── */
 .toc-page { page-break-after: always; }
 .kicker { color: #9a7a31; font-size: 8pt; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; }
-.toc-page h1 { margin: 0 0 3mm; color: #0f1a2e; font-family: Fraunces, Georgia, serif; font-size: 28pt; font-weight: 600; }
-.toc-intro { width: 126mm; margin-bottom: 7mm; color: #48586b; font-size: 10.3pt; }
+.toc-page h1 { margin: 0 0 2mm; color: #0f1a2e; font-family: Fraunces, Georgia, serif; font-size: 24pt; font-weight: 600; }
+.toc-intro { width: 130mm; margin-bottom: 3.5mm; color: #48586b; font-size: 9.5pt; line-height: 1.35; }
 .toc-list { border-top: 1px solid #c7a451; }
 .toc-row {
   display: grid;
-  grid-template-columns: 13mm auto 1fr 12mm;
+  grid-template-columns: 11mm auto 1fr 10mm;
   align-items: baseline;
-  gap: 3mm;
-  min-height: 5mm;
-  padding: 1.8mm 0;
+  gap: 2.5mm;
+  min-height: 3.8mm;
+  padding: 1.0mm 0;
   border-bottom: 1px solid #e4ddd1;
   color: #0f1a2e;
 }
-.toc-num { color: #9a7a31; font-size: 8pt; font-weight: 800; letter-spacing: 0.1em; }
-.toc-title { font-family: Fraunces, Georgia, serif; font-size: 11pt; }
-.toc-rule { border-bottom: 1px dotted #b8c0c5; transform: translateY(-1.5mm); }
-.toc-pageno { color: #0f1a2e; font-weight: 800; text-align: right; }
+.toc-num { color: #9a7a31; font-size: 7.5pt; font-weight: 800; letter-spacing: 0.08em; }
+.toc-title { font-family: Fraunces, Georgia, serif; font-size: 9.8pt; }
+.toc-rule { border-bottom: 1px dotted #b8c0c5; transform: translateY(-1.2mm); }
+.toc-pageno { color: #0f1a2e; font-size: 9.5pt; font-weight: 800; text-align: right; }
 
 /* ─── SECCIONES ───────────────────────────────────────────────────────────── */
 .manual-section { page-break-before: always; }
