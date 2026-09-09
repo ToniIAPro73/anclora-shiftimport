@@ -3230,6 +3230,37 @@ select:disabled {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-gutter: stable;
+  /* CX-F01: without this, deleting a row above the fold triggers browser
+     scroll-anchoring, which shifts the remaining rows up under the sticky
+     thead — visually indistinguishable from the header "growing" downward
+     until it covers the next row's trash button. Focus placement after a
+     delete is already handled explicitly (UXR-F1-M01); anchoring only
+     fights that. */
+  overflow-anchor: none;
+}
+
+/* CX-F01: collapsed by default on narrow viewports once the parse has
+   produced rows to review — the file/identity block no longer eats the
+   fixed modal height, leaving 0px for the row list (audit: five rows in
+   the DOM, list measuring 0px). Never unmounted: only hidden, so editing
+   state and the temporal decision survive expanding/collapsing (AC-3).
+   The detail block is only ever gated by `+` off the summary bar, so on
+   desktop (where the bar stays display:none) it keeps its normal flex
+   layout regardless of viewport — nothing to collapse when there is room. */
+.import-modal-identity-summary {
+  display: none;
+}
+
+.import-modal-identity-detail {
+  display: flex;
+}
+
+/* CX-F01 / UXR-F2-M02: the per-field card caption only exists to replace
+   the visual column header once the table becomes a stack of cards below
+   768px (see the media query) — on any wider viewport the real <thead> is
+   still visible, so showing this too would be genuinely redundant text. */
+.import-row-card-label {
+  display: none;
 }
 
 .import-modal__footer {
@@ -4806,7 +4837,18 @@ button[aria-busy='true'] {
 
 
 
-@media (max-width: 760px) {
+/* CX-F01 / UXR-F2-M02: 768px is not a guess — it is the exact width the
+   audit measured columns cramping at (E061, 768x1024). At 760px and below
+   the grid already stacked to one column (giving the shifts panel the
+   modal's full width); widening the threshold to 768px folds that same
+   viewport into the stacked, card-row layout instead of leaving it on the
+   two-column desktop grid where six inputs had to share roughly a third of
+   the width. 1024px (the next matrix point) has ample room for the table.
+   The `(max-height: 420px)` arm is the other half of the P1: 844x390 is
+   WIDE (844 > 768, so the width arm alone never matches it) but too SHORT
+   for the fixed two-column shell — the audit measured the exact same 0px
+   list there as at 390x844, for the same underlying reason. */
+@media (max-width: 768px), (max-height: 420px) {
   .import-modal-overlay {
     align-items: center;
     justify-content: center;
@@ -4838,6 +4880,77 @@ button[aria-busy='true'] {
     min-height: 0;
   }
 
+  /* CX-F01: the toggle bar (and the collapse it gates) is only meaningful
+     at narrow widths, and only once parsing produced a summary bar to
+     toggle from — the sibling selector keeps the pre-parse upload/identity
+     fields fully visible even at this width (no bar rendered yet, so
+     nothing here matches). */
+  .import-modal-identity-summary {
+    display: flex;
+  }
+
+  .import-modal-identity-summary + .import-modal-identity-detail {
+    display: none;
+  }
+
+  .import-modal-identity-summary + .import-modal-identity-detail.import-modal-identity-detail--expanded {
+    display: flex;
+  }
+
+  /* CX-F01 / UXR-F2-M02: table columns become stacked cards. The thead is
+     hidden visually only — every field already carries its own aria-label
+     (row + field, UXR-F1-M01) that never depended on <th> association, so
+     hiding it loses nothing for assistive tech. Each field's compact
+     visible caption (.import-row-card-label, hidden by default in the
+     table view above) is the sighted replacement for the column header. */
+  .import-row-table thead {
+    display: none;
+  }
+
+  .import-row-table,
+  .import-row-table tbody,
+  .import-row-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .import-row-table tr {
+    border: 1px solid var(--border-soft);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    padding: 8px;
+  }
+
+  .import-row-table td {
+    display: block;
+    padding: 6px 4px !important;
+  }
+
+  .import-row-table td:last-child {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .import-row-card-label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-subtle);
+    margin-bottom: 2px;
+  }
+
+  /* That block gets its own bounded scroll region instead of an unbounded
+     natural height — never clipped (overflow-y:auto, not hidden): the
+     future-import consent choice is required reading (DO_NOT_BREAK). Its
+     automatic min-height resolves to 0 (overflow other than visible), so it
+     can shrink to make real room for the row list below, on either arm of
+     this query. */
+  .import-modal-review-extra {
+    flex: 0 1 auto;
+    overflow-y: auto;
+    max-height: 34vh;
+  }
+
   .jt-counter-modal-content {
     width: 100% !important;
     max-width: none !important;
@@ -4847,6 +4960,46 @@ button[aria-busy='true'] {
 
   .jt-counter-modal-grid {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* CX-F01 AC-2 (390x844 and narrower/similar portrait widths — plenty of
+   vertical room once the identity block is collapsed): a generous floor so
+   at least one full review card is visible without scrolling, not just a
+   sliver — measured regression without any floor: the list's own
+   flex:1 1 auto lost the fight against the review-extra block below it
+   down to 2px even after the identity block collapsed (§2.0.2 root cause,
+   the P1 itself). Scoped to width only — see the height-only arm below for
+   why 844x390 needs a different number instead of this one. */
+@media (max-width: 768px) and (min-height: 421px) {
+  .import-modal__shifts-list {
+    min-height: 180px;
+  }
+}
+
+/* CX-F01 AC-2 (844x390 and similarly short landscape phones): the total
+   modal budget here is only ~370px, of which the whole shifts panel gets
+   roughly 100px after the header — there is no room for a 180px floor
+   without it overflowing its own flex container (measured: forcing 180px
+   here pushed the list's box below the panel's clipped bounds, hiding it
+   entirely — worse than the un-floored 2px). A modest floor keeps the
+   area genuinely positive and scrollable, matching what AC-2 actually
+   requires (positive height, reachable actions) without re-breaking the
+   layout it sits in; a full unscrolled row is not achievable in 390px of
+   total height and is not what AC-2 for this viewport asks for. */
+@media (max-height: 420px) {
+  .import-modal__shifts-list {
+    min-height: 64px;
+  }
+
+  /* Quality chips / diagnostics / format-assistant status group: shrinks
+     and scrolls internally instead of pushing the list to nothing — see
+     the JSX comment at .import-modal-review-status for why this group
+     alone already exceeded the panel's ~100px budget at 844x390. */
+  .import-modal-review-status {
+    flex: 0 1 auto;
+    overflow-y: auto;
+    max-height: 30vh;
   }
 }
 
@@ -4966,6 +5119,13 @@ button[aria-busy='true'] {
 @media (max-width: 760px) and (max-height: 700px) {
   .import-modal-right {
     min-height: 0;
+  }
+
+  /* CX-F01 AC-2: even in short landscape (e.g. 844x390) the row list must
+     keep a positive, non-zero height — a hard floor, not just "whatever is
+     left" — so the confirm-blocking preview never fully disappears. */
+  .import-modal__shifts-list {
+    min-height: 96px;
   }
 }
 

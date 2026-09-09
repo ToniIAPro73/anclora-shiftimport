@@ -17,7 +17,8 @@ import {
   updateRemoteEmployee,
   RemoteEmployee,
 } from '../../lib/remote';
-import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv, UserCsvRow } from '../../lib/bulk-import-csv';
+import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv } from '../../lib/bulk-import-csv';
+import { classifyUserRow, EMAIL_FORMAT_RE, UserPreviewRow, UserPreviewStatus } from '../../lib/classify-user-row';
 import { findActiveArea } from '../../lib/areas';
 import { ModalShell } from '../ui/ModalShell';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -64,20 +65,6 @@ interface EmployeePreviewRow {
   errorMessage?: string;
 }
 
-type UserPreviewStatus =
-  | 'new_and_link' | 'existing_and_link' | 'no_employee' | 'already_linked'
-  | 'employee_not_found' | 'employee_already_linked' | 'user_already_linked'
-  | 'invalid_role' | 'invalid_email' | 'duplicate_in_file';
-
-interface UserPreviewRow {
-  row: UserCsvRow;
-  status: UserPreviewStatus;
-  /** Locally-resolved target employee (by external_employee_id), when any. */
-  employee?: RemoteEmployee;
-}
-
-const EMAIL_FORMAT_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /** One row of the bulk "Conceder acceso" panel (Fase 4) — always keyed by
  * employeeId, never by row index, since rows can be removed independently. */
 interface BulkGrantRow {
@@ -97,6 +84,7 @@ const bulkStatusLabelKey: Record<Exclude<BulkMemberStatus, 'error'>, string> = {
 const userPreviewStatusKey: Record<UserPreviewStatus, string> = {
   new_and_link: 'members.previewStatusNewAndLink',
   existing_and_link: 'members.previewStatusExistingAndLink',
+  new_no_employee: 'members.previewStatusNewNoEmployee',
   no_employee: 'members.previewStatusNoEmployee',
   already_linked: 'members.previewStatusAlreadyLinked',
   employee_not_found: 'members.previewStatusEmployeeNotFound',
@@ -105,6 +93,7 @@ const userPreviewStatusKey: Record<UserPreviewStatus, string> = {
   invalid_role: 'members.previewStatusInvalidRole',
   invalid_email: 'members.previewStatusInvalidEmail',
   duplicate_in_file: 'members.previewStatusDuplicateInFile',
+  duplicate_employee_id_in_file: 'members.previewStatusDuplicateEmployeeIdInFile',
 };
 
 const bulkResultCodeKey: Record<string, string> = {
@@ -115,62 +104,6 @@ const bulkResultCodeKey: Record<string, string> = {
   EMPLOYEE_ALREADY_LINKED: 'members.resultCodeEmployeeAlreadyLinked',
   USER_ALREADY_LINKED: 'members.resultCodeUserAlreadyLinked',
 };
-
-/**
- * Preview-only classification (Fase 4): informational, mirrors the backend's
- * own validation/guards (bulkAddMembers in api/_lib/data.js) so the ADMIN
- * sees an accurate picture before confirming — the server independently
- * re-validates every row, this is never trusted as authorization.
- */
-function classifyUserRow(
-  row: UserCsvRow,
-  seenEmails: Set<string>,
-  members: RemoteMember[],
-  employees: RemoteEmployee[],
-): UserPreviewRow {
-  if (row.rowError === 'missingEmail' || !row.email || !EMAIL_FORMAT_RE.test(row.email)) {
-    return { row, status: 'invalid_email' };
-  }
-  if (row.rowError === 'invalidRole' || !row.role) {
-    return { row, status: 'invalid_role' };
-  }
-  if (seenEmails.has(row.email)) {
-    return { row, status: 'duplicate_in_file' };
-  }
-  seenEmails.add(row.email);
-
-  let employee: RemoteEmployee | undefined;
-  if (row.externalEmployeeId) {
-    employee = employees.find((candidate) => candidate.externalEmployeeId === row.externalEmployeeId);
-    if (!employee) {
-      return { row, status: 'employee_not_found' };
-    }
-  }
-
-  const existingMember = members.find((member) => member.email.toLowerCase() === row.email);
-  const linkedEmployee = existingMember
-    ? employees.find((candidate) => candidate.userId === existingMember.userId)
-    : undefined;
-
-  if (employee?.userId && employee.userId !== existingMember?.userId) {
-    return { row, status: 'employee_already_linked', employee };
-  }
-  if (employee && linkedEmployee && linkedEmployee.id !== employee.id) {
-    return { row, status: 'user_already_linked', employee };
-  }
-
-  if (existingMember) {
-    if (employee && linkedEmployee?.id === employee.id) {
-      return { row, status: 'already_linked', employee };
-    }
-    if (employee) {
-      return { row, status: 'existing_and_link', employee };
-    }
-    return { row, status: linkedEmployee ? 'already_linked' : 'no_employee', employee: linkedEmployee };
-  }
-
-  return employee ? { row, status: 'new_and_link', employee } : { row, status: 'no_employee' };
-}
 
 /**
  * B2B organization management (ADMIN only, Fase 1.1 PASO 9 + bulk import).
@@ -902,8 +835,9 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
       setUsersCsvError(t('members.csvParseError'));
       return;
     }
-    const seenEmails = new Set<string>();
-    setUsersPreview(rows.map((row) => classifyUserRow(row, seenEmails, members, employees)));
+    const seenEmails = new Map<string, number>();
+    const seenExternalEmployeeIds = new Map<string, number>();
+    setUsersPreview(rows.map((row, index) => classifyUserRow(row, index, seenEmails, seenExternalEmployeeIds, members, employees)));
   };
 
   /** Sends every parsed row in one bulk call — the backend is the single
@@ -997,8 +931,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                   {t('members.usersPreviewSummary', {
                     total: usersPreview.length,
                     existing: usersPreview.filter((entry) => entry.status === 'existing_and_link' || entry.status === 'already_linked' || entry.status === 'no_employee').length,
-                    new: usersPreview.filter((entry) => entry.status === 'new_and_link').length,
-                    errors: usersPreview.filter((entry) => !['new_and_link', 'existing_and_link', 'already_linked', 'no_employee'].includes(entry.status)).length,
+                    new: usersPreview.filter((entry) => entry.status === 'new_and_link' || entry.status === 'new_no_employee').length,
+                    // Every remaining status is a blocking conflict for that row (invalid
+                    // data, an id/email repeated in the file, or a link collision) — never
+                    // silently folded into "new" or "existing" (CX-F05 AC-3: the sum must
+                    // equal the total and match what confirmation will actually execute).
+                    errors: usersPreview.filter((entry) => !['new_and_link', 'new_no_employee', 'existing_and_link', 'already_linked', 'no_employee'].includes(entry.status)).length,
                   })}
                 </p>
                 <div className="members-submode-scroll">
@@ -1017,7 +955,12 @@ export const MembersModal = ({ isOpen, onClose, employees, areas = [], currentUs
                       <span>{entry.row.role || '—'}</span>
                       <span>{entry.employee?.name ?? '—'}</span>
                       <span>{areaLabel(entry.employee?.areaId)}</span>
-                      <span>{t(userPreviewStatusKey[entry.status])}</span>
+                      <span>
+                        {t(userPreviewStatusKey[entry.status])}
+                        {entry.duplicateOfIndex !== undefined && (
+                          <> {t('members.previewDuplicateReference', { row: entry.duplicateOfIndex + 1 })}</>
+                        )}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -707,7 +707,14 @@ Validación: 8 viewports; preview con históricos/futuros y por rol; casos nuevo
 - Manual: parse completo + revisión + confirmación en los 3 viewports críticos, cuenta sintética
   EMPLOYEE.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — AC-1/AC-2/AC-3 verificados con medición real (Playwright): `shifts-list.height`
+390×844=180px, 844×390=64px (antes 0px ambos). Causa raíz completa: no sólo el bloque de
+identidad/archivo — el bloque de diff/temporal/consentimiento de futuros, DEBAJO de la lista dentro
+del mismo panel, también competía por el espacio fijo y por sí solo excedía el presupuesto; extraído
+a `.import-modal-review-extra`/`.import-modal-review-status` con scroll propio (nunca oculto —
+DO_NOT_BREAK). `thead` sticky corregido con `overflow-anchor: none`. Ver
+`docs/roadmap/UXR-F2-HIGH-IMPACT-GATE.md` §3.1/§4 para la evidencia completa y los huecos declarados
+(matriz PNG completa y doble corrida de baseline no ejecutadas).
 
 ---
 
@@ -764,7 +771,13 @@ Validación: 8 viewports; preview con históricos/futuros y por rol; casos nuevo
   `npm run build`.
 - Manual: edición y borrado de fila en layout de tarjeta, cuenta sintética EMPLOYEE.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — breakpoint **768px confirmado con datos** (anchura exacta donde la auditoría
+midió columnas comprimidas, E061; no 760px por costumbre). Medido: input de fecha en modo tarjeta
+639px de ancho (antes ~66px). `<thead>` oculto visualmente sin pérdida de accesibilidad (cada input
+ya lleva `aria-label` propio, nunca dependió de `<th>`). Arrastre de Fase 1 §2.0.1 corregido:
+identificador de fila por fecha (`turno del 2026-09-15`), no por ordinal. AC-3: mismo DOM tabla↔tarjeta
+(reestilo CSS puro, `.import-row-table`), por construcción no puede perder foco/valor al cambiar de
+layout — cubierto por el test existente de edición.
 
 ---
 
@@ -816,7 +829,10 @@ Validación: 8 viewports; preview con históricos/futuros y por rol; casos nuevo
 - Automatizado: `npx vitest run src/lib/import-temporal.test.ts`, `npx tsc --noEmit`, `npm run lint`.
 - Manual: no aplica (función pura, sin UI en esta microtarea).
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — `deriveEffectiveTemporalSummary` implementada tal como el contrato de
+`02_DATA_API_CONTRACT.md` la definía, sin cambios de firma. AC-1 y AC-2 cubiertos literalmente por
+test (5 casos: EMPLOYEE+draft, EMPLOYEE+historical-only, ADMIN+historical-only, ADMIN+draft, sin
+futuros).
 
 ---
 
@@ -869,7 +885,12 @@ Validación: 8 viewports; preview con históricos/futuros y por rol; casos nuevo
 - Manual: import con futuros para EMPLOYEE (excluido) y ADMIN (toggle históricos↔futuros), cuentas
   sintéticas de ambos roles.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` (huecos: sin captura visual 1440×900×claro/oscuro×ES/EN — ver gate) — badge
+`import-future-count` consume `deriveEffectiveTemporalSummary`; texto condicional ("Se crearían N
+borradores...") sólo cuando `includedAsDraft>0`, texto explícito de exclusión cuando
+`excludedByRole>0` (nunca oculto). AC-1/AC-2 cubiertos por test de componente (EMPLOYEE con futuros:
+badge y `import-self-future-notice` coinciden en "cero borradores"; ADMIN: badge cambia al alternar
+historical-only↔draft). DO_NOT_BREAK "nunca publicar automáticamente" verificado explícitamente.
 
 ---
 
@@ -931,7 +952,13 @@ Validación: 8 viewports; preview con históricos/futuros y por rol; casos nuevo
   `npm run lint`.
 - Manual: no aplica en esta microtarea (lógica pura; la UI se valida en `UXR-F2-M06`).
 
-**Estado**: `PENDING`
+**Estado**: `DONE` — **ubicación real**: `classifyUserRow` extraído a `src/lib/classify-user-row.ts`
+(precedente `bulk-import-csv.ts`), no dejado como función local del componente. Bug real encontrado
+en `MembersModal.tsx` (no sólo el descrito en la spec): `no_employee` se devolvía tanto para "cuenta
+existente sin empleado" como para "email nuevo sin vínculo" — nuevo status `new_no_employee` separa
+el segundo caso. Nuevo eje `seenExternalEmployeeIds` (análogo a `seenEmails`) para el AC-2, status
+`duplicate_employee_id_in_file` + `duplicateOfIndex`. 8 tests unitarios cubren los 2 AC más casos de
+regresión (email duplicado sin afectar por el nuevo eje, id no coincidente = `employee_not_found`).
 
 ---
 
@@ -988,7 +1015,13 @@ Validación: 8 viewports; preview con históricos/futuros y por rol; casos nuevo
 - Manual: carga del fixture corregido (`UXR-F1-M04`) con filas nuevas/existentes/duplicadas,
   cuenta sintética ADMIN.
 
-**Estado**: `PENDING`
+**Estado**: `DONE` (hueco: sin captura visual 1440×900×claro/oscuro — ver gate) — resumen de conteos
+recalculado sobre los nuevos ejes de M05 (`new_and_link`+`new_no_employee`→"nuevas";
+`existing_and_link`+`already_linked`+`no_employee`→"ya son miembros"; el resto→"errores", incluido el
+nuevo duplicado). Test de componente con los 4 casos exactos de la auditoría en un único CSV de 5
+filas: `5 filas · 2 ya son miembros · 2 nuevas · 1 errores` — AC-3 verificado, la suma cuadra
+exactamente con el total. Motivo del duplicado mostrado por fila ("(ver fila N)"), no sólo en el
+agregado.
 
 ---
 

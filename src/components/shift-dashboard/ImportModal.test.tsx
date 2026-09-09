@@ -227,6 +227,37 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(loadFormatProfiles()[0].useCount).toBe(1);
   });
 
+  // CX-F01 / UXR-F2-M01 AC-3: the identity/file summary is collapsible on
+  // narrow viewports (CSS-driven; invisible to jsdom, verified visually in
+  // the Playwright baseline harness) but the underlying fields are never
+  // unmounted — toggling it must never lose an edited value.
+  it('toggling the identity/file summary never unmounts the fields: edits survive collapse/expand (CX-F01 AC-3)', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-identity-summary')).toBeTruthy());
+    const toggle = screen.getByTestId('import-identity-toggle');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+    const nameInput = screen.getByPlaceholderText('Nombre del empleado') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'Edited Name' } });
+    expect(nameInput.value).toBe('Edited Name');
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    // Same input, not a remount: the edited value is still there.
+    expect((screen.getByPlaceholderText('Nombre del empleado') as HTMLInputElement).value).toBe('Edited Name');
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect((screen.getByPlaceholderText('Nombre del empleado') as HTMLInputElement).value).toBe('Edited Name');
+  });
+
+  it('the identity/file summary only appears after a parse produced rows — nothing to collapse before that', () => {
+    renderImportModal('es', () => {});
+    expect(screen.queryByTestId('import-identity-summary')).toBeNull();
+  });
+
   it('requires an explicit future-draft choice and defaults to historical-only', async () => {
     mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
       shifts: [makeShift({ date: '2099-03-04' })],
@@ -563,6 +594,39 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(document.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 
+  // CX-F01 / UXR-F2-M02 §2.0.1: the row's accessible name is keyed by its
+  // own date, not by position — so it stays correct after an earlier row
+  // is deleted and everything below it renumbers. This was the Fase 1
+  // defect: "Hora de fin, turno 3" became "turno 2" after a delete, no
+  // longer identifying the same row a screen-reader user had just heard.
+  it('row labels are keyed by date, not position: deleting an earlier row never relabels a later one (§2.0.1)', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult());
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByText('2 nuevos')).toBeTruthy());
+    expect(screen.getByLabelText('Fecha, turno del 2026-03-05')).toBeTruthy();
+
+    // Delete the first row (2026-03-04).
+    const rows = document.querySelectorAll('tbody tr');
+    fireEvent.click(within(rows[0] as HTMLElement).getByRole('button'));
+
+    await waitFor(() => expect(document.querySelectorAll('tbody tr')).toHaveLength(1));
+    // The surviving row is now at index 0, but its label still names its
+    // own date — never "turno 1", which would misidentify it.
+    expect(screen.getByLabelText('Fecha, turno del 2026-03-05')).toBeTruthy();
+    expect(screen.queryByLabelText('Fecha, turno 1')).toBeNull();
+  });
+
+  it('falls back to the positional ordinal only when the row has no usable date (§2.0.1)', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts: [makeShift({ date: '' })],
+      quality: { shifts: [makeShift({ date: '' })], confidence: 1, warnings: [], state: 'REVIEW' },
+    }));
+    renderImportModal('es', () => {}, { initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Eliminar turno 1' })).toBeTruthy());
+  });
+
   it('unsupported format rejects: UNSUPPORTED state rendered, explanatory text, confirm disabled, no assistant', async () => {
     mockedAnalyzeDocumentFile.mockRejectedValue(new IngestionError('UNSUPPORTED_FORMAT', 'Formato no soportado.'));
 
@@ -606,6 +670,25 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
     expect(screen.queryByLabelText('Nombre')).toBeNull();
     expect(screen.queryByPlaceholderText('Nombre del empleado')).toBeNull();
     expect(screen.queryByPlaceholderText('ID de empleado')).toBeNull();
+  });
+
+  // CX-F04 / UXR-F2-M04 AC-1: locked identity (EMPLOYEE) with future rows
+  // must show zero drafts and an explicit reason — never the "will create
+  // drafts" badge that the self-future notice directly contradicts.
+  it('locked identity with future shifts: badge and notice agree that zero drafts will be created', async () => {
+    mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+      shifts: [makeShift({ date: '2099-03-04' })],
+      quality: { shifts: [makeShift({ date: '2099-03-04' })], confidence: 1, warnings: [], state: 'CORRECT' },
+    }));
+    renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, initialFile: csvFile() });
+
+    await waitFor(() => expect(screen.getByTestId('import-self-future-notice')).toBeTruthy());
+    expect(screen.getByTestId('import-self-future-notice').textContent).toContain('no se creará planificación');
+
+    const badge = screen.getByTestId('import-future-count');
+    expect(badge.textContent).toBe('1 turnos futuros detectados; no se crearán borradores con la opción actual');
+    // EMPLOYEE never gets the consent toggle: the decision is not theirs to make.
+    expect(screen.queryByTestId('import-future-consent')).toBeNull();
   });
 
   it('unlocked (guest) identity: Name/ID stay editable inputs', () => {
@@ -976,6 +1059,36 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       expect(confirmBtn.disabled).toBe(true);
       fireEvent.click(confirmBtn);
       expect(onConfirmImport).not.toHaveBeenCalled();
+    });
+
+    // CX-F04 / UXR-F2-M04 AC-2: the badge must never claim drafts will be
+    // created while the effective decision is historical-only, and must
+    // switch to the conditional "would create" wording once draft is chosen.
+    it('badge never promises drafts under historical-only, switches to conditional wording under draft (CX-F04)', async () => {
+      mockedDetectTeamRoster.mockReturnValue(null);
+      mockedAnalyzeDocumentFile.mockResolvedValue(makeResult({
+        shifts: [
+          makeShift({ date: '2099-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular' }),
+        ],
+      }));
+
+      renderImportModal('es', () => {}, {
+        initialFile: csvFile(),
+        existingShifts: [],
+        identityLocked: false,
+      });
+
+      await waitFor(() => expect(screen.getByTestId('import-future-count')).toBeTruthy());
+      expect(screen.getByTestId('import-future-count').textContent).toBe(
+        '1 turnos futuros detectados; no se crearán borradores con la opción actual',
+      );
+
+      const draftOption = screen.getByLabelText(/Importar históricos y añadir los futuros a planificación en borrador/i);
+      fireEvent.click(draftOption);
+
+      expect(screen.getByTestId('import-future-count').textContent).toBe(
+        'Se crearían 1 borradores de turnos futuros (sin publicar)',
+      );
     });
 
     it('mixed shifts: enablement follows selected temporal option and recalculates actionable count', async () => {

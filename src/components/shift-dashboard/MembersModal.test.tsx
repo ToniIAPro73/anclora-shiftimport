@@ -310,7 +310,62 @@ describe('MembersModal — bulk users CSV import + automatic linking', () => {
     fireEvent.change(input, { target: { files: [usersCsv()] } });
 
     await waitFor(() => expect(screen.getByText('Usuario nuevo + vincular')).toBeTruthy());
-    expect(screen.getByText('Usuario sin empleado')).toBeTruthy(); // the admin row has no external id
+    // CX-F05: a brand-new email with no external id is "new, unlinked" — never
+    // the ambiguous "Usuario sin empleado" label, which now means an existing
+    // member without a linked employee (a different row shape entirely).
+    expect(screen.getByText('Usuario nuevo sin vínculo')).toBeTruthy(); // the admin row has no external id
+    expect(screen.queryByText('Usuario sin empleado')).toBeNull();
+    // CX-F05 AC-3: both rows are brand-new, so the resume must count 2 "new",
+    // not 1 — the presentation defect the audit measured was exactly this.
+    expect(screen.getByText('2 filas · 0 ya son miembros · 2 nuevas · 0 errores')).toBeTruthy();
+  });
+
+  // CX-F05 / UXR-F2-M06 AC-2 + AC-3: the four cases the audit named — new
+  // unlinked, existing linked, existing unlinked, and a repeated new
+  // external id — classified correctly, with a per-row reference to the
+  // duplicated row and a summary whose buckets sum to the file total.
+  it('classifies all four CX-F05 cases and the summary sums to the file total', async () => {
+    mockedListRemoteMembers.mockResolvedValue([
+      { userId: 'u-existente', email: 'existente@example.com', displayName: 'Existente', role: 'ADMIN' },
+      { userId: 'u-vinculado', email: 'vinculado@example.com', displayName: 'Vinculada', role: 'PLANNER' },
+    ]);
+    renderMembersModal([
+      remoteEmployee({ id: 'e1', name: 'Empleado Uno', externalEmployeeId: 'EMP1', userId: null }),
+      remoteEmployee({ id: 'e2', name: 'Empleado Dos', externalEmployeeId: 'EMP2', userId: null }),
+    ]);
+    // classifyUserRow reads the `members` state populated by an async reload
+    // on mount — wait for it before uploading, or every row would wrongly
+    // see an empty member list and misclassify as brand-new.
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+    await screen.findByText('Existente');
+
+    const csv = new File(
+      [
+        'email,name,role,external_employee_id\n' +
+        'nuevo1@example.com,Nueva Uno,EMPLOYEE,\n' +
+        'existente@example.com,Existente,ADMIN,\n' +
+        'vinculado@example.com,Vinculada,PLANNER,EMP1\n' +
+        'duplicado@example.com,Duplicado,EMPLOYEE,EMP2\n' +
+        'duplicado2@example.com,Duplicado Dos,EMPLOYEE,EMP2\n',
+      ],
+      'cuatro-casos.csv',
+      { type: 'text/csv' },
+    );
+
+    fireEvent.click(screen.getByText('Importar CSV'));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csv] } });
+
+    // 5 rows total: 2 new (nuevo1, duplicado) + 2 existing (existente,
+    // vinculado) + 1 error (the duplicate id) — sums to 5.
+    await waitFor(() => expect(screen.getByText('5 filas · 2 ya son miembros · 2 nuevas · 1 errores')).toBeTruthy());
+    expect(screen.getByText('Usuario nuevo sin vínculo')).toBeTruthy();
+    expect(screen.getByText('Usuario existente sin empleado vinculado')).toBeTruthy();
+    expect(screen.getByText('Usuario existente + vincular')).toBeTruthy();
+    expect(screen.getByText('Usuario nuevo + vincular')).toBeTruthy();
+    // AC-2: the duplicate references row 4 (1-based), where EMP2 was first claimed.
+    expect(screen.getByText(/ID de empleado duplicado en este archivo/)).toBeTruthy();
+    expect(screen.getByText(/\(ver fila 4\)/)).toBeTruthy();
   });
 
   it('confirm sends one bulk request and shows one-time temporary passwords + linked count', async () => {

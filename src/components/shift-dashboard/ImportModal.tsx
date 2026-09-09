@@ -36,7 +36,7 @@ import { AssistantAnswers, buildProfileFromTokenMeanings, buildCodeOverridesFrom
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { RemoteArea } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
-import { splitImportByOperationalDate } from '../../lib/import-temporal';
+import { deriveEffectiveTemporalSummary, splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
 import { FutureImportConsent } from './FutureImportConsent';
 
@@ -107,6 +107,7 @@ const WARNING_I18N_KEYS: Record<ImportWarningCode, string> = {
 
 const MAX_VISIBLE_WARNINGS = 4;
 const XLSX_STYLE_TOKEN_PREFIX = '__xlsx_style__:';
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type ColorResolution =
   | { kind: 'shift-type'; typeId: string }
@@ -359,6 +360,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [selfAmbiguous, setSelfAmbiguous] = useState(false);
   const [selfImportSummary, setSelfImportSummary] = useState<SelfImportSummary | null>(null);
   const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
+  // CX-F01: on narrow viewports the file/identity block ate all the fixed
+  // modal height, leaving 0px for the shifts list (audit: five rows in the
+  // DOM, list measuring 0px). Collapsed by default so review has room;
+  // never unmounted, so expanding/collapsing or rotating never loses edits
+  // (AC-3) — the underlying fields keep this same component's state. Only
+  // relevant post-parse: pre-parse, the block is always the full height it
+  // needs to be, there is nothing to collapse.
+  const [identitySummaryExpanded, setIdentitySummaryExpanded] = useState(false);
   const [colorResolutions, setColorResolutions] = useState<Record<string, ColorResolution>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialFileHandledRef = useRef<File | null>(null);
@@ -405,6 +414,16 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
       future: split.future.length,
     };
   }, [parsedShifts]);
+
+  // The badge must announce the effective destination, not the raw detected
+  // count: role and the historical-only/draft decision can exclude every
+  // future row from ever becoming a draft (CX-F04 — the precommit must not
+  // promise a destination the confirmation will not honor).
+  const effectiveTemporalSummary = useMemo(() => {
+    const ready = parsedShifts.filter(hasImportableShiftData);
+    const split = splitImportByOperationalDate(ready);
+    return deriveEffectiveTemporalSummary(split, { identityLocked, decision: futureImportDecision });
+  }, [parsedShifts, identityLocked, futureImportDecision]);
 
   const actionableCount = useMemo(() => {
     if (parsedShifts.length === 0) {
@@ -1180,6 +1199,31 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
         <div className="import-modal__content import-modal-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 0.9fr) minmax(0, 1.1fr)', gap: '18px', flex: 1, overflow: 'hidden' }}>
           <div className="import-modal__left import-modal-left" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: '10px', minWidth: 0, overflow: 'hidden' }}>
+            {parsedShifts.length > 0 && (
+              <div
+                className="import-modal-identity-summary"
+                data-testid="import-identity-summary"
+                style={{ alignItems: 'center', justifyContent: 'space-between', gap: '10px', minWidth: 0 }}
+              >
+                <span style={{ fontSize: '0.8rem', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {[file?.name, employeeName, detectedPeriodLabel].filter(Boolean).join(' · ')}
+                </span>
+                <button
+                  type="button"
+                  data-testid="import-identity-toggle"
+                  className="btn-outline"
+                  aria-expanded={identitySummaryExpanded}
+                  onClick={() => setIdentitySummaryExpanded((expanded) => !expanded)}
+                  style={{ padding: '6px 10px', fontSize: '0.76rem', fontWeight: 700, flexShrink: 0 }}
+                >
+                  {t(identitySummaryExpanded ? 'importModal.identityCollapse' : 'importModal.identityExpand')}
+                </button>
+              </div>
+            )}
+            <div
+              className={`import-modal-identity-detail${identitySummaryExpanded ? ' import-modal-identity-detail--expanded' : ''}`}
+              style={{ flexDirection: 'column', gap: '10px', minWidth: 0 }}
+            >
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                 <span>{t('importModal.nameLabel')}</span>
@@ -1352,6 +1396,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 ) : t('importModal.process')}
               </button>
             </div>
+            </div>
           </div>
 
           <div className="import-modal__shifts-panel import-modal-right" style={{ display: 'flex', flexDirection: 'column', background: 'var(--panel-muted-bg)', borderRadius: '16px', padding: '16px', overflow: 'hidden', minWidth: 0 }}>
@@ -1362,6 +1407,17 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </span>
             </div>
 
+            {/* CX-F01 (UXR-F2-M01), 844x390 arm: quality chips, diagnostics
+                and the format assistant used to be fixed-size siblings of
+                the row list within the same ~100px budget the short-landscape
+                panel actually has — on their own they already exceeded it,
+                squeezing the list to nothing even after §M01's other fixes.
+                They get the same shrink-and-scroll treatment as
+                import-modal-review-extra below, only at that extreme height
+                (see the (max-height:420px) rule) — never hidden outright,
+                since a blocking diagnostic living in here is exactly what
+                must stay visible (DO_NOT_BREAK: avisos de filas excluidas). */}
+            <div className="import-modal-review-status">
             {diagnosis && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
                 <span
@@ -1655,10 +1711,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   : 'importModal.formatMemoryUnavailable')}
               </p>
             )}
+            </div>
 
             <div className="import-modal__shifts-list" style={{ border: '1px solid var(--glass-border)', borderRadius: '12px' }}>
               {parsedShifts.length > 0 ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                <table className="import-row-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead style={{ position: 'sticky', top: 0, background: 'var(--table-head-bg)', zIndex: 10 }}>
                     <tr>
                       <th style={{ padding: '12px', textAlign: 'left', borderBottom: '1px solid var(--glass-border)' }}>{t('importModal.colDate')}</th>
@@ -1679,39 +1736,51 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                       // (warning date context / unknown token in the raw cell).
                       const needsAttention = incomplete || (quality?.state === 'REVIEW' && isWarningLinkedRow(shift));
                       const rowNumber = index + 1;
+                      // §2.0.1 (Fase 1 carryover): identify the row by its
+                      // own date when it has one — stable across inserts/
+                      // deletes, unlike the positional ordinal, which is
+                      // exactly why the label used to go stale on delete.
+                      const rowLabel = ISO_DATE_RE.test(shift.date)
+                        ? t('importModal.rowLabelByDate', { date: shift.date })
+                        : t('importModal.rowLabelByOrdinal', { row: rowNumber });
                       return (
                         <tr key={index} style={{ borderBottom: '1px solid var(--border-soft)', background: needsAttention ? 'var(--danger-row-bg)' : 'transparent' }}>
                           <td style={{ padding: '8px' }}>
-                            <input type="text" className="modal-input" aria-label={t('importModal.rowDateAria', { row: rowNumber })} value={shift.date} onChange={(event) => handleUpdateShift(index, 'date', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
+                            <span className="import-row-card-label">{t('importModal.colDate')}</span>
+                            <input type="text" className="modal-input" aria-label={t('importModal.rowDateAria', { rowLabel })} value={shift.date} onChange={(event) => handleUpdateShift(index, 'date', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
                           </td>
                           <td style={{ padding: '8px' }}>
+                            <span className="import-row-card-label">{t('importModal.colOrigin')}</span>
                             <input
                               type="text"
                               className="modal-input"
-                              aria-label={t('importModal.rowOriginAria', { row: rowNumber })}
+                              aria-label={t('importModal.rowOriginAria', { rowLabel })}
                               value={shift.sourceFormat ? getImportFormatLabel(shift.sourceFormat) : (detectedFormat ?? '')}
                               readOnly
                               style={{ padding: '6px', fontSize: '0.8rem', opacity: 0.85 }}
                             />
                           </td>
                           <td style={{ padding: '8px' }}>
-                            <input type="text" className="modal-input" aria-label={t('importModal.rowTypeAria', { row: rowNumber })} value={shift.shiftType ?? ''} onChange={(event) => handleUpdateShift(index, 'shiftType', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
+                            <span className="import-row-card-label">{t('importModal.colType')}</span>
+                            <input type="text" className="modal-input" aria-label={t('importModal.rowTypeAria', { rowLabel })} value={shift.shiftType ?? ''} onChange={(event) => handleUpdateShift(index, 'shiftType', event.target.value)} style={{ padding: '6px', fontSize: '0.8rem' }} />
                           </td>
                           <td style={{ padding: '8px' }}>
+                            <span className="import-row-card-label">{t('importModal.colStart')}</span>
                             <input
                               type="text"
                               className="modal-input"
-                              aria-label={t('importModal.rowStartAria', { row: rowNumber })}
+                              aria-label={t('importModal.rowStartAria', { rowLabel })}
                               value={isNonWorking && shift.startTime === '??:??' ? '' : shift.startTime}
                               onChange={(event) => handleUpdateShift(index, 'startTime', event.target.value)}
                               style={{ padding: '6px', fontSize: '0.8rem', color: !isNonWorking && shift.startTime === '??:??' ? 'var(--danger)' : 'inherit' }}
                             />
                           </td>
                           <td style={{ padding: '8px' }}>
+                            <span className="import-row-card-label">{t('importModal.colEnd')}</span>
                             <input
                               type="text"
                               className="modal-input"
-                              aria-label={t('importModal.rowEndAria', { row: rowNumber })}
+                              aria-label={t('importModal.rowEndAria', { rowLabel })}
                               value={isNonWorking && shift.endTime === '??:??' ? '' : shift.endTime}
                               onChange={(event) => handleUpdateShift(index, 'endTime', event.target.value)}
                               style={{ padding: '6px', fontSize: '0.8rem', color: !isNonWorking && shift.endTime === '??:??' ? 'var(--danger)' : 'inherit' }}
@@ -1721,7 +1790,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                             <button
                               type="button"
                               ref={(el) => { rowRemoveButtonRefs.current[index] = el; }}
-                              aria-label={t('importModal.removeRowAria', { row: rowNumber })}
+                              aria-label={t('importModal.removeRowAria', { rowLabel })}
                               disabled={interactionLocked}
                               onClick={() => handleRemoveShift(index)}
                               style={{ color: 'var(--danger)', padding: '6px' }}
@@ -1759,13 +1828,31 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               )}
             </div>
 
+            {/* CX-F01 (UXR-F2-M01): this block — diff/temporal badges, the
+                future-import consent fieldset, and the empty-result notices
+                — used to compete with the row list above for the same fixed
+                height, squeezing the list to a couple of px on narrow
+                viewports even after collapsing the identity block. It gets
+                its own scroll region below 768px instead (never clipped —
+                the future-consent choice is required reading, per
+                DO_NOT_BREAK) so the row list keeps its min-height floor. */}
+            <div className="import-modal-review-extra">
             {readyShifts.length > 0 && (
               <div style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-subtle)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {importDiff.new.length > 0 && <span>{t('importModal.diffNew', { count: importDiff.new.length })}</span>}
                 {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
                 {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
                 {temporalSummary.historical > 0 && <span data-testid="import-historical-count">{t('importModal.temporalHistorical', { count: temporalSummary.historical })}</span>}
-                {temporalSummary.future > 0 && <span data-testid="import-future-count">{t('importModal.temporalFutureDraft', { count: temporalSummary.future })}</span>}
+                {effectiveTemporalSummary.includedAsDraft > 0 && (
+                  <span data-testid="import-future-count">
+                    {t('importModal.temporalFutureDraft', { count: effectiveTemporalSummary.includedAsDraft })}
+                  </span>
+                )}
+                {effectiveTemporalSummary.includedAsDraft === 0 && effectiveTemporalSummary.excludedByRole > 0 && (
+                  <span data-testid="import-future-count">
+                    {t('importModal.temporalFutureExcluded', { count: effectiveTemporalSummary.excludedByRole })}
+                  </span>
+                )}
               </div>
             )}
 
@@ -1806,6 +1893,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 </div>
               )
             )}
+            </div>
 
           </div>
         </div>

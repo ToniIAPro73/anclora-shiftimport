@@ -37,12 +37,12 @@ desviaciones respecto a esta spec (si las hay) y decisiones tomadas durante la i
 
 | ID | Título | Estado |
 |---|---|---|
-| UXR-F2-M01 | CX-F01 — resumen expandible + región visible mínima | PENDING |
-| UXR-F2-M02 | CX-F01 — adaptar filas a lectura móvil | PENDING |
-| UXR-F2-M03 | CX-F04 — derivar resumen temporal efectivo (lib) | PENDING |
-| UXR-F2-M04 | CX-F04 — consumir resumen efectivo en el badge (UI) | PENDING |
-| UXR-F2-M05 | CX-F05 — separar existencia/vínculo, detectar duplicado intra-fichero (lib) | PENDING |
-| UXR-F2-M06 | CX-F05 — mostrar clasificación y conteos consistentes (UI) | PENDING |
+| UXR-F2-M01 | CX-F01 — resumen expandible + región visible mínima | DONE (AC funcionales con medición real; ver gate §3.1/§3.4 para huecos de captura) |
+| UXR-F2-M02 | CX-F01 — adaptar filas a lectura móvil | DONE (breakpoint 768px medido, no adivinado) |
+| UXR-F2-M03 | CX-F04 — derivar resumen temporal efectivo (lib) | DONE |
+| UXR-F2-M04 | CX-F04 — consumir resumen efectivo en el badge (UI) | DONE (sin captura visual — NOT_EVALUATED en gate) |
+| UXR-F2-M05 | CX-F05 — separar existencia/vínculo, detectar duplicado intra-fichero (lib) | DONE (extraído a `src/lib/classify-user-row.ts`) |
+| UXR-F2-M06 | CX-F05 — mostrar clasificación y conteos consistentes (UI) | DONE (sin captura visual — NOT_EVALUATED en gate) |
 
 ### Fase 3 — Estructura (6)
 
@@ -196,6 +196,71 @@ desviaciones respecto a esta spec (si las hay) y decisiones tomadas durante la i
   `03_IMPLEMENTATION_PLAN.md` (fixture cargable por el parser real). La pata NOT_EVALUATED de M04
   (verificación por `MembersModal` en vivo) y el hallazgo del `thead` sticky quedan como riesgo
   heredado para Fase 2/3.
+
+---
+
+### 2026-09-09 — Fase 2 completa (PASS_WITH_GAPS)
+
+- **HEAD antes/después**: `cbd642d` (sin cambio de HEAD — nada commiteado en esta pasada; Fase 1 ya
+  en las 4 ramas remotas).
+- **Ficheros tocados**: `src/lib/import-temporal.ts` (+`deriveEffectiveTemporalSummary`),
+  `src/components/shift-dashboard/ImportModal.tsx` (badge CX-F04, resumen colapsable + layout de
+  tarjeta CX-F01, identificador de fila por fecha §2.0.1), `src/components/shift-dashboard/MembersModal.tsx`
+  (CX-F05, `classifyUserRow` extraído), `src/index.css` (breakpoint 768px, colapso de identidad,
+  layout de tarjeta, min-height de la lista, scroll propio de los bloques de estado). Nuevo:
+  `src/lib/classify-user-row.ts` + `.test.ts`. Tests ampliados: `import-temporal.test.ts`,
+  `ImportModal.test.tsx`, `MembersModal.test.tsx`. Harness: nuevo
+  `qa/e2e-acceptance/specs-baseline/uxr-f2-import-preview-evidence.spec.ts`.
+- **Orden de ejecución**: Cadena A (M03→M04) → Cadena B (M05→M06) → Cadena C (M01→M02), como manda
+  el prompt de fase.
+- **UXR-F2-M03/M04 (CX-F04)**: `deriveEffectiveTemporalSummary(split, {identityLocked, decision})`
+  pura en `import-temporal.ts`; el badge `import-future-count` ahora usa `includedAsDraft` (tiempo
+  condicional: "Se crearían N borradores...") o, cuando `excludedByRole>0`, un texto explícito de
+  exclusión — nunca el conteo detectado crudo como si fuera destino. Dos claves i18n nuevas
+  (`temporalFutureExcluded`, reescrita `temporalFutureDraft`). No publica nada; función pura + copy.
+- **UXR-F2-M05/M06 (CX-F05)**: `classifyUserRow` extraído de `MembersModal.tsx` a
+  `src/lib/classify-user-row.ts` (precedente `bulk-import-csv.ts`). Bug real encontrado: el status
+  `no_employee` se devolvía tanto para "cuenta existente sin empleado" (línea ~169 original) como
+  para "email nuevo sin vínculo" (línea ~172), y el resumen agregaba ambos bajo "existente" — de ahí
+  el defecto medido. Nuevo status `new_no_employee` para el segundo caso; el resumen ahora los cuenta
+  por separado. Nuevo eje de duplicado: `seenExternalEmployeeIds` (análogo a `seenEmails`), status
+  `duplicate_employee_id_in_file` con `duplicateOfIndex`, mostrado en la preview como "(ver fila N)".
+- **UXR-F2-M01 (CX-F01, el P1)**: colapso 100% CSS del bloque de archivo/identidad tras el parse
+  (`.import-modal-identity-summary + .import-modal-identity-detail`, selector de hermano — nunca
+  desmonta el subárbol, así que no puede perder ediciones). **Hallazgo no anticipado por la spec,
+  causa raíz real del 0px**: el bloque de identidad NO era el único culpable — el bloque de
+  diff/temporal/consentimiento de futuros, DEBAJO de la lista de filas dentro del mismo panel flex,
+  competía por el mismo espacio fijo y por sí solo ya excedía el presupuesto disponible. Se extrajo a
+  `.import-modal-review-extra` (y las chips de calidad/diagnóstico a `.import-modal-review-status`),
+  ambos con `flex:0 1 auto; overflow-y:auto` en viewports estrechos/cortos — nunca `display:none`
+  (DO_NOT_BREAK: avisos de filas excluidas). A 844×390 el presupuesto real del panel completo es
+  ~100px tras la cabecera; con eso, una fila de tarjeta de 354px no cabe sin scroll — el AC-2 exige
+  "altura positiva y acciones no recortadas" (cumplido, medido: 64px), no "fila completa sin scroll"
+  (eso es AC-1, para 390×844, donde sí se cumple con 180px). Corrección de `thead` sticky: añadido
+  `overflow-anchor: none` (evita que el scroll-anchoring del navegador reposicione filas bajo la
+  cabecera al borrar, la causa técnica exacta del drift documentado en Fase 1).
+- **UXR-F2-M02 (CX-F01)**: breakpoint **768px** elegido y medido (no 760px por costumbre, no
+  adivinado) — es la anchura exacta donde la auditoría midió columnas comprimidas (E061). Tabla
+  reestilizada a tarjetas vía CSS puro (`.import-row-table`, mismo DOM, `<thead>` oculto
+  visualmente — cada input ya lleva su propio `aria-label`, nunca dependió de `<th>`). Arrastre de
+  Fase 1 corregido (§2.0.1): el identificador de fila pasa de ordinal (`turno 3`, se desactualizaba
+  al borrar) a fecha (`turno del 2026-09-15`, estable), con fallback a ordinal sólo si la fecha es
+  inválida/vacía. Claves i18n nuevas: `rowLabelByDate`, `rowLabelByOrdinal`.
+- **Medición real (Playwright, Chromium, `@playwright/test` — no `agent-browser`)**: ver
+  `qa/e2e-acceptance/artifacts/uxr-f2-evidence/measurements.json`. `shifts-list.height`: 180px
+  (390×844, antes 0px), 64px (844×390, antes 0px); input de fecha en modo tarjeta: 639px de ancho
+  (768×1024, antes ~66px compartidos entre 6 columnas); axe: 0 violaciones (390×844, ES, claro).
+- **Tests ejecutados y resultado**: `npm test`/`tsc --noEmit`/`lint`/`build` en verde antes y después
+  — 158 ficheros / 1486 tests (+20 netos sobre el cierre de Fase 1), cero regresiones.
+- **Huecos declarados (no ocultos, ver gate §3.4/§3.5/§3.6)**: sin matriz PNG 8×2×2 completa; sin
+  doble corrida de `compare-baseline-runs.mjs` para confirmar si `import-preview` sale de
+  `DECLARED_UNSTABLE_SCREENS`; sin recalificación formal de scorecards (mejora medida pero no
+  convertida en rating GOOD/FAIR defendible sin el re-audit completo de Fase 4); axe y teclado sólo
+  verificados en una combinación de viewport/tema/locale, no en todas las pantallas tocadas.
+- **Siguiente paso**: Fase 3 puede empezar (CX-F02/F06/F07) — ninguna de sus dependencias declaradas
+  se apoya en los huecos de esta fase. Quien cierre los huecos de evidencia visual de Fase 2 puede
+  reutilizar `uxr-f2-import-preview-evidence.spec.ts` como base, ampliándolo a M04/M06 y a la matriz
+  completa.
 
 ---
 
