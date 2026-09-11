@@ -25,6 +25,7 @@ const changeRequestApplicationMigrationPath = resolve(dirname(fileURLToPath(impo
 const importOutcomeMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0033_import_outcome.sql');
 const shiftTypeSemanticsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0034_shift_type_semantics.sql');
 const operationalAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0035_operational_assignments.sql');
+const temporalOrgModelMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0036_temporal_organizational_model.sql');
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {
@@ -418,5 +419,65 @@ describe('0035 operational assignments migration contract', () => {
     expect(sql).toContain("'ASSIGNMENT_CREATED'");
     expect(sql).toContain("'ASSIGNMENT_UPDATED'");
     expect(sql).toContain("'ASSIGNMENT_REMOVED'");
+  });
+});
+
+describe('0036 temporal organizational model migration contract', () => {
+  it('enables btree_gist and adds composite unique constraint to areas', async () => {
+    const sql = await readFile(temporalOrgModelMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE EXTENSION IF NOT EXISTS btree_gist');
+    expect(sql).toContain('ALTER TABLE areas');
+    expect(sql).toContain('ADD CONSTRAINT areas_id_organization_id_key UNIQUE (id, organization_id)');
+  });
+
+  it('creates the 6 normalized temporal tables with multi-tenant composite keys', async () => {
+    const sql = await readFile(temporalOrgModelMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS organization_people');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS employee_profiles');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS person_role_periods');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS employee_area_periods');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS person_access_scope_periods');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS reporting_relationship_periods');
+
+    expect(sql).toContain('CONSTRAINT organization_people_id_org_unique UNIQUE (id, organization_id)');
+    expect(sql).toContain('CONSTRAINT organization_people_org_user_unique UNIQUE (organization_id, user_id)');
+    expect(sql).toContain('CONSTRAINT employee_profiles_person_unique UNIQUE (organization_person_id)');
+    expect(sql).toContain('CONSTRAINT employee_profiles_id_org_unique UNIQUE (id, organization_id)');
+    expect(sql).toContain('REFERENCES organization_people (id, organization_id) ON DELETE CASCADE');
+  });
+
+  it('enforces exclusion constraints for non-overlapping roles, areas, and scopes', async () => {
+    const sql = await readFile(temporalOrgModelMigrationPath, 'utf8');
+    expect(sql).toContain('person_role_periods_no_overlap_excl');
+    expect(sql).toContain("daterange(valid_from, valid_to, '[]') WITH &&");
+    expect(sql).toContain('employee_area_periods_no_same_area_overlap_excl');
+    expect(sql).toContain('employee_area_periods_single_primary_overlap_excl');
+    expect(sql).toContain('person_access_scope_org_no_overlap_excl');
+    expect(sql).toContain('person_access_scope_area_no_overlap_excl');
+    expect(sql).toContain('person_access_scope_person_no_overlap_excl');
+    expect(sql).toContain('reporting_relationship_periods_self_supervision_check');
+    expect(sql).toContain('reporting_relationship_periods_single_primary_overlap_excl');
+  });
+
+  it('contains deterministic backfill from legacy tables', async () => {
+    const sql = await readFile(temporalOrgModelMigrationPath, 'utf8');
+    expect(sql).toContain('INSERT INTO organization_people');
+    expect(sql).toContain('FROM memberships m');
+    expect(sql).toContain('temp_unlinked_emp_backfill');
+    expect(sql).toContain('INSERT INTO employee_profiles');
+    expect(sql).toContain('INSERT INTO person_role_periods');
+    expect(sql).toContain("'LEGACY_CURRENT_STATE'");
+    expect(sql).toContain('INSERT INTO employee_area_periods');
+    expect(sql).toContain('INSERT INTO person_access_scope_periods');
+  });
+
+  it('creates the 4 canonical current views', async () => {
+    const sql = await readFile(temporalOrgModelMigrationPath, 'utf8');
+    expect(sql).toContain('CREATE OR REPLACE VIEW current_person_roles AS');
+    expect(sql).toContain('CREATE OR REPLACE VIEW current_employee_areas AS');
+    expect(sql).toContain('CREATE OR REPLACE VIEW current_person_access_scopes AS');
+    expect(sql).toContain('CREATE OR REPLACE VIEW current_reporting_relationships AS');
+    expect(sql).toContain('valid_from <= CURRENT_DATE');
+    expect(sql).toContain('valid_to >= CURRENT_DATE');
   });
 });

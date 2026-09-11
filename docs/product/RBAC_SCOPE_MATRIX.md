@@ -1,8 +1,9 @@
 # RBAC & Scope Authorization Matrix — P5.7
 
 **Canonical Authority**: `docs/product/RBAC_SCOPE_MATRIX.md`  
+**Underlying Architecture**: `docs/product/TEMPORAL_ORGANIZATIONAL_MODEL.md` (Phase 1 Temporal Model Foundation)  
 **Status**: APPROVED / CONTRACTUAL  
-**Date**: 2026-09-07  
+**Date**: 2026-09-07 (Updated 2026-09-12)  
 **Scope**: Anclora ShiftImport P5.7 — Team, Roles, Scopes & Organizational Management
 
 ---

@@ -64,12 +64,13 @@ async function main() {
     `;
     const expectedTables = [
       '_migrations', 'areas', 'approval_requests', 'area_responsibles',
-      'change_requests', 'employees', 'format_profiles', 'imports',
-      'login_attempts', 'memberships', 'notifications', 'oauth_identities',
-      'operational_assignments', 'organization_audit_events', 'organizations',
-      'password_reset_tokens', 'schedule_versions', 'schedules', 'sessions',
-      'shift_acknowledgements', 'shift_assignments', 'shift_comments', 'shifts',
-      'users',
+      'change_requests', 'employee_area_periods', 'employee_profiles', 'employees',
+      'format_profiles', 'imports', 'login_attempts', 'memberships', 'notifications',
+      'oauth_identities', 'operational_assignments', 'organization_audit_events',
+      'organization_people', 'organizations', 'password_reset_tokens',
+      'person_access_scope_periods', 'person_role_periods', 'reporting_relationship_periods',
+      'schedule_versions', 'schedules', 'sessions', 'shift_acknowledgements',
+      'shift_assignments', 'shift_comments', 'shifts', 'users',
     ];
     const actualTables = tableRows.map((row) => row.table_name);
     const missing = expectedTables.filter((table) => !actualTables.includes(table));
