@@ -15,6 +15,8 @@
  * 6. Seeds and asserts all 5 area backfill scenarios + employee link guarantee.
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { Client } from "@neondatabase/serverless";
 
@@ -58,7 +60,13 @@ export function validateTargetBranch(branch) {
     throw new Error(`Refusing to target default branch: '${name}'`);
   }
 
-  if (lower === "main" || lower === "master" || lower === "production") {
+  if (
+    lower === "main" ||
+    lower === "master" ||
+    lower === "production" ||
+    lower === "preview/production" ||
+    lower === "preview/staging"
+  ) {
     throw new Error(`Refusing to target production/main branch: '${name}'`);
   }
 
@@ -94,6 +102,95 @@ export function resolveNeonMainBranch(branches) {
 }
 
 /**
+ * Fetches all branches from Neon project via neonctl.
+ */
+export function fetchNeonBranches({ projectId = PROJECT_ID, neonctlExec = execFileSync } = {}) {
+  const raw = neonctlExec(
+    "npx",
+    ["neonctl", "branches", "list", "--project-id", projectId, "--output", "json"],
+    { encoding: "utf-8" }
+  );
+  return JSON.parse(raw);
+}
+
+/**
+ * Fetches all endpoints from Neon project via neonctl.
+ */
+export function fetchNeonEndpoints({ projectId = PROJECT_ID, neonctlExec = execFileSync } = {}) {
+  const raw = neonctlExec(
+    "npx",
+    ["neonctl", "api", `/projects/${projectId}/endpoints`],
+    { encoding: "utf-8" }
+  );
+  const parsed = JSON.parse(raw);
+  return Array.isArray(parsed) ? parsed : parsed.endpoints || [];
+}
+
+/**
+ * Resolves the actual Neon branch associated with a database connection string.
+ * Maps: connection string host -> Neon endpoint -> Neon branch.
+ */
+export function resolveBranchFromConnectionString(
+  connectionString,
+  { projectId = PROJECT_ID, neonctlExec = execFileSync, branches = null, endpoints = null } = {}
+) {
+  if (!connectionString || typeof connectionString !== "string") {
+    throw new Error("connectionString is required to resolve branch");
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(connectionString);
+  } catch (err) {
+    throw new Error(`Invalid connection string: ${err.message}`);
+  }
+
+  const hostname = parsedUrl.hostname;
+  if (!hostname) {
+    throw new Error(`Could not extract hostname from connection string: ${connectionString}`);
+  }
+
+  const endpointList = endpoints || fetchNeonEndpoints({ projectId, neonctlExec });
+  const matchedEndpoint = endpointList.find((ep) => {
+    if (ep.host === hostname) return true;
+    if (ep.hosts?.read_write_host === hostname) return true;
+    if (ep.hosts?.read_write_pooled_host === hostname) return true;
+    if (ep.id && (hostname.startsWith(ep.id + '.') || hostname.startsWith(ep.id + '-'))) return true;
+    return false;
+  });
+
+  if (!matchedEndpoint) {
+    throw new Error(`Could not identify Neon endpoint for host '${hostname}' in project '${projectId}'. Refusing to connect.`);
+  }
+
+  const branchId = matchedEndpoint.branch_id;
+  if (!branchId) {
+    throw new Error(`Neon endpoint '${matchedEndpoint.id}' has no associated branch_id. Refusing to connect.`);
+  }
+
+  const branchList = branches || fetchNeonBranches({ projectId, neonctlExec });
+  const matchedBranch = branchList.find((b) => b.id === branchId);
+  if (!matchedBranch) {
+    throw new Error(`Branch '${branchId}' associated with endpoint '${matchedEndpoint.id}' was not found in project '${projectId}'. Refusing to connect.`);
+  }
+
+  return matchedBranch;
+}
+
+/**
+ * Asserts that a connection string points to a verified, safe, temporal Neon branch.
+ * Fails closed before any database connection.
+ */
+export function assertSafeTemporalDatabaseUrl(
+  connectionString,
+  { projectId = PROJECT_ID, neonctlExec = execFileSync, targetBranch = null, branches = null, endpoints = null } = {}
+) {
+  const branch = targetBranch || resolveBranchFromConnectionString(connectionString, { projectId, neonctlExec, branches, endpoints });
+  validateTargetBranch(branch);
+  return branch;
+}
+
+/**
  * Resolves runner configuration without ever falling back to DATABASE_URL or POSTGRES_URL.
  */
 export function resolveRunnerConfig(env = process.env, options = {}) {
@@ -107,15 +204,22 @@ export function resolveRunnerConfig(env = process.env, options = {}) {
       );
     }
 
-    if (options.targetBranch) {
-      validateTargetBranch(options.targetBranch);
-    }
+    const neonctlExec = options.neonctlExec || execFileSync;
+    const projectId = options.projectId || PROJECT_ID;
+    const targetBranch = assertSafeTemporalDatabaseUrl(temporalDbUrl, {
+      projectId,
+      neonctlExec,
+      targetBranch: options.targetBranch,
+      branches: options.branches,
+      endpoints: options.endpoints,
+    });
 
     return {
       mode: "existing",
       connectionString: temporalDbUrl,
       isEphemeral: false,
       ignoredGenericUrl: Boolean(genericDbUrl),
+      targetBranch,
     };
   }
 
@@ -126,18 +230,6 @@ export function resolveRunnerConfig(env = process.env, options = {}) {
     isEphemeral: true,
     ignoredGenericUrl: Boolean(genericDbUrl),
   };
-}
-
-/**
- * Fetches all branches from Neon project via neonctl.
- */
-export function fetchNeonBranches({ projectId = PROJECT_ID, neonctlExec = execFileSync } = {}) {
-  const raw = neonctlExec(
-    "npx",
-    ["neonctl", "branches", "list", "--project-id", projectId, "--output", "json"],
-    { encoding: "utf-8" }
-  );
-  return JSON.parse(raw);
 }
 
 /**
@@ -340,15 +432,90 @@ export async function seedLegacyBackfillCases(client, { seedOrgId }) {
     [seedOrgId, c5Id, areaB, areaC]
   );
 
+  // Case Same-Area A: Open followed by closed in same area
+  const cSaRes = await client.query(
+    "INSERT INTO employees (organization_id, name, user_id, area_id, status, created_at) VALUES ($1, 'Emp Same-Area Open+Closed', NULL, NULL, 'active', '2026-01-01') RETURNING id",
+    [seedOrgId]
+  );
+  const cSaId = cSaRes.rows[0].id;
+  await client.query(
+    "INSERT INTO operational_assignments (organization_id, assignment_type, subject_id, target_id, valid_from, valid_to) VALUES " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-02-01', NULL), " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-05-01', '2026-08-31')",
+    [seedOrgId, cSaId, areaB]
+  );
+
+  // Case Same-Area B: Closed contained in open in same area
+  const cSbRes = await client.query(
+    "INSERT INTO employees (organization_id, name, user_id, area_id, status, created_at) VALUES ($1, 'Emp Same-Area Contained in Open', NULL, NULL, 'active', '2026-01-01') RETURNING id",
+    [seedOrgId]
+  );
+  const cSbId = cSbRes.rows[0].id;
+  await client.query(
+    "INSERT INTO operational_assignments (organization_id, assignment_type, subject_id, target_id, valid_from, valid_to) VALUES " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-01-01', NULL), " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-03-01', '2026-04-30')",
+    [seedOrgId, cSbId, areaB]
+  );
+
+  // Case Same-Area C: Consecutive and overlapping closed in same area
+  const cScRes = await client.query(
+    "INSERT INTO employees (organization_id, name, user_id, area_id, status, created_at) VALUES ($1, 'Emp Same-Area Consecutive Overlap', NULL, NULL, 'active', '2026-01-01') RETURNING id",
+    [seedOrgId]
+  );
+  const cScId = cScRes.rows[0].id;
+  await client.query(
+    "INSERT INTO operational_assignments (organization_id, assignment_type, subject_id, target_id, valid_from, valid_to) VALUES " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-02-01', '2026-04-30'), " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-05-01', '2026-07-31'), " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-07-15', '2026-09-30')",
+    [seedOrgId, cScId, areaB]
+  );
+
+  // Case Same-Area D: Legacy exact duplicates in same area
+  const cSdRes = await client.query(
+    "INSERT INTO employees (organization_id, name, user_id, area_id, status, created_at) VALUES ($1, 'Emp Same-Area Duplicates', NULL, NULL, 'active', '2026-01-01') RETURNING id",
+    [seedOrgId]
+  );
+  const cSdId = cSdRes.rows[0].id;
+  await client.query(
+    "INSERT INTO operational_assignments (organization_id, assignment_type, subject_id, target_id, valid_from, valid_to) VALUES " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-03-01', '2026-06-30'), " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-03-01', '2026-06-30')",
+    [seedOrgId, cSdId, areaB]
+  );
+
+  // Case Labor E: Clamping assignments to labor tenure (started_on / ended_on) and discarding empty intersections
+  const cLeRes = await client.query(
+    "INSERT INTO employees (organization_id, name, user_id, area_id, status, created_at, deactivated_at) VALUES " +
+      "($1, 'Emp Labor Clamped', NULL, NULL, 'inactive', '2026-02-01', '2026-08-31') RETURNING id",
+    [seedOrgId]
+  );
+  const cLeId = cLeRes.rows[0].id;
+  await client.query(
+    "INSERT INTO operational_assignments (organization_id, assignment_type, subject_id, target_id, valid_from, valid_to) VALUES " +
+      "($1, 'EMPLOYEE_AREA', $2, $3, '2026-01-01', '2026-10-31'), " +
+      "($1, 'EMPLOYEE_AREA', $2, $4, '2026-09-01', '2026-11-30')",
+    [seedOrgId, cLeId, areaB, areaC]
+  );
+
+  // Case Labor F: Inactive employee fallback cutoff (does NOT extend to infinity)
+  const cLfRes = await client.query(
+    "INSERT INTO employees (organization_id, name, user_id, area_id, status, created_at, deactivated_at) VALUES " +
+      "($1, 'Emp Inactive Fallback Cutoff', NULL, $2, 'inactive', '2026-01-01', '2026-05-31') RETURNING id",
+    [seedOrgId, areaA]
+  );
+  const cLfId = cLfRes.rows[0].id;
+
   return {
     areas: { areaA, areaB, areaC, areaD },
     users: { ownerId, adminId, plannerId, empUserId },
-    employees: { unlinkedEmpId, c1Id, c2Id, c3Id, c4Id, c5Id },
+    employees: { unlinkedEmpId, c1Id, c2Id, c3Id, c4Id, c5Id, cSaId, cSbId, cScId, cSdId, cLeId, cLfId },
   };
 }
 
 /**
- * Verifies that the backfill complied with all requirements for the 5 cases.
+ * Verifies that the backfill complied with all requirements for the cases.
  */
 export async function verifyLegacyBackfillResults(client, { seedOrgId, seedData }) {
   const { areas, users, employees } = seedData;
@@ -475,6 +642,60 @@ export async function verifyLegacyBackfillResults(client, { seedOrgId, seedData 
   if (!gapBefore || !gapBetween || !gapAfter) {
     throw new Error(`Case 5 fallback gaps failed: before=${Boolean(gapBefore)}, between=${Boolean(gapBetween)}, after=${Boolean(gapAfter)}`);
   }
+
+  // Case Same-Area A: Open followed by closed in same area -> single open period [2026-02-01, NULL]
+  const cSaPeriods = (await client.query(
+    "SELECT area_id, valid_from::text, valid_to::text, is_primary FROM employee_area_periods WHERE employee_profile_id = $1",
+    [employees.cSaId]
+  )).rows;
+  if (cSaPeriods.length !== 1 || cSaPeriods[0].area_id !== areas.areaB || cSaPeriods[0].valid_from !== '2026-02-01' || cSaPeriods[0].valid_to !== null) {
+    throw new Error(`Same-area Case A failed: expected 1 open period [2026-02-01, NULL], got ${JSON.stringify(cSaPeriods)}`);
+  }
+
+  // Case Same-Area B: Closed contained in open in same area -> single open period [2026-01-01, NULL]
+  const cSbPeriods = (await client.query(
+    "SELECT area_id, valid_from::text, valid_to::text, is_primary FROM employee_area_periods WHERE employee_profile_id = $1",
+    [employees.cSbId]
+  )).rows;
+  if (cSbPeriods.length !== 1 || cSbPeriods[0].area_id !== areas.areaB || cSbPeriods[0].valid_from !== '2026-01-01' || cSbPeriods[0].valid_to !== null) {
+    throw new Error(`Same-area Case B failed: expected 1 open period [2026-01-01, NULL], got ${JSON.stringify(cSbPeriods)}`);
+  }
+
+  // Case Same-Area C: Consecutive and overlapping closed in same area -> single merged period [2026-02-01, 2026-09-30]
+  const cScPeriods = (await client.query(
+    "SELECT area_id, valid_from::text, valid_to::text, is_primary FROM employee_area_periods WHERE employee_profile_id = $1",
+    [employees.cScId]
+  )).rows;
+  if (cScPeriods.length !== 1 || cScPeriods[0].area_id !== areas.areaB || cScPeriods[0].valid_from !== '2026-02-01' || cScPeriods[0].valid_to !== '2026-09-30') {
+    throw new Error(`Same-area Case C failed: expected 1 merged period [2026-02-01, 2026-09-30], got ${JSON.stringify(cScPeriods)}`);
+  }
+
+  // Case Same-Area D: Duplicates in same area -> single period [2026-03-01, 2026-06-30]
+  const cSdPeriods = (await client.query(
+    "SELECT area_id, valid_from::text, valid_to::text, is_primary FROM employee_area_periods WHERE employee_profile_id = $1",
+    [employees.cSdId]
+  )).rows;
+  if (cSdPeriods.length !== 1 || cSdPeriods[0].area_id !== areas.areaB || cSdPeriods[0].valid_from !== '2026-03-01' || cSdPeriods[0].valid_to !== '2026-06-30') {
+    throw new Error(`Same-area Case D failed: expected 1 period [2026-03-01, 2026-06-30], got ${JSON.stringify(cSdPeriods)}`);
+  }
+
+  // Case Labor E: Clamped to tenure [2026-02-01, 2026-08-31], outside assignment discarded
+  const cLePeriods = (await client.query(
+    "SELECT area_id, valid_from::text, valid_to::text, is_primary FROM employee_area_periods WHERE employee_profile_id = $1",
+    [employees.cLeId]
+  )).rows;
+  if (cLePeriods.length !== 1 || cLePeriods[0].area_id !== areas.areaB || cLePeriods[0].valid_from !== '2026-02-01' || cLePeriods[0].valid_to !== '2026-08-31') {
+    throw new Error(`Labor Case E failed: expected 1 clamped period [2026-02-01, 2026-08-31], got ${JSON.stringify(cLePeriods)}`);
+  }
+
+  // Case Labor F: Inactive employee fallback stops at deactivated_at (2026-05-31), NOT NULL
+  const cLfPeriods = (await client.query(
+    "SELECT area_id, valid_from::text, valid_to::text, is_primary FROM employee_area_periods WHERE employee_profile_id = $1",
+    [employees.cLfId]
+  )).rows;
+  if (cLfPeriods.length !== 1 || cLfPeriods[0].area_id !== areas.areaA || cLfPeriods[0].valid_from !== '2026-01-01' || cLfPeriods[0].valid_to !== '2026-05-31') {
+    throw new Error(`Labor Case F failed: expected fallback ending at 2026-05-31, got ${JSON.stringify(cLfPeriods)}`);
+  }
 }
 
 /**
@@ -597,14 +818,23 @@ export async function runTemporalIntegrationHarness(options = {}) {
     }
 
     // Step 4: Run PostgreSQL integration test suite
-    console.log("[runner] Step 4: Running 23-scenario PostgreSQL integration test suite (Vitest)...");
+    console.log("[runner] Step 4: Running PostgreSQL integration test suite (Vitest)...");
+    const reportFilePath = path.join(process.cwd(), `.vitest-temporal-report-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.json`);
     const testResult = spawnSyncFn(
       "npx",
-      ["vitest", "run", "db/temporal-org-model.integration.test.mjs"],
+      [
+        "vitest",
+        "run",
+        "db/temporal-org-model.integration.test.mjs",
+        "--reporter=default",
+        "--reporter=json",
+        `--outputFile=${reportFilePath}`,
+      ],
       {
         env: {
           ...env,
           TEMPORAL_MODEL_DATABASE_URL: connectionString,
+          TEMPORAL_RUNNER_ACCREDITED: "true",
           // Explicitly clear generic DB URLs
           DATABASE_URL: "",
           POSTGRES_URL: "",
@@ -613,11 +843,22 @@ export async function runTemporalIntegrationHarness(options = {}) {
       }
     );
 
+    // Extract actual test results dynamically from vitest json report
+    try {
+      if (fs.existsSync(reportFilePath)) {
+        const rawReport = fs.readFileSync(reportFilePath, "utf-8");
+        const parsedReport = JSON.parse(rawReport);
+        passedCount = Number(parsedReport.numPassedTests) || 0;
+        fs.unlinkSync(reportFilePath);
+      }
+    } catch (parseErr) {
+      console.warn(`[runner] Warning: Could not parse vitest JSON report: ${parseErr.message}`);
+    }
+
     if (testResult.status !== 0) {
       throw new Error(`Integration test suite failed with exit code ${testResult.status}`);
     }
 
-    passedCount = 23;
     console.log(`[runner] All ${passedCount} integration scenarios PASSED.`);
   } catch (err) {
     executionError = err;

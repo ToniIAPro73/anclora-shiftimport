@@ -298,23 +298,24 @@ Para evitar cualquier posibilidad de fuga de datos entre organizaciones (incluso
 * `shifts`: Sigue enlazando a `shifts.employee_id`.
 
 ### 6.2. Estrategia de Backfill Normalizado de Áreas
-La migración `0036_temporal_organizational_model.sql` implementa una estrategia de normalización determinista e idempotente para `employee_area_periods` basada en un pipeline CTE de 11 pasos:
-1. **Fusión de asignaciones contiguas/solapadas por área**: agrupa periodos de `operational_assignments` para la misma área mediante detección de islas (window functions `lag`).
-2. **Discretización en cortes temporales elementales (slices)**: proyecta todas las fechas límite de asignaciones explícitas y ciclo del empleado (`valid_from`, `valid_to + 1`, `created_at`, `deactivated_at + 1`) creando intervalos elementales no solapados `[slice_start, slice_end]`.
-3. **Determinación estricta de área primaria por corte**:
+La migración `0036_temporal_organizational_model.sql` implementa una estrategia de normalización determinista e idempotente para `employee_area_periods` basada en un pipeline CTE riguroso:
+1. **Recorte a vigencia laboral (clamping)**: en el CTE `clamped_oa`, toda asignación de `operational_assignments` se interseca con `daterange(ep.started_on, ep.ended_on, '[]')` y se descartan intersecciones vacías (`NOT isempty(...)`).
+2. **Normalización robusta de solapamientos en la misma área (NULL como infinito)**: mediante `COALESCE(valid_to, 'infinity'::date)`, el agrupamiento por islas fusiona unívocamente:
+   - Periodo abierto seguido de cerrado para la misma área (resultado: único periodo abierto).
+   - Periodo cerrado contenido dentro de un periodo abierto (resultado: único periodo abierto).
+   - Periodos cerrados consecutivos (día inmediatamente posterior) o solapados (resultado: único periodo continuo).
+   - Duplicados legacy exactos (resultado: único periodo deduplicado).
+   Todo ello sin generar duplicados secundarios ni conflictos de exclusión GiST.
+3. **Discretización en cortes temporales elementales (slices)**: proyecta todas las fechas límite de asignaciones explícitas y ciclo del empleado (`valid_from`, `valid_to + 1`, `started_on`, `ended_on + 1`), acotando los cortes estrictamente entre `started_on` y `ended_on`.
+4. **Determinación estricta de área primaria por corte**:
    - Si coincide con `employees.area_id`, tiene prioridad como primaria.
    - Si no, se elige la asignación con fecha de inicio más temprana (`valid_from`).
    - Desempate determinista por fecha de creación (`created_at`) y UUID de área (`area_id`).
    - Exactamente **como máximo un área primaria** en cualquier fecha.
-4. **Marcado de áreas concurrentes como secundarias**: todas las asignaciones explícitas adicionales que solapan en el mismo corte se registran como `is_primary = false`.
-5. **Fallback de `employees.area_id` en huecos temporales**: los cortes donde el empleado carece de asignaciones en `operational_assignments` se cubren con `employees.area_id` (`is_primary = true`, `source = 'LEGACY_EMPLOYEE_AREA_FALLBACK'`).
-6. **Fusión final de segmentos contiguos**: los cortes consecutivos con idéntica tupla `(area_id, is_primary, source)` se colapsan en un único rango continuo `[valid_from, valid_to]`.
-7. **Soporte exhaustivo verificado**:
-   - Rangos parcialmente solapados.
-   - Rangos contenidos (un periodo dentro de otro más amplio).
-   - Periodos abiertos (`valid_to IS NULL`) y asignaciones consecutivas.
-   - Múltiples áreas secundarias simultáneas.
-   - Fallback de `employees.area_id` cubriendo huecos antes, entre o después de asignaciones explícitas.
+5. **Marcado de áreas concurrentes como secundarias**: todas las asignaciones explícitas adicionales que solapan en el mismo corte se registran como `is_primary = false`.
+6. **Fallback de `employees.area_id` en huecos temporales sin extensión tras la baja**: los cortes donde el empleado carece de asignaciones en `operational_assignments` se cubren con `employees.area_id` (`is_primary = true`, `source = 'LEGACY_EMPLOYEE_AREA_FALLBACK'`). Si el empleado está inactivo o tiene `deactivated_at`, el fallback no se extiende al infinito y termina estrictamente en `ended_on` / `deactivated_at`.
+7. **Fusión final de segmentos contiguos**: los cortes consecutivos con idéntica tupla `(area_id, is_primary, source)` se colapsan en un único rango continuo `[valid_from, valid_to]`.
+8. **Restricción de vigencia laboral mediante Trigger**: el trigger de constraint `trg_check_employee_area_period_labor_validity` valida en inserciones y actualizaciones que todo `employee_area_periods` esté 100% contenido en `[started_on, ended_on]` del perfil, rechazando periodos fuera de contrato o asignaciones abiertas en empleados dados de baja.
 
 ---
 
@@ -349,9 +350,9 @@ Para simplificar el consumo en servicios de backend y frontend sin necesidad de 
 
 ## 9. Servicio de Transferencia Temporal de Propiedad (`transferOwnershipTemporal`)
 
-La función `transferOwnershipTemporal` (`api/_lib/temporal-org-model.js`) implementa la transferencia atómica y segura del rol `OWNER` con las siguientes garantías:
-1. **Transaccionalidad estricta**: exige `sql.transaction` y aborta de inmediato si no está disponible.
-2. **Bloqueo de concurrencia**: ejecuta `SELECT id FROM organizations WHERE id = $1 FOR UPDATE` para serializar transferencias concurrentes.
+La función `transferOwnershipTemporal` (`api/_lib/temporal-org-model.js`) implementa la transferencia atómica y segura del rol `OWNER` con protección estricta contra condiciones de carrera TOCTOU:
+1. **Transacción interactiva única**: toda la operación se ejecuta dentro de un callback interactivo iniciado por `sql.transaction(async (txn) => { ... })`.
+2. **Bloqueo exclusivo inmediato contra TOCTOU**: adquiere el bloqueo de fila `SELECT id FROM organizations WHERE id = $1 FOR UPDATE` al inicio de la transacción, antes de cualquier lectura, verificación de propietario o validación de estado. Esto serializa cualquier intento concurrente garantizando que solo uno consolide el traspaso y el segundo reciba un conflicto controlado.
 3. **Validación de requisitos del nuevo propietario**:
    - Pertenencia a la organización.
    - Presencia de `user_id`.
@@ -365,13 +366,13 @@ La función `transferOwnershipTemporal` (`api/_lib/temporal-org-model.js`) imple
 
 ## 10. Harness de Integración Reproducible y Seguro
 
-El script `scripts/run-temporal-org-model-integration.mjs` incorpora 6 garantías contra escrituras accidentales:
+El script `scripts/run-temporal-org-model-integration.mjs` incorpora garantías integrales contra mutaciones accidentales:
 1. **Prohibición de URLs genéricas**: ignora estrictamente `DATABASE_URL` y `POSTGRES_URL`.
-2. **Resolución dinámica de `main`**: consulta las ramas de Neon para localizar dinámicamente la rama `main` del proyecto `holy-cake-85660318`.
-3. **Aislamiento en rama efímera**: crea una rama hija temporal (`tmp-temporal-*`) de `main`, ejecuta semillas legacy, migración 0036, verificaciones y pruebas exclusivamente allí.
+2. **Resolución obligatoria de rama por endpoint (Neon API)**: si se especifica `TEMPORAL_MODEL_DATABASE_URL`, el runner mapea obligatoriamente el host contra los endpoints del proyecto Neon (`/projects/:id/endpoints`), localiza la rama real asociada y rechaza cualquier rama `main`, default, protegida, staging, production, development o sin prefijo temporal inequívoco (`tmp-`, `test-`, `ephemeral-`), fallando cerrado antes de cualquier conexión.
+3. **Aislamiento en rama efímera**: en modo por defecto, provisiona una rama hija temporal (`tmp-temporal-*`) de `main`, ejecuta semillas legacy (incluyendo los 4 casos de misma área y los 2 de vigencia laboral), migración 0036, verificaciones y pruebas exclusivamente allí.
 4. **Destrucción garantizada en `finally`**: destruye la rama efímera tanto si las pruebas pasan como si fallan. Si la destrucción falla, reporta `FAIL` y expone el ID de rama para limpieza manual.
-5. **Requisito explícito para bases existentes**: si se pasa `TEMPORAL_MODEL_DATABASE_URL`, exige `ALLOW_EXISTING_TEMPORAL_TEST_DATABASE=true` y valida que la rama no sea `main`, no sea default, no esté protegida y tenga prefijo temporal.
-6. **Suite de pruebas de seguridad**: `scripts/run-temporal-org-model-integration.test.mjs` verifica unitariamente las 6 propiedades de seguridad.
+5. **Acreditación de runner en pruebas directas**: `db/temporal-org-model.integration.test.mjs` exige acreditación de runner (`TEMPORAL_RUNNER_ACCREDITED=true`) o ejecuta validación contra Neon API antes de conectar.
+6. **Contabilización dinámica y real**: extrae el número de escenarios ejecutados directamente del informe estructurado JSON de Vitest, sin cifras hardcodeadas.
 
 ---
 

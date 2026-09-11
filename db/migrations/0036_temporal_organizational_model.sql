@@ -264,6 +264,16 @@ CREATE CONSTRAINT TRIGGER trg_check_reporting_relationship
   FOR EACH ROW
   EXECUTE FUNCTION check_reporting_relationship_validity();
 
+-- Trigger for employee area period labor validity (must be fully contained within employee profile tenure)
+CREATE OR REPLACE FUNCTION check_employee_area_period_labor_validity() RETURNS TRIGGER AS $$ DECLARE ep_started date; ep_ended date; BEGIN SELECT started_on, ended_on INTO ep_started, ep_ended FROM employee_profiles WHERE id = NEW.employee_profile_id AND organization_id = NEW.organization_id; IF NOT FOUND THEN RAISE EXCEPTION 'Employee profile % not found in organization %', NEW.employee_profile_id, NEW.organization_id; END IF; IF NOT (daterange(ep_started, ep_ended, '[]') @> daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Employee area period [%, %] is not fully contained within employee profile labor tenure [%, %]', NEW.valid_from, NEW.valid_to, ep_started, ep_ended; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_check_employee_area_period_labor_validity ON employee_area_periods;
+CREATE CONSTRAINT TRIGGER trg_check_employee_area_period_labor_validity
+  AFTER INSERT OR UPDATE ON employee_area_periods
+  DEFERRABLE INITIALLY IMMEDIATE
+  FOR EACH ROW
+  EXECUTE FUNCTION check_employee_area_period_labor_validity();
+
 -- =========================================================================
 -- DETERMINISTIC BACKFILL FROM LEGACY SCHEMAS
 -- =========================================================================
@@ -347,31 +357,40 @@ WHERE NOT EXISTS (
 -- Slices timeline into deterministic elementary intervals, merges same-area overlaps, selects exactly one primary area at any date,
 -- preserves concurrent secondary areas, and fills timeline gaps before/after explicit assignments with fallback area.
 WITH 
-ordered_oa AS (
+clamped_oa AS (
   SELECT 
     oa.organization_id,
     oa.subject_id AS employee_profile_id,
     oa.target_id AS area_id,
-    oa.valid_from,
-    oa.valid_to,
-    oa.created_at,
-    MAX(oa.valid_to) OVER (
-      PARTITION BY oa.organization_id, oa.subject_id, oa.target_id 
-      ORDER BY oa.valid_from ASC, oa.valid_to NULLS LAST
-      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-    ) AS prev_max_to
+    lower(daterange(oa.valid_from, oa.valid_to, '[]') * daterange(ep.started_on, ep.ended_on, '[]')) AS valid_from,
+    CASE 
+      WHEN upper_inf(daterange(oa.valid_from, oa.valid_to, '[]') * daterange(ep.started_on, ep.ended_on, '[]')) THEN NULL 
+      ELSE (upper(daterange(oa.valid_from, oa.valid_to, '[]') * daterange(ep.started_on, ep.ended_on, '[]')) - 1)::date 
+    END AS valid_to,
+    oa.created_at
   FROM operational_assignments oa
   JOIN employees e ON e.id = oa.subject_id AND e.organization_id = oa.organization_id
   JOIN employee_profiles ep ON ep.id = oa.subject_id AND ep.organization_id = oa.organization_id
   JOIN areas a ON a.id = oa.target_id AND a.organization_id = oa.organization_id
   WHERE oa.assignment_type = 'EMPLOYEE_AREA'
+    AND NOT isempty(daterange(oa.valid_from, oa.valid_to, '[]') * daterange(ep.started_on, ep.ended_on, '[]'))
+),
+ordered_oa AS (
+  SELECT 
+    co.*,
+    MAX(COALESCE(co.valid_to, 'infinity'::date)) OVER (
+      PARTITION BY co.organization_id, co.employee_profile_id, co.area_id 
+      ORDER BY co.valid_from ASC, co.valid_to NULLS LAST
+      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+    ) AS prev_max_to
+  FROM clamped_oa co
 ),
 grouped_same_area AS (
   SELECT 
     ooa.*,
     SUM(CASE 
       WHEN prev_max_to IS NULL THEN 1
-      WHEN valid_from > prev_max_to + 1 THEN 1
+      WHEN valid_from > (prev_max_to + 1) THEN 1
       ELSE 0 
     END) OVER (
       PARTITION BY organization_id, employee_profile_id, area_id 
@@ -395,28 +414,38 @@ emp_points AS (
   UNION
   SELECT organization_id, employee_profile_id, (valid_to + 1)::date AS pt FROM same_area_merged WHERE valid_to IS NOT NULL
   UNION
-  SELECT e.organization_id, ep.id AS employee_profile_id, COALESCE(e.created_at::date, '2026-01-01'::date) AS pt 
-  FROM employees e
-  JOIN employee_profiles ep ON ep.id = e.id AND ep.organization_id = e.organization_id
-  JOIN areas a ON a.id = e.area_id AND a.organization_id = e.organization_id
+  SELECT ep.organization_id, ep.id AS employee_profile_id, COALESCE(ep.started_on, e.created_at::date, '2026-01-01'::date) AS pt 
+  FROM employee_profiles ep
+  JOIN employees e ON e.id = ep.id AND e.organization_id = ep.organization_id
   WHERE e.area_id IS NOT NULL
   UNION
-  SELECT e.organization_id, ep.id AS employee_profile_id, (e.deactivated_at::date + 1)::date AS pt 
-  FROM employees e
-  JOIN employee_profiles ep ON ep.id = e.id AND ep.organization_id = e.organization_id
-  JOIN areas a ON a.id = e.area_id AND a.organization_id = e.organization_id
-  WHERE e.area_id IS NOT NULL AND e.deactivated_at IS NOT NULL
+  SELECT ep.organization_id, ep.id AS employee_profile_id, (COALESCE(ep.ended_on, e.deactivated_at::date) + 1)::date AS pt 
+  FROM employee_profiles ep
+  JOIN employees e ON e.id = ep.id AND e.organization_id = ep.organization_id
+  WHERE e.area_id IS NOT NULL AND (ep.ended_on IS NOT NULL OR e.deactivated_at IS NOT NULL)
 ),
 dedup_points AS (
   SELECT DISTINCT organization_id, employee_profile_id, pt FROM emp_points
 ),
 slices AS (
   SELECT 
-    organization_id,
-    employee_profile_id,
-    pt AS slice_from,
-    (LEAD(pt) OVER (PARTITION BY organization_id, employee_profile_id ORDER BY pt ASC) - 1)::date AS slice_to
-  FROM dedup_points
+    dp.organization_id,
+    dp.employee_profile_id,
+    dp.pt AS slice_from,
+    CASE 
+      WHEN ep.ended_on IS NOT NULL OR e.deactivated_at IS NOT NULL THEN
+        LEAST(
+          (LEAD(dp.pt) OVER (PARTITION BY dp.organization_id, dp.employee_profile_id ORDER BY dp.pt ASC) - 1)::date,
+          COALESCE(ep.ended_on, e.deactivated_at::date)
+        )
+      ELSE
+        (LEAD(dp.pt) OVER (PARTITION BY dp.organization_id, dp.employee_profile_id ORDER BY dp.pt ASC) - 1)::date
+    END AS slice_to
+  FROM dedup_points dp
+  JOIN employee_profiles ep ON ep.id = dp.employee_profile_id AND ep.organization_id = dp.organization_id
+  JOIN employees e ON e.id = dp.employee_profile_id AND e.organization_id = dp.organization_id
+  WHERE (ep.started_on IS NULL OR dp.pt >= ep.started_on)
+    AND (COALESCE(ep.ended_on, e.deactivated_at::date) IS NULL OR dp.pt <= COALESCE(ep.ended_on, e.deactivated_at::date))
 ),
 slice_eval AS (
   SELECT 
@@ -477,9 +506,10 @@ raw_segments AS (
 ordered_segments AS (
   SELECT 
     rs.*,
-    LAG(slice_to) OVER (
+    MAX(COALESCE(rs.slice_to, 'infinity'::date)) OVER (
       PARTITION BY organization_id, employee_profile_id, area_id, is_primary, source
       ORDER BY slice_from ASC, slice_to NULLS LAST
+      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
     ) AS prev_slice_to
   FROM raw_segments rs
 ),
@@ -488,7 +518,7 @@ grouped_segments AS (
     os.*,
     SUM(CASE 
       WHEN prev_slice_to IS NULL THEN 1
-      WHEN slice_from > prev_slice_to + 1 THEN 1
+      WHEN slice_from > (prev_slice_to + 1) THEN 1
       ELSE 0 
     END) OVER (
       PARTITION BY organization_id, employee_profile_id, area_id, is_primary, source

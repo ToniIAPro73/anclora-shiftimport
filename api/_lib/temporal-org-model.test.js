@@ -654,7 +654,13 @@ describe('temporal organizational model domain service', () => {
     });
 
     it('rejects future-dated transfers without automated scheduler', async () => {
-      const fakeSql = async () => [];
+      const fakeSql = async (strings) => {
+        const text = strings.join('?');
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
+        return [];
+      };
       fakeSql.transaction = async (fn) => fn(fakeSql);
       await expect(
         transferOwnershipTemporal(fakeSql, {
@@ -668,6 +674,9 @@ describe('temporal organizational model domain service', () => {
     it('rejects transfer if target person has no associated user_id', async () => {
       const fakeSql = async (strings) => {
         const text = strings.join('?');
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
         if (text.includes('FROM organization_people')) {
           return [{ id: personB, user_id: null, status: 'PENDING_INVITATION' }];
         }
@@ -687,6 +696,9 @@ describe('temporal organizational model domain service', () => {
     it('rejects transfer if target person is not in ACTIVE status', async () => {
       const fakeSql = async (strings) => {
         const text = strings.join('?');
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
         if (text.includes('FROM organization_people')) {
           return [{ id: personB, user_id: 'user-b-uuid', status: 'SUSPENDED' }];
         }
@@ -706,6 +718,9 @@ describe('temporal organizational model domain service', () => {
     it('rejects transfer if target person has no existing membership', async () => {
       const fakeSql = async (strings) => {
         const text = strings.join('?');
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
         if (text.includes('FROM organization_people')) {
           return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
         }
@@ -728,6 +743,9 @@ describe('temporal organizational model domain service', () => {
     it('rejects transfer if incompatible future role periods exist', async () => {
       const fakeSql = async (strings) => {
         const text = strings.join('?');
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
         if (text.includes('FROM organization_people')) {
           return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
         }
@@ -766,6 +784,10 @@ describe('temporal organizational model domain service', () => {
         const text = strings.join('?');
         executedQueries.push({ text, values });
 
+        // Organization lock
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
         // Target person lookup
         if (text.includes('FROM organization_people')) {
           return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
@@ -788,8 +810,7 @@ describe('temporal organizational model domain service', () => {
       };
 
       fakeSql.transaction = async (fn) => {
-        const queries = fn(fakeSql);
-        return await Promise.all(queries);
+        return await fn(fakeSql);
       };
 
       const result = await transferOwnershipTemporal(fakeSql, {
@@ -833,6 +854,9 @@ describe('temporal organizational model domain service', () => {
     it('rejects transfer if target is same as current owner', async () => {
       const fakeSql = async (strings) => {
         const text = strings.join('?');
+        if (text.includes('FROM organizations')) {
+          return [{ id: orgId }];
+        }
         if (text.includes('FROM organization_people')) {
           return [{ id: personA, user_id: 'user-a-uuid', status: 'ACTIVE' }];
         }

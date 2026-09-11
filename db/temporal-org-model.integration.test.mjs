@@ -29,19 +29,28 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       );
     }
 
+    // Safety accreditation check: ensure tests only run against accredited/temporal databases
+    if (process.env.TEMPORAL_RUNNER_ACCREDITED !== 'true') {
+      const { assertSafeTemporalDatabaseUrl } = await import(
+        '../scripts/run-temporal-org-model-integration.mjs'
+      );
+      assertSafeTemporalDatabaseUrl(connectionString);
+    }
+
     client = new Client(connectionString);
     await client.connect();
 
-    sqlAdapter.transaction = async (queriesBuilder) => {
+    sqlAdapter.transaction = async (callback) => {
       await client.query('BEGIN;');
       try {
-        const queries = typeof queriesBuilder === 'function' ? queriesBuilder(sqlAdapter) : queriesBuilder;
-        const results = [];
-        for (const q of queries) {
-          results.push(await q);
+        let result;
+        if (typeof callback === 'function') {
+          result = await callback(sqlAdapter);
+        } else if (Array.isArray(callback)) {
+          result = await Promise.all(callback);
         }
         await client.query('COMMIT;');
-        return results;
+        return result;
       } catch (err) {
         await client.query('ROLLBACK;');
         throw err;
@@ -1044,21 +1053,21 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
         VALUES ($1, $2, 'ADMIN', '2026-01-01', NULL)
       `, [org, personB]);
 
-      // Create a failing sql adapter that simulates failure in the last operation
+      // Create a failing sql adapter that simulates failure in the transaction
+      let queryCount = 0;
       const failingAdapter = async (strings, ...values) => {
+        queryCount++;
+        if (queryCount >= 5) {
+          throw new Error('Simulated failure on last transaction statement');
+        }
         return sqlAdapter(strings, ...values);
       };
-      failingAdapter.transaction = async (queriesBuilder) => {
+      failingAdapter.transaction = async (callback) => {
         await client.query('BEGIN;');
         try {
-          const queries = typeof queriesBuilder === 'function' ? queriesBuilder(failingAdapter) : queriesBuilder;
-          for (let i = 0; i < queries.length; i++) {
-            if (i === queries.length - 1) {
-              throw new Error('Simulated failure on last transaction statement');
-            }
-            await queries[i];
-          }
+          const result = await callback(failingAdapter);
           await client.query('COMMIT;');
+          return result;
         } catch (err) {
           await client.query('ROLLBACK;');
           throw err;
@@ -1115,6 +1124,225 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     } finally {
       if (org) {
         await client.query('DELETE FROM organizations WHERE id = $1', [org]);
+      }
+    }
+  });
+
+  // Section 4 Requirement: TOCTOU Concurrency Serialization on Organization Lock
+  it('Scenario: Concurrent ownership transfers serialize on organization lock without duplicate owners (TOCTOU protection)', async () => {
+    const client2 = new Client(process.env.TEMPORAL_MODEL_DATABASE_URL);
+    await client2.connect();
+
+    const sqlAdapter2 = async (strings, ...values) => {
+      let text = strings[0];
+      const params = [];
+      for (let i = 0; i < values.length; i++) {
+        params.push(values[i]);
+        text += '$' + params.length + strings[i + 1];
+      }
+      const res = await client2.query(text, params);
+      return res.rows;
+    };
+    sqlAdapter2.transaction = async (callback) => {
+      await client2.query('BEGIN;');
+      try {
+        let result;
+        if (typeof callback === 'function') {
+          result = await callback(sqlAdapter2);
+        } else if (Array.isArray(callback)) {
+          result = await Promise.all(callback);
+        }
+        await client2.query('COMMIT;');
+        return result;
+      } catch (err) {
+        await client2.query('ROLLBACK;');
+        throw err;
+      }
+    };
+
+    let testOrgId = null;
+    try {
+      testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Concurrent Transfer Org', 'company') RETURNING id")).rows[0].id;
+
+      const u1 = (await client.query("INSERT INTO users (email, display_name, password_hash) VALUES ('c_owner1_' || gen_random_uuid() || '@test.com', 'Initial Owner', 'hash') RETURNING id")).rows[0].id;
+      const u2 = (await client.query("INSERT INTO users (email, display_name, password_hash) VALUES ('c_cand2_' || gen_random_uuid() || '@test.com', 'Candidate 2', 'hash') RETURNING id")).rows[0].id;
+      const u3 = (await client.query("INSERT INTO users (email, display_name, password_hash) VALUES ('c_cand3_' || gen_random_uuid() || '@test.com', 'Candidate 3', 'hash') RETURNING id")).rows[0].id;
+
+      const p1 = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [testOrgId, u1])).rows[0].id;
+      const p2 = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [testOrgId, u2])).rows[0].id;
+      const p3 = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [testOrgId, u3])).rows[0].id;
+
+      await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'OWNER')", [testOrgId, u1]);
+      await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'ADMIN')", [testOrgId, u2]);
+      await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'ADMIN')", [testOrgId, u3]);
+
+      await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, valid_to) VALUES ($1, $2, 'OWNER', '2026-01-01', NULL)", [testOrgId, p1]);
+      await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, valid_to) VALUES ($1, $2, 'ADMIN', '2026-01-01', NULL)", [testOrgId, p2]);
+      await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, valid_to) VALUES ($1, $2, 'ADMIN', '2026-01-01', NULL)", [testOrgId, p3]);
+
+      // Launch both transfers concurrently competing for ownership
+      const [r1, r2] = await Promise.allSettled([
+        transferOwnershipTemporal(sqlAdapter, {
+          organizationId: testOrgId,
+          newOwnerPersonId: p2,
+          effectiveDate: '2026-07-01',
+          newPreviousOwnerRole: 'ADMIN',
+        }),
+        transferOwnershipTemporal(sqlAdapter2, {
+          organizationId: testOrgId,
+          newOwnerPersonId: p3,
+          effectiveDate: '2026-07-01',
+          newPreviousOwnerRole: 'ADMIN',
+        }),
+      ]);
+
+      const fulfilled = [r1, r2].filter((r) => r.status === 'fulfilled');
+      const rejected = [r1, r2].filter((r) => r.status === 'rejected');
+
+      expect(fulfilled.length).toBe(1);
+      expect(rejected.length).toBe(1);
+      expect(rejected[0].reason.message).toMatch(/(conflict|Incompatible future role periods|not active|no active OWNER)/i);
+
+      // Verify database state: exactly 1 OWNER active on and after 2026-07-01
+      const ownerRoles = await client.query(`
+        SELECT organization_person_id, role, valid_from::text, valid_to::text
+        FROM person_role_periods
+        WHERE organization_id = $1 AND role = 'OWNER'
+        ORDER BY valid_from ASC;
+      `, [testOrgId]);
+
+      expect(ownerRoles.rows.length).toBe(2); // p1 (closed 2026-06-30) and winner (open from 2026-07-01)
+      expect(ownerRoles.rows[0].organization_person_id).toBe(p1);
+      expect(ownerRoles.rows[0].valid_to).toBe('2026-06-30');
+      expect(ownerRoles.rows[1].valid_from).toBe('2026-07-01');
+      expect(ownerRoles.rows[1].valid_to).toBeNull();
+      const winningPersonId = fulfilled[0].value.newOwnerPersonId;
+      expect(ownerRoles.rows[1].organization_person_id).toBe(winningPersonId);
+
+      const ownerMemberships = await client.query(`
+        SELECT user_id, role FROM memberships WHERE organization_id = $1 AND role = 'OWNER';
+      `, [testOrgId]);
+      expect(ownerMemberships.rows.length).toBe(1);
+    } finally {
+      await client2.end();
+      if (testOrgId) {
+        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
+      }
+    }
+  });
+
+  // Section 3 Requirement: Labor Validity Trigger on employee_area_periods
+  it('Scenario: Labor validity trigger rejects area assignments outside employee profile tenure', async () => {
+    let testOrgId = null;
+    try {
+      testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Labor Validity Org', 'company') RETURNING id")).rows[0].id;
+      const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Valid Area') RETURNING id", [testOrgId])).rows[0].id;
+
+      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [testOrgId])).rows[0].id;
+      const profile = (await client.query(`
+        INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, employment_status, started_on, ended_on)
+        VALUES ($1, $2, 'Bounded Employee', 'TERMINATED', '2026-02-01', '2026-08-31') RETURNING id
+      `, [testOrgId, person])).rows[0].id;
+
+      // 1. Assignment starting before tenure started_on -> MUST FAIL
+      let errBefore = null;
+      try {
+        await client.query(`
+          INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+          VALUES ($1, $2, $3, '2026-01-01', '2026-06-30', true)
+        `, [testOrgId, profile, area]);
+      } catch (err) {
+        errBefore = err;
+      }
+      expect(errBefore).not.toBeNull();
+      expect(errBefore.message).toContain('not fully contained within employee profile labor tenure');
+
+      // 2. Assignment ending after tenure ended_on -> MUST FAIL
+      let errAfter = null;
+      try {
+        await client.query(`
+          INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+          VALUES ($1, $2, $3, '2026-03-01', '2026-09-30', true)
+        `, [testOrgId, profile, area]);
+      } catch (err) {
+        errAfter = err;
+      }
+      expect(errAfter).not.toBeNull();
+      expect(errAfter.message).toContain('not fully contained within employee profile labor tenure');
+
+      // 3. Open assignment (valid_to IS NULL) on terminated employee -> MUST FAIL
+      let errOpen = null;
+      try {
+        await client.query(`
+          INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+          VALUES ($1, $2, $3, '2026-03-01', NULL, true)
+        `, [testOrgId, profile, area]);
+      } catch (err) {
+        errOpen = err;
+      }
+      expect(errOpen).not.toBeNull();
+      expect(errOpen.message).toContain('not fully contained within employee profile labor tenure');
+
+      // 4. Fully contained assignment [2026-03-01, 2026-07-31] -> MUST SUCCEED
+      const validPeriod = await client.query(`
+        INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+        VALUES ($1, $2, $3, '2026-03-01', '2026-07-31', true) RETURNING id
+      `, [testOrgId, profile, area]);
+      expect(validPeriod.rows.length).toBe(1);
+    } finally {
+      if (testOrgId) {
+        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
+      }
+    }
+  });
+
+  // Section 2 Requirement: Same-Area Overlap & Duplicate Rejection by GiST Exclusion
+  it('Scenario: GiST exclusion constraint rejects overlapping and duplicate assignments for the exact same area', async () => {
+    let testOrgId = null;
+    try {
+      testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Same Area GiST Org', 'company') RETURNING id")).rows[0].id;
+      const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Target Area') RETURNING id", [testOrgId])).rows[0].id;
+
+      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [testOrgId])).rows[0].id;
+      const profile = (await client.query(`
+        INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, employment_status, started_on, ended_on)
+        VALUES ($1, $2, 'Active Worker', 'ACTIVE', '2026-01-01', NULL) RETURNING id
+      `, [testOrgId, person])).rows[0].id;
+
+      // Base period
+      await client.query(`
+        INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+        VALUES ($1, $2, $3, '2026-02-01', '2026-06-30', true)
+      `, [testOrgId, profile, area]);
+
+      // 1. Overlapping period for same area -> MUST FAIL by employee_area_periods_no_same_area_overlap_excl
+      let errOverlap = null;
+      try {
+        await client.query(`
+          INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+          VALUES ($1, $2, $3, '2026-05-01', '2026-08-31', false)
+        `, [testOrgId, profile, area]);
+      } catch (err) {
+        errOverlap = err;
+      }
+      expect(errOverlap).not.toBeNull();
+      expect(errOverlap.message).toContain('employee_area_periods_no_same_area_overlap_excl');
+
+      // 2. Exact duplicate period for same area -> MUST FAIL by GiST constraint
+      let errDup = null;
+      try {
+        await client.query(`
+          INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+          VALUES ($1, $2, $3, '2026-02-01', '2026-06-30', false)
+        `, [testOrgId, profile, area]);
+      } catch (err) {
+        errDup = err;
+      }
+      expect(errDup).not.toBeNull();
+      expect(errDup.message).toContain('employee_area_periods_no_same_area_overlap_excl');
+    } finally {
+      if (testOrgId) {
+        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
       }
     }
   });

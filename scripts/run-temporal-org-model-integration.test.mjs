@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, it, expect, vi } from "vitest";
 import {
   isTemporalBranchName,
@@ -68,6 +69,87 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
       expect(config.mode).toBe("existing");
       expect(config.connectionString).toBe(env.TEMPORAL_MODEL_DATABASE_URL);
       expect(config.isEphemeral).toBe(false);
+    });
+
+    it("rejects connection pointing to Neon 'main' branch even if ALLOW_EXISTING_TEMPORAL_TEST_DATABASE=true", () => {
+      const mockEndpoints = [
+        {
+          id: "ep-lingering-dew-b1atfd0w",
+          host: "ep-lingering-dew-b1atfd0w.c-5.eu-central-1.aws.neon.tech",
+          branch_id: "br-solitary-thunder-b1hm9low",
+        },
+      ];
+      const mockBranches = [
+        {
+          id: "br-solitary-thunder-b1hm9low",
+          name: "main",
+          default: true,
+          primary: true,
+          protected: false,
+        },
+      ];
+
+      const env = {
+        TEMPORAL_MODEL_DATABASE_URL: "postgresql://neondb_owner:secret@ep-lingering-dew-b1atfd0w.c-5.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+        ALLOW_EXISTING_TEMPORAL_TEST_DATABASE: "true",
+      };
+
+      expect(() =>
+        resolveRunnerConfig(env, {
+          endpoints: mockEndpoints,
+          branches: mockBranches,
+        })
+      ).toThrow(/Refusing to target default branch: 'main'/);
+    });
+
+    it("fails closed in harness before any connection if TEMPORAL_MODEL_DATABASE_URL points to main", async () => {
+      let connectionAttempted = false;
+      class MockClient {
+        async connect() {
+          connectionAttempted = true;
+        }
+        async query() { return { rows: [] }; }
+        async end() {}
+      }
+
+      const mockNeonctl = vi.fn((cmd, args) => {
+        if (args.includes("/projects/holy-cake-85660318/endpoints")) {
+          return JSON.stringify([
+            {
+              id: "ep-lingering-dew-b1atfd0w",
+              host: "ep-lingering-dew-b1atfd0w.c-5.eu-central-1.aws.neon.tech",
+              branch_id: "br-solitary-thunder-b1hm9low",
+            },
+          ]);
+        }
+        if (args.includes("branches") && args.includes("list")) {
+          return JSON.stringify([
+            {
+              id: "br-solitary-thunder-b1hm9low",
+              name: "main",
+              default: true,
+              primary: true,
+              protected: false,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const env = {
+        TEMPORAL_MODEL_DATABASE_URL: "postgresql://neondb_owner:secret@ep-lingering-dew-b1atfd0w.c-5.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+        ALLOW_EXISTING_TEMPORAL_TEST_DATABASE: "true",
+      };
+
+      await expect(
+        runTemporalIntegrationHarness({
+          env,
+          neonctlExec: mockNeonctl,
+          ClientClass: MockClient,
+        })
+      ).rejects.toThrow(/Refusing to target default branch/);
+
+      expect(connectionAttempted).toBe(false);
     });
   });
 
@@ -200,6 +282,11 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
       });
 
       const mockSpawnSync = vi.fn((cmd, args) => {
+        const outArg = args.find((a) => typeof a === "string" && a.startsWith("--outputFile="));
+        if (outArg) {
+          const filePath = outArg.split("=")[1];
+          fs.writeFileSync(filePath, JSON.stringify({ numPassedTests: 23, numTotalTests: 23 }));
+        }
         return { status: 0, stdout: "", stderr: "" };
       });
 
