@@ -166,6 +166,25 @@ export function getDayBefore(date: string | Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+export function dateRangeContains(
+  outerFrom: string | Date,
+  outerTo: string | Date | null | undefined,
+  innerFrom: string | Date,
+  innerTo: string | Date | null | undefined
+): boolean {
+  const normOuterFrom = normalizeDate(outerFrom)!;
+  const normOuterTo = outerTo ? normalizeDate(outerTo) : null;
+  const normInnerFrom = normalizeDate(innerFrom)!;
+  const normInnerTo = innerTo ? normalizeDate(innerTo) : null;
+
+  if (normOuterFrom > normInnerFrom) return false;
+  if (normOuterTo !== null) {
+    if (normInnerTo === null) return false;
+    if (normInnerTo > normOuterTo) return false;
+  }
+  return true;
+}
+
 export function detectSupervisionCycle(
   existingEdges: Array<{ supervisorPersonId: string; subordinatePersonId: string; validFrom?: string; validTo?: string | null }>,
   newEdge: { supervisorPersonId: string; subordinatePersonId: string; validFrom?: string; validTo?: string | null }

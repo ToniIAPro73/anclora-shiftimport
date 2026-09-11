@@ -63,6 +63,25 @@ CREATE INDEX IF NOT EXISTS emp_profiles_org_idx ON employee_profiles (organizati
 CREATE INDEX IF NOT EXISTS emp_profiles_person_idx ON employee_profiles (organization_person_id);
 CREATE INDEX IF NOT EXISTS emp_profiles_status_idx ON employee_profiles (organization_id, employment_status);
 
+-- Guarantee employee profiles require user_id OR status PENDING_INVITATION
+CREATE OR REPLACE FUNCTION check_employee_profile_person_link_validity() RETURNS TRIGGER AS $$ DECLARE v_user_id UUID; v_status TEXT; BEGIN SELECT user_id, status INTO v_user_id, v_status FROM organization_people WHERE id = NEW.organization_person_id AND organization_id = NEW.organization_id; IF NOT FOUND THEN RAISE EXCEPTION 'Referenced organization person % does not exist in organization %', NEW.organization_person_id, NEW.organization_id; END IF; IF v_user_id IS NULL AND v_status <> 'PENDING_INVITATION' THEN RAISE EXCEPTION 'Employee profile cannot be associated with a person without user_id whose status is not PENDING_INVITATION (status is %)', v_status; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_check_employee_profile_person_link ON employee_profiles;
+CREATE CONSTRAINT TRIGGER trg_check_employee_profile_person_link
+  AFTER INSERT OR UPDATE ON employee_profiles
+  DEFERRABLE INITIALLY IMMEDIATE
+  FOR EACH ROW
+  EXECUTE FUNCTION check_employee_profile_person_link_validity();
+
+CREATE OR REPLACE FUNCTION check_organization_person_employee_link_validity() RETURNS TRIGGER AS $$ BEGIN IF NEW.user_id IS NULL AND NEW.status <> 'PENDING_INVITATION' THEN IF EXISTS (SELECT 1 FROM employee_profiles ep WHERE ep.organization_person_id = NEW.id AND ep.organization_id = NEW.organization_id) THEN RAISE EXCEPTION 'Organization person without user_id having an employee profile must have status PENDING_INVITATION (status changed to %)', NEW.status; END IF; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_check_organization_person_employee_link ON organization_people;
+CREATE CONSTRAINT TRIGGER trg_check_organization_person_employee_link
+  AFTER INSERT OR UPDATE ON organization_people
+  DEFERRABLE INITIALLY IMMEDIATE
+  FOR EACH ROW
+  EXECUTE FUNCTION check_organization_person_employee_link_validity();
+
 -- 3. person_role_periods
 CREATE TABLE IF NOT EXISTS person_role_periods (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -236,7 +255,7 @@ CREATE INDEX IF NOT EXISTS reporting_rel_subordinate_idx ON reporting_relationsh
 CREATE INDEX IF NOT EXISTS reporting_rel_dates_idx ON reporting_relationship_periods (organization_id, valid_from, valid_to);
 
 -- Trigger for reporting relationship hierarchy, role compatibility, and anti-cycle validation
-CREATE OR REPLACE FUNCTION check_reporting_relationship_validity() RETURNS TRIGGER AS $$ BEGIN IF NEW.supervisor_person_id = NEW.subordinate_person_id THEN RAISE EXCEPTION 'Self-supervision forbidden: supervisor and subordinate must be distinct'; END IF; IF NEW.relationship_type IN ('ADMIN_EMPLOYEE', 'PLANNER_EMPLOYEE') THEN IF NOT EXISTS (SELECT 1 FROM employee_profiles ep WHERE ep.organization_person_id = NEW.subordinate_person_id AND ep.organization_id = NEW.organization_id) THEN RAISE EXCEPTION 'Subordinate person % must have an employee_profile for relationship type %', NEW.subordinate_person_id, NEW.relationship_type; END IF; END IF; IF NEW.relationship_type = 'ADMIN_PLANNER' THEN IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.supervisor_person_id AND prp.organization_id = NEW.organization_id AND prp.role IN ('OWNER', 'ADMIN') AND daterange(prp.valid_from, prp.valid_to, '[]') && daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Supervisor must hold OWNER or ADMIN role for ADMIN_PLANNER'; END IF; IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.subordinate_person_id AND prp.organization_id = NEW.organization_id AND prp.role = 'PLANNER' AND daterange(prp.valid_from, prp.valid_to, '[]') && daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Subordinate must hold PLANNER role for ADMIN_PLANNER'; END IF; ELSIF NEW.relationship_type = 'ADMIN_EMPLOYEE' THEN IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.supervisor_person_id AND prp.organization_id = NEW.organization_id AND prp.role IN ('OWNER', 'ADMIN') AND daterange(prp.valid_from, prp.valid_to, '[]') && daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Supervisor must hold OWNER or ADMIN role for ADMIN_EMPLOYEE'; END IF; ELSIF NEW.relationship_type = 'PLANNER_EMPLOYEE' THEN IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.supervisor_person_id AND prp.organization_id = NEW.organization_id AND prp.role = 'PLANNER' AND daterange(prp.valid_from, prp.valid_to, '[]') && daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Supervisor must hold PLANNER role for PLANNER_EMPLOYEE'; END IF; END IF; IF EXISTS (WITH RECURSIVE path AS (SELECT r.subordinate_person_id AS current_node, (daterange(r.valid_from, r.valid_to, '[]') * daterange(NEW.valid_from, NEW.valid_to, '[]')) AS common_range, ARRAY[r.supervisor_person_id, r.subordinate_person_id] AS visited FROM reporting_relationship_periods r WHERE r.organization_id = NEW.organization_id AND r.supervisor_person_id = NEW.subordinate_person_id AND (NEW.id IS NULL OR r.id <> NEW.id) AND daterange(r.valid_from, r.valid_to, '[]') && daterange(NEW.valid_from, NEW.valid_to, '[]') UNION ALL SELECT r.subordinate_person_id, (p.common_range * daterange(r.valid_from, r.valid_to, '[]')), p.visited || r.subordinate_person_id FROM reporting_relationship_periods r JOIN path p ON r.supervisor_person_id = p.current_node WHERE r.organization_id = NEW.organization_id AND (NEW.id IS NULL OR r.id <> NEW.id) AND NOT (r.subordinate_person_id = ANY(p.visited)) AND (p.common_range && daterange(r.valid_from, r.valid_to, '[]'))) SELECT 1 FROM path WHERE current_node = NEW.supervisor_person_id AND NOT isempty(common_range)) THEN RAISE EXCEPTION 'Circular supervision detected: A person cannot report to their subordinate (temporal cycle)'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION check_reporting_relationship_validity() RETURNS TRIGGER AS $$ BEGIN IF NEW.supervisor_person_id = NEW.subordinate_person_id THEN RAISE EXCEPTION 'Self-supervision forbidden: supervisor and subordinate must be distinct'; END IF; IF NEW.relationship_type IN ('ADMIN_EMPLOYEE', 'PLANNER_EMPLOYEE') THEN IF NOT EXISTS (SELECT 1 FROM employee_profiles ep WHERE ep.organization_person_id = NEW.subordinate_person_id AND ep.organization_id = NEW.organization_id AND daterange(ep.started_on, ep.ended_on, '[]') @> daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Subordinate person % must have an employee_profile covering relationship period for relationship type %', NEW.subordinate_person_id, NEW.relationship_type; END IF; END IF; IF NEW.relationship_type = 'ADMIN_PLANNER' THEN IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.supervisor_person_id AND prp.organization_id = NEW.organization_id AND prp.role IN ('OWNER', 'ADMIN') AND daterange(prp.valid_from, prp.valid_to, '[]') @> daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Supervisor must hold active OWNER or ADMIN role covering full relationship period for ADMIN_PLANNER'; END IF; IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.subordinate_person_id AND prp.organization_id = NEW.organization_id AND prp.role = 'PLANNER' AND daterange(prp.valid_from, prp.valid_to, '[]') @> daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Subordinate must hold active PLANNER role covering full relationship period for ADMIN_PLANNER'; END IF; ELSIF NEW.relationship_type = 'ADMIN_EMPLOYEE' THEN IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.supervisor_person_id AND prp.organization_id = NEW.organization_id AND prp.role IN ('OWNER', 'ADMIN') AND daterange(prp.valid_from, prp.valid_to, '[]') @> daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Supervisor must hold active OWNER or ADMIN role covering full relationship period for ADMIN_EMPLOYEE'; END IF; ELSIF NEW.relationship_type = 'PLANNER_EMPLOYEE' THEN IF NOT EXISTS (SELECT 1 FROM person_role_periods prp WHERE prp.organization_person_id = NEW.supervisor_person_id AND prp.organization_id = NEW.organization_id AND prp.role = 'PLANNER' AND daterange(prp.valid_from, prp.valid_to, '[]') @> daterange(NEW.valid_from, NEW.valid_to, '[]')) THEN RAISE EXCEPTION 'Supervisor must hold active PLANNER role covering full relationship period for PLANNER_EMPLOYEE'; END IF; END IF; IF EXISTS (WITH RECURSIVE path AS (SELECT r.subordinate_person_id AS current_node, (daterange(r.valid_from, r.valid_to, '[]') * daterange(NEW.valid_from, NEW.valid_to, '[]')) AS common_range, ARRAY[r.supervisor_person_id, r.subordinate_person_id] AS visited FROM reporting_relationship_periods r WHERE r.organization_id = NEW.organization_id AND r.supervisor_person_id = NEW.subordinate_person_id AND (NEW.id IS NULL OR r.id <> NEW.id) AND daterange(r.valid_from, r.valid_to, '[]') && daterange(NEW.valid_from, NEW.valid_to, '[]') UNION ALL SELECT r.subordinate_person_id, (p.common_range * daterange(r.valid_from, r.valid_to, '[]')), p.visited || r.subordinate_person_id FROM reporting_relationship_periods r JOIN path p ON r.supervisor_person_id = p.current_node WHERE r.organization_id = NEW.organization_id AND (NEW.id IS NULL OR r.id <> NEW.id) AND NOT (r.subordinate_person_id = ANY(p.visited)) AND (p.common_range && daterange(r.valid_from, r.valid_to, '[]'))) SELECT 1 FROM path WHERE current_node = NEW.supervisor_person_id AND NOT isempty(common_range)) THEN RAISE EXCEPTION 'Circular supervision detected: A person cannot report to their subordinate (temporal cycle)'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_check_reporting_relationship ON reporting_relationship_periods;
 CREATE CONSTRAINT TRIGGER trg_check_reporting_relationship
@@ -324,82 +343,188 @@ WHERE NOT EXISTS (
     AND prp.valid_to IS NULL
 );
 
--- Backfill 6: Area assignments from operational_assignments (EMPLOYEE_AREA) - Priority 1
--- Explicit temporal assignments take precedence over legacy employees.area_id.
--- If an employee has multiple concurrent assignments, exactly one is marked primary (preferring employees.area_id match).
-WITH ranked_assignments AS (
+-- Backfill 6: Normalized area periods from operational_assignments (Priority 1) and employees.area_id fallback (Priority 2)
+-- Slices timeline into deterministic elementary intervals, merges same-area overlaps, selects exactly one primary area at any date,
+-- preserves concurrent secondary areas, and fills timeline gaps before/after explicit assignments with fallback area.
+WITH 
+ordered_oa AS (
   SELECT 
-    oa.id AS oa_id,
     oa.organization_id,
-    oa.subject_id,
-    oa.target_id,
+    oa.subject_id AS employee_profile_id,
+    oa.target_id AS area_id,
     oa.valid_from,
     oa.valid_to,
     oa.created_at,
-    oa.updated_at,
-    ROW_NUMBER() OVER (
-      PARTITION BY oa.organization_id, oa.subject_id, daterange(oa.valid_from, oa.valid_to, '[]')
-      ORDER BY 
-        CASE WHEN oa.target_id = e.area_id THEN 0 ELSE 1 END,
-        oa.created_at ASC,
-        oa.id ASC
-    ) AS rank_num
+    MAX(oa.valid_to) OVER (
+      PARTITION BY oa.organization_id, oa.subject_id, oa.target_id 
+      ORDER BY oa.valid_from ASC, oa.valid_to NULLS LAST
+      ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+    ) AS prev_max_to
   FROM operational_assignments oa
   JOIN employees e ON e.id = oa.subject_id AND e.organization_id = oa.organization_id
   JOIN employee_profiles ep ON ep.id = oa.subject_id AND ep.organization_id = oa.organization_id
   JOIN areas a ON a.id = oa.target_id AND a.organization_id = oa.organization_id
   WHERE oa.assignment_type = 'EMPLOYEE_AREA'
+),
+grouped_same_area AS (
+  SELECT 
+    ooa.*,
+    SUM(CASE 
+      WHEN prev_max_to IS NULL THEN 1
+      WHEN valid_from > prev_max_to + 1 THEN 1
+      ELSE 0 
+    END) OVER (
+      PARTITION BY organization_id, employee_profile_id, area_id 
+      ORDER BY valid_from ASC, valid_to NULLS LAST
+    ) AS island_id
+  FROM ordered_oa ooa
+),
+same_area_merged AS (
+  SELECT 
+    organization_id,
+    employee_profile_id,
+    area_id,
+    MIN(valid_from) AS valid_from,
+    CASE WHEN bool_or(valid_to IS NULL) THEN NULL ELSE MAX(valid_to) END AS valid_to,
+    MIN(created_at) AS created_at
+  FROM grouped_same_area
+  GROUP BY organization_id, employee_profile_id, area_id, island_id
+),
+emp_points AS (
+  SELECT organization_id, employee_profile_id, valid_from AS pt FROM same_area_merged
+  UNION
+  SELECT organization_id, employee_profile_id, (valid_to + 1)::date AS pt FROM same_area_merged WHERE valid_to IS NOT NULL
+  UNION
+  SELECT e.organization_id, ep.id AS employee_profile_id, COALESCE(e.created_at::date, '2026-01-01'::date) AS pt 
+  FROM employees e
+  JOIN employee_profiles ep ON ep.id = e.id AND ep.organization_id = e.organization_id
+  JOIN areas a ON a.id = e.area_id AND a.organization_id = e.organization_id
+  WHERE e.area_id IS NOT NULL
+  UNION
+  SELECT e.organization_id, ep.id AS employee_profile_id, (e.deactivated_at::date + 1)::date AS pt 
+  FROM employees e
+  JOIN employee_profiles ep ON ep.id = e.id AND ep.organization_id = e.organization_id
+  JOIN areas a ON a.id = e.area_id AND a.organization_id = e.organization_id
+  WHERE e.area_id IS NOT NULL AND e.deactivated_at IS NOT NULL
+),
+dedup_points AS (
+  SELECT DISTINCT organization_id, employee_profile_id, pt FROM emp_points
+),
+slices AS (
+  SELECT 
+    organization_id,
+    employee_profile_id,
+    pt AS slice_from,
+    (LEAD(pt) OVER (PARTITION BY organization_id, employee_profile_id ORDER BY pt ASC) - 1)::date AS slice_to
+  FROM dedup_points
+),
+slice_eval AS (
+  SELECT 
+    s.organization_id,
+    s.employee_profile_id,
+    s.slice_from,
+    s.slice_to,
+    a.area_id AS explicit_area_id,
+    a.valid_from AS explicit_from,
+    a.created_at AS explicit_created_at,
+    fallback_a.id AS fallback_area_id,
+    CASE 
+      WHEN a.area_id IS NOT NULL THEN
+        ROW_NUMBER() OVER (
+          PARTITION BY s.organization_id, s.employee_profile_id, s.slice_from
+          ORDER BY 
+            CASE WHEN a.area_id = e.area_id THEN 0 ELSE 1 END,
+            a.valid_from ASC,
+            a.created_at ASC,
+            a.area_id ASC
+        )
+      ELSE NULL 
+    END AS rank_num
+  FROM slices s
+  JOIN employees e ON e.id = s.employee_profile_id AND e.organization_id = s.organization_id
+  LEFT JOIN areas fallback_a ON fallback_a.id = e.area_id AND fallback_a.organization_id = e.organization_id
+  LEFT JOIN same_area_merged a 
+    ON a.organization_id = s.organization_id 
+   AND a.employee_profile_id = s.employee_profile_id
+   AND a.valid_from <= s.slice_from
+   AND (a.valid_to IS NULL OR a.valid_to >= COALESCE(s.slice_to, '9999-12-31'::date))
+),
+raw_segments AS (
+  SELECT 
+    organization_id,
+    employee_profile_id,
+    explicit_area_id AS area_id,
+    slice_from,
+    slice_to,
+    (rank_num = 1) AS is_primary,
+    'LEGACY_OPERATIONAL_ASSIGNMENT' AS source
+  FROM slice_eval
+  WHERE explicit_area_id IS NOT NULL
+
+  UNION ALL
+
+  SELECT 
+    organization_id,
+    employee_profile_id,
+    fallback_area_id AS area_id,
+    slice_from,
+    slice_to,
+    true AS is_primary,
+    'LEGACY_EMPLOYEE_AREA_FALLBACK' AS source
+  FROM slice_eval
+  WHERE explicit_area_id IS NULL AND fallback_area_id IS NOT NULL
+),
+ordered_segments AS (
+  SELECT 
+    rs.*,
+    LAG(slice_to) OVER (
+      PARTITION BY organization_id, employee_profile_id, area_id, is_primary, source
+      ORDER BY slice_from ASC, slice_to NULLS LAST
+    ) AS prev_slice_to
+  FROM raw_segments rs
+),
+grouped_segments AS (
+  SELECT 
+    os.*,
+    SUM(CASE 
+      WHEN prev_slice_to IS NULL THEN 1
+      WHEN slice_from > prev_slice_to + 1 THEN 1
+      ELSE 0 
+    END) OVER (
+      PARTITION BY organization_id, employee_profile_id, area_id, is_primary, source
+      ORDER BY slice_from ASC, slice_to NULLS LAST
+    ) AS grp_id
+  FROM ordered_segments os
+),
+final_merged AS (
+  SELECT 
+    organization_id,
+    employee_profile_id,
+    area_id,
+    is_primary,
+    source,
+    MIN(slice_from) AS valid_from,
+    CASE WHEN bool_or(slice_to IS NULL) THEN NULL ELSE MAX(slice_to) END AS valid_to
+  FROM grouped_segments
+  GROUP BY organization_id, employee_profile_id, area_id, is_primary, source, grp_id
 )
 INSERT INTO employee_area_periods (
   organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary, source, created_at, updated_at
 )
 SELECT 
-  ra.organization_id,
-  ra.subject_id,
-  ra.target_id,
-  ra.valid_from,
-  ra.valid_to,
-  (ra.rank_num = 1) AS is_primary,
-  'LEGACY_OPERATIONAL_ASSIGNMENT',
-  ra.created_at,
-  ra.updated_at
-FROM ranked_assignments ra
-WHERE NOT EXISTS (
-  SELECT 1 FROM employee_area_periods eap
-  WHERE eap.employee_profile_id = ra.subject_id
-    AND eap.area_id = ra.target_id
-    AND eap.valid_from = ra.valid_from
-);
+  fm.organization_id,
+  fm.employee_profile_id,
+  fm.area_id,
+  fm.valid_from,
+  fm.valid_to,
+  fm.is_primary,
+  fm.source,
+  NOW(),
+  NOW()
+FROM final_merged fm
+ON CONFLICT DO NOTHING;
 
--- Backfill 7: Fallback area assignments from employees.area_id - Priority 2
--- Used only when the employee has no overlapping primary assignment from operational_assignments.
-INSERT INTO employee_area_periods (
-  organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary, source, created_at, updated_at
-)
-SELECT 
-  ep.organization_id,
-  ep.id,
-  e.area_id,
-  COALESCE(e.created_at::date, '2026-01-01'::date),
-  NULL,
-  true,
-  'LEGACY_EMPLOYEE_AREA_FALLBACK',
-  e.created_at,
-  e.updated_at
-FROM employees e
-JOIN employee_profiles ep ON ep.id = e.id AND ep.organization_id = e.organization_id
-JOIN areas a ON a.id = e.area_id AND a.organization_id = e.organization_id
-WHERE e.area_id IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM employee_area_periods eap
-    WHERE eap.employee_profile_id = ep.id
-      AND (
-        eap.area_id = e.area_id
-        OR (eap.is_primary = true AND (eap.valid_to IS NULL OR eap.valid_to >= COALESCE(e.created_at::date, '2026-01-01'::date)))
-      )
-  );
-
--- Backfill 8: Access scopes from area_responsibles (Approval Policy AREA_RESPONSIBLE)
+-- Backfill 7: Access scopes from area_responsibles (Approval Policy AREA_RESPONSIBLE)
 -- Maps designated area approval administrators to temporal area access scopes
 INSERT INTO person_access_scope_periods (
   organization_id, organization_person_id, scope_type, area_id, target_person_id, valid_from, valid_to, source, created_at, updated_at
@@ -426,7 +551,7 @@ WHERE NOT EXISTS (
     AND (pasp.valid_to IS NULL OR pasp.valid_to >= COALESCE(ar.created_at::date, '2026-01-01'::date))
 );
 
--- Backfill 9: Access scopes from memberships (OWNER / ADMIN / ORGANIZATION PLANNER)
+-- Backfill 8: Access scopes from memberships (OWNER / ADMIN / ORGANIZATION PLANNER)
 INSERT INTO person_access_scope_periods (organization_id, organization_person_id, scope_type, area_id, target_person_id, valid_from, valid_to, source, created_at, updated_at)
 SELECT 
   m.organization_id,
@@ -450,7 +575,7 @@ WHERE (m.role IN ('OWNER', 'ADMIN')
       AND (pasp.valid_to IS NULL OR pasp.valid_to >= COALESCE(m.created_at::date, '2026-01-01'::date))
   );
 
--- Backfill 10: Access scopes for Planners with scoped_area_id
+-- Backfill 9: Access scopes for Planners with scoped_area_id
 INSERT INTO person_access_scope_periods (organization_id, organization_person_id, scope_type, area_id, target_person_id, valid_from, valid_to, source, created_at, updated_at)
 SELECT 
   m.organization_id,
@@ -475,7 +600,7 @@ WHERE m.role = 'PLANNER' AND m.scoped_area_id IS NOT NULL
       AND (pasp.valid_to IS NULL OR pasp.valid_to >= COALESCE(m.created_at::date, '2026-01-01'::date))
   );
 
--- Backfill 11: Access scopes from operational_assignments (PLANNER_AREA)
+-- Backfill 10: Access scopes from operational_assignments (PLANNER_AREA)
 INSERT INTO person_access_scope_periods (organization_id, organization_person_id, scope_type, area_id, target_person_id, valid_from, valid_to, source, created_at, updated_at)
 SELECT 
   oa.organization_id,
@@ -500,7 +625,7 @@ WHERE oa.assignment_type = 'PLANNER_AREA'
       AND (pasp.valid_to IS NULL OR pasp.valid_to >= oa.valid_from)
   );
 
--- Backfill 12: Access scopes from operational_assignments (PLANNER_EMPLOYEE)
+-- Backfill 11: Access scopes from operational_assignments (PLANNER_EMPLOYEE)
 INSERT INTO person_access_scope_periods (organization_id, organization_person_id, scope_type, area_id, target_person_id, valid_from, valid_to, source, created_at, updated_at)
 SELECT 
   oa.organization_id,

@@ -248,6 +248,8 @@ Líneas de reporte, aprobación y supervisión temporal.
     - Exige obligatoriamente `employee_profiles` para subordinados de tipo `ADMIN_EMPLOYEE` y `PLANNER_EMPLOYEE`.
     - Compatibilidad de roles cruzada en `person_role_periods` activa en el intervalo de la relación (`ADMIN_PLANNER`: supervisor OWNER/ADMIN, subordinado PLANNER; `ADMIN_EMPLOYEE`: supervisor OWNER/ADMIN; `PLANNER_EMPLOYEE`: supervisor PLANNER).
     - **Detección de ciclos temporales por intersección recursiva de trayectorias**: un ciclo solo se diagnostica si la intersección de los rangos de vigencia a lo largo de todo el camino dirigido es no vacía. Permite la alternancia y reutilización recíproca en periodos disjuntos (p. ej. A supervisa a B en 2025 y B supervisa a A en 2026).
+    - **Cobertura temporal estricta de roles y perfiles (`@>`)**: el trigger `check_reporting_relationship_validity()` exige que el rango de la relación de supervisión esté **completamente cubierto** (`@>`) por el periodo de rol de supervisor (`ADMIN` o `PLANNER`), por el rol de subordinado (en `ADMIN_PLANNER`), y por la vigencia contractual del empleado en `employee_profiles` (`started_on`/`ended_on` en `ADMIN_EMPLOYEE` y `PLANNER_EMPLOYEE`). No basta con una intersección parcial (`&&`).
+    - **Garantía transaccional de enlace empleado-persona**: los triggers `trg_check_employee_profile_person_link` y `trg_check_organization_person_employee_link` garantizan invariablemente que ningún perfil de empleado quede vinculado a una persona con `user_id IS NULL` cuyo estado no sea estrictamente `PENDING_INVITATION`.
 
 ---
 
@@ -295,20 +297,24 @@ Para evitar cualquier posibilidad de fuga de datos entre organizaciones (incluso
 * `employees`: Sigue recibiendo escrituras y consultas directas; cada `employees.id` equivale a `employee_profiles.id`.
 * `shifts`: Sigue enlazando a `shifts.employee_id`.
 
-### 6.2. Estrategia de Backfill Idempotente
-La migración `0036_temporal_organizational_model.sql` incluye un backfill determinista e idempotente en 12 fases ordenadas:
-1. **Usuarios con membresía** ⇒ Crea fila en `organization_people` con `status = 'ACTIVE'`.
-2. **Empleados con usuario sin membresía** ⇒ Crea fila en `organization_people` con `status = 'ACTIVE'` o `'INACTIVE'`.
-3. **Empleados no vinculados (`user_id IS NULL`)** ⇒ Crea fila en `organization_people` con `status = 'PENDING_INVITATION'` y genera `employee_profiles` correspondiente de forma determinista usando el UUID del empleado.
-4. **Empleados vinculados a usuario** ⇒ Enlaza `employee_profiles` con la persona creada previamente.
-5. **Membresías activas** ⇒ Crea periodos en `person_role_periods` con `source = 'LEGACY_CURRENT_STATE'`.
-6. **Asignaciones de área desde `operational_assignments` (Prioridad 1)** ⇒ Migra `EMPLOYEE_AREA` a `employee_area_periods` con `is_primary` jerarquizado y `source = 'LEGACY_OPERATIONAL_ASSIGNMENT'`.
-7. **Asignaciones de área desde `employees.area_id` (Prioridad 2, Fallback)** ⇒ Migra `employees.area_id` a `employee_area_periods` solo si no existe ya una asignación primaria concurrente desde Prioridad 1, con `source = 'LEGACY_EMPLOYEE_AREA_FALLBACK'`.
-8. **Responsables de área (`area_responsibles`)** ⇒ Migra políticas de aprobación por área a `person_access_scope_periods` con `scope_type = 'AREA'` y `source = 'LEGACY_AREA_RESPONSIBLE'`.
-9. **Alcances desde membresías** ⇒ `OWNER`, `ADMIN` y `PLANNER` globales reciben `scope_type = 'ORGANIZATION'`.
-10. **Alcances de Planners con área acotada** ⇒ Reciben `scope_type = 'AREA'` para su `scoped_area_id`.
-11. **Alcances desde `operational_assignments` (PLANNER_AREA)** ⇒ Migra a `person_access_scope_periods` (`AREA`).
-12. **Alcances desde `operational_assignments` (PLANNER_EMPLOYEE)** ⇒ Migra a `person_access_scope_periods` (`PERSON`).
+### 6.2. Estrategia de Backfill Normalizado de Áreas
+La migración `0036_temporal_organizational_model.sql` implementa una estrategia de normalización determinista e idempotente para `employee_area_periods` basada en un pipeline CTE de 11 pasos:
+1. **Fusión de asignaciones contiguas/solapadas por área**: agrupa periodos de `operational_assignments` para la misma área mediante detección de islas (window functions `lag`).
+2. **Discretización en cortes temporales elementales (slices)**: proyecta todas las fechas límite de asignaciones explícitas y ciclo del empleado (`valid_from`, `valid_to + 1`, `created_at`, `deactivated_at + 1`) creando intervalos elementales no solapados `[slice_start, slice_end]`.
+3. **Determinación estricta de área primaria por corte**:
+   - Si coincide con `employees.area_id`, tiene prioridad como primaria.
+   - Si no, se elige la asignación con fecha de inicio más temprana (`valid_from`).
+   - Desempate determinista por fecha de creación (`created_at`) y UUID de área (`area_id`).
+   - Exactamente **como máximo un área primaria** en cualquier fecha.
+4. **Marcado de áreas concurrentes como secundarias**: todas las asignaciones explícitas adicionales que solapan en el mismo corte se registran como `is_primary = false`.
+5. **Fallback de `employees.area_id` en huecos temporales**: los cortes donde el empleado carece de asignaciones en `operational_assignments` se cubren con `employees.area_id` (`is_primary = true`, `source = 'LEGACY_EMPLOYEE_AREA_FALLBACK'`).
+6. **Fusión final de segmentos contiguos**: los cortes consecutivos con idéntica tupla `(area_id, is_primary, source)` se colapsan en un único rango continuo `[valid_from, valid_to]`.
+7. **Soporte exhaustivo verificado**:
+   - Rangos parcialmente solapados.
+   - Rangos contenidos (un periodo dentro de otro más amplio).
+   - Periodos abiertos (`valid_to IS NULL`) y asignaciones consecutivas.
+   - Múltiples áreas secundarias simultáneas.
+   - Fallback de `employees.area_id` cubriendo huecos antes, entre o después de asignaciones explícitas.
 
 ---
 
@@ -341,7 +347,35 @@ Para simplificar el consumo en servicios de backend y frontend sin necesidad de 
 
 ---
 
-## 9. Próximos Pasos (Fases 2 y 3)
+## 9. Servicio de Transferencia Temporal de Propiedad (`transferOwnershipTemporal`)
+
+La función `transferOwnershipTemporal` (`api/_lib/temporal-org-model.js`) implementa la transferencia atómica y segura del rol `OWNER` con las siguientes garantías:
+1. **Transaccionalidad estricta**: exige `sql.transaction` y aborta de inmediato si no está disponible.
+2. **Bloqueo de concurrencia**: ejecuta `SELECT id FROM organizations WHERE id = $1 FOR UPDATE` para serializar transferencias concurrentes.
+3. **Validación de requisitos del nuevo propietario**:
+   - Pertenencia a la organización.
+   - Presencia de `user_id`.
+   - Estado `status = 'ACTIVE'`.
+   - Membresía válida existente en `memberships`.
+4. **Rechazo de fechas futuras**: transacciones con fecha efectiva posterior a hoy se rechazan explícitamente a la espera del scheduler automatizado.
+5. **Cero `DELETE` y detección explícita de conflictos**: no destruye periodos futuros; si existen periodos incompatibles en o después de la fecha efectiva, aborta con conflicto explícito.
+6. **Sincronización retroactiva atómica**: actualiza sincronizadamente los periodos de rol en `person_role_periods` y la tabla legacy `memberships`.
+
+---
+
+## 10. Harness de Integración Reproducible y Seguro
+
+El script `scripts/run-temporal-org-model-integration.mjs` incorpora 6 garantías contra escrituras accidentales:
+1. **Prohibición de URLs genéricas**: ignora estrictamente `DATABASE_URL` y `POSTGRES_URL`.
+2. **Resolución dinámica de `main`**: consulta las ramas de Neon para localizar dinámicamente la rama `main` del proyecto `holy-cake-85660318`.
+3. **Aislamiento en rama efímera**: crea una rama hija temporal (`tmp-temporal-*`) de `main`, ejecuta semillas legacy, migración 0036, verificaciones y pruebas exclusivamente allí.
+4. **Destrucción garantizada en `finally`**: destruye la rama efímera tanto si las pruebas pasan como si fallan. Si la destrucción falla, reporta `FAIL` y expone el ID de rama para limpieza manual.
+5. **Requisito explícito para bases existentes**: si se pasa `TEMPORAL_MODEL_DATABASE_URL`, exige `ALLOW_EXISTING_TEMPORAL_TEST_DATABASE=true` y valida que la rama no sea `main`, no sea default, no esté protegida y tenga prefijo temporal.
+6. **Suite de pruebas de seguridad**: `scripts/run-temporal-org-model-integration.test.mjs` verifica unitariamente las 6 propiedades de seguridad.
+
+---
+
+## 11. Próximos Pasos (Fases 2 y 3)
 
 * **Fase 2 (Doble Escritura y Capa de Dominio)**:
   - Los endpoints de onboarding, gestión de miembros y asignación de turnos escribirán simultáneamente en el modelo legacy y en el modelo temporal.

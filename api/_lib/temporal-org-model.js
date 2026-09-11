@@ -110,6 +110,29 @@ export function getDayBefore(date) {
 }
 
 /**
+ * Checks if outer range [outerFrom, outerTo] fully covers inner range [innerFrom, innerTo].
+ *
+ * @param {string} outerFrom
+ * @param {string|null} outerTo
+ * @param {string} innerFrom
+ * @param {string|null} innerTo
+ * @returns {boolean}
+ */
+export function dateRangeContains(outerFrom, outerTo, innerFrom, innerTo) {
+  const normOuterFrom = normalizeDate(outerFrom);
+  const normOuterTo = outerTo ? normalizeDate(outerTo) : null;
+  const normInnerFrom = normalizeDate(innerFrom);
+  const normInnerTo = innerTo ? normalizeDate(innerTo) : null;
+
+  if (normOuterFrom > normInnerFrom) return false;
+  if (normOuterTo !== null) {
+    if (normInnerTo === null) return false;
+    if (normInnerTo > normOuterTo) return false;
+  }
+  return true;
+}
+
+/**
  * Validates a temporal role period assignment.
  */
 export function validateRolePeriod({
@@ -350,6 +373,9 @@ export function validateReportingRelationship({
   supervisorRole,
   subordinateRole,
   subordinateHasProfile,
+  supervisorRolePeriod = null,
+  subordinateRolePeriod = null,
+  subordinateProfilePeriod = null,
 }) {
   if (!organizationId) throw new Error('organizationId is required');
   if (!supervisorPersonId) throw new Error('supervisorPersonId is required');
@@ -379,6 +405,15 @@ export function validateReportingRelationship({
     if (!subordinateHasProfile) {
       throw new Error(`Subordinate person must have an active employee profile for relationship type ${relationshipType}`);
     }
+    if (subordinateProfilePeriod) {
+      const profileFrom = subordinateProfilePeriod.startedOn || subordinateProfilePeriod.validFrom;
+      const profileTo = subordinateProfilePeriod.endedOn !== undefined ? subordinateProfilePeriod.endedOn : subordinateProfilePeriod.validTo;
+      if (profileFrom || profileTo) {
+        if (!dateRangeContains(profileFrom || from, profileTo ?? null, from, to)) {
+          throw new Error('Subordinate employee profile tenure does not fully cover the reporting relationship period');
+        }
+      }
+    }
   }
 
   // Role compatibility validations (mandatory parameters)
@@ -389,12 +424,23 @@ export function validateReportingRelationship({
     throw new Error('subordinateRole is required for reporting relationship validation');
   }
 
+  if (supervisorRolePeriod) {
+    if (!dateRangeContains(supervisorRolePeriod.validFrom, supervisorRolePeriod.validTo ?? null, from, to)) {
+      throw new Error('Supervisor role period does not fully cover the reporting relationship period');
+    }
+  }
+
   if (relationshipType === 'ADMIN_PLANNER') {
     if (!['OWNER', 'ADMIN'].includes(supervisorRole)) {
       throw new Error(`Incompatible supervisor role for ADMIN_PLANNER: ${supervisorRole}. Must be OWNER or ADMIN`);
     }
     if (subordinateRole !== 'PLANNER') {
       throw new Error(`Incompatible subordinate role for ADMIN_PLANNER: ${subordinateRole}. Must be PLANNER`);
+    }
+    if (subordinateRolePeriod) {
+      if (!dateRangeContains(subordinateRolePeriod.validFrom, subordinateRolePeriod.validTo ?? null, from, to)) {
+        throw new Error('Subordinate role period does not fully cover the reporting relationship period');
+      }
     }
   } else if (relationshipType === 'ADMIN_EMPLOYEE') {
     if (!['OWNER', 'ADMIN'].includes(supervisorRole)) {
@@ -706,6 +752,9 @@ export async function transferOwnershipTemporal(sql, {
   effectiveDate,
   newPreviousOwnerRole = 'ADMIN',
 }) {
+  if (typeof sql?.transaction !== 'function') {
+    throw new Error('Transaction support is required for atomic ownership transfer');
+  }
   if (!organizationId) throw new Error('organizationId is required');
   if (!newOwnerPersonId) throw new Error('newOwnerPersonId is required');
   if (!['ADMIN', 'PLANNER'].includes(newPreviousOwnerRole)) {
@@ -713,9 +762,13 @@ export async function transferOwnershipTemporal(sql, {
   }
 
   const effDate = normalizeDate(effectiveDate);
+  const today = new Date().toISOString().slice(0, 10);
+  if (effDate > today) {
+    throw new Error('Future-dated ownership transfers are not allowed without an automated scheduler');
+  }
   const dayBefore = getDayBefore(effDate);
 
-  // Validate target person belongs to the organization
+  // Validate target person belongs to the organization and meets owner prerequisites
   const newOwnerPersonRows = await sql`
     SELECT id, user_id, status
     FROM organization_people
@@ -725,6 +778,22 @@ export async function transferOwnershipTemporal(sql, {
     throw new Error(`Target person ${newOwnerPersonId} not found in organization ${organizationId}`);
   }
   const newOwnerPerson = newOwnerPersonRows[0];
+  if (!newOwnerPerson.user_id) {
+    throw new Error('New owner must have an associated user_id');
+  }
+  if (newOwnerPerson.status !== 'ACTIVE') {
+    throw new Error('New owner must be in ACTIVE status');
+  }
+
+  // Validate new owner holds a valid membership
+  const newOwnerMembershipRows = await sql`
+    SELECT role
+    FROM memberships
+    WHERE organization_id = ${organizationId} AND user_id = ${newOwnerPerson.user_id};
+  `;
+  if (newOwnerMembershipRows.length === 0) {
+    throw new Error('New owner must have an existing membership in the organization');
+  }
 
   // Discover or verify current owner
   let currentOwner;
@@ -772,8 +841,27 @@ export async function transferOwnershipTemporal(sql, {
     throw new Error(`Effective date ${effDate} is on or before current owner start date ${curOwnerValidFrom}`);
   }
 
+  // Explicit conflict check: do NOT delete future periods; reject if incompatible future periods exist
+  const futureRoleRows = await sql`
+    SELECT id, role, organization_person_id, valid_from
+    FROM person_role_periods
+    WHERE organization_id = ${organizationId}
+      AND (
+        (organization_person_id = ${currentOwner.organization_person_id} AND valid_from > ${effDate}::date)
+        OR (organization_person_id = ${newOwnerPersonId} AND valid_from >= ${effDate}::date)
+        OR (role = 'OWNER' AND valid_from >= ${effDate}::date)
+      );
+  `;
+  if (futureRoleRows.length > 0) {
+    throw new Error('Ownership transfer conflict: Incompatible future role periods exist on or after effective date');
+  }
+
   const queriesBuilder = (client) => {
     const list = [
+      // Concurrency lock: serialize transfers on organization
+      client`
+        SELECT id FROM organizations WHERE id = ${organizationId} FOR UPDATE;
+      `,
       // 1. Close active OWNER period for current owner at effectiveDate - 1 day
       client`
         UPDATE person_role_periods
@@ -797,14 +885,7 @@ export async function transferOwnershipTemporal(sql, {
           AND valid_from <= ${dayBefore}::date
           AND (valid_to IS NULL OR valid_to >= ${effDate}::date);
       `,
-      // 4. Remove any future-dated role periods of new owner starting on or after effectiveDate
-      client`
-        DELETE FROM person_role_periods
-        WHERE organization_id = ${organizationId}
-          AND organization_person_id = ${newOwnerPersonId}
-          AND valid_from >= ${effDate}::date;
-      `,
-      // 5. Open new OWNER period for new owner starting at effectiveDate
+      // 4. Open new OWNER period for new owner starting at effectiveDate
       client`
         INSERT INTO person_role_periods (
           organization_id, organization_person_id, role, valid_from, valid_to, source, created_at, updated_at
@@ -814,7 +895,7 @@ export async function transferOwnershipTemporal(sql, {
       `,
     ];
 
-    // 6. Update legacy memberships table for current owner if user_id exists
+    // 5. Update legacy memberships table for current owner if user_id exists
     if (currentOwner.user_id) {
       list.push(client`
         UPDATE memberships
@@ -823,7 +904,7 @@ export async function transferOwnershipTemporal(sql, {
       `);
     }
 
-    // 7. Update legacy memberships table for new owner if user_id exists
+    // 6. Update legacy memberships table for new owner if user_id exists
     if (newOwnerPerson.user_id) {
       list.push(client`
         UPDATE memberships
@@ -835,13 +916,7 @@ export async function transferOwnershipTemporal(sql, {
     return list;
   };
 
-  if (typeof sql.transaction === 'function') {
-    await sql.transaction(queriesBuilder);
-  } else {
-    for (const query of queriesBuilder(sql)) {
-      await query;
-    }
-  }
+  await sql.transaction(queriesBuilder);
 
   return {
     transferred: true,

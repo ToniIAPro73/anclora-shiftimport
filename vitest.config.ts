@@ -5,7 +5,13 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'api/**/*.test.js', 'db/**/*.test.mjs'],
+    include: [
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'api/**/*.test.js',
+      'db/**/*.test.mjs',
+      'scripts/**/*.test.mjs',
+    ],
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
