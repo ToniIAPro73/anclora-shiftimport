@@ -6,12 +6,14 @@ import {
   normalizeDate,
   isDateWithinRange,
   rangesOverlap,
+  getDayBefore,
   validateRolePeriod,
   validateEmployeeAreaPeriod,
   validateAccessScopePeriod,
   validateReportingRelationship,
   detectSupervisionCycle,
   closePeriod,
+  transferOwnershipTemporal,
 } from './temporal-org-model.js';
 
 describe('temporal organizational model domain service', () => {
@@ -429,6 +431,8 @@ describe('temporal organizational model domain service', () => {
           validFrom: '2026-01-01',
           validTo: null,
           existingRelationships: existing,
+          supervisorRole: 'ADMIN',
+          subordinateRole: 'PLANNER',
         })
       ).toThrow('Circular supervision detected');
     });
@@ -460,8 +464,37 @@ describe('temporal organizational model domain service', () => {
           validFrom: '2026-01-01',
           validTo: null,
           existingRelationships: existing,
+          supervisorRole: 'ADMIN',
+          subordinateRole: 'PLANNER',
         })
       ).toThrow('Circular supervision detected');
+    });
+
+    it('allows reciprocal supervision in disjoint temporal intervals (no cycle)', () => {
+      const existing = [
+        {
+          supervisorPersonId: personA,
+          subordinatePersonId: personB,
+          relationshipType: 'ADMIN_PLANNER',
+          validFrom: '2025-01-01',
+          validTo: '2025-12-31',
+        },
+      ];
+
+      // B supervises A in 2026 (disjoint from 2025): perfectly valid
+      const res = validateReportingRelationship({
+        organizationId: orgId,
+        supervisorPersonId: personB,
+        subordinatePersonId: personA,
+        relationshipType: 'ADMIN_PLANNER',
+        validFrom: '2026-01-01',
+        validTo: '2026-12-31',
+        existingRelationships: existing,
+        supervisorRole: 'ADMIN',
+        subordinateRole: 'PLANNER',
+      });
+      expect(res.supervisorPersonId).toBe(personB);
+      expect(res.subordinatePersonId).toBe(personA);
     });
 
     it('allows an employee with primary and secondary planners (Scenario 15)', () => {
@@ -486,6 +519,9 @@ describe('temporal organizational model domain service', () => {
         validTo: null,
         isPrimary: false,
         existingRelationships: existing,
+        supervisorRole: 'PLANNER',
+        subordinateRole: 'EMPLOYEE',
+        subordinateHasProfile: true,
       });
       expect(res.isPrimary).toBe(false);
       expect(res.supervisorPersonId).toBe(personB);
@@ -501,6 +537,9 @@ describe('temporal organizational model domain service', () => {
           validTo: null,
           isPrimary: true,
           existingRelationships: existing,
+          supervisorRole: 'PLANNER',
+          subordinateRole: 'EMPLOYEE',
+          subordinateHasProfile: true,
         })
       ).toThrow('Subordinate already has a primary supervisor');
     });
@@ -527,13 +566,16 @@ describe('temporal organizational model domain service', () => {
         validTo: '2026-08-31',
         isPrimary: true,
         existingRelationships: existing,
+        supervisorRole: 'PLANNER',
+        subordinateRole: 'EMPLOYEE',
+        subordinateHasProfile: true,
       });
       expect(sub.supervisorPersonId).toBe(personB);
       expect(sub.validFrom).toBe('2026-07-01');
       expect(sub.validTo).toBe('2026-08-31');
     });
 
-    it('validates role compatibility for supervision types', () => {
+    it('validates role compatibility and subordinate profile for supervision types', () => {
       // Non-admin supervisor for ADMIN_PLANNER fails
       expect(() =>
         validateReportingRelationship({
@@ -547,6 +589,20 @@ describe('temporal organizational model domain service', () => {
         })
       ).toThrow('Incompatible supervisor role');
 
+      // Missing subordinateHasProfile for PLANNER_EMPLOYEE fails
+      expect(() =>
+        validateReportingRelationship({
+          organizationId: orgId,
+          supervisorPersonId: personA,
+          subordinatePersonId: personB,
+          relationshipType: 'PLANNER_EMPLOYEE',
+          validFrom: '2026-01-01',
+          supervisorRole: 'PLANNER',
+          subordinateRole: 'EMPLOYEE',
+          subordinateHasProfile: false,
+        })
+      ).toThrow('Subordinate person must have an active employee profile');
+
       // Non-planner supervisor for PLANNER_EMPLOYEE fails
       expect(() =>
         validateReportingRelationship({
@@ -556,8 +612,107 @@ describe('temporal organizational model domain service', () => {
           relationshipType: 'PLANNER_EMPLOYEE',
           validFrom: '2026-01-01',
           supervisorRole: 'EMPLOYEE',
+          subordinateRole: 'EMPLOYEE',
+          subordinateHasProfile: true,
         })
       ).toThrow('Incompatible supervisor role for PLANNER_EMPLOYEE');
+    });
+  });
+
+  describe('getDayBefore utility', () => {
+    it('calculates the previous calendar day correctly across month and year boundaries', () => {
+      expect(getDayBefore('2026-06-01')).toBe('2026-05-31');
+      expect(getDayBefore('2026-03-01')).toBe('2026-02-28');
+      expect(getDayBefore('2026-01-01')).toBe('2025-12-31');
+    });
+  });
+
+  describe('transferOwnershipTemporal domain helper', () => {
+    it('validates required inputs and role transitions', async () => {
+      const executedQueries = [];
+      const fakeSql = async (strings, ...values) => {
+        const text = strings.join('?');
+        executedQueries.push({ text, values });
+
+        // Target person lookup
+        if (text.includes('FROM organization_people')) {
+          return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
+        }
+        // Current owner lookup
+        if (text.includes("FROM person_role_periods prp") && text.includes("role = 'OWNER'")) {
+          return [{
+            id: 'role-period-current-owner',
+            organization_person_id: personA,
+            valid_from: '2026-01-01',
+            valid_to: null,
+            user_id: 'user-a-uuid',
+          }];
+        }
+        return [];
+      };
+
+      fakeSql.transaction = async (fn) => {
+        const queries = fn(fakeSql);
+        return await Promise.all(queries);
+      };
+
+      const result = await transferOwnershipTemporal(fakeSql, {
+        organizationId: orgId,
+        currentOwnerPersonId: personA,
+        newOwnerPersonId: personB,
+        effectiveDate: '2026-07-01',
+        newPreviousOwnerRole: 'ADMIN',
+      });
+
+      expect(result.transferred).toBe(true);
+      expect(result.previousOwnerPersonId).toBe(personA);
+      expect(result.newOwnerPersonId).toBe(personB);
+      expect(result.effectiveDate).toBe('2026-07-01');
+
+      // Verify closing period at 2026-06-30
+      const closeOwnerQuery = executedQueries.find((q) =>
+        q.text.includes('UPDATE person_role_periods') && q.values.includes('2026-06-30')
+      );
+      expect(closeOwnerQuery).toBeDefined();
+
+      // Verify inserting new OWNER period at 2026-07-01
+      const insertNewOwner = executedQueries.find((q) =>
+        q.text.includes('INSERT INTO person_role_periods') && q.text.includes("'OWNER'") && q.values.includes('2026-07-01')
+      );
+      expect(insertNewOwner).toBeDefined();
+
+      // Verify memberships compatibility updates
+      const membershipUpdate = executedQueries.find((q) =>
+        q.text.includes('UPDATE memberships') && q.text.includes("'OWNER'")
+      );
+      expect(membershipUpdate).toBeDefined();
+    });
+
+    it('rejects transfer if target is same as current owner', async () => {
+      const fakeSql = async (strings) => {
+        const text = strings.join('?');
+        if (text.includes('FROM organization_people')) {
+          return [{ id: personA, user_id: 'user-a-uuid', status: 'ACTIVE' }];
+        }
+        if (text.includes("FROM person_role_periods")) {
+          return [{
+            id: 'role-owner-1',
+            organization_person_id: personA,
+            valid_from: '2026-01-01',
+            valid_to: null,
+            user_id: 'user-a-uuid',
+          }];
+        }
+        return [];
+      };
+
+      await expect(
+        transferOwnershipTemporal(fakeSql, {
+          organizationId: orgId,
+          newOwnerPersonId: personA,
+          effectiveDate: '2026-07-01',
+        })
+      ).rejects.toThrow('Target owner cannot be the same as current owner');
     });
   });
 });

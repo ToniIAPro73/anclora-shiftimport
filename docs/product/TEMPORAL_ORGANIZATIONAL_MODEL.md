@@ -124,7 +124,8 @@ Representa el nodo raíz de cualquier persona adscrita a la organización, indep
   - `id` (UUID PK)
   - `organization_id` (UUID NOT NULL, FK `organizations.id` ON DELETE CASCADE)
   - `user_id` (UUID NULLABLE, FK `users.id` ON DELETE SET NULL): Referencia a credencial de acceso.
-  - `status` (TEXT NOT NULL DEFAULT 'ACTIVE'): `ACTIVE`, `INACTIVE`, `SUSPENDED`.
+  - `status` (TEXT NOT NULL DEFAULT 'ACTIVE'): `ACTIVE`, `INACTIVE`, `SUSPENDED`, `PENDING_INVITATION`.
+    - *Invariante de producto*: Los empleados legacy sin cuenta de usuario (`user_id IS NULL`) se crean con estado `PENDING_INVITATION`, indicando que son sujetos de cuadrante pendientes de invitación/vinculación de credenciales.
   - `created_at`, `updated_at` (TIMESTAMPTZ NOT NULL DEFAULT NOW())
 - **Restricciones**:
   - `UNIQUE (id, organization_id)`: Permite claves compuestas multi-tenant dependientes.
@@ -138,7 +139,7 @@ Ficha laboral operativa del trabajador.
   - `organization_person_id` (UUID NOT NULL): Vincula la ficha laboral con la persona.
   - `external_employee_id` (TEXT NULLABLE): Matrícula, nómina o código de cuadrante externo.
   - `employee_name` (TEXT NOT NULL)
-  - `employment_status` (TEXT NOT NULL DEFAULT 'ACTIVE'): `ACTIVE`, `LEAVE`, `TERMINATED`.
+  - `employment_status` (TEXT NOT NULL DEFAULT 'ACTIVE'): `ACTIVE`, `INACTIVE`, `ON_LEAVE`, `TERMINATED`.
   - `started_on` (DATE NULLABLE), `ended_on` (DATE NULLABLE)
 - **Restricciones**:
   - `UNIQUE (id, organization_id)`
@@ -163,6 +164,14 @@ Vigencia temporal del rol de una persona dentro de la organización.
       daterange(valid_from, valid_to, '[]') WITH &&
     )
     ```
+  - `EXCLUDE USING gist`: Garantiza a nivel de base de datos la **unicidad temporal de OWNER**: no pueden existir dos OWNER simultáneos dentro de la misma organización:
+    ```sql
+    EXCLUDE USING gist (
+      organization_id WITH =,
+      daterange(valid_from, valid_to, '[]') WITH &&
+    ) WHERE (role = 'OWNER')
+    ```
+  - Transición atómica mediante helper `transferOwnershipTemporal(sql, params)`.
 
 ### 3.4. `employee_area_periods`
 Asignación de un empleado a una o varias áreas operativas a lo largo del tiempo.
@@ -234,6 +243,11 @@ Líneas de reporte, aprobación y supervisión temporal.
       daterange(valid_from, valid_to, '[]') WITH &&
     ) WHERE (is_primary = true)
     ```
+  - **Trigger Function `check_reporting_relationship_validity()`**:
+    - Anti-auto-supervisión inmediata.
+    - Exige obligatoriamente `employee_profiles` para subordinados de tipo `ADMIN_EMPLOYEE` y `PLANNER_EMPLOYEE`.
+    - Compatibilidad de roles cruzada en `person_role_periods` activa en el intervalo de la relación (`ADMIN_PLANNER`: supervisor OWNER/ADMIN, subordinado PLANNER; `ADMIN_EMPLOYEE`: supervisor OWNER/ADMIN; `PLANNER_EMPLOYEE`: supervisor PLANNER).
+    - **Detección de ciclos temporales por intersección recursiva de trayectorias**: un ciclo solo se diagnostica si la intersección de los rangos de vigencia a lo largo de todo el camino dirigido es no vacía. Permite la alternancia y reutilización recíproca en periodos disjuntos (p. ej. A supervisa a B en 2025 y B supervisa a A en 2026).
 
 ---
 
@@ -282,13 +296,19 @@ Para evitar cualquier posibilidad de fuga de datos entre organizaciones (incluso
 * `shifts`: Sigue enlazando a `shifts.employee_id`.
 
 ### 6.2. Estrategia de Backfill Idempotente
-La migración `0036_temporal_organizational_model.sql` incluye un backfill automático:
-1. **Usuarios con membresía** ⇒ Crea fila en `organization_people` con `user_id`.
-2. **Empleados sin usuario** ⇒ Crea fila en `organization_people` con `user_id = NULL` y genera `employee_profiles` vinculada.
-3. **Empleados vinculados a usuario** ⇒ Enlaza `employee_profiles` con la persona correspondiente creada en el paso 1.
-4. **Membresías activas** ⇒ Crea periodos en `person_role_periods` con `source = 'LEGACY_CURRENT_STATE'`, `valid_from = COALESCE(created_at, '2026-01-01')`.
-5. **Asignaciones de área** ⇒ Migra `operational_assignments` y `employees.area_id` a `employee_area_periods`.
-6. **Responsables de área** ⇒ Migra `area_responsibles` a `reporting_relationship_periods` de tipo `PLANNER_EMPLOYEE`.
+La migración `0036_temporal_organizational_model.sql` incluye un backfill determinista e idempotente en 12 fases ordenadas:
+1. **Usuarios con membresía** ⇒ Crea fila en `organization_people` con `status = 'ACTIVE'`.
+2. **Empleados con usuario sin membresía** ⇒ Crea fila en `organization_people` con `status = 'ACTIVE'` o `'INACTIVE'`.
+3. **Empleados no vinculados (`user_id IS NULL`)** ⇒ Crea fila en `organization_people` con `status = 'PENDING_INVITATION'` y genera `employee_profiles` correspondiente de forma determinista usando el UUID del empleado.
+4. **Empleados vinculados a usuario** ⇒ Enlaza `employee_profiles` con la persona creada previamente.
+5. **Membresías activas** ⇒ Crea periodos en `person_role_periods` con `source = 'LEGACY_CURRENT_STATE'`.
+6. **Asignaciones de área desde `operational_assignments` (Prioridad 1)** ⇒ Migra `EMPLOYEE_AREA` a `employee_area_periods` con `is_primary` jerarquizado y `source = 'LEGACY_OPERATIONAL_ASSIGNMENT'`.
+7. **Asignaciones de área desde `employees.area_id` (Prioridad 2, Fallback)** ⇒ Migra `employees.area_id` a `employee_area_periods` solo si no existe ya una asignación primaria concurrente desde Prioridad 1, con `source = 'LEGACY_EMPLOYEE_AREA_FALLBACK'`.
+8. **Responsables de área (`area_responsibles`)** ⇒ Migra políticas de aprobación por área a `person_access_scope_periods` con `scope_type = 'AREA'` y `source = 'LEGACY_AREA_RESPONSIBLE'`.
+9. **Alcances desde membresías** ⇒ `OWNER`, `ADMIN` y `PLANNER` globales reciben `scope_type = 'ORGANIZATION'`.
+10. **Alcances de Planners con área acotada** ⇒ Reciben `scope_type = 'AREA'` para su `scoped_area_id`.
+11. **Alcances desde `operational_assignments` (PLANNER_AREA)** ⇒ Migra a `person_access_scope_periods` (`AREA`).
+12. **Alcances desde `operational_assignments` (PLANNER_EMPLOYEE)** ⇒ Migra a `person_access_scope_periods` (`PERSON`).
 
 ---
 
@@ -309,15 +329,15 @@ Para simplificar el consumo en servicios de backend y frontend sin necesidad de 
 
 ## 8. Matriz de Combinaciones Válidas
 
-| Tipo de Sujeto | `user_id` en Persona | Perfil Empleado | Rol en `person_role_periods` | Casos de Uso Reales |
-|---|:---:|:---:|:---:|---|
-| **Operario de Planta / Turno** | `NULL` | Sí | `EMPLOYEE` | Empleado de cuadrante sin acceso informático al portal. |
-| **Operario con Portal Móvil** | UUID | Sí | `EMPLOYEE` | Empleado que consulta cuadrantes y solicita cambios en autoservicio. |
-| **Planificador de Turnos** | UUID | No / Opcional | `PLANNER` | Administrativo de tráfico que planifica turnos de un área sin realizarlos él mismo. |
-| **Planificador con Turnos** | UUID | Sí | `PLANNER` | Jefe de equipo o supervisor de rampa que realiza turnos y a la vez planifica a sus pares. |
-| **Administrador / RRHH** | UUID | No / Opcional | `ADMIN` | Gestor global sin turnos asignados. |
-| **Propietario / Owner** | UUID | No / Opcional | `OWNER` | Dueño de la organización. |
-| **Ex-empleado / Baja** | UUID o `NULL` | Sí (`TERMINATED`) | Inactivo | Histórico archivado preservando turnos y trazabilidad. |
+| Tipo de Sujeto | `user_id` en Persona | Estado Persona | Perfil Empleado | Rol en `person_role_periods` | Casos de Uso Reales |
+|---|:---:|:---:|:---:|:---:|---|
+| **Operario de Planta / Turno (Sin acceso)** | `NULL` | `PENDING_INVITATION` | Sí (`ACTIVE`) | Ninguno / Pendiente | Empleado detectado en cuadrante/importación sin cuenta portal. |
+| **Operario con Portal Móvil** | UUID | `ACTIVE` | Sí (`ACTIVE`) | `EMPLOYEE` | Empleado que consulta cuadrantes y solicita cambios en autoservicio. |
+| **Planificador de Turnos** | UUID | `ACTIVE` | No / Opcional | `PLANNER` | Administrativo de tráfico que planifica turnos de un área sin realizarlos él mismo. |
+| **Planificador con Turnos** | UUID | `ACTIVE` | Sí (`ACTIVE`) | `PLANNER` | Jefe de equipo o supervisor de rampa que realiza turnos y a la vez planifica a sus pares. |
+| **Administrador / RRHH** | UUID | `ACTIVE` | No / Opcional | `ADMIN` | Gestor global sin turnos asignados. |
+| **Propietario / Owner** | UUID | `ACTIVE` | No / Opcional | `OWNER` | Dueño de la organización (exactamente uno simultáneo). |
+| **Ex-empleado / Baja** | UUID o `NULL` | `INACTIVE` | Sí (`TERMINATED`) | Inactivo / Histórico | Histórico archivado preservando turnos y trazabilidad. |
 
 ---
 

@@ -6,5 +6,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'api/**/*.test.js', 'db/**/*.test.mjs'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      ...(process.env.TEMPORAL_MODEL_DATABASE_URL ? [] : ['**/*.integration.test.mjs']),
+    ],
   },
 });

@@ -294,6 +294,8 @@ describe('22 Canonical business scenarios for temporal organizational model (Pha
       relationshipType: 'PLANNER_EMPLOYEE',
       validFrom: '2026-01-01',
       supervisorRole: 'PLANNER',
+      subordinateRole: 'EMPLOYEE',
+      subordinateHasProfile: true,
     });
     const rel2 = validateReportingRelationship({
       organizationId: org1,
@@ -303,6 +305,8 @@ describe('22 Canonical business scenarios for temporal organizational model (Pha
       validFrom: '2026-01-01',
       existingRelationships: [rel1],
       supervisorRole: 'PLANNER',
+      subordinateRole: 'EMPLOYEE',
+      subordinateHasProfile: true,
     });
     expect(rel1.subordinatePersonId).toBe(personEmp1);
     expect(rel2.subordinatePersonId).toBe(personEmp2);
@@ -318,6 +322,8 @@ describe('22 Canonical business scenarios for temporal organizational model (Pha
       validFrom: '2026-01-01',
       isPrimary: true,
       supervisorRole: 'PLANNER',
+      subordinateRole: 'EMPLOYEE',
+      subordinateHasProfile: true,
     });
     const secondary = validateReportingRelationship({
       organizationId: org1,
@@ -328,6 +334,8 @@ describe('22 Canonical business scenarios for temporal organizational model (Pha
       isPrimary: false,
       existingRelationships: [primary],
       supervisorRole: 'PLANNER',
+      subordinateRole: 'EMPLOYEE',
+      subordinateHasProfile: true,
     });
     expect(primary.isPrimary).toBe(true);
     expect(secondary.isPrimary).toBe(false);
@@ -353,6 +361,8 @@ describe('22 Canonical business scenarios for temporal organizational model (Pha
       isPrimary: true,
       existingRelationships: [originalPeriod],
       supervisorRole: 'PLANNER',
+      subordinateRole: 'EMPLOYEE',
+      subordinateHasProfile: true,
     });
     expect(substitutePeriod.validFrom).toBe('2026-07-01');
     expect(substitutePeriod.supervisorPersonId).toBe(personSubstitute);
@@ -418,6 +428,8 @@ describe('22 Canonical business scenarios for temporal organizational model (Pha
         validFrom: '2026-01-01',
         validTo: null,
         existingRelationships: existing,
+        supervisorRole: 'ADMIN',
+        subordinateRole: 'PLANNER',
       })
     ).toThrow('Circular supervision detected');
   });

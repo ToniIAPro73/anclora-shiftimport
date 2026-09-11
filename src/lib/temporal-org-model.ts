@@ -6,7 +6,7 @@ export type OrgRole = 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE';
 export type OrgScopeType = 'ORGANIZATION' | 'AREA' | 'PERSON';
 export type OrgRelationshipType = 'ADMIN_PLANNER' | 'ADMIN_EMPLOYEE' | 'PLANNER_EMPLOYEE';
 export type EmploymentStatus = 'ACTIVE' | 'INACTIVE' | 'ON_LEAVE' | 'TERMINATED';
-export type PersonStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING_INVITATION';
+export type PersonStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_INVITATION';
 
 export interface OrganizationPerson {
   id: string;
@@ -134,38 +134,86 @@ export function rangesOverlap(
   return aStartsBeforeBEnds && bStartsBeforeAEnds;
 }
 
+export function intersectDateRanges(
+  rangeA: { from?: string | Date | null; validFrom?: string | Date | null; to?: string | Date | null; validTo?: string | Date | null },
+  rangeB: { from?: string | Date | null; validFrom?: string | Date | null; to?: string | Date | null; validTo?: string | Date | null }
+): { from: string; to: string | null; validFrom: string; validTo: string | null } | null {
+  const sA = normalizeDate(rangeA.from || rangeA.validFrom)!;
+  const eA = rangeA.to ? normalizeDate(rangeA.to) : (rangeA.validTo ? normalizeDate(rangeA.validTo) : null);
+  const sB = normalizeDate(rangeB.from || rangeB.validFrom)!;
+  const eB = rangeB.to ? normalizeDate(rangeB.to) : (rangeB.validTo ? normalizeDate(rangeB.validTo) : null);
+
+  const maxStart = sA > sB ? sA : sB;
+  let minEnd: string | null = null;
+  if (eA !== null && eB !== null) {
+    minEnd = eA < eB ? eA : eB;
+  } else if (eA !== null) {
+    minEnd = eA;
+  } else if (eB !== null) {
+    minEnd = eB;
+  }
+
+  if (minEnd !== null && maxStart > minEnd) {
+    return null;
+  }
+  return { from: maxStart, to: minEnd, validFrom: maxStart, validTo: minEnd };
+}
+
+export function getDayBefore(date: string | Date): string {
+  const normalized = normalizeDate(date)!;
+  const d = new Date(`${normalized}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function detectSupervisionCycle(
-  existingEdges: Array<{ supervisorPersonId: string; subordinatePersonId: string }>,
-  newEdge: { supervisorPersonId: string; subordinatePersonId: string }
+  existingEdges: Array<{ supervisorPersonId: string; subordinatePersonId: string; validFrom?: string; validTo?: string | null }>,
+  newEdge: { supervisorPersonId: string; subordinatePersonId: string; validFrom?: string; validTo?: string | null }
 ): boolean {
   const { supervisorPersonId, subordinatePersonId } = newEdge;
   if (supervisorPersonId === subordinatePersonId) {
     return true;
   }
 
-  const adj = new Map<string, string[]>();
+  const newRange = {
+    validFrom: newEdge.validFrom || '1970-01-01',
+    validTo: newEdge.validTo || null,
+  };
+
+  const adj = new Map<string, Array<{ to: string; validFrom: string; validTo: string | null }>>();
   for (const edge of existingEdges) {
     const list = adj.get(edge.supervisorPersonId) || [];
-    list.push(edge.subordinatePersonId);
+    list.push({
+      to: edge.subordinatePersonId,
+      validFrom: edge.validFrom || '1970-01-01',
+      validTo: edge.validTo || null,
+    });
     adj.set(edge.supervisorPersonId, list);
   }
 
-  const list = adj.get(supervisorPersonId) || [];
-  list.push(subordinatePersonId);
-  adj.set(supervisorPersonId, list);
-
-  const visited = new Set<string>();
-  function canReach(current: string, target: string): boolean {
-    if (current === target) return true;
-    visited.add(current);
-    const neighbors = adj.get(current) || [];
-    for (const next of neighbors) {
-      if (!visited.has(next)) {
-        if (canReach(next, target)) return true;
+  function canReachWithTemporalOverlap(
+    currentNode: string,
+    currentRange: { validFrom: string; validTo: string | null },
+    visited: Set<string>
+  ): boolean {
+    const outgoing = adj.get(currentNode) || [];
+    for (const edge of outgoing) {
+      const intersection = intersectDateRanges(currentRange, edge);
+      if (intersection !== null) {
+        if (edge.to === supervisorPersonId) {
+          return true;
+        }
+        if (!visited.has(edge.to)) {
+          const nextVisited = new Set(visited);
+          nextVisited.add(edge.to);
+          if (canReachWithTemporalOverlap(edge.to, intersection, nextVisited)) {
+            return true;
+          }
+        }
       }
     }
     return false;
   }
 
-  return canReach(subordinatePersonId, supervisorPersonId);
+  return canReachWithTemporalOverlap(subordinatePersonId, newRange, new Set([subordinatePersonId]));
 }

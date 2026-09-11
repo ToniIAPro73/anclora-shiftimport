@@ -8,7 +8,7 @@ export const ROLES = Object.freeze(['OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE']);
 export const SCOPE_TYPES = Object.freeze(['ORGANIZATION', 'AREA', 'PERSON']);
 export const RELATIONSHIP_TYPES = Object.freeze(['ADMIN_PLANNER', 'ADMIN_EMPLOYEE', 'PLANNER_EMPLOYEE']);
 export const EMPLOYMENT_STATUSES = Object.freeze(['ACTIVE', 'INACTIVE', 'ON_LEAVE', 'TERMINATED']);
-export const PERSON_STATUSES = Object.freeze(['ACTIVE', 'INACTIVE', 'PENDING_INVITATION']);
+export const PERSON_STATUSES = Object.freeze(['ACTIVE', 'INACTIVE', 'SUSPENDED', 'PENDING_INVITATION']);
 export const SOURCES = Object.freeze([
   'SYSTEM',
   'USER',
@@ -71,6 +71,45 @@ export function rangesOverlap(startA, endA, startB, endB) {
 }
 
 /**
+ * Computes the intersection of two closed or open-ended discrete date ranges.
+ * Returns null if the intersection is empty.
+ */
+export function intersectDateRanges(rangeA, rangeB) {
+  const sA = normalizeDate(rangeA.from || rangeA.validFrom);
+  const eA = rangeA.to ? normalizeDate(rangeA.to) : (rangeA.validTo ? normalizeDate(rangeA.validTo) : null);
+  const sB = normalizeDate(rangeB.from || rangeB.validFrom);
+  const eB = rangeB.to ? normalizeDate(rangeB.to) : (rangeB.validTo ? normalizeDate(rangeB.validTo) : null);
+
+  const maxStart = sA > sB ? sA : sB;
+  let minEnd = null;
+  if (eA !== null && eB !== null) {
+    minEnd = eA < eB ? eA : eB;
+  } else if (eA !== null) {
+    minEnd = eA;
+  } else if (eB !== null) {
+    minEnd = eB;
+  }
+
+  if (minEnd !== null && maxStart > minEnd) {
+    return null;
+  }
+  return { from: maxStart, to: minEnd, validFrom: maxStart, validTo: minEnd };
+}
+
+/**
+ * Returns the calendar date immediately preceding the given ISO date string.
+ *
+ * @param {string} date ISO date YYYY-MM-DD
+ * @returns {string} ISO date YYYY-MM-DD
+ */
+export function getDayBefore(date) {
+  const normalized = normalizeDate(date);
+  const d = new Date(`${normalized}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
  * Validates a temporal role period assignment.
  */
 export function validateRolePeriod({
@@ -80,7 +119,6 @@ export function validateRolePeriod({
   validFrom,
   validTo = null,
   existingPeriods = [],
-  currentOwnerPersonId = null,
 }) {
   if (!organizationId) throw new Error('organizationId is required');
   if (!organizationPersonId) throw new Error('organizationPersonId is required');
@@ -254,41 +292,45 @@ export function validateAccessScopePeriod({
 
 /**
  * Detects if adding a directed edge (supervisor -> subordinate) introduces a cycle in the reporting graph.
+ * Temporal cycle detection: a path forms a cycle only if the intersection of all date ranges along the path is non-empty.
  */
 export function detectSupervisionCycle(existingEdges, newEdge) {
-  const { supervisorPersonId, subordinatePersonId } = newEdge;
+  const { supervisorPersonId, subordinatePersonId, validFrom, validTo = null } = newEdge;
   if (supervisorPersonId === subordinatePersonId) {
     return true; // Self-supervision is a trivial cycle
   }
 
-  // Adjacency list: supervisor -> [subordinates]
-  const adj = new Map();
-  for (const edge of existingEdges) {
-    const list = adj.get(edge.supervisorPersonId) || [];
-    list.push(edge.subordinatePersonId);
-    adj.set(edge.supervisorPersonId, list);
-  }
+  const initialRange = {
+    from: normalizeDate(validFrom),
+    to: validTo ? normalizeDate(validTo) : null,
+  };
 
-  // Add the new edge
-  const list = adj.get(supervisorPersonId) || [];
-  list.push(subordinatePersonId);
-  adj.set(supervisorPersonId, list);
-
-  // Check reachability from subordinate back to supervisor (DFS)
-  const visited = new Set();
-  function canReach(current, target) {
-    if (current === target) return true;
-    visited.add(current);
-    const neighbors = adj.get(current) || [];
-    for (const next of neighbors) {
-      if (!visited.has(next)) {
-        if (canReach(next, target)) return true;
+  function dfs(currentNode, currentRange, visited) {
+    for (const edge of existingEdges) {
+      if (edge.supervisorPersonId === currentNode) {
+        const edgeRange = {
+          from: normalizeDate(edge.validFrom),
+          to: edge.validTo ? normalizeDate(edge.validTo) : null,
+        };
+        const intersection = intersectDateRanges(currentRange, edgeRange);
+        if (intersection !== null) {
+          if (edge.subordinatePersonId === supervisorPersonId) {
+            return true;
+          }
+          if (!visited.has(edge.subordinatePersonId)) {
+            const nextVisited = new Set(visited);
+            nextVisited.add(edge.subordinatePersonId);
+            if (dfs(edge.subordinatePersonId, intersection, nextVisited)) {
+              return true;
+            }
+          }
+        }
       }
     }
     return false;
   }
 
-  return canReach(subordinatePersonId, supervisorPersonId);
+  return dfs(subordinatePersonId, initialRange, new Set([subordinatePersonId]));
 }
 
 /**
@@ -305,9 +347,9 @@ export function validateReportingRelationship({
   supervisorOrganizationId = organizationId,
   subordinateOrganizationId = organizationId,
   existingRelationships = [],
-  supervisorRole = null,
-  subordinateRole = null,
-  subordinateHasProfile = false,
+  supervisorRole,
+  subordinateRole,
+  subordinateHasProfile,
 }) {
   if (!organizationId) throw new Error('organizationId is required');
   if (!supervisorPersonId) throw new Error('supervisorPersonId is required');
@@ -332,30 +374,47 @@ export function validateReportingRelationship({
     throw new Error(`Invalid date range: validTo (${to}) cannot be earlier than validFrom (${from})`);
   }
 
-  // Role compatibility validations (when roles are provided)
+  // Subordinate profile check
+  if (['ADMIN_EMPLOYEE', 'PLANNER_EMPLOYEE'].includes(relationshipType)) {
+    if (!subordinateHasProfile) {
+      throw new Error(`Subordinate person must have an active employee profile for relationship type ${relationshipType}`);
+    }
+  }
+
+  // Role compatibility validations (mandatory parameters)
+  if (!supervisorRole) {
+    throw new Error('supervisorRole is required for reporting relationship validation');
+  }
+  if (!subordinateRole) {
+    throw new Error('subordinateRole is required for reporting relationship validation');
+  }
+
   if (relationshipType === 'ADMIN_PLANNER') {
-    if (supervisorRole && !['OWNER', 'ADMIN'].includes(supervisorRole)) {
+    if (!['OWNER', 'ADMIN'].includes(supervisorRole)) {
       throw new Error(`Incompatible supervisor role for ADMIN_PLANNER: ${supervisorRole}. Must be OWNER or ADMIN`);
     }
-    if (subordinateRole && subordinateRole !== 'PLANNER') {
+    if (subordinateRole !== 'PLANNER') {
       throw new Error(`Incompatible subordinate role for ADMIN_PLANNER: ${subordinateRole}. Must be PLANNER`);
     }
   } else if (relationshipType === 'ADMIN_EMPLOYEE') {
-    if (supervisorRole && !['OWNER', 'ADMIN'].includes(supervisorRole)) {
+    if (!['OWNER', 'ADMIN'].includes(supervisorRole)) {
       throw new Error(`Incompatible supervisor role for ADMIN_EMPLOYEE: ${supervisorRole}. Must be OWNER or ADMIN`);
     }
+    if (subordinateRole !== 'EMPLOYEE') {
+      throw new Error(`Incompatible subordinate role for ADMIN_EMPLOYEE: ${subordinateRole}. Must be EMPLOYEE`);
+    }
   } else if (relationshipType === 'PLANNER_EMPLOYEE') {
-    if (supervisorRole && supervisorRole !== 'PLANNER') {
+    if (supervisorRole !== 'PLANNER') {
       throw new Error(`Incompatible supervisor role for PLANNER_EMPLOYEE: ${supervisorRole}. Must be PLANNER`);
+    }
+    if (subordinateRole !== 'EMPLOYEE') {
+      throw new Error(`Incompatible subordinate role for PLANNER_EMPLOYEE: ${subordinateRole}. Must be EMPLOYEE`);
     }
   }
 
   // Check duplicates and single primary
-  const overlappingActiveEdges = [];
   for (const existing of existingRelationships) {
     if (!rangesOverlap(from, to, existing.validFrom, existing.validTo)) continue;
-
-    overlappingActiveEdges.push(existing);
 
     // Duplicate check
     if (
@@ -377,10 +436,12 @@ export function validateReportingRelationship({
     }
   }
 
-  // Cycle detection
-  const hasCycle = detectSupervisionCycle(overlappingActiveEdges, {
+  // Cycle detection with temporal date range intersection
+  const hasCycle = detectSupervisionCycle(existingRelationships, {
     supervisorPersonId,
     subordinatePersonId,
+    validFrom: from,
+    validTo: to,
   });
   if (hasCycle) {
     throw new Error('Circular supervision detected: A person cannot report to their subordinate (direct or indirect cycle)');
@@ -623,4 +684,171 @@ export async function resolveShiftAreaHistorical(sql, { organizationId, employee
     return rows[0].area_id;
   }
   return fallbackAreaId;
+}
+
+/**
+ * Atomically transfers organizational ownership on a specific effective date in the temporal model,
+ * maintaining the single OWNER exclusion constraint and updating legacy memberships for compatibility.
+ *
+ * @param {object} sql Neon/postgres tagged template client
+ * @param {object} params
+ * @param {string} params.organizationId
+ * @param {string} [params.currentOwnerPersonId] Optional, discovered if omitted
+ * @param {string} params.newOwnerPersonId
+ * @param {string} params.effectiveDate ISO YYYY-MM-DD
+ * @param {string} [params.newPreviousOwnerRole='ADMIN']
+ * @returns {Promise<{ transferred: boolean, organizationId: string, previousOwnerPersonId: string, newOwnerPersonId: string, effectiveDate: string, previousOwnerRole: string }>}
+ */
+export async function transferOwnershipTemporal(sql, {
+  organizationId,
+  currentOwnerPersonId = null,
+  newOwnerPersonId,
+  effectiveDate,
+  newPreviousOwnerRole = 'ADMIN',
+}) {
+  if (!organizationId) throw new Error('organizationId is required');
+  if (!newOwnerPersonId) throw new Error('newOwnerPersonId is required');
+  if (!['ADMIN', 'PLANNER'].includes(newPreviousOwnerRole)) {
+    throw new Error('Previous owner role must be ADMIN or PLANNER');
+  }
+
+  const effDate = normalizeDate(effectiveDate);
+  const dayBefore = getDayBefore(effDate);
+
+  // Validate target person belongs to the organization
+  const newOwnerPersonRows = await sql`
+    SELECT id, user_id, status
+    FROM organization_people
+    WHERE id = ${newOwnerPersonId} AND organization_id = ${organizationId};
+  `;
+  if (newOwnerPersonRows.length === 0) {
+    throw new Error(`Target person ${newOwnerPersonId} not found in organization ${organizationId}`);
+  }
+  const newOwnerPerson = newOwnerPersonRows[0];
+
+  // Discover or verify current owner
+  let currentOwner;
+  if (currentOwnerPersonId) {
+    const rows = await sql`
+      SELECT prp.id, prp.organization_person_id, prp.valid_from, prp.valid_to, op.user_id
+      FROM person_role_periods prp
+      JOIN organization_people op ON op.id = prp.organization_person_id AND op.organization_id = prp.organization_id
+      WHERE prp.organization_id = ${organizationId}
+        AND prp.organization_person_id = ${currentOwnerPersonId}
+        AND prp.role = 'OWNER'
+        AND prp.valid_from <= ${effDate}::date
+        AND (prp.valid_to IS NULL OR prp.valid_to >= ${effDate}::date)
+      ORDER BY prp.valid_from DESC
+      LIMIT 1;
+    `;
+    if (rows.length === 0) {
+      throw new Error(`Current owner period for person ${currentOwnerPersonId} not active on ${effDate}`);
+    }
+    currentOwner = rows[0];
+  } else {
+    const rows = await sql`
+      SELECT prp.id, prp.organization_person_id, prp.valid_from, prp.valid_to, op.user_id
+      FROM person_role_periods prp
+      JOIN organization_people op ON op.id = prp.organization_person_id AND op.organization_id = prp.organization_id
+      WHERE prp.organization_id = ${organizationId}
+        AND prp.role = 'OWNER'
+        AND prp.valid_from <= ${effDate}::date
+        AND (prp.valid_to IS NULL OR prp.valid_to >= ${effDate}::date)
+      ORDER BY prp.valid_from DESC
+      LIMIT 1;
+    `;
+    if (rows.length === 0) {
+      throw new Error(`No active OWNER role period found in organization ${organizationId} on ${effDate}`);
+    }
+    currentOwner = rows[0];
+  }
+
+  if (currentOwner.organization_person_id === newOwnerPersonId) {
+    throw new Error('Target owner cannot be the same as current owner');
+  }
+
+  const curOwnerValidFrom = normalizeDate(currentOwner.valid_from);
+  if (curOwnerValidFrom > dayBefore) {
+    throw new Error(`Effective date ${effDate} is on or before current owner start date ${curOwnerValidFrom}`);
+  }
+
+  const queriesBuilder = (client) => {
+    const list = [
+      // 1. Close active OWNER period for current owner at effectiveDate - 1 day
+      client`
+        UPDATE person_role_periods
+        SET valid_to = ${dayBefore}::date, updated_at = NOW()
+        WHERE id = ${currentOwner.id};
+      `,
+      // 2. Open new demoted role period for previous owner at effectiveDate
+      client`
+        INSERT INTO person_role_periods (
+          organization_id, organization_person_id, role, valid_from, valid_to, source, created_at, updated_at
+        ) VALUES (
+          ${organizationId}, ${currentOwner.organization_person_id}, ${newPreviousOwnerRole}, ${effDate}::date, NULL, 'USER', NOW(), NOW()
+        );
+      `,
+      // 3. Close any active role period of new owner starting before effectiveDate at effectiveDate - 1 day
+      client`
+        UPDATE person_role_periods
+        SET valid_to = ${dayBefore}::date, updated_at = NOW()
+        WHERE organization_id = ${organizationId}
+          AND organization_person_id = ${newOwnerPersonId}
+          AND valid_from <= ${dayBefore}::date
+          AND (valid_to IS NULL OR valid_to >= ${effDate}::date);
+      `,
+      // 4. Remove any future-dated role periods of new owner starting on or after effectiveDate
+      client`
+        DELETE FROM person_role_periods
+        WHERE organization_id = ${organizationId}
+          AND organization_person_id = ${newOwnerPersonId}
+          AND valid_from >= ${effDate}::date;
+      `,
+      // 5. Open new OWNER period for new owner starting at effectiveDate
+      client`
+        INSERT INTO person_role_periods (
+          organization_id, organization_person_id, role, valid_from, valid_to, source, created_at, updated_at
+        ) VALUES (
+          ${organizationId}, ${newOwnerPersonId}, 'OWNER', ${effDate}::date, NULL, 'USER', NOW(), NOW()
+        );
+      `,
+    ];
+
+    // 6. Update legacy memberships table for current owner if user_id exists
+    if (currentOwner.user_id) {
+      list.push(client`
+        UPDATE memberships
+        SET role = ${newPreviousOwnerRole}, scoped_area_id = NULL, planner_scope_type = NULL
+        WHERE organization_id = ${organizationId} AND user_id = ${currentOwner.user_id};
+      `);
+    }
+
+    // 7. Update legacy memberships table for new owner if user_id exists
+    if (newOwnerPerson.user_id) {
+      list.push(client`
+        UPDATE memberships
+        SET role = 'OWNER', scoped_area_id = NULL, planner_scope_type = NULL
+        WHERE organization_id = ${organizationId} AND user_id = ${newOwnerPerson.user_id};
+      `);
+    }
+
+    return list;
+  };
+
+  if (typeof sql.transaction === 'function') {
+    await sql.transaction(queriesBuilder);
+  } else {
+    for (const query of queriesBuilder(sql)) {
+      await query;
+    }
+  }
+
+  return {
+    transferred: true,
+    organizationId,
+    previousOwnerPersonId: currentOwner.organization_person_id,
+    newOwnerPersonId,
+    effectiveDate: effDate,
+    previousOwnerRole: newPreviousOwnerRole,
+  };
 }

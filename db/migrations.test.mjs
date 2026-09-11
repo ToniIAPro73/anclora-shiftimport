@@ -463,7 +463,7 @@ describe('0036 temporal organizational model migration contract', () => {
     const sql = await readFile(temporalOrgModelMigrationPath, 'utf8');
     expect(sql).toContain('INSERT INTO organization_people');
     expect(sql).toContain('FROM memberships m');
-    expect(sql).toContain('temp_unlinked_emp_backfill');
+    expect(sql).toContain('PENDING_INVITATION');
     expect(sql).toContain('INSERT INTO employee_profiles');
     expect(sql).toContain('INSERT INTO person_role_periods');
     expect(sql).toContain("'LEGACY_CURRENT_STATE'");
