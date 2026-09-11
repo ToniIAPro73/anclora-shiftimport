@@ -109,7 +109,7 @@ describe('VLM fallback integration in analyzeDocumentFile', () => {
     expect(result.vlmError).toBeUndefined();
   });
 
-  it('applies configured working semantics to VLM rows and ignores AJ', async () => {
+  it('applies configured working semantics to VLM rows and maps AJ to Libre', async () => {
     saveShiftTypeOverrides({
       types: [{ id: 'Festivo', label: 'Festivo', shortLabel: 'Festivo', color: '#111111', countsAsWork: false }],
       aliases: {},
@@ -129,9 +129,10 @@ describe('VLM fallback integration in analyzeDocumentFile', () => {
     try {
       const result = await analyzeDocumentFile(buildEmptyPdf(), SELECTOR, undefined, CONTEXT);
 
-      expect(result.shifts).toHaveLength(2);
+      expect(result.shifts).toHaveLength(3);
       expect(result.shifts[0]).toMatchObject({ shiftType: 'Festivo', startTime: '', endTime: '', isValid: true });
       expect(result.shifts[1]).toMatchObject({ shiftType: 'Regular', startTime: '', endTime: '', isValid: false });
+      expect(result.shifts[2]).toMatchObject({ shiftType: 'Libre', startTime: '', endTime: '', isValid: true });
     } finally {
       saveShiftTypeOverrides({ types: [], aliases: {} });
     }

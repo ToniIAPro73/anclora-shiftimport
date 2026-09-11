@@ -52,8 +52,9 @@ describe('ProfileAssistantPanel selected-row fallback', () => {
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
-    // Follow-up round: the picked row reveals DL; AJ is intentionally ignored.
+    // Follow-up round: the picked row reveals DL/AJ — classify, then confirm.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);

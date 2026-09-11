@@ -71,10 +71,9 @@ describe('generateAssistantQuestions', () => {
   });
 
   it('emits shift-code questions for unknown code-like row tokens', () => {
-    // DL is unknown until taught; AJ is intentionally ignored and never asks
-    // for a semantic classification.
+    // Without the company preset, DL/AJ are unknown tokens in Ana's row.
     const analysis = analyzeItemsForImport(TYPE_A_FIXTURE_ITEMS, CONTEXT, TYPE_A_SELECTOR);
-    expect(analysis.unknownTokens).toEqual(['DL']);
+    expect(analysis.unknownTokens).toEqual(['DL', 'AJ']);
 
     // Short code-like tokens are asked as shift-code (type + times), so the
     // answer can actually re-parse the cell — never a silent drop.
@@ -82,6 +81,7 @@ describe('generateAssistantQuestions', () => {
     const tokenQuestions = questions.filter((q) => q.kind === 'shift-code');
     expect(tokenQuestions).toEqual([
       { kind: 'shift-code', code: 'DL' },
+      { kind: 'shift-code', code: 'AJ' },
     ]);
   });
 
@@ -111,8 +111,8 @@ describe('buildProfileFromAnswers', () => {
     expect(profile.id).toBeTruthy();
     expect(profile.label).toBe('Cuadrante mensual');
     expect(profile.signature).toEqual(analysis.structure.signature);
-    expect(profile.tokenAliases).toEqual({ DL: 'Libre', XY: 'Regular' });
-    expect(profile.offTokens).toEqual(['DL']);
+    expect(profile.tokenAliases).toEqual({ DL: 'Libre', AJ: 'Libre', XY: 'Regular' });
+    expect(profile.offTokens).toEqual(['DL', 'AJ']);
     expect(profile.employeeRow).toEqual({ strategy: 'manual-row', rowIndex: 1 });
     expect(profile.parserParams).toEqual({ clusterTolerance: 8, columnMatchMaxDistance: 12 });
   });
@@ -225,7 +225,7 @@ describe('applyTokenAliasesToShiftTypes', () => {
     applyTokenAliasesToShiftTypes(profile);
 
     expect(resolveShiftTypeId('DL')).toBe('Libre');
-    expect(resolveShiftTypeId('aj')).toBeNull();
+    expect(resolveShiftTypeId('aj')).toBe('Libre');
     expect(resolveShiftTypeId('xy')).toBe('Regular');
   });
 

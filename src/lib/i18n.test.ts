@@ -49,8 +49,8 @@ describe('i18n', () => {
   });
 
   it('translates the default shift type labels only (custom labels pass through unchanged)', () => {
-    expect(translateShiftTypeLabel('Libre', 'es', 'Libre')).toBe('Libre');
-    expect(translateShiftTypeLabel('Libre', 'en', 'Libre')).toBe('Free');
+    expect(translateShiftTypeLabel('Libre', 'es', 'Libre')).toBe('Día libre');
+    expect(translateShiftTypeLabel('Libre', 'en', 'Libre')).toBe('Day off');
     expect(translateShiftTypeLabel('Vacaciones', 'en', 'Vacaciones')).toBe('Vacation');
     expect(translateShiftTypeLabel('Regular', 'en', 'Regular')).toBe('Regular');
     expect(translateShiftTypeLabel('Turno Personalizado', 'en', 'Turno Personalizado')).toBe('Turno Personalizado');

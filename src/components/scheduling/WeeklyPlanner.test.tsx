@@ -467,10 +467,10 @@ describe('WeeklyPlanner', () => {
       expect(within(regBtn).getByText('08:00–16:00')).toBeInTheDocument();
 
       // 2. LIBRE_COLOR (#ef4444)
-      const libreBtn = screen.getByRole('button', { name: /Libre/ });
+      const libreBtn = screen.getByRole('button', { name: /Día libre/ });
       expect(libreBtn).toHaveAttribute('data-shift-type', 'Libre');
       expect(libreBtn.style.getPropertyValue('--assignment-color')).toBe('#ef4444');
-      expect(within(libreBtn).getByText('Libre')).toBeInTheDocument();
+      expect(within(libreBtn).getByText('Día libre')).toBeInTheDocument();
 
       // 3. VACACIONES_COLOR (#16a34a)
       const vacBtn = screen.getByRole('button', { name: /Vacaciones/ });

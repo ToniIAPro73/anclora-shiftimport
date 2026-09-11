@@ -6,6 +6,7 @@ import {
   getShiftTypeColor,
   getShiftTypeDefinition,
   getShiftTypes,
+  isDayOffCode,
   mergeShiftTypeOverrides,
   resolveShiftTypeId,
   setShiftTypeAlias,
@@ -34,9 +35,28 @@ describe('configurable shift type registry', () => {
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
     expect(resolveShiftTypeId('JT')).toBe('JT');
     expect(resolveShiftTypeId('DL')).toBe('Libre');
-    expect(resolveShiftTypeId('AJ')).toBeNull();
+    expect(resolveShiftTypeId('AJ')).toBe('Libre');
     expect(resolveShiftTypeId('TD')).toBe('Regular');
     expect(getShiftTypes().map((type) => type.id)).toContain('JT');
+  });
+
+  it('isDayOffCode matches DL and AJ case-insensitively with trimmed whitespace and rejects partials', () => {
+    expect(isDayOffCode('DL')).toBe(true);
+    expect(isDayOffCode('dl')).toBe(true);
+    expect(isDayOffCode('Dl')).toBe(true);
+    expect(isDayOffCode('dL')).toBe(true);
+    expect(isDayOffCode(' DL ')).toBe(true);
+    expect(isDayOffCode('AJ')).toBe(true);
+    expect(isDayOffCode('aj')).toBe(true);
+    expect(isDayOffCode('Aj')).toBe(true);
+    expect(isDayOffCode('aJ')).toBe(true);
+    expect(isDayOffCode(' AJ ')).toBe(true);
+    expect(isDayOffCode('AJ1')).toBe(false);
+    expect(isDayOffCode('BAJ')).toBe(false);
+    expect(isDayOffCode('AJ-2')).toBe(false);
+    expect(isDayOffCode(null)).toBe(false);
+    expect(isDayOffCode(undefined)).toBe(false);
+    expect(isDayOffCode('')).toBe(false);
   });
 
   it('user can upsert a custom type', () => {

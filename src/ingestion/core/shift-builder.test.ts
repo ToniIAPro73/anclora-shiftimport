@@ -45,18 +45,24 @@ describe('buildShiftEntriesForDay', () => {
     expect(buildShiftEntriesForDay('2026-08-06', [''])).toEqual([]);
   });
 
-  it.each(['2026-08-01', '2026-09-07', '2026-10-01'])('ignores AJ on %s without creating a parsed record', (date) => {
+  it.each(['2026-08-01', '2026-09-07', '2026-10-01'])('builds Libre for AJ on %s when preset is loaded', (date) => {
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
-    expect(buildShiftEntriesForDay(date, ['AJ'])).toEqual([]);
-    expect(buildShiftEntriesForDay(date, ['AJ [2]'])).toEqual([]);
+    expect(summarize(buildShiftEntriesForDay(date, ['AJ']))).toEqual([
+      { date, startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    ]);
+    expect(summarize(buildShiftEntriesForDay(date, ['AJ [2]']))).toEqual([
+      { date, startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    ]);
   });
 
-  it('keeps DL as a distinct supported rest token when AJ is present elsewhere', () => {
+  it('builds Libre identically for DL and AJ', () => {
     mergeShiftTypeOverrides(SHIFT_TYPE_PRESET_EXAMPLE);
     expect(summarize(buildShiftEntriesForDay('2026-08-02', ['DL']))).toEqual([
       { date: '2026-08-02', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
     ]);
-    expect(buildShiftEntriesForDay('2026-08-03', ['AJ', ''])).toEqual([]);
+    expect(summarize(buildShiftEntriesForDay('2026-08-03', ['AJ', '']))).toEqual([
+      { date: '2026-08-03', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
+    ]);
   });
 
   it('applies an explicit learned ignore without creating a parsed record', () => {

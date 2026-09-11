@@ -109,11 +109,13 @@ describe('ProfileAssistantPanel', () => {
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
-    // The picked row's cells reveal DL; AJ is explicitly ignored.
+    // The picked row's cells reveal DL/AJ — asked now, not silently excluded.
     expect(onComplete).not.toHaveBeenCalled();
     expect(screen.getByText('¿Qué turno representa DL?')).toBeTruthy();
+    expect(screen.getByText('¿Qué turno representa AJ?')).toBeTruthy();
 
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
@@ -125,21 +127,28 @@ describe('ProfileAssistantPanel', () => {
 
   it('supports shift-code work/rest answers and applies the aliases', () => {
     const { analysis, questions } = setup(TYPE_A_SELECTOR);
-    expect(questions.map((q) => q.kind)).toEqual(['shift-code']);
+    expect(questions.map((q) => q.kind)).toEqual(['shift-code', 'shift-code']);
     const onComplete = vi.fn();
     renderPanel(questions, analysis, TYPE_A_SELECTOR, onComplete);
 
     expect(screen.getByText('¿Qué turno representa DL?')).toBeTruthy();
+    expect(screen.getByText('¿Qué turno representa AJ?')).toBeTruthy();
 
-    // DL = rest (Libre). AJ is intentionally ignored.
+    // DL = rest (Libre). AJ = work: times are required before confirming.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Turno de trabajo')[1]);
+    expect((screen.getByText('Aplicar y continuar') as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Hora Inicio'), { target: { value: '08:00' } });
+    fireEvent.change(screen.getByLabelText('Hora Fin'), { target: { value: '16:00' } });
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(resolveShiftTypeId('DL')).toBe('Libre');
-    expect(resolveShiftTypeId('AJ')).toBeNull();
+    expect(resolveShiftTypeId('AJ')).toBe('Regular');
+    // The learned work code rebuilt its shift on the re-parse (GS-10).
     const result = onComplete.mock.calls[0][0] as AssistantCompletion;
-    expect(result.shifts.some((shift) => shift.rawText.includes('AJ'))).toBe(false);
+    expect(result.shifts.some((shift) => shift.rawText.includes('AJ') && shift.startTime === '08:00')).toBe(true);
   });
 
   it('offers active custom shift types and excludes archived types', () => {
@@ -163,7 +172,7 @@ describe('ProfileAssistantPanel', () => {
     const { analysis, questions } = setup(TYPE_A_SELECTOR);
     renderPanel(questions, analysis, TYPE_A_SELECTOR);
 
-    fireEvent.click(screen.getByText('Otro'));
+    fireEvent.click(screen.getAllByText('Otro')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Elige el tipo' }));
     expect(screen.getByText('Guardia')).toBeTruthy();
     expect(screen.queryByText('Archivado')).toBeNull();
@@ -176,8 +185,9 @@ describe('ProfileAssistantPanel', () => {
 
     fireEvent.click(screen.getByText('Ana Martinez (1001)'));
     fireEvent.click(screen.getByText('Aplicar y continuar'));
-    // Follow-up round: classify DL; AJ is intentionally ignored.
+    // Follow-up round: classify the codes revealed by the picked row.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     const profiles = loadFormatProfiles();
@@ -197,8 +207,9 @@ describe('ProfileAssistantPanel', () => {
     renderPanel(questions, analysis, TYPE_A_SELECTOR, onComplete);
 
     fireEvent.click(screen.getByLabelText('Guardar este formato para próximos meses'));
-    // DL must be classified before confirming; AJ is intentionally ignored.
+    // Both unknown codes must be classified before confirming.
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     expect(loadFormatProfiles()).toHaveLength(0);
@@ -238,6 +249,7 @@ describe('ProfileAssistantPanel', () => {
     );
 
     fireEvent.click(screen.getAllByText('Descanso')[0]);
+    fireEvent.click(screen.getAllByText('Descanso')[1]);
     fireEvent.click(screen.getByText('Aplicar y continuar'));
 
     // The import completes synchronously — it never waits on the save.

@@ -3,9 +3,8 @@
  *
  * "Off" tokens are not hardcoded: they are whatever resolves to the `Libre`
  * type through the configurable shift-type registry (src/lib/shift-types.ts).
- * Company tokens (e.g. dl via SHIFT_TYPE_PRESET_EXAMPLE) therefore work only
- * when the corresponding alias set is loaded. AJ is explicitly ignored by
- * product decision and is filtered before any alias can resolve it.
+ * Company tokens (e.g. dl/aj via SHIFT_TYPE_PRESET_EXAMPLE) therefore work only
+ * when the corresponding alias set is loaded.
  */
 import { resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { isExplicitlyIgnoredCode } from './ignored-codes';

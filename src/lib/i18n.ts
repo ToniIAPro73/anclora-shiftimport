@@ -3263,7 +3263,10 @@ export function translate(locale: Locale, key: string, vars?: Record<string, str
  */
 const DEFAULT_TYPE_LABELS: Record<string, { es: string; en: string }> = {
   Regular: { es: 'Regular', en: 'Regular' },
-  Libre: { es: 'Libre', en: 'Free' },
+  Libre: { es: 'Día libre', en: 'Day off' },
+  'Día libre': { es: 'Día libre', en: 'Day off' },
+  'Dia libre': { es: 'Día libre', en: 'Day off' },
+  'Day off': { es: 'Día libre', en: 'Day off' },
   Vacaciones: { es: 'Vacaciones', en: 'Vacation' },
   Extras: { es: 'Extras', en: 'Extras' },
 };

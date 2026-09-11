@@ -35,7 +35,7 @@ export const TYPE_B_FIXTURE_ITEMS: PdfTextItem[] = [
   { text: 'OFF', x: 260, y: 450, width: 0, height: 0, page: 1 },        // day off (default token)
   { text: 'DL', x: 360, y: 450, width: 0, height: 0, page: 1 },         // company alias: Libre only with preset
   { text: '20:00-23:00', x: 460, y: 450, width: 0, height: 0, page: 1 },
-  { text: 'AJ', x: 560, y: 450, width: 0, height: 0, page: 1 },         // explicit unsupported source code: ignored
+  { text: 'AJ', x: 560, y: 450, width: 0, height: 0, page: 1 },         // company alias: Libre only with preset
   { text: '08:00-12:00 -- 16:00-20:00', x: 660, y: 450, width: 0, height: 0, page: 1 }, // split shift
   { text: 'OFF', x: 760, y: 450, width: 0, height: 0, page: 1 },        // day off (default token)
 
@@ -48,12 +48,13 @@ export const TYPE_B_SELECTOR = {
   employeeIdentifiers: ['1001'],
 };
 
-/** Expected normalized result WITH SHIFT_TYPE_PRESET_EXAMPLE loaded (DL -> Libre; AJ ignored). */
+/** Expected normalized result WITH SHIFT_TYPE_PRESET_EXAMPLE loaded (DL, AJ -> Libre). */
 export const TYPE_B_EXPECTED_WITH_PRESET = [
   { date: '2026-07-05', startTime: '17:00', endTime: '01:00', shiftType: 'Regular', isValid: true },
   { date: '2026-07-06', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
   { date: '2026-07-07', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
   { date: '2026-07-08', startTime: '20:00', endTime: '23:00', shiftType: 'Regular', isValid: true },
+  { date: '2026-07-09', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },
   { date: '2026-07-10', startTime: '08:00', endTime: '12:00', shiftType: 'Regular', isValid: true },
   { date: '2026-07-10', startTime: '16:00', endTime: '20:00', shiftType: 'Regular', isValid: true },
   { date: '2026-07-11', startTime: '', endTime: '', shiftType: 'Libre', isValid: true },

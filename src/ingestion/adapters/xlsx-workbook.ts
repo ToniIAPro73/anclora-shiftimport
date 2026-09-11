@@ -24,7 +24,7 @@ import { normalizeStructuredRows, RowDiagnostic, StructuredShiftRow } from './st
 import { DetectedTeamEmployee, TeamRosterDetection } from '../team-roster';
 import { normalizeTimeToken } from '../core/normalize';
 import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
-import { getShiftTypes, resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getShiftTypes, isDayOffCode, resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { ShiftCodeMapping } from '../core/shift-code-profile';
 import JSZip from 'jszip';
 
@@ -189,8 +189,8 @@ function positionalCalendarFromSheet(
       } else if (raw) {
         // These document codes are known rest markers in this calendar
         // family. Keep the product registry authoritative, with the
-        // documented DL compatibility fallback when no user alias exists.
-        const type = resolveShiftTypeId(raw) ?? (/^DL$/i.test(raw) ? 'Libre' : null);
+        // documented DL/AJ compatibility fallback when no user alias exists.
+        const type = resolveShiftTypeId(raw) ?? (isDayOffCode(raw) ? 'Libre' : null);
         if (type && !shiftTypeCountsAsWork(type)) {
           shifts.push({ date, startTime: '', endTime: '', origin: 'IMP', isValid: true, confidence: 0.95, rawText: raw, shiftType: type, notes: null, color: null });
           monthHasData = true;

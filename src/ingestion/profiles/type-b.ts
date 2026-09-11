@@ -7,7 +7,7 @@
  * employee id or a section header (`supervisor`, `sup aea`). Section labels
  * (`jtu`, `supervisor`, `sup aea`) also classify the employee's category.
  *
- * Off-token aliases (`off` by default; company tokens like dl when
+ * Off-token aliases (`off` by default; company tokens like dl/aj when
  * SHIFT_TYPE_PRESET_EXAMPLE is loaded) resolve via the shift-type registry.
  */
 import { IngestionProfile } from './types';

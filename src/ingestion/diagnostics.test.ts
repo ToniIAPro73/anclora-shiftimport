@@ -99,18 +99,18 @@ describe('buildImportDiagnosis — canonical states', () => {
     expect(diagnostic?.blocking).toBe(true);
     expect(diagnostic?.recoverable).toBe(true);
     // Both codes accounted for — no silent omission.
-    expect(diagnostic?.tokens).toEqual(['DL']);
-    expect(diagnostic?.affectedDays).toEqual([3]);
-    // Only unresolved codes receive a deterministic question; AJ is ignored.
+    expect(diagnostic?.tokens?.sort()).toEqual(['AJ', 'DL']);
+    expect(diagnostic?.affectedDays).toEqual([3, 5]);
+    // One deterministic question per code.
     expect(questions.filter((question) => question.kind === 'shift-code')).toEqual([
       { kind: 'shift-code', code: 'DL' },
+      { kind: 'shift-code', code: 'AJ' },
     ]);
   });
 
   it('B. guided recovery: defining the codes re-parses the missing days and persists the learning', () => {
     const analysis = analyzeItemsForImport(TYPE_A_FIXTURE_ITEMS, CONTEXT, TYPE_A_SELECTOR);
-    // DL is taught as rest; AJ remains explicitly ignored even if an answer
-    // attempts to classify it as work.
+    // Real fixture tokens: DL (day 3) as rest, AJ (day 5) as work with times.
     const realAnswers = {
       tokenMeanings: {
         DL: { kind: 'rest' as const, shiftTypeId: 'Libre' },
@@ -122,18 +122,21 @@ describe('buildImportDiagnosis — canonical states', () => {
     const reparsed = parseShiftsFromItems(TYPE_A_FIXTURE_ITEMS, CONTEXT, TYPE_A_SELECTOR, overrides);
     const dates = reparsed.map((shift) => shift.date);
     expect(dates).toContain('2026-08-03'); // DL → Libre
-    expect(dates).not.toContain('2026-08-05');
+    expect(dates).toContain('2026-08-05'); // AJ → work 08:00–16:00
+    const aj = reparsed.find((shift) => shift.date === '2026-08-05');
+    expect(aj?.startTime).toBe('08:00');
+    expect(aj?.endTime).toBe('16:00');
 
     // Learning persisted through the EXISTING override storage (no new mechanism).
     const profile = buildProfileFromAnswers(TYPE_A_FIXTURE_ITEMS, CONTEXT, analysis, realAnswers);
-    expect(profile.tokenAliases).toEqual({ DL: 'Libre' });
-    expect(profile.codeTimes).toBeUndefined();
+    expect(profile.tokenAliases).toEqual({ DL: 'Libre', AJ: 'Regular' });
+    expect(profile.codeTimes).toEqual({ AJ: { startTime: '08:00', endTime: '16:00' } });
 
     saveFormatProfile(profile);
     // Repeat import of the same layout resolves the codes silently.
     const again = analyzeShiftsFromItems(TYPE_A_FIXTURE_ITEMS, CONTEXT, TYPE_A_SELECTOR);
     expect(again.analysis.unknownTokens).toEqual([]);
-    expect(again.shifts.map((shift) => shift.date)).not.toContain('2026-08-05');
+    expect(again.shifts.map((shift) => shift.date)).toContain('2026-08-05');
     expect(resolveShiftTypeId('DL')).toBeNull(); // aliases applied by the panel, not the profile builder
   });
 
@@ -146,7 +149,7 @@ describe('buildImportDiagnosis — canonical states', () => {
     const diagnostic = diagnosis.diagnostics.find((entry) => entry.code === 'UNKNOWN_SHIFT_CODES');
     expect(diagnostic?.blocking).toBe(false);
     expect(diagnostic?.messageKey).toBe('diagnosis.unknownCodes.excludedMessage');
-    expect(diagnostic?.affectedDays).toEqual([3]);
+    expect(diagnostic?.affectedDays).toEqual([3, 5]);
   });
 
   it('D. month mismatch: blocking until the user decides; never re-dates silently', () => {

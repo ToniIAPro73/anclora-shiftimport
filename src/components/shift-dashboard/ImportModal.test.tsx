@@ -865,7 +865,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       const options = Array.from(selects[0].querySelectorAll('option')).map((opt) => opt.textContent);
 
       expect(options).toContain('Vacaciones');
-      expect(options).toContain('Libre');
+      expect(options).toContain('Día libre');
       expect(options).toContain('Guardia Especial');
       expect(options).not.toContain('Turno Obsoleto');
     });

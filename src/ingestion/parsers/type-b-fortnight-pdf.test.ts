@@ -28,10 +28,10 @@ const FIXTURE_PATH = new URL(
 const CONTEXT: CalendarImportContext = { month: 7, year: 2026 }; // August 2026
 const AUGUST_DAYS = 31;
 
-// Learned from the assistant answer a real user would give for DL. AJ is
-// intentionally ignored by ingestion even if a legacy mapping is supplied.
+// Learned from the assistant answer a real user would give for DL and AJ.
 const CODE_OVERRIDES = new Map<string, ShiftCodeMapping>([
   ['DL', { code: 'DL', startTime: null, endTime: null, status: 'free' }],
+  ['AJ', { code: 'AJ', startTime: null, endTime: null, status: 'free' }],
 ]);
 
 async function loadPdfFile(): Promise<File> {
@@ -57,7 +57,7 @@ describe('TYPE_B two-quincena PDF: extraction completeness (Fase 1.2F-PDF)', () 
     expect(shifts.some((shift) => shift.date === '2026-08-31')).toBe(true);
   });
 
-  it('Andrés Costa Ferrer (SI120005): overnight shifts survive and AJ is ignored', async () => {
+  it('Andrés Costa Ferrer (SI120005): overnight shifts and AJ both extracted', async () => {
     const file = await loadPdfFile();
     const items = await extractDocumentItems(file);
     const selector = { employeeName: 'Andrés Costa Ferrer', employeeIdentifiers: ['SI120005'] };
@@ -65,16 +65,14 @@ describe('TYPE_B two-quincena PDF: extraction completeness (Fase 1.2F-PDF)', () 
     const { shifts } = analyzeShiftsFromItems(items, CONTEXT, selector, undefined, CODE_OVERRIDES);
     const distinctDays = new Set(shifts.map((shift) => shift.date)).size;
 
-    // AJ is intentionally omitted; the remaining real entries still cover
-    // the employee's operational calendar without treating AJ as Libre.
-    expect(distinctDays / AUGUST_DAYS).toBeGreaterThanOrEqual(0.90);
+    expect(distinctDays / AUGUST_DAYS).toBeGreaterThanOrEqual(0.95);
     const overnight = shifts.filter(
       (shift) => shift.startTime && shift.endTime && shift.startTime > shift.endTime,
     );
     expect(overnight.length).toBeGreaterThan(0);
     const restDays = shifts.filter((shift) => !shift.startTime && !shift.endTime);
     expect(restDays.length).toBeGreaterThan(0);
-    expect(shifts.some((shift) => /^AJ(?:\s|$)/i.test(shift.rawText ?? ''))).toBe(false);
+    expect(shifts.some((shift) => /^AJ(?:\s|$)/i.test(shift.rawText ?? ''))).toBe(true);
   });
 
   it('employee boundary: two different employees never share identical shift sets (no row bleeding)', async () => {

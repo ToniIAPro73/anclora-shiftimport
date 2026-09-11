@@ -8,7 +8,7 @@
  *
  * The effective registry is DEFAULT_SHIFT_TYPES (neutral, generic for any
  * shift worker) merged with per-user overrides persisted in localStorage.
- * Company-specific types (e.g. JT) and aliases (dl/td) are NOT product
+ * Company-specific types (e.g. JT) and aliases (dl/aj/td) are NOT product
  * defaults; they live in SHIFT_TYPE_PRESET_EXAMPLE as documentation and can
  * be loaded via mergeShiftTypeOverrides.
  */
@@ -44,11 +44,25 @@ const DEFAULT_SHIFT_TYPE_ALIASES: Record<string, string> = {
   regular: 'Regular',
   trabajo: 'Regular',
   libre: 'Libre',
+  'día libre': 'Libre',
+  'dia libre': 'Libre',
+  'day off': 'Libre',
   off: 'Libre',
   vacaciones: 'Vacaciones',
   'vac.': 'Vacaciones',
   vac: 'Vacaciones',
   extras: 'Extras',
+};
+
+/**
+ * Normalizes an import token by stripping surrounding whitespace and checking
+ * for exact match against known day-off tokens (DL and AJ), case-insensitively.
+ * Rejects prefixes/suffixes like AJ1, BAJ, AJ-2.
+ */
+export const isDayOffCode = (token: string | null | undefined): boolean => {
+  if (typeof token !== 'string') return false;
+  const normalized = token.trim().toUpperCase();
+  return normalized === 'DL' || normalized === 'AJ';
 };
 
 /**
@@ -63,6 +77,7 @@ export const SHIFT_TYPE_PRESET_EXAMPLE: ShiftTypeOverrides = {
   aliases: {
     jt: 'JT',
     dl: 'Libre',
+    aj: 'Libre',
     td: 'Regular',
   },
 };

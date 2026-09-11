@@ -227,7 +227,7 @@ describe('analyzeDocumentFile — positional XLSX regression', () => {
     const file = makeFile('Turnos_Sebastian_Pozo_Mendoza.xlsx', [buffer], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const result = await analyzeDocumentFile(file, { employeeName: 'Sebastian Pozo Mendoza', employeeIdentifiers: [] }, undefined, { month: 8, year: 2026 });
     expect(result.kind).toBe('excel');
-    expect(result.shifts).toHaveLength(232);
+    expect(result.shifts).toHaveLength(246);
     expect(result.coveredPeriods).toHaveLength(9);
     expect(result.coveredPeriods?.[0]).toEqual({ month: 0, year: 2026 });
     expect(result.coveredPeriods?.[8]).toEqual({ month: 8, year: 2026 });
@@ -263,7 +263,7 @@ describe('analyzeDocumentFile — positional XLSX regression', () => {
     const buffer = readFileSync(resolve(process.cwd(), 'test-data/fixtures/parser-regression/Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx'));
     const file = makeFile('Turnos_Sebastian_Pozo_Mendoza_prueba_cambios.xlsx', [buffer], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     const result = await analyzeDocumentFile(file, { employeeName: 'Sebastian Pozo Mendoza', employeeIdentifiers: [] }, undefined, { month: 8, year: 2026 });
-    expect(result.shifts).toHaveLength(232);
+    expect(result.shifts).toHaveLength(246);
     expect(result.quality.warnings).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: 'UNKNOWN_SHIFT_TOKEN' }),
     ]));

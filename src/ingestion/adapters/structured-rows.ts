@@ -14,7 +14,7 @@
  */
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { IngestionErrorCode } from '../../lib/ingestion-errors';
-import { resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { isDayOffCode, resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { normalizeTimeToken } from '../core/normalize';
 import { parseTableDate } from '../tabular-assistant';
 import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
@@ -100,7 +100,7 @@ export function normalizeStructuredRows(rows: StructuredShiftRow[]): StructuredN
     if (isExplicitlyIgnoredCode(rawType)) {
       continue;
     }
-    const resolvedType = rawType ? resolveShiftTypeId(rawType) : null;
+    const resolvedType = rawType ? (resolveShiftTypeId(rawType) ?? (isDayOffCode(rawType) ? 'Libre' : null)) : null;
     const shiftType = resolvedType || rawType || (hasStart && hasEnd ? 'Regular' : 'Libre');
     const requiresTimes = shiftTypeCountsAsWork(shiftType);
 

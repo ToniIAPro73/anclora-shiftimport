@@ -18,7 +18,7 @@ import { IngestionError, VlmErrorCode } from '../../lib/ingestion-errors';
 import { computeImportResult, ImportResult, QualitySignals } from '../../lib/import-quality';
 import { UserFormatProfile } from '../../lib/format-profiles';
 import { normalizeText, normalizeTimeToken } from '../core/normalize';
-import { shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { isDayOffCode, resolveShiftTypeId, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { EmployeeSelector, matchesNameTokens } from '../core/row-detection';
 import { PdfTextItem } from '../core/text-items';
 import { isExplicitlyIgnoredCode } from '../core/ignored-codes';
@@ -40,7 +40,6 @@ import {
 import { detectCalendarContextFromItems, parseShiftsFromItems } from './parse-items';
 import { detectSections } from './multi-section';
 import { extractPdfTextItems } from './pdf';
-import { resolveShiftTypeId } from '../../lib/shift-types';
 import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
 import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
 import { loadXlsxWorksheets, parseXlsxTeamWorkbook, XLSX_STYLE_TOKEN_PREFIX } from '../adapters/xlsx-workbook';
@@ -345,7 +344,7 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
         };
         if (slots === null) {
           // Untimed code for this worker on this slot position.
-          const typeId = cell ? resolveShiftTypeId(cell) : null;
+          const typeId = cell ? (resolveShiftTypeId(cell) ?? (isDayOffCode(cell) ? 'Libre' : null)) : null;
           shifts.push({
             date: '',
             startTime: '',
@@ -417,7 +416,7 @@ export function parseRosterCsv(text: string, options: RosterParseOptions = {}): 
       continue;
     }
 
-    const typeId = rawType ? resolveShiftTypeId(rawType) : null;
+    const typeId = rawType ? (resolveShiftTypeId(rawType) ?? (isDayOffCode(rawType) ? 'Libre' : null)) : null;
     if (!hasTime && !typeId && !effectiveValue) {
       continue;
     }
@@ -603,7 +602,7 @@ function mapVlmRecordsToShifts(records: VlmRecords, sourceFormat: string): { shi
     if (isExplicitlyIgnoredCode(rawType)) {
       continue;
     }
-    const shiftType = rawType ? (resolveShiftTypeId(rawType) ?? rawType) : null;
+    const shiftType = rawType ? (resolveShiftTypeId(rawType) ?? (isDayOffCode(rawType) ? 'Libre' : rawType)) : null;
     const notes = entry.notes?.trim() || null;
     if (!shiftType && !startTime && !endTime && !notes) {
       continue;
@@ -814,7 +813,7 @@ function analyzeRosterDocument(
         recognizedTokens += 1;
         continue;
       }
-      if (resolveShiftTypeId(cell) || ROSTER_TIME_LIKE.test(cell) || ROSTER_WEEKDAY_SLOT.test(cell)) {
+      if (resolveShiftTypeId(cell) || isDayOffCode(cell) || ROSTER_TIME_LIKE.test(cell) || ROSTER_WEEKDAY_SLOT.test(cell)) {
         recognizedTokens += 1;
         continue;
       }
