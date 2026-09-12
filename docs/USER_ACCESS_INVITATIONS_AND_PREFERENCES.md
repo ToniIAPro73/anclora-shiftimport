@@ -2,8 +2,9 @@
 
 Migration `0039_user_access_invitations_and_preferences.sql` prepares the
 persistent domain for secure account invitations and later account activation.
-It is forward-only; invitation acceptance, Resend delivery, CSV workflows and
-the UI are intentionally deferred.
+It is forward-only. The server domain, Resend adapter seam, acceptance route
+and Team UI are implemented; CSV workflows, delivery webhooks and later
+password changes remain deferred.
 
 ## Entities and compatibility
 
@@ -84,11 +85,21 @@ retry logic without storing credentials or clear tokens.
 
 ## Security and deferred scope
 
-Token generation, hashing, expiry checks and account activation belong to the
-future server endpoint and must execute in one transaction. Password hashes
-must continue using the existing scrypt format. No password is emailed or
-stored as a temporary credential. Resend configuration is server-only and
-validated by `api/_lib/email/config.js`; tests use an injected transport.
+Token generation, hashing, expiry checks and account activation are handled by
+`api/_lib/invitations.js` in a transaction. Password hashes continue using the
+existing scrypt format. No password is emailed or stored as a temporary
+credential. Resend configuration is server-only and validated by
+`api/_lib/email/config.js`; tests use an injected transport. Invitation emails
+use the current application locale supplied by the Team UI at generation time.
 
-Still pending: invitation/acceptance endpoints, final email templates, real
-Resend transport, delivery webhooks and the password-setting UI.
+Available endpoints are `/api/invitations` (tenant directory and creation),
+`/api/invitations/:id` (revoke/resend), `/api/invitations/validate` and
+`/api/invitations/accept`. The public acceptance screen is
+`/accept-invitation?token=…`. Delivery failures leave a recoverable pending
+invitation and never expose provider details. A person-bound employee
+invitation cannot be revoked without replacement because 0039 requires a
+pending employee person to retain exactly one pending invitation; the API
+returns an explicit error rather than violating that invariant.
+
+Still pending: CSV workflows, delivery webhooks, password recovery and later
+password changes.

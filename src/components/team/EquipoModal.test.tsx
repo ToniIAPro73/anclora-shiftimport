@@ -13,7 +13,10 @@ vi.mock('../../lib/remote', async (importOriginal) => {
   return {
     ...actual,
     listRemoteMembers: vi.fn(),
-    addRemoteMember: vi.fn(),
+    createRemoteAccessInvitation: vi.fn(),
+    listRemoteAccessDirectory: vi.fn(),
+    resendRemoteAccessInvitation: vi.fn(),
+    revokeRemoteAccessInvitation: vi.fn(),
     updateRemoteMemberRole: vi.fn(),
     removeRemoteMember: vi.fn(),
     createRemoteEmployee: vi.fn(),
@@ -24,7 +27,6 @@ vi.mock('../../lib/remote', async (importOriginal) => {
     bulkMoveRemoteEmployeesArea: vi.fn(),
     updateRemoteEmployee: vi.fn(),
     bulkAddRemoteMembers: vi.fn(),
-    bulkCreateRemoteEmployees: vi.fn(),
   };
 });
 
@@ -35,10 +37,9 @@ beforeEach(() => {
 });
 
 const mockedListRemoteMembers = vi.mocked(remote.listRemoteMembers);
-const mockedAddRemoteMember = vi.mocked(remote.addRemoteMember);
+const mockedCreateRemoteAccessInvitation = vi.mocked(remote.createRemoteAccessInvitation);
 const mockedUpdateRemoteMemberRole = vi.mocked(remote.updateRemoteMemberRole);
 const mockedRemoveRemoteMember = vi.mocked(remote.removeRemoteMember);
-const mockedCreateRemoteEmployee = vi.mocked(remote.createRemoteEmployee);
 const mockedTransferRemoteOwnership = vi.mocked(remote.transferRemoteOwnership);
 const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
 const mockedCreateRemoteArea = vi.mocked(remote.createRemoteArea);
@@ -243,19 +244,13 @@ describe('EquipoModal — Tab 1: PERSONAS', () => {
 
   it('runs the 5-step wizard to create a new Persona with access and employee record', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
-    mockedCreateRemoteEmployee.mockResolvedValue({
-      id: 'emp-new',
-      organizationId: 'org-1',
-      name: 'Elena Gómez',
-      userId: null,
-      externalEmployeeId: 'EMP-003',
-      status: 'active',
-    });
-    mockedAddRemoteMember.mockResolvedValue({
-      userId: 'usr-new',
-      email: 'elena@empresa.com',
-      role: 'EMPLOYEE',
-      temporaryPassword: 'temp-password-123',
+    mockedCreateRemoteAccessInvitation.mockResolvedValue({
+      invitation: {
+        id: 'inv-new', organizationId: 'org-1', organizationPersonId: 'emp-new', email: 'elena@empresa.com',
+        status: 'PENDING', createdAt: '2026-01-01', expiresAt: '2026-01-08', acceptedAt: null, revokedAt: null,
+        lastSentAt: '2026-01-01', lastDeliveryAt: '2026-01-01', deliveryStatus: 'SENT', sendAttempts: 1,
+      },
+      delivery: { status: 'SENT', id: 'delivery-1' },
     });
 
     renderModal('OWNER');
@@ -285,21 +280,15 @@ describe('EquipoModal — Tab 1: PERSONAS', () => {
 
     // Verify calls
     await waitFor(() => {
-      expect(mockedCreateRemoteEmployee).toHaveBeenCalledWith(expect.objectContaining({
-        name: 'Elena Gómez',
-      }));
-      expect(mockedAddRemoteMember).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockedCreateRemoteAccessInvitation).toHaveBeenCalledWith(expect.objectContaining({
         displayName: 'Elena Gómez',
         email: 'elena@empresa.com',
         role: 'EMPLOYEE',
-        employeeId: 'emp-new',
+        employeeName: 'Elena Gómez',
+        locale: 'es',
       }));
     });
-
-    // Temporary password display
-    await waitFor(() => {
-      expect(screen.getByText('temp-password-123')).toBeInTheDocument();
-    });
+    expect(screen.queryByText(/contraseña temporal/i)).not.toBeInTheDocument();
   });
 
   it('allows revoking access from active member', async () => {
@@ -819,112 +808,12 @@ describe('EquipoModal — initialEmployeeId & Import Recovery', () => {
   });
 });
 
-describe('EquipoModal — bulk provisioning in Personas workspace (UXR-F3-M05 / UXR-F3-M06)', () => {
-  it('discovers the bulk import action directly inside the Personas tab toolbar (M05)', async () => {
+describe('EquipoModal — bulk provisioning is deferred', () => {
+  it('does not expose CSV user provisioning or temporary credentials', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
     renderModal('ADMIN');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('equipo-modal')).toBeInTheDocument();
-    });
-
-    // Bulk import button is directly visible in Personas toolbar next to Add Persona
-    const bulkBtn = screen.getByTestId('bulk-import-button');
-    expect(bulkBtn).toBeInTheDocument();
-    expect(bulkBtn).toHaveTextContent('Carga masiva CSV');
-
-    fireEvent.click(bulkBtn);
-
-    // Modal shell opens with bulk import file picker
-    expect(screen.getByTestId('bulk-import-modal')).toBeInTheDocument();
-    expect(screen.getByText('Seleccionar archivo CSV')).toBeInTheDocument();
-  });
-
-  it('preserves tab, search query, and filters when canceling from bulk preview (M06)', async () => {
-    mockedListRemoteMembers.mockResolvedValue(membersFixture);
-    renderModal('ADMIN');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('personas-search')).toBeInTheDocument();
-    });
-
-    // Apply search filter
-    fireEvent.change(screen.getByTestId('personas-search'), { target: { value: 'Dave' } });
-    // Apply access filter
-    fireEvent.change(screen.getByTestId('filter-access'), { target: { value: 'without_access' } });
-
-    expect(screen.getByTestId('personas-search')).toHaveValue('Dave');
-    expect(screen.getByTestId('filter-access')).toHaveValue('without_access');
-
-    // Open bulk import
-    fireEvent.click(screen.getByTestId('bulk-import-button'));
-    expect(screen.getByTestId('bulk-import-modal')).toBeInTheDocument();
-
-    // Cancel from bulk import
-    const cancelBtn = screen.getByLabelText('Cerrar importación');
-    fireEvent.click(cancelBtn);
-
-    // Modal is closed
-    await waitFor(() => {
-      expect(screen.queryByTestId('bulk-import-modal')).not.toBeInTheDocument();
-    });
-
-    // Context is preserved: still on Personas tab with same filters
-    expect(screen.getByTestId('tab-personas')).toHaveClass('is-active');
-    expect(screen.getByTestId('personas-search')).toHaveValue('Dave');
-    expect(screen.getByTestId('filter-access')).toHaveValue('without_access');
-  });
-
-  it('classifies rows in the preview and allows confirming bulk import', async () => {
-    mockedListRemoteMembers.mockResolvedValue(membersFixture);
-    const mockedBulkAdd = vi.mocked(remote.bulkAddRemoteMembers);
-    mockedBulkAdd.mockResolvedValue({
-      summary: {
-        created: 1,
-        linked: 1,
-        existing: 0,
-        failed: 0,
-      },
-      results: [
-        {
-          key: 'u-0',
-          row: 1,
-          email: 'new@example.com',
-          status: 'created_and_linked',
-          temporaryPassword: 'temp-pass-123',
-        },
-      ],
-    });
-
-    renderModal('ADMIN');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('bulk-import-button')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByTestId('bulk-import-button'));
-
-    const csvContent = 'email,name,role,external_employee_id\nnew@example.com,New User,EMPLOYEE,EMP-002';
-    const file = new File([csvContent], 'users.csv', { type: 'text/csv' });
-
-    const fileInput = screen.getByTestId('bulk-file-input');
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('bulk-preview-summary')).toBeInTheDocument();
-      expect(screen.getByTestId('bulk-preview-table')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('new@example.com')).toBeInTheDocument();
-
-    // Confirm import
-    fireEvent.click(screen.getByTestId('bulk-confirm-button'));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Importación completada: 1 usuarios creados, 1 vinculados/i)).toBeInTheDocument();
-      expect(screen.getByText('temp-pass-123')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByTestId('equipo-modal')).toBeInTheDocument());
+    expect(screen.queryByTestId('bulk-import-button')).not.toBeInTheDocument();
+    expect(screen.queryByText(/credenciales temporales/i)).not.toBeInTheDocument();
   });
 });
-
-

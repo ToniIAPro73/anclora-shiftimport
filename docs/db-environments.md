@@ -1,12 +1,8 @@
 # Entornos de base de datos (Neon) — cómo no confundirlos
 
-Este repo tiene al menos dos ramas Neon distintas con datos completamente
-diferentes. Confundirlas produce diagnósticos falsos (se investiga contra
-datos demo/seed pensando que son datos reales de producción, o viceversa).
-Ocurrió el 2026-09-03: una sesión de agente recibió una connection string
-que resultó ser la de desarrollo, consultó esa base, no encontró al
-empleado que el usuario reportaba, y tardó varios turnos en darse cuenta de
-que estaba mirando la base equivocada.
+La aplicación utiliza actualmente una única rama Neon compartida por todos
+los entornos: `main` (`br-solitary-thunder-b1hm9low`). Las pruebas deben aislar
+sus datos por `organization_id`; nunca deben usar el tenant operativo.
 
 ## Identificadores no sensibles por entorno
 
@@ -16,34 +12,25 @@ string, sin necesidad de leer ni imprimir la contraseña:
 
 | Entorno | Neon project id | Host (prefijo) | Origen |
 | --- | --- | --- | --- |
-| Development (local) | `holy-cake-85660318` | `ep-winter-bird-...` | `.env.development.local` (commiteado localmente, no en git) |
-| Production (Vercel) | *(distinto, no fijar aquí un valor que pueda quedar desactualizado)* | `ep-lingering-dew-...` | Vercel Dashboard → Settings → Environment Variables → filtro "Production" |
+| Todos los entornos | `holy-cake-85660318` | `ep-lingering-dew-...` | `.env.local` local y variables de Vercel; comparar siempre el fingerprint seguro |
 
-Si el host de una connection string no coincide con ninguno de los dos
-anteriores, no asumas que es producción ni que es dev — pregunta o vuelve a
-verificar el origen (Vercel Dashboard, filtrando explícitamente por
-"Production", no por "Preview" ni "Development").
+Si el host no coincide con el fingerprint de `main`, detén el diagnóstico y
+verifica el origen antes de consultar datos funcionales.
 
 ## Procedimiento antes de tratar una connection string como "producción"
 
-1. **Nunca la pidas directamente sin más** — pide que la copien desde
-   Vercel Dashboard → Settings → Environment Variables → filtrando
-   explícitamente por el entorno "Production" (no "Preview"/"Development").
-2. Antes de sacar conclusiones de una query, compara el host recibido
-   contra `grep POSTGRES_HOST .env.development.local` de este repo (sin
-   imprimir la contraseña). Si coincide, **es la base de dev**, no
-   producción — aunque el usuario la haya llamado "de producción" de buena
-   fe.
+1. Comprueba que el host corresponde al fingerprint de Neon `main` y que el
+   proyecto es `holy-cake-85660318`; no imprimas la cadena completa.
+2. Ejecuta primero `npm run db:migrate:status` y confirma el branch ID
+   `br-solitary-thunder-b1hm9low` antes de cualquier query funcional.
 3. `vercel env pull --environment=production` normalmente **no sirve** para
    obtener esta cadena: Vercel marca `DATABASE_URL`/`POSTGRES_URL` como
    variables "sensitive" y el pull devuelve un placeholder corto (~11
    caracteres), no el valor real. No lo interpretes como "ya tengo la
    cadena real" sin comprobar su longitud/validez como URL.
-4. Si los resultados de una query no cuadran con lo que el usuario describe
-   (organización sin el empleado esperado, conteos que no encajan), la
-   hipótesis por defecto debe ser "entorno equivocado", no "el dato no
-   existe" — vuelve a verificar el origen antes de reportar una conclusión
-   negativa.
+4. `Groundforce` es el tenant operativo observado en main y queda fuera de
+   pruebas. Si el nombre `Anclora Group` aparece en main, se protege del mismo
+   modo; nunca se selecciona una organización por posición o nombre parcial.
 5. Nunca imprimas la connection string completa ni la contraseña en salidas
    de terminal, logs o ficheros commiteados. Los scripts de diagnóstico
    deben leer la URL de una variable de entorno pasada inline al comando
@@ -54,11 +41,7 @@ verificar el origen (Vercel Dashboard, filtrando explícitamente por
 ## Runbook rápido para un diagnóstico contra producción
 
 ```bash
-# 1. Pide al usuario la cadena desde Vercel Dashboard -> Production (nunca la asumas).
-# 2. Compárala contra la de dev antes de usarla:
-grep POSTGRES_HOST .env.development.local
-# Si el host no coincide con el de arriba, procede. Si coincide, PARA: es dev.
-
-# 3. Ejecuta el script de diagnóstico pasando la URL inline, nunca en fichero commiteado:
-PROD_DB_URL='postgresql://...' node tmp/algun-script-de-diagnostico.mjs
+# 1. Verifica proyecto, rama y ledger con el comando de estado read-only.
+# 2. Ejecuta el diagnóstico usando `.env.local`; nunca imprimas la URL ni la guardes en Git.
+node tmp/algun-script-de-diagnostico.mjs
 ```

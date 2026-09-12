@@ -71,7 +71,7 @@ ShiftImport no pretende ser, en su MVP actual, un ERP, un HRIS completo, una sui
 - **Áreas opcionales**: una organización puede subdividirse en áreas, sin ser obligatorio.
 - **Ciclo de vida de empleado**: estados `pending_access` / `active` / `inactive`, con vinculación opcional a un usuario con acceso.
 - **Roles y scopes**: `OWNER` / `ADMIN` / `PLANNER` / `EMPLOYEE`, con scopes `ORGANIZATION` / `AREA` / `SELF` según el rol y la configuración de la membership.
-- **Provisioning masivo**: alta de usuarios en lote vía CSV, con credenciales de un solo uso descargables (no persistidas en servidor).
+- **Invitaciones de acceso**: alta individual mediante enlace seguro; la persona invitada establece su propia contraseña. La importación masiva CSV queda diferida.
 - **Interfaz en español e inglés**, con tema claro y oscuro.
 
 Ver [`docs/roadmap/shiftimport-mvp-v2/00-BASELINE.md`](./docs/roadmap/shiftimport-mvp-v2/00-BASELINE.md) para el inventario completo de capacidades (DONE / PARTIAL / MISSING) con evidencia en código.
@@ -94,12 +94,20 @@ npm install
 npm run dev
 ```
 
-Validación: `npm run lint && npm run build`. Ver [`SETUP.md`](./SETUP.md) y [`backend-setup.md`](./backend-setup.md) para configuración de base de datos.
+`npm run dev` sirve el frontend con Vite. Para ejecutar también las Vercel
+Functions localmente, usa `vercel dev` en otra terminal dentro del mismo
+repositorio; ambos procesos leen la configuración server-side existente y no
+exponen `DATABASE_URL` ni `RESEND_API_KEY` al bundle.
+
+Validación: `npm run lint && npm run build`. El desarrollo local usa la única
+base Neon `main` mediante `.env.local` (ignorado por Git); `npm run
+db:migrate:status` acredita el ledger sin escribir. Ver [`SETUP.md`](./SETUP.md)
+y [`backend-setup.md`](./backend-setup.md) para configuración.
 
 ## Privacidad
 
 - El archivo original importado no se persiste.
-- Las credenciales de un solo uso generadas en el alta masiva son descargables por el administrador y no se guardan en servidor tras la respuesta.
+- Las invitaciones no contienen contraseñas temporales: la persona establece su contraseña al aceptar el enlace.
 - Los fixtures de pruebas son sintéticos; no se commitean cuadrantes reales.
 
 ## Idiomas soportados

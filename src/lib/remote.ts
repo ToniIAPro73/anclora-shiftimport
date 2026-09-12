@@ -876,6 +876,99 @@ export async function listRemoteMembers(): Promise<RemoteMember[]> {
   return payload.members;
 }
 
+export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED';
+export type InvitationDeliveryStatus = 'NOT_SENT' | 'SENT' | 'FAILED' | 'DELIVERED' | 'BOUNCED' | 'COMPLAINED';
+
+export interface RemoteAccessInvitation {
+  id: string;
+  organizationId: string;
+  organizationPersonId: string | null;
+  email: string;
+  status: InvitationStatus;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  lastSentAt: string | null;
+  lastDeliveryAt: string | null;
+  deliveryStatus: InvitationDeliveryStatus;
+  sendAttempts: number;
+  employeeName?: string | null;
+  inviterDisplayName?: string | null;
+}
+
+export interface RemoteDirectoryPerson {
+  id: string;
+  userId: string | null;
+  email: string | null;
+  displayName: string | null;
+  accountStatus: 'PENDING_INVITATION' | 'ACTIVE' | 'SUSPENDED' | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING_INVITATION';
+  role: RemoteMember['role'] | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  employmentStatus: string | null;
+  externalEmployeeId: string | null;
+}
+
+export async function listRemoteAccessDirectory(): Promise<{
+  people: RemoteDirectoryPerson[];
+  invitations: RemoteAccessInvitation[];
+}> {
+  return apiFetch('/api/invitations');
+}
+
+export async function createRemoteAccessInvitation(input: {
+  email: string;
+  displayName?: string;
+  role: Exclude<RemoteMember['role'], 'OWNER'>;
+  employeeId?: string | null;
+  employeeName?: string;
+  externalEmployeeId?: string;
+  areaId?: string | null;
+  locale: 'es' | 'en';
+}): Promise<{ invitation: RemoteAccessInvitation; delivery: { status: string; code?: string; id?: string | null } }> {
+  return apiFetch('/api/invitations', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function revokeRemoteAccessInvitation(id: string): Promise<void> {
+  await apiFetch(`/api/invitations/${encodeURIComponent(id)}`, {
+    method: 'POST', body: JSON.stringify({ action: 'revoke' }),
+  });
+}
+
+export async function resendRemoteAccessInvitation(id: string, locale: 'es' | 'en'): Promise<{ invitationId: string; status: string; code?: string }> {
+  return apiFetch(`/api/invitations/${encodeURIComponent(id)}`, {
+    method: 'POST', body: JSON.stringify({ action: 'resend', locale }),
+  });
+}
+
+export interface InvitationValidation {
+  status: 'VALID';
+  invitationId: string;
+  organizationName: string;
+  role: RemoteMember['role'];
+  employeeName: string | null;
+  email: string;
+  expiresAt: string;
+}
+
+export async function validateRemoteAccessInvitation(token: string): Promise<InvitationValidation> {
+  return apiFetch(`/api/invitations/validate?token=${encodeURIComponent(token)}`);
+}
+
+export async function acceptRemoteAccessInvitation(input: {
+  token: string;
+  email: string;
+  displayName?: string;
+  password?: string;
+  passwordConfirmation?: string;
+  locale: 'es' | 'en';
+  theme: 'system' | 'light' | 'dark';
+}): Promise<{ status: 'ACCEPTED'; organizationId: string; userId: string }> {
+  return apiFetch('/api/invitations/accept', { method: 'POST', body: JSON.stringify(input) });
+}
+
 /** Account-level: update current user's display_name. */
 export async function updateUserDisplayName(displayName: string): Promise<{ user: { id: string; email: string; displayName: string } }> {
   const payload = await apiFetch<{ user: { id: string; email: string; displayName: string } }>('/api/user/me', {

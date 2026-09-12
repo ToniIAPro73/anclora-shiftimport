@@ -51,6 +51,7 @@ import { OrgSelectorModal } from './components/shift-dashboard/OrgSelectorModal'
 import { OnboardingChoiceModal } from './components/shift-dashboard/OnboardingChoiceModal';
 import { FormatProfileMigrationModal } from './components/shift-dashboard/FormatProfileMigrationModal';
 import { EquipoModal } from './components/team/EquipoModal';
+import { AcceptInvitationScreen } from './components/AcceptInvitationScreen';
 import { ImportHistoryModal } from './components/shift-dashboard/ImportHistoryModal';
 import { FormatProfilesModal } from './components/shift-dashboard/FormatProfilesModal';
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
@@ -412,7 +413,7 @@ function App() {
         setEmployees([]);
         setAreas([]);
         setShifts([]);
-        if (routeRef.current !== '/' && routeRef.current !== '/pricing') {
+        if (routeRef.current !== '/' && routeRef.current !== '/pricing' && routeRef.current !== '/accept-invitation') {
           navigate('/login');
         }
       } finally {
@@ -1599,6 +1600,12 @@ function App() {
         <CookieConsent />
       </>
     );
+  }
+
+  // Invitation links are public and must not be intercepted by the regular
+  // login gate while the recipient is completing account activation.
+  if (route === '/accept-invitation') {
+    return <AcceptInvitationScreen />;
   }
 
   // Auth screen is a full-screen route-like surface (contract: no dashboard

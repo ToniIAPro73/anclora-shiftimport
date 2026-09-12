@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
-  CheckCircle2,
-  Copy,
-  Download,
   Shield,
-  Upload,
   UserPlus,
   Users,
 } from 'lucide-react';
 import { buildPersonas, filterPersonas, Persona } from '../../lib/personas';
 import {
-  addRemoteMember,
-  bulkAddRemoteMembers,
-  bulkCreateRemoteEmployees,
+  createRemoteAccessInvitation,
+  listRemoteAccessDirectory,
+  resendRemoteAccessInvitation,
+  revokeRemoteAccessInvitation,
+  RemoteAccessInvitation,
   bulkMoveRemoteEmployeesArea,
   createRemoteArea,
   createRemoteEmployee,
@@ -28,9 +26,6 @@ import {
   updateRemoteEmployee,
   updateRemoteMemberRole,
 } from '../../lib/remote';
-import { EmployeeCsvRow, parseEmployeesCsv, parseUsersCsv } from '../../lib/bulk-import-csv';
-import { classifyUserRow, UserPreviewRow } from '../../lib/classify-user-row';
-import { buildCredentialsTxt, credentialsFileName, downloadTextFile, GeneratedCredential } from '../../lib/credentials-export';
 import type { Role } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -64,6 +59,7 @@ export function EquipoModal({
   const { t, locale } = useI18n();
   const [activeTab, setActiveTab] = useState<'personas' | 'roles' | 'areas' | 'assignments'>(initialTab);
   const [members, setMembers] = useState<RemoteMember[]>([]);
+  const [invitations, setInvitations] = useState<RemoteAccessInvitation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,132 +76,14 @@ export function EquipoModal({
   const [wizardName, setWizardName] = useState('');
   const [wizardHasAccess, setWizardHasAccess] = useState(true);
   const [wizardEmail, setWizardEmail] = useState('');
-  const [wizardPassword, setWizardPassword] = useState('');
   const [wizardCreateEmployee, setWizardCreateEmployee] = useState(true);
+  const [wizardExistingEmployeeId, setWizardExistingEmployeeId] = useState<string | null>(null);
   const [wizardExternalId, setWizardExternalId] = useState('');
   const [wizardAreaId, setWizardAreaId] = useState('');
   const [wizardRole, setWizardRole] = useState<'ADMIN' | 'PLANNER' | 'EMPLOYEE'>('EMPLOYEE');
   const [wizardScopeType, setWizardScopeType] = useState<'ORGANIZATION' | 'AREAS' | 'EMPLOYEES'>('ORGANIZATION');
   const [wizardScopedAreaIds, setWizardScopedAreaIds] = useState<string[]>([]);
   const [wizardSubmitting, setWizardSubmitting] = useState(false);
-  const [wizardGeneratedPassword, setWizardGeneratedPassword] = useState<string | null>(null);
-  const [copiedPassword, setCopiedPassword] = useState(false);
-
-  // Bulk import state (UXR-F3-M05 / UXR-F3-M06)
-  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
-  const [bulkFile, setBulkFile] = useState<File | null>(null);
-  const [bulkKind, setBulkKind] = useState<'users' | 'employees' | null>(null);
-  const [bulkUsersPreview, setBulkUsersPreview] = useState<UserPreviewRow[] | null>(null);
-  const [bulkEmployeesPreview, setBulkEmployeesPreview] = useState<Array<{ row: EmployeeCsvRow; status: 'new' | 'existing' | 'error'; errorMessage?: string }> | null>(null);
-  const [bulkParseError, setBulkParseError] = useState<string | null>(null);
-  const [bulkImportSubmitting, setBulkImportSubmitting] = useState(false);
-  const [bulkImportSuccessMsg, setBulkImportSuccessMsg] = useState<string | null>(null);
-  const [bulkGeneratedCredentials, setBulkGeneratedCredentials] = useState<GeneratedCredential[]>([]);
-  const [bulkCopiedPasswordIdx, setBulkCopiedPasswordIdx] = useState<number | null>(null);
-
-  const resetBulkImport = () => {
-    setBulkFile(null);
-    setBulkKind(null);
-    setBulkUsersPreview(null);
-    setBulkEmployeesPreview(null);
-    setBulkParseError(null);
-    setBulkImportSubmitting(false);
-    setBulkImportSuccessMsg(null);
-    setBulkGeneratedCredentials([]);
-    setBulkCopiedPasswordIdx(null);
-  };
-
-  const handleBulkFileChange = async (file: File) => {
-    resetBulkImport();
-    setBulkFile(file);
-    try {
-      const text = await file.text();
-
-      // Check users CSV format (requires email & role columns)
-      const userRows = parseUsersCsv(text);
-      if (userRows && userRows.length > 0) {
-        setBulkKind('users');
-        const seenEmails = new Map<string, number>();
-        const seenExternalEmployeeIds = new Map<string, number>();
-        const preview = userRows.map((row, idx) =>
-          classifyUserRow(row, idx, seenEmails, seenExternalEmployeeIds, members, employees)
-        );
-        setBulkUsersPreview(preview);
-        return;
-      }
-
-      // Check employees CSV format (requires external_employee_id & name columns)
-      const empRows = parseEmployeesCsv(text);
-      if (empRows && empRows.length > 0) {
-        setBulkKind('employees');
-        const byExternalId = new Map(employees.map((e) => [e.externalEmployeeId ?? '', e]));
-        const preview = empRows.map((row) => {
-          if (!row.externalEmployeeId) {
-            return { row, status: 'error' as const, errorMessage: 'Falta external_employee_id' };
-          }
-          const match = byExternalId.get(row.externalEmployeeId);
-          return match ? { row, status: 'existing' as const } : { row, status: 'new' as const };
-        });
-        setBulkEmployeesPreview(preview);
-        return;
-      }
-
-      setBulkParseError('El archivo no coincide con los formatos admitidos (Usuarios: email,name,role,...; Empleados: external_employee_id,name,...).');
-    } catch (err: unknown) {
-      setBulkParseError(err instanceof Error ? err.message : 'Error al leer el archivo CSV');
-    }
-  };
-
-  const handleBulkConfirm = async () => {
-    setBulkImportSubmitting(true);
-    setBulkParseError(null);
-    try {
-      if (bulkKind === 'users' && bulkUsersPreview) {
-        const rowsToSubmit = bulkUsersPreview
-          .filter((p) => p.status !== 'invalid_email' && p.status !== 'invalid_role')
-          .map((p, idx) => ({
-            key: `u-${idx}`,
-            email: p.row.email,
-            name: p.row.name,
-            role: (p.row.role || 'EMPLOYEE') as 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE',
-            externalEmployeeId: p.row.externalEmployeeId || undefined,
-          }));
-        const res = await bulkAddRemoteMembers(rowsToSubmit);
-        const creds: GeneratedCredential[] = [];
-        res.results.forEach((r, idx) => {
-          if (r.temporaryPassword) {
-            creds.push({
-              email: rowsToSubmit[idx].email,
-              displayName: rowsToSubmit[idx].name,
-              role: rowsToSubmit[idx].role,
-              temporaryPassword: r.temporaryPassword,
-            });
-          }
-        });
-        setBulkGeneratedCredentials(creds);
-        setBulkImportSuccessMsg(`Importación completada: ${res.summary.created} usuarios creados, ${res.summary.linked} vinculados.`);
-        onChanged();
-        void fetchMembers();
-      } else if (bulkKind === 'employees' && bulkEmployeesPreview) {
-        const newRows = bulkEmployeesPreview
-          .filter((p) => p.status === 'new')
-          .map((p, idx) => ({
-            key: `emp-${idx}`,
-            name: p.row.name,
-            externalEmployeeId: p.row.externalEmployeeId,
-            areaName: p.row.areaName,
-          }));
-        const res = await bulkCreateRemoteEmployees(newRows);
-        setBulkImportSuccessMsg(`Importación completada: ${res.length} empleados creados.`);
-        onChanged();
-      }
-    } catch (err: unknown) {
-      setBulkParseError(err instanceof Error ? err.message : 'Error durante la importación');
-    } finally {
-      setBulkImportSubmitting(false);
-    }
-  };
-
   // Ownership transfer state
   const [isTransferOpen, setIsTransferOpen] = useState(false);
   const [transferTargetUserId, setTransferTargetUserId] = useState('');
@@ -328,6 +206,13 @@ export function EquipoModal({
     try {
       const data = await listRemoteMembers();
       setMembers(data);
+      try {
+        const directory = await listRemoteAccessDirectory();
+        setInvitations(directory.invitations);
+      } catch {
+        // Older fixtures/backends can still serve the legacy member list.
+        setInvitations([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('members.loadFailed'));
     } finally {
@@ -529,44 +414,38 @@ export function EquipoModal({
     setWizardSubmitting(true);
     setError(null);
     try {
-      let createdEmployeeId: string | undefined;
+      // Create the person, optional employee profile, role and invitation in
+      // one server transaction. The current application locale is part of
+      // the request so the email is generated in the language visible to the
+      // actor right now.
+      if (wizardHasAccess) {
+        const res = await createRemoteAccessInvitation({
+          email: wizardEmail.trim(),
+          displayName: wizardName.trim(),
+          role: wizardRole,
+          employeeId: wizardCreateEmployee ? undefined : wizardExistingEmployeeId,
+          employeeName: wizardCreateEmployee ? wizardName.trim() : undefined,
+          externalEmployeeId: wizardCreateEmployee ? wizardExternalId.trim() || undefined : undefined,
+          areaId: wizardCreateEmployee ? wizardAreaId || undefined : undefined,
+          locale,
+        });
+        if (res.delivery.status !== 'SENT') {
+          setError(t('teamWorkspace.invitationCreatedEmailFailed'));
+        }
+      }
 
-      // 1. If operational employee is requested, create employee first
-      if (wizardCreateEmployee) {
-        const emp = await createRemoteEmployee({
+      if (!wizardHasAccess && wizardCreateEmployee) {
+        await createRemoteEmployee({
           name: wizardName.trim(),
           externalEmployeeId: wizardExternalId.trim() || undefined,
           areaId: wizardAreaId || undefined,
         });
-        createdEmployeeId = emp.id;
-      }
-
-      let generatedPassword: string | null = null;
-      // 2. If access is requested, add member and link
-      if (wizardHasAccess) {
-        const res = await addRemoteMember({
-          email: wizardEmail.trim(),
-          displayName: wizardName.trim(),
-          role: wizardRole,
-          password: wizardPassword.trim() || undefined,
-          employeeId: createdEmployeeId,
-          scopedAreaId: wizardRole === 'PLANNER' && wizardScopeType === 'AREAS' && wizardScopedAreaIds.length > 0 ? wizardScopedAreaIds[0] : undefined,
-          plannerScopeType: wizardRole === 'PLANNER' ? wizardScopeType : undefined,
-          scopedAreaIds: wizardRole === 'PLANNER' && wizardScopeType === 'AREAS' ? wizardScopedAreaIds : undefined,
-        });
-
-        if (res.temporaryPassword) {
-          generatedPassword = res.temporaryPassword;
-          setWizardGeneratedPassword(res.temporaryPassword);
-        }
       }
 
       onChanged();
       await fetchMembers();
-      if (!generatedPassword) {
-        setIsWizardOpen(false);
-        resetWizard();
-      }
+      setIsWizardOpen(false);
+      resetWizard();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
     } finally {
@@ -579,15 +458,13 @@ export function EquipoModal({
     setWizardName('');
     setWizardHasAccess(true);
     setWizardEmail('');
-    setWizardPassword('');
     setWizardCreateEmployee(true);
+    setWizardExistingEmployeeId(null);
     setWizardExternalId('');
     setWizardAreaId('');
     setWizardRole('EMPLOYEE');
     setWizardScopeType('ORGANIZATION');
     setWizardScopedAreaIds([]);
-    setWizardGeneratedPassword(null);
-    setCopiedPassword(false);
   };
 
   // Revoke access confirmation dialog state
@@ -622,6 +499,21 @@ export function EquipoModal({
   // Handle Revoke Access
   const handleRevokeAccess = (persona: Persona) => {
     setConfirmRevokePersona(persona);
+  };
+
+  const handleInvitationAction = async (invitation: RemoteAccessInvitation, action: 'resend' | 'revoke') => {
+    setError(null);
+    try {
+      if (action === 'resend') {
+        const result = await resendRemoteAccessInvitation(invitation.id, locale);
+        if (result.status !== 'SENT') setError(t('teamWorkspace.invitationCreatedEmailFailed'));
+      } else {
+        await revokeRemoteAccessInvitation(invitation.id);
+      }
+      await fetchMembers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
+    }
   };
 
   const executeRevokeAccess = async () => {
@@ -665,7 +557,7 @@ export function EquipoModal({
       isOpen={isOpen}
       onClose={onClose}
       title={t('teamWorkspace.title')}
-      closeAriaLabel="Cerrar"
+      closeAriaLabel={t('teamWorkspace.close')}
       workspace
       maxWidth="1140px"
     >
@@ -754,10 +646,10 @@ export function EquipoModal({
                   data-testid="filter-role"
                 >
                   <option value="all">{t('teamWorkspace.filterRole')}: {t('teamWorkspace.all')}</option>
-                  <option value="OWNER">Propietario</option>
-                  <option value="ADMIN">Administrador</option>
-                  <option value="PLANNER">Planificador</option>
-                  <option value="EMPLOYEE">Empleado</option>
+                  <option value="OWNER">{t('teamWorkspace.roleOwner')}</option>
+                  <option value="ADMIN">{t('teamWorkspace.roleAdmin')}</option>
+                  <option value="PLANNER">{t('teamWorkspace.rolePlanner')}</option>
+                  <option value="EMPLOYEE">{t('teamWorkspace.roleEmployee')}</option>
                 </select>
 
                 <select
@@ -789,17 +681,6 @@ export function EquipoModal({
               </div>
 
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                {(currentUserRole === 'ADMIN' || currentUserRole === 'OWNER') && (
-                  <button
-                    type="button"
-                    className="equipo-btn equipo-btn--secondary"
-                    onClick={() => { resetBulkImport(); setIsBulkImportOpen(true); }}
-                    data-testid="bulk-import-button"
-                  >
-                    <Upload size={16} />
-                    {t('teamWorkspace.bulkImportAction')}
-                  </button>
-                )}
                 <button
                   type="button"
                   className="equipo-btn equipo-btn--primary"
@@ -812,10 +693,38 @@ export function EquipoModal({
               </div>
             </div>
 
+            {invitations.some((invitation) => invitation.status === 'PENDING') && (
+              <section className="equipo-panel" aria-labelledby="pending-invitations-title" style={{ marginBottom: '12px' }}>
+                <h3 id="pending-invitations-title" style={{ margin: '0 0 8px 0', fontSize: '0.95rem' }}>
+                  {t('teamWorkspace.pendingInvitations')}
+                </h3>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {invitations.filter((invitation) => invitation.status === 'PENDING').map((invitation) => (
+                    <div key={invitation.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                      <div>
+                        <strong>{invitation.email}</strong>
+                        <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                          {t('teamWorkspace.invitationExpires', { date: new Date(invitation.expiresAt).toLocaleDateString(locale === 'en' ? 'en-GB' : 'es-ES') })}
+                        </span>
+                      </div>
+                      <div className="equipo-actions-cell">
+                        <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => void handleInvitationAction(invitation, 'resend')}>
+                          {t('teamWorkspace.resendInvitation')}
+                        </button>
+                        <button type="button" className="equipo-btn equipo-btn--danger" onClick={() => void handleInvitationAction(invitation, 'revoke')}>
+                          {t('teamWorkspace.revokeInvitation')}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             <div className="equipo-modal__table-container">
               {loading ? (
                 <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  Cargando personas…
+                  {t('teamWorkspace.loadingPeople')}
                 </div>
               ) : filteredPersonas.length === 0 ? (
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -825,14 +734,14 @@ export function EquipoModal({
                 <table className="equipo-table" data-testid="personas-table">
                   <thead>
                     <tr>
-                      <th>Persona</th>
-                      <th>Email de acceso</th>
-                      <th>Acceso</th>
-                      <th>Rol</th>
-                      <th>Ficha Empleado</th>
-                      <th>Área actual</th>
-                      <th>Estado</th>
-                      <th>Acciones</th>
+                      <th>{t('teamWorkspace.person')}</th>
+                      <th>{t('teamWorkspace.accessEmail')}</th>
+                      <th>{t('teamWorkspace.filterAccess')}</th>
+                      <th>{t('teamWorkspace.filterRole')}</th>
+                      <th>{t('teamWorkspace.employeeRecord')}</th>
+                      <th>{t('teamWorkspace.currentArea')}</th>
+                      <th>{t('teamWorkspace.filterStatus')}</th>
+                      <th>{t('teamWorkspace.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -854,7 +763,7 @@ export function EquipoModal({
                                 <strong>{p.name}</strong>
                                 {p.isCurrentUser && (
                                   <span style={{ marginLeft: '6px', fontSize: '0.75rem', color: 'var(--accent)' }}>
-                                    (Tú)
+                                    ({t('teamWorkspace.you')})
                                   </span>
                                 )}
                                 {isTargetEmployee && (
@@ -863,7 +772,7 @@ export function EquipoModal({
                                     style={{ marginLeft: '6px', fontSize: '0.72rem' }}
                                     data-testid="target-recovery-badge"
                                   >
-                                    Completar ficha
+                                    {t('teamWorkspace.completeRecord')}
                                   </span>
                                 )}
                               </div>
@@ -890,10 +799,10 @@ export function EquipoModal({
                           <td>
                             {p.role ? (
                               <span className={`equipo-badge equipo-badge--${p.role.toLowerCase()}`}>
-                                {p.role === 'OWNER' && 'Propietario'}
-                                {p.role === 'ADMIN' && 'Admin'}
-                                {p.role === 'PLANNER' && 'Planificador'}
-                                {p.role === 'EMPLOYEE' && 'Empleado'}
+                                {p.role === 'OWNER' && t('teamWorkspace.roleOwner')}
+                                {p.role === 'ADMIN' && t('teamWorkspace.roleAdmin')}
+                                {p.role === 'PLANNER' && t('teamWorkspace.rolePlanner')}
+                                {p.role === 'EMPLOYEE' && t('teamWorkspace.roleEmployee')}
                               </span>
                             ) : (
                               <span style={{ color: 'var(--text-muted)' }}>—</span>
@@ -924,9 +833,9 @@ export function EquipoModal({
                                   className="equipo-btn equipo-btn--secondary"
                                   onClick={() => handleOpenEditEmployee(matchingEmp)}
                                   data-testid={isTargetEmployee ? 'target-edit-employee-btn' : `edit-employee-${p.id}`}
-                                  title="Editar ficha de empleado"
-                                >
-                                  Editar ficha
+                                    title={t('teamWorkspace.editEmployee')}
+                                  >
+                                  {t('teamWorkspace.editEmployee')}
                                 </button>
                               )}
                               {!p.hasAccess && p.employeeId && (
@@ -937,6 +846,7 @@ export function EquipoModal({
                                     resetWizard();
                                     setWizardName(p.name);
                                     setWizardCreateEmployee(false);
+                                    setWizardExistingEmployeeId(p.employeeId);
                                     setWizardExternalId(p.employeeExternalId || '');
                                     setWizardStep(2);
                                     setIsWizardOpen(true);
@@ -1591,299 +1501,22 @@ export function EquipoModal({
           </div>
         )}
 
-        {/* MODAL: CARGA MASIVA CSV (UXR-F3-M05 / UXR-F3-M06) */}
-        {isBulkImportOpen && (
-          <ModalShell
-            isOpen={isBulkImportOpen}
-            onClose={() => { setIsBulkImportOpen(false); resetBulkImport(); }}
-            title={t('teamWorkspace.bulkImportTitle')}
-            closeAriaLabel="Cerrar importación"
-            maxWidth="720px"
-          >
-            <div className="equipo-bulk-import" data-testid="bulk-import-modal">
-              {bulkImportSuccessMsg ? (
-                <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                  <CheckCircle2 size={48} style={{ color: 'var(--success, #16a34a)', marginBottom: '12px' }} />
-                  <h3 style={{ margin: '0 0 8px 0' }}>{t('teamWorkspace.bulkSuccess')}</h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{bulkImportSuccessMsg}</p>
-
-                  {bulkGeneratedCredentials.length > 0 && (
-                    <div style={{ margin: '16px 0', textAlign: 'left' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <strong>Credenciales temporales generadas:</strong>
-                        <button
-                          type="button"
-                          className="equipo-btn equipo-btn--secondary"
-                          onClick={() => {
-                            downloadTextFile(
-                              buildCredentialsTxt(locale, 'Organización', bulkGeneratedCredentials, (r) => r),
-                              credentialsFileName(locale)
-                            );
-                          }}
-                        >
-                          <Download size={14} /> {t('teamWorkspace.bulkDownloadCredentials')}
-                        </button>
-                      </div>
-                      <div className="equipo-panel" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-                        {bulkGeneratedCredentials.map((c, i) => (
-                          <div key={c.email} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border-soft)' }}>
-                            <span><strong>{c.email}</strong> ({c.role}): <code style={{ fontFamily: 'monospace' }}>{c.temporaryPassword}</code></span>
-                            <button
-                              type="button"
-                              className="equipo-btn equipo-btn--secondary"
-                              onClick={() => {
-                                void navigator.clipboard.writeText(`${c.email}: ${c.temporaryPassword}`);
-                                setBulkCopiedPasswordIdx(i);
-                                setTimeout(() => setBulkCopiedPasswordIdx(null), 2000);
-                              }}
-                            >
-                              <Copy size={12} /> {bulkCopiedPasswordIdx === i ? 'Copiado' : 'Copiar'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    className="equipo-btn equipo-btn--primary"
-                    onClick={() => { setIsBulkImportOpen(false); resetBulkImport(); }}
-                    style={{ marginTop: '16px' }}
-                    data-testid="bulk-finish-button"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {t('teamWorkspace.bulkImportDescription')}
-                  </p>
-
-                  {bulkParseError && (
-                    <div className="card card--error" role="alert" style={{ padding: '8px 12px' }} data-testid="bulk-parse-error">
-                      <span style={{ color: 'var(--danger, #ef4444)' }}>{bulkParseError}</span>
-                    </div>
-                  )}
-
-                  {!bulkUsersPreview && !bulkEmployeesPreview ? (
-                    <div
-                      style={{
-                        border: '2px dashed var(--glass-border)',
-                        borderRadius: '12px',
-                        padding: '32px 16px',
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        background: 'var(--panel-muted-bg)',
-                      }}
-                      onClick={() => {
-                        const input = document.getElementById('equipo-bulk-csv-input');
-                        input?.click();
-                      }}
-                    >
-                      <Upload size={32} style={{ color: 'var(--color-accent)', marginBottom: '8px' }} />
-                      <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>{t('teamWorkspace.bulkSelectFile')}</p>
-                      <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        Archivos .csv con cabeceras estándar
-                      </p>
-                      <input
-                        id="equipo-bulk-csv-input"
-                        type="file"
-                        accept=".csv,text/csv"
-                        style={{ display: 'none' }}
-                        data-testid="bulk-file-input"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) void handleBulkFileChange(file);
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div>
-                      {bulkFile && (
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                          {t('teamWorkspace.bulkSelectedFile') || 'Archivo seleccionado'}: <strong>{bulkFile.name}</strong>
-                        </div>
-                      )}
-                      {bulkKind === 'users' && bulkUsersPreview && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div
-                            className="equipo-modal__alert equipo-modal__alert--info"
-                            data-testid="bulk-preview-summary"
-                          >
-                            <span>
-                              {t('teamWorkspace.bulkSummary', {
-                                total: bulkUsersPreview.length,
-                                newCount: bulkUsersPreview.filter((r) => r.status === 'new_and_link' || r.status === 'new_no_employee').length,
-                                existingCount: bulkUsersPreview.filter((r) => r.status === 'existing_and_link' || r.status === 'already_linked' || r.status === 'no_employee').length,
-                                errorCount: bulkUsersPreview.filter((r) => r.status === 'invalid_email' || r.status === 'invalid_role' || r.status === 'employee_not_found' || r.status === 'duplicate_in_file' || r.status === 'duplicate_employee_id_in_file').length,
-                              })}
-                            </span>
-                          </div>
-
-                          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
-                            <table className="equipo-table" data-testid="bulk-preview-table">
-                              <thead>
-                                <tr>
-                                  <th>Email</th>
-                                  <th>Nombre</th>
-                                  <th>Rol</th>
-                                  <th>ID Externo</th>
-                                  <th>Estado</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {bulkUsersPreview.map((p, idx) => (
-                                  <tr key={`u-${idx}`} data-testid={`bulk-row-${idx}`}>
-                                    <td>{p.row.email || '—'}</td>
-                                    <td>{p.row.name || '—'}</td>
-                                    <td>{p.row.role || '—'}</td>
-                                    <td>{p.row.externalEmployeeId || '—'}</td>
-                                    <td>
-                                      <span className={`equipo-badge equipo-badge--${p.status.includes('invalid') || p.status.includes('duplicate') || p.status.includes('not_found') ? 'error' : p.status.includes('new') ? 'success' : 'neutral'}`}>
-                                        {p.status}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {bulkKind === 'employees' && bulkEmployeesPreview && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                          <div
-                            className="equipo-modal__alert equipo-modal__alert--info"
-                            data-testid="bulk-preview-summary"
-                          >
-                            <span>
-                              {t('teamWorkspace.bulkSummary', {
-                                total: bulkEmployeesPreview.length,
-                                newCount: bulkEmployeesPreview.filter((r) => r.status === 'new').length,
-                                existingCount: bulkEmployeesPreview.filter((r) => r.status === 'existing').length,
-                                errorCount: bulkEmployeesPreview.filter((r) => r.status === 'error').length,
-                              })}
-                            </span>
-                          </div>
-
-                          <div style={{ maxHeight: '260px', overflowY: 'auto' }}>
-                            <table className="equipo-table" data-testid="bulk-preview-table">
-                              <thead>
-                                <tr>
-                                  <th>ID Externo</th>
-                                  <th>Nombre</th>
-                                  <th>Área</th>
-                                  <th>Estado</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {bulkEmployeesPreview.map((p, idx) => (
-                                  <tr key={`e-${idx}`} data-testid={`bulk-row-${idx}`}>
-                                    <td>{p.row.externalEmployeeId || '—'}</td>
-                                    <td>{p.row.name || '—'}</td>
-                                    <td>{p.row.areaName || '—'}</td>
-                                    <td>
-                                      <span className={`equipo-badge equipo-badge--${p.status === 'new' ? 'success' : p.status === 'existing' ? 'neutral' : 'error'}`}>
-                                        {p.status === 'new' ? 'Nuevo' : p.status === 'existing' ? 'Existente' : p.errorMessage || 'Error'}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '16px' }}>
-                        <button
-                          type="button"
-                          className="equipo-btn equipo-btn--secondary"
-                          onClick={() => { setIsBulkImportOpen(false); resetBulkImport(); }}
-                          data-testid="bulk-cancel-button"
-                          disabled={bulkImportSubmitting}
-                        >
-                          {t('teamWorkspace.bulkCancel')}
-                        </button>
-                        <button
-                          type="button"
-                          className="equipo-btn equipo-btn--primary"
-                          onClick={() => void handleBulkConfirm()}
-                          disabled={bulkImportSubmitting}
-                          data-testid="bulk-confirm-button"
-                        >
-                          {bulkImportSubmitting ? t('teamWorkspace.bulkImporting') : t('teamWorkspace.bulkConfirm')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </ModalShell>
-        )}
-
         {/* WIZARD MODAL: AÑADIR PERSONA */}
         {isWizardOpen && (
           <ModalShell
             isOpen={isWizardOpen}
             onClose={() => { setIsWizardOpen(false); resetWizard(); }}
             title={t('teamWorkspace.wizardTitle')}
-            closeAriaLabel="Cerrar"
+            closeAriaLabel={t('teamWorkspace.close')}
             maxWidth="560px"
           >
             <div className="equipo-wizard" data-testid="add-persona-wizard">
-              {wizardGeneratedPassword ? (
-                <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                  <CheckCircle2 size={48} style={{ color: 'var(--success, #16a34a)', marginBottom: '12px' }} />
-                  <h3 style={{ margin: '0 0 8px 0' }}>{t('teamWorkspace.createdSuccess')}</h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {t('teamWorkspace.temporaryPasswordNote')}
-                  </p>
-                  <div className="equipo-panel" style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px',
-                    margin: '16px 0',
-                    padding: '12px',
-                    fontFamily: 'monospace',
-                    fontSize: '1rem',
-                  }}>
-                    <strong>{wizardGeneratedPassword}</strong>
-                    <button
-                      type="button"
-                      className="equipo-btn equipo-btn--secondary"
-                      onClick={() => {
-                        void navigator.clipboard.writeText(wizardGeneratedPassword);
-                        setCopiedPassword(true);
-                        setTimeout(() => setCopiedPassword(false), 2000);
-                      }}
-                    >
-                      <Copy size={14} />
-                      {copiedPassword ? 'Copiada' : 'Copiar'}
-                    </button>
-                  </div>
-                  <button
-                    type="button"
-                    className="equipo-btn equipo-btn--primary"
-                    style={{ width: '100%', marginTop: '16px' }}
-                    onClick={() => { setIsWizardOpen(false); resetWizard(); }}
-                  >
-                    Finalizar
-                  </button>
-                </div>
-              ) : (
-                <>
                   <div className="equipo-wizard__steps">
-                    <span className={`equipo-wizard__step-indicator${wizardStep === 1 ? ' is-active' : ''}`}>1. Identidad</span>
-                    <span className={`equipo-wizard__step-indicator${wizardStep === 2 ? ' is-active' : ''}`}>2. Acceso</span>
-                    <span className={`equipo-wizard__step-indicator${wizardStep === 3 ? ' is-active' : ''}`}>3. Empleo</span>
-                    <span className={`equipo-wizard__step-indicator${wizardStep === 4 ? ' is-active' : ''}`}>4. Scope</span>
-                    <span className={`equipo-wizard__step-indicator${wizardStep === 5 ? ' is-active' : ''}`}>5. Confirmación</span>
+                    <span className={`equipo-wizard__step-indicator${wizardStep === 1 ? ' is-active' : ''}`}>1. {t('teamWorkspace.stepIdentity')}</span>
+                    <span className={`equipo-wizard__step-indicator${wizardStep === 2 ? ' is-active' : ''}`}>2. {t('teamWorkspace.stepAccess')}</span>
+                    <span className={`equipo-wizard__step-indicator${wizardStep === 3 ? ' is-active' : ''}`}>3. {t('teamWorkspace.stepEmployment')}</span>
+                    <span className={`equipo-wizard__step-indicator${wizardStep === 4 ? ' is-active' : ''}`}>4. {t('teamWorkspace.stepScope')}</span>
+                    <span className={`equipo-wizard__step-indicator${wizardStep === 5 ? ' is-active' : ''}`}>5. {t('teamWorkspace.stepConfirm')}</span>
                   </div>
 
                   {/* Step 1: Identidad */}
@@ -1930,7 +1563,7 @@ export function EquipoModal({
                       {wizardHasAccess && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' }}>
                           <div>
-                            <label htmlFor="wizard-email" style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px' }}>Email de acceso *</label>
+                            <label htmlFor="wizard-email" style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px' }}>{t('teamWorkspace.accessEmail')} *</label>
                             <input
                               id="wizard-email"
                               type="email"
@@ -1941,20 +1574,9 @@ export function EquipoModal({
                               data-testid="wizard-email-input"
                             />
                           </div>
-                          <div>
-                            <label htmlFor="wizard-password" style={{ display: 'block', fontSize: '0.85rem', marginBottom: '4px' }}>
-                              {t('teamWorkspace.initialPasswordOptional')}
-                            </label>
-                            <input
-                              id="wizard-password"
-                              type="password"
-                              className="equipo-modal__search"
-                              placeholder={t('teamWorkspace.passwordPlaceholder')}
-                              value={wizardPassword}
-                              onChange={(e) => setWizardPassword(e.target.value)}
-                              data-testid="wizard-password-input"
-                            />
-                          </div>
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            {t('teamWorkspace.invitationPasswordNote')}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -2029,7 +1651,7 @@ export function EquipoModal({
                     <div className="equipo-wizard__form-group">
                       {wizardHasAccess ? (
                         <>
-                          <label htmlFor="wizard-role" style={{ fontWeight: 600 }}>Rol en la organización *</label>
+                          <label htmlFor="wizard-role" style={{ fontWeight: 600 }}>{t('teamWorkspace.roleInOrganization')} *</label>
                           <select
                             id="wizard-role"
                             className="equipo-modal__select"
@@ -2037,14 +1659,14 @@ export function EquipoModal({
                             onChange={(e) => setWizardRole(e.target.value as typeof wizardRole)}
                             data-testid="wizard-role-select"
                           >
-                            <option value="EMPLOYEE">Empleado</option>
-                            <option value="PLANNER">Planificador</option>
-                            <option value="ADMIN">Administrador</option>
+                            <option value="EMPLOYEE">{t('teamWorkspace.roleEmployee')}</option>
+                            <option value="PLANNER">{t('teamWorkspace.rolePlanner')}</option>
+                            <option value="ADMIN">{t('teamWorkspace.roleAdmin')}</option>
                           </select>
 
                           {wizardRole === 'PLANNER' && (
                             <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>Ámbito de planificación</p>
+                              <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>{t('teamWorkspace.planningScope')}</p>
                               <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <input
                                   type="radio"
@@ -2090,7 +1712,7 @@ export function EquipoModal({
                         </>
                       ) : (
                         <p style={{ color: 'var(--text-muted)' }}>
-                          Esta persona no tendrá acceso de usuario, por lo que no requiere rol ni ámbito.
+                          {t('teamWorkspace.noUserAccess')}
                         </p>
                       )}
                     </div>
@@ -2099,7 +1721,7 @@ export function EquipoModal({
                   {/* Step 5: Confirmación */}
                   {wizardStep === 5 && (
                     <div className="equipo-wizard__form-group">
-                      <h4 style={{ margin: '0 0 12px 0' }}>Resumen de la nueva persona</h4>
+                      <h4 style={{ margin: '0 0 12px 0' }}>{t('teamWorkspace.newPersonSummary')}</h4>
                       <div className="equipo-panel" style={{
                         padding: '12px 16px',
                         display: 'flex',
@@ -2107,12 +1729,12 @@ export function EquipoModal({
                         gap: '6px',
                         fontSize: '0.85rem',
                       }}>
-                        <div><strong>Nombre:</strong> {wizardName}</div>
-                        <div><strong>Acceso:</strong> {wizardHasAccess ? `Sí (${wizardEmail})` : 'No'}</div>
-                        {wizardHasAccess && <div><strong>Rol:</strong> {wizardRole}</div>}
-                        <div><strong>Ficha Empleado:</strong> {wizardCreateEmployee ? (wizardExternalId ? `Sí (ID: ${wizardExternalId})` : 'Sí') : 'No'}</div>
+                        <div><strong>{t('teamWorkspace.name')}:</strong> {wizardName}</div>
+                        <div><strong>{t('teamWorkspace.filterAccess')}:</strong> {wizardHasAccess ? `${t('teamWorkspace.yesSummary')} (${wizardEmail})` : t('teamWorkspace.noSummary')}</div>
+                        {wizardHasAccess && <div><strong>{t('teamWorkspace.filterRole')}:</strong> {wizardRole === 'ADMIN' ? t('teamWorkspace.roleAdmin') : wizardRole === 'PLANNER' ? t('teamWorkspace.rolePlanner') : t('teamWorkspace.roleEmployee')}</div>}
+                        <div><strong>{t('teamWorkspace.employeeRecord')}:</strong> {wizardCreateEmployee ? (wizardExternalId ? `${t('teamWorkspace.yesSummary')} (ID: ${wizardExternalId})` : t('teamWorkspace.yesSummary')) : t('teamWorkspace.noSummary')}</div>
                         {wizardCreateEmployee && wizardAreaId && (
-                          <div><strong>Área:</strong> {areas.find((a) => a.id === wizardAreaId)?.name}</div>
+                          <div><strong>{t('teamWorkspace.filterArea')}:</strong> {areas.find((a) => a.id === wizardAreaId)?.name}</div>
                         )}
                       </div>
                     </div>
@@ -2151,8 +1773,6 @@ export function EquipoModal({
                       </button>
                     )}
                   </div>
-                </>
-              )}
             </div>
           </ModalShell>
         )}

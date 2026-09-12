@@ -1,15 +1,9 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { bulkAddMembers } from '../_lib/data.js';
-import { hashPassword } from '../_lib/passwords.js';
+import { HttpError } from '../_lib/auth.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * POST /api/memberships/bulk — bulk user provisioning + automatic
- * User<->Employee linking (Usuarios CSV import, ADMIN/OWNER only, Team plan).
- * Body: { members: [{ key, email, name?, role, externalEmployeeId? }] }.
- * `key` is a client-supplied correlation id, echoed back per result, never
- * stored. Never creates an Employee — `externalEmployeeId` only resolves an
- * existing one. Partial success: one bad row never aborts the rest.
+ * POST /api/memberships/bulk — retired until the CSV invitation flow exists.
  */
 export default async function handler(req, res) {
   try {
@@ -21,8 +15,9 @@ export default async function handler(req, res) {
       return sendJson(res, 405, { error: 'Method not allowed' });
     }
 
-    const result = await bulkAddMembers(sql, ctx, req.body?.members ?? [], hashPassword);
-    return sendJson(res, 200, result);
+    const error = new HttpError(410, 'Bulk access provisioning is deferred; use individual invitations');
+    error.code = 'BULK_INVITATIONS_DEFERRED';
+    throw error;
   } catch (error) {
     return handleError(res, error);
   }

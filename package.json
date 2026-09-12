@@ -17,8 +17,8 @@
     "test:migration:fresh-chain": "node scripts/test-migration-fresh-chain.mjs",
     "preview": "vite preview",
     "seed:dev": "node --env-file=.env.development.local db/seed-dev.mjs",
-    "db:migrate": "node db/migrate.mjs",
-    "db:migrate:status": "node db/migrate.mjs --status"
+    "db:migrate": "node --env-file=.env.local db/migrate.mjs",
+    "db:migrate:status": "node --env-file=.env.local db/migrate.mjs --status"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

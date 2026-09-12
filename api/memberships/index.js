@@ -1,15 +1,12 @@
-import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { addMember, listMembers, removeMember, updateMemberRole } from '../_lib/data.js';
-import { hashPassword } from '../_lib/passwords.js';
+import { getSql, HttpError, requireOrgContext, resolveContext } from '../_lib/auth.js';
+import { listMembers, removeMember, updateMemberRole } from '../_lib/data.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
  * Minimal B2B membership management (OWNER/ADMIN only, org from session).
  *
  * GET    /api/memberships                — list org members
- * POST   /api/memberships                — add member {email, role,
- *                                          password? (new users), displayName?,
- *                                          employeeId? (link User↔Employee)}
+ * POST   /api/memberships                — retired; use /api/invitations
  * PATCH  /api/memberships                — change role/scope {userId, role, scopedAreaId?}
  * DELETE /api/memberships                — remove membership {userId}
  *
@@ -25,7 +22,9 @@ export default async function handler(req, res) {
       return sendJson(res, 200, { members: await listMembers(sql, ctx) });
     }
     if (req.method === 'POST') {
-      return sendJson(res, 201, { member: await addMember(sql, ctx, req.body ?? {}, hashPassword) });
+      const error = new HttpError(410, 'Use the invitation flow to grant access');
+      error.code = 'INVITATIONS_REQUIRED';
+      throw error;
     }
     if (req.method === 'PATCH') {
       return sendJson(res, 200, { member: await updateMemberRole(sql, ctx, req.body ?? {}) });
