@@ -379,11 +379,18 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'imports.outcome_reason',
           'shifts.shift_type',
         ],
-        routines: ['transfer_organization_ownership_temporal'],
+        routines: [
+          'transfer_organization_ownership_temporal',
+          'check_user_access_invitation_integrity',
+          'check_user_access_pending_person_invitation_integrity',
+          'guard_user_access_invitation_mutation',
+          'guard_user_access_invitation_delete',
+        ],
         indexes: [
           'format_profiles_org_structurehash_active_idx',
           'memberships_one_owner_per_org_idx',
           'shifts_id_employee_unique_idx',
+          'user_access_invitations_pending_org_email_uidx',
         ],
         constraints: [
           { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
@@ -454,17 +461,27 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           '_migrations.checksum',
           'users.account_status',
         ],
-        routines: ['transfer_organization_ownership_temporal'],
+        routines: [
+          'transfer_organization_ownership_temporal',
+          'check_user_access_invitation_integrity',
+          'check_user_access_pending_person_invitation_integrity',
+          'guard_user_access_invitation_mutation',
+          'guard_user_access_invitation_delete',
+        ],
         indexes: [
           'format_profiles_org_structurehash_active_idx',
           'memberships_one_owner_per_org_idx',
           'shifts_id_employee_unique_idx',
+          'user_access_invitations_pending_org_email_uidx',
         ],
         constraints: [
           { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
           { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
           { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
           { conname: '_migrations_checksum_format_chk', def: "CHECK (checksum ~ '^[0-9a-f]{64}$')" },
+          { conname: 'users_account_status_check', def: "CHECK (account_status IN ('PENDING_INVITATION', 'ACTIVE', 'SUSPENDED'))" },
+          { conname: 'user_access_invitations_token_hash_key', def: 'UNIQUE (token_hash)' },
+          { conname: 'user_access_invitations_person_org_fkey', def: 'FOREIGN KEY (organization_person_id, organization_id)' },
         ],
       });
 

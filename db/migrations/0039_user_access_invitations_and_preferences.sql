@@ -13,8 +13,8 @@ CREATE TABLE user_preferences (
   user_id UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
   locale TEXT NOT NULL DEFAULT 'es'
     CHECK (locale IN ('es', 'en')),
-  theme TEXT NOT NULL DEFAULT 'SYSTEM'
-    CHECK (theme IN ('SYSTEM', 'LIGHT', 'DARK')),
+  theme TEXT NOT NULL DEFAULT 'system'
+    CHECK (theme IN ('system', 'light', 'dark')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -24,7 +24,9 @@ CREATE TABLE user_access_invitations (
   organization_id UUID NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
   organization_person_id UUID,
   email_normalized TEXT NOT NULL,
-  invited_by_user_id UUID REFERENCES users (id) ON DELETE SET NULL,
+  -- Invitation provenance is mandatory. Physical deletion of users with
+  -- invitation history is intentionally restricted; deactivate instead.
+  invited_by_user_id UUID NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
   token_hash TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'PENDING'
     CHECK (status IN ('PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED')),
@@ -89,19 +91,38 @@ CREATE INDEX user_access_invitations_expiry_idx
 CREATE INDEX user_access_invitations_delivery_idx
   ON user_access_invitations (delivery_status, last_sent_at);
 
--- The sender must be a member of the same organization. Role authorization is
--- an API concern; tenant membership is enforced at the database boundary.
+-- The sender is an active, tenant-scoped actor with a currently valid
+-- OWNER/ADMIN role, or an organization-scoped PLANNER role. The temporal role
+-- row is required so a historical role cannot authorize a new invitation.
 CREATE FUNCTION check_user_access_invitation_integrity()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF NEW.invited_by_user_id IS NOT NULL
-    AND NOT EXISTS (
-      SELECT 1
-      FROM memberships m
-      WHERE m.user_id = NEW.invited_by_user_id
-        AND m.organization_id = NEW.organization_id
+  IF TG_OP = 'INSERT'
+     OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
+     OR NEW.invited_by_user_id IS DISTINCT FROM OLD.invited_by_user_id THEN
+    IF NOT EXISTS (
+    SELECT 1
+    FROM users u
+    JOIN memberships m
+      ON m.user_id = u.id
+     AND m.organization_id = NEW.organization_id
+    JOIN organization_people op
+      ON op.user_id = m.user_id
+     AND op.organization_id = m.organization_id
+     AND op.status = 'ACTIVE'
+    JOIN person_role_periods prp
+      ON prp.organization_person_id = op.id
+     AND prp.organization_id = op.organization_id
+     AND prp.role = m.role
+     AND prp.valid_from <= CURRENT_DATE
+     AND (prp.valid_to IS NULL OR prp.valid_to >= CURRENT_DATE)
+    WHERE u.id = NEW.invited_by_user_id
+      AND u.account_status = 'ACTIVE'
+      AND m.role IN ('OWNER', 'ADMIN', 'PLANNER')
+      AND (m.role <> 'PLANNER' OR m.planner_scope_type = 'ORGANIZATION')
     ) THEN
-    RAISE EXCEPTION 'Invitation sender must belong to the invitation organization';
+      RAISE EXCEPTION 'Invitation sender must be an active, authorized actor in the invitation organization';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -112,3 +133,156 @@ CREATE CONSTRAINT TRIGGER trg_check_user_access_invitation_integrity
   DEFERRABLE INITIALLY IMMEDIATE
   FOR EACH ROW
   EXECUTE FUNCTION check_user_access_invitation_integrity();
+
+-- A pending organization person is a deliberate invitation staging state, not
+-- an unbounded orphan state. The unique partial index above enforces "at most
+-- one"; this deferred cross-table trigger enforces the matching "exactly one"
+-- and the reverse direction (a person-bound pending invitation requires a
+-- pending person). Deferral permits the future activation transaction to
+-- update person, membership, user and invitation in any safe order.
+CREATE FUNCTION check_user_access_pending_person_invitation_integrity()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_person_id UUID;
+  v_organization_id UUID;
+  v_person_status TEXT;
+  v_pending_count INTEGER;
+BEGIN
+  -- Deletions have their own immediate guard below. Constraint-triggered
+  -- cross-table checks only need to validate surviving rows.
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+
+  IF TG_TABLE_NAME = 'organization_people' THEN
+    IF TG_OP = 'DELETE' THEN
+      RETURN OLD;
+    END IF;
+    v_person_id := NEW.id;
+    v_organization_id := NEW.organization_id;
+  ELSE
+    IF TG_OP = 'DELETE' THEN
+      v_person_id := OLD.organization_person_id;
+      v_organization_id := OLD.organization_id;
+    ELSE
+      v_person_id := NEW.organization_person_id;
+      v_organization_id := NEW.organization_id;
+    END IF;
+  END IF;
+
+  IF v_person_id IS NULL THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
+  SELECT op.status
+    INTO v_person_status
+    FROM organization_people op
+   WHERE op.id = v_person_id
+     AND op.organization_id = v_organization_id;
+
+  -- A deleted person no longer has a pending-person invariant to satisfy.
+  IF NOT FOUND THEN
+    RETURN COALESCE(NEW, OLD);
+  END IF;
+
+  SELECT count(*)::INTEGER
+    INTO v_pending_count
+    FROM user_access_invitations i
+   WHERE i.organization_id = v_organization_id
+     AND i.organization_person_id = v_person_id
+     AND i.status = 'PENDING';
+
+  IF v_person_status = 'PENDING_INVITATION' AND v_pending_count <> 1 THEN
+    RAISE EXCEPTION 'Pending organization person must have exactly one pending access invitation';
+  END IF;
+
+  IF v_person_status <> 'PENDING_INVITATION'
+     AND EXISTS (
+       SELECT 1
+         FROM user_access_invitations i
+        WHERE i.organization_id = v_organization_id
+          AND i.organization_person_id = v_person_id
+          AND i.status = 'PENDING'
+     ) THEN
+    RAISE EXCEPTION 'A pending access invitation may reference only a pending organization person';
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER trg_check_user_access_pending_person_on_person
+  AFTER INSERT OR UPDATE OR DELETE ON organization_people
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW
+  EXECUTE FUNCTION check_user_access_pending_person_invitation_integrity();
+
+CREATE CONSTRAINT TRIGGER trg_check_user_access_pending_person_on_invitation
+  AFTER INSERT OR UPDATE OR DELETE ON user_access_invitations
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW
+  EXECUTE FUNCTION check_user_access_pending_person_invitation_integrity();
+
+CREATE FUNCTION guard_user_access_invitation_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- FK actions execute nested row triggers; their parent deletion removes the
+  -- person/organization as well and must not be treated as manual orphaning.
+  IF pg_trigger_depth() > 1 THEN
+    RETURN OLD;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM organization_people op
+     WHERE op.id = OLD.organization_person_id
+       AND op.organization_id = OLD.organization_id
+       AND op.status = 'PENDING_INVITATION'
+  ) THEN
+    RAISE EXCEPTION 'A pending access invitation cannot be deleted while its person is pending';
+  END IF;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_guard_user_access_invitation_delete
+  BEFORE DELETE ON user_access_invitations
+  FOR EACH ROW
+  EXECUTE FUNCTION guard_user_access_invitation_delete();
+
+-- Tokens are issued as hashes and are never replaced in-place. Terminal rows
+-- are immutable for identity, tenancy, provenance and lifecycle fields. Only
+-- delivery metadata remains mutable for future provider callbacks/retries.
+CREATE FUNCTION guard_user_access_invitation_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.token_hash IS DISTINCT FROM OLD.token_hash THEN
+    RAISE EXCEPTION 'Invitation token hash is immutable';
+  END IF;
+
+  IF NEW.status = 'EXPIRED' AND NEW.expires_at > CURRENT_TIMESTAMP THEN
+    RAISE EXCEPTION 'An invitation cannot be marked expired before its expiry time';
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND OLD.status IN ('ACCEPTED', 'REVOKED', 'EXPIRED') THEN
+    IF NEW.status IS DISTINCT FROM OLD.status
+       OR NEW.organization_id IS DISTINCT FROM OLD.organization_id
+       OR NEW.organization_person_id IS DISTINCT FROM OLD.organization_person_id
+       OR NEW.email_normalized IS DISTINCT FROM OLD.email_normalized
+       OR NEW.invited_by_user_id IS DISTINCT FROM OLD.invited_by_user_id
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at
+       OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+       OR NEW.accepted_at IS DISTINCT FROM OLD.accepted_at
+       OR NEW.revoked_at IS DISTINCT FROM OLD.revoked_at THEN
+      RAISE EXCEPTION 'Terminal access invitations cannot change identity, tenancy or lifecycle fields';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_guard_user_access_invitation_mutation
+  BEFORE INSERT OR UPDATE ON user_access_invitations
+  FOR EACH ROW
+  EXECUTE FUNCTION guard_user_access_invitation_mutation();

@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from '@neondatabase/serverless';
+import { randomUUID } from 'node:crypto';
 import {
   resolveShiftAreaHistorical,
   transferOwnershipTemporal,
@@ -7,6 +8,41 @@ import {
 
 describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)', () => {
   let client;
+
+  // 0039 makes the legacy temporal staging state explicit: every synthetic
+  // pending person used by these tests gets a real, tenant-scoped invitation.
+  async function createPendingPerson(organizationId, label) {
+    await client.query(`SET CONSTRAINTS
+      trg_check_user_access_pending_person_on_person,
+      trg_check_user_access_pending_person_on_invitation DEFERRED`);
+    const actorUser = (await client.query(
+      'INSERT INTO users (email, display_name, password_hash) VALUES ($1, $2, $3) RETURNING id',
+      [`temporal-actor-${label}-${randomUUID()}@example.com`, `Temporal Actor ${label}`, 'hash']
+    )).rows[0].id;
+    const actorPerson = (await client.query(
+      "INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id",
+      [organizationId, actorUser]
+    )).rows[0].id;
+    await client.query(
+      "INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'ADMIN')",
+      [organizationId, actorUser]
+    );
+    await client.query(
+      "INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from) VALUES ($1, $2, 'ADMIN', CURRENT_DATE)",
+      [organizationId, actorPerson]
+    );
+    const person = (await client.query(
+      "INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id",
+      [organizationId]
+    )).rows[0].id;
+    await client.query(
+      `INSERT INTO user_access_invitations
+        (organization_id, organization_person_id, email_normalized, invited_by_user_id, token_hash, expires_at)
+       VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP + INTERVAL '1 day')`,
+      [organizationId, person, `pending-${label}-${randomUUID()}@example.com`, actorUser, randomUUID().replaceAll('-', '').padEnd(64, '0').slice(0, 64)]
+    );
+    return person;
+  }
 
   // Adapter for tagged template queries using pg/neon client
   const sqlAdapter = async (strings, ...values) => {
@@ -104,7 +140,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S1', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's1');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S1') RETURNING id", [org, person])).rows[0].id;
       const area1 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area Rampa') RETURNING id", [org])).rows[0].id;
       const area2 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area Equipajes') RETURNING id", [org])).rows[0].id;
@@ -140,7 +176,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S2', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's2');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S2') RETURNING id", [org, person])).rows[0].id;
       const area1 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area 1') RETURNING id", [org])).rows[0].id;
       const area2 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area 2') RETURNING id", [org])).rows[0].id;
@@ -178,7 +214,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S3', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's3');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S3') RETURNING id", [org, person])).rows[0].id;
       const area1 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area Expiring') RETURNING id", [org])).rows[0].id;
 
@@ -206,7 +242,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S4', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's4');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S4') RETURNING id", [org, person])).rows[0].id;
       const area1 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area A') RETURNING id", [org])).rows[0].id;
       const area2 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area B') RETURNING id", [org])).rows[0].id;
@@ -239,7 +275,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S5', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's5');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S5') RETURNING id", [org, person])).rows[0].id;
       const area1 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area Same') RETURNING id", [org])).rows[0].id;
 
@@ -271,7 +307,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S6', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's6');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S6') RETURNING id", [org, person])).rows[0].id;
 
       const fallback = await resolveShiftAreaHistorical(sqlAdapter, {
@@ -291,7 +327,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S7', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's7');
 
       await client.query(`
         INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, valid_to)
@@ -321,8 +357,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S8', 'company') RETURNING id")).rows[0].id;
-      const personA = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const personB = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const personA = await createPendingPerson(org, 's8a');
+      const personB = await createPendingPerson(org, 's8b');
 
       await client.query(`
         INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from)
@@ -404,7 +440,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S10', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's10');
 
       await client.query(`
         INSERT INTO person_access_scope_periods (organization_id, organization_person_id, scope_type, valid_from)
@@ -434,7 +470,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S11', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's11');
       const area1 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area Planner 1') RETURNING id", [org])).rows[0].id;
       const area2 = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area Planner 2') RETURNING id", [org])).rows[0].id;
 
@@ -464,8 +500,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S12', 'company') RETURNING id")).rows[0].id;
-      const planner = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const targetEmp = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const planner = await createPendingPerson(org, 's12-planner');
+      const targetEmp = await createPendingPerson(org, 's12-target');
 
       await client.query(`
         INSERT INTO person_access_scope_periods (organization_id, organization_person_id, scope_type, target_person_id, valid_from)
@@ -489,7 +525,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     try {
       const orgA = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org A13', 'company') RETURNING id")).rows[0].id;
       const orgB = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org B13', 'company') RETURNING id")).rows[0].id;
-      const personA = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [orgA])).rows[0].id;
+      const personA = await createPendingPerson(orgA, 's13');
       const areaB = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area B13') RETURNING id", [orgB])).rows[0].id;
 
       let error = null;
@@ -515,8 +551,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S14', 'company') RETURNING id")).rows[0].id;
-      const adminPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const plannerPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const adminPerson = await createPendingPerson(org, 's14-admin');
+      const plannerPerson = await createPendingPerson(org, 's14-planner');
 
       await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from) VALUES ($1, $2, 'ADMIN', '2026-01-01')", [org, adminPerson]);
       await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from) VALUES ($1, $2, 'PLANNER', '2026-01-01')", [org, plannerPerson]);
@@ -539,8 +575,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S15', 'company') RETURNING id")).rows[0].id;
-      const plannerPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const empPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const plannerPerson = await createPendingPerson(org, 's15-planner');
+      const empPerson = await createPendingPerson(org, 's15-employee');
 
       await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from) VALUES ($1, $2, 'PLANNER', '2026-01-01')", [org, plannerPerson]);
 
@@ -578,9 +614,9 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S16', 'company') RETURNING id")).rows[0].id;
-      const sup1 = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const sup2 = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const emp = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const sup1 = await createPendingPerson(org, 's16-sup1');
+      const sup2 = await createPendingPerson(org, 's16-sup2');
+      const emp = await createPendingPerson(org, 's16-employee');
 
       await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp S16')", [org, emp]);
       await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from) VALUES ($1, $2, 'PLANNER', '2026-01-01')", [org, sup1]);
@@ -610,7 +646,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S17', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 's18');
 
       let error = null;
       await client.query('SAVEPOINT sp_s17;');
@@ -635,8 +671,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S18', 'company') RETURNING id")).rows[0].id;
-      const personA = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const personB = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const personA = await createPendingPerson(org, 's19a');
+      const personB = await createPendingPerson(org, 's19b');
 
       await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp A')", [org, personA]);
       await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp B')", [org, personB]);
@@ -674,9 +710,9 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S19', 'company') RETURNING id")).rows[0].id;
-      const personA = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const personB = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const personC = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const personA = await createPendingPerson(org, 's20a');
+      const personB = await createPendingPerson(org, 's20b');
+      const personC = await createPendingPerson(org, 's20c');
 
       await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp A')", [org, personA]);
       await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp B')", [org, personB]);
@@ -722,8 +758,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org S20', 'company') RETURNING id")).rows[0].id;
-      const personA = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const personB = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const personA = await createPendingPerson(org, 'restrict-a');
+      const personB = await createPendingPerson(org, 'restrict-b');
 
       // In 2025: A is ADMIN, B is PLANNER
       await client.query("INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, valid_to) VALUES ($1, $2, 'ADMIN', '2025-01-01', '2025-12-31')", [org, personA]);
@@ -759,7 +795,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org Restrict', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 'restrict');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp') RETURNING id", [org, person])).rows[0].id;
       const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Protected Area') RETURNING id", [org])).rows[0].id;
 
@@ -791,7 +827,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org Cascade', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 'cascade');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp') RETURNING id", [org, person])).rows[0].id;
       const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area') RETURNING id", [org])).rows[0].id;
 
@@ -823,7 +859,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org Views', 'company') RETURNING id")).rows[0].id;
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const person = await createPendingPerson(org, 'views');
       const emp = (await client.query("INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name) VALUES ($1, $2, 'Emp View') RETURNING id", [org, person])).rows[0].id;
       const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Area View') RETURNING id", [org])).rows[0].id;
 
@@ -861,9 +897,9 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
     await client.query('BEGIN;');
     try {
       const org = (await client.query("INSERT INTO organizations (name, type) VALUES ('Org Coverage', 'company') RETURNING id")).rows[0].id;
-      const adminPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const plannerPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
-      const empPerson = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const adminPerson = await createPendingPerson(org, 'coverage-admin');
+      const plannerPerson = await createPendingPerson(org, 'coverage-planner');
+      const empPerson = await createPendingPerson(org, 'coverage-employee');
 
       // Case 1: Role ADMIN 1 Jan to 31 Jan, relationship for whole 2026 -> REJECT
       await client.query(`
@@ -901,7 +937,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       expect(relOk.rows.length).toBe(1);
 
       // Case 3: Planner role ended, relation later -> REJECT
-      const supPlanner = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const supPlanner = await createPendingPerson(org, 'coverage-sup-planner');
       await client.query(`
         INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, valid_to)
         VALUES ($1, $2, 'PLANNER', '2026-01-01', '2026-05-31')
@@ -926,7 +962,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       expect(error3.message).toContain('Supervisor must hold active PLANNER role covering full relationship period');
 
       // Case 4: Subordinate employee profile ended_on before relation ends -> REJECT
-      const empEnded = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      const empEnded = await createPendingPerson(org, 'coverage-ended');
       await client.query(`
         INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, started_on, ended_on)
         VALUES ($1, $2, 'Emp Ended', '2026-01-01', '2026-06-30')
@@ -968,10 +1004,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       `, [org, personLinked]);
 
       // Valid 2: Person PENDING_INVITATION without user_id with employee profile
-      const personPending = (await client.query(`
-        INSERT INTO organization_people (organization_id, user_id, status)
-        VALUES ($1, NULL, 'PENDING_INVITATION') RETURNING id
-      `, [org])).rows[0].id;
+      const personPending = await createPendingPerson(org, 'link-pending');
       await client.query(`
         INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name)
         VALUES ($1, $2, 'Pending Emp')
@@ -1025,8 +1058,12 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
 
       const personA = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [org, userA])).rows[0].id;
       const personB = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [org, userB])).rows[0].id;
-      // Person without user_id
-      const personUnlinked = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, NULL, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
+      // Person without user_id and without an employee profile: this isolates
+      // the ownership service's target-user invariant from 0039 staging.
+      const personUnlinked = (await client.query(
+        "INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, NULL, 'ACTIVE') RETURNING id",
+        [org]
+      )).rows[0].id;
 
       await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'OWNER')", [org, userA]);
       await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'ADMIN')", [org, userB]);
@@ -1185,11 +1222,12 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
   // Section 3 Requirement: Labor Validity Trigger on employee_area_periods
   it('Scenario: Labor validity trigger rejects area assignments outside employee profile tenure', async () => {
     let testOrgId = null;
+    await client.query('BEGIN;');
     try {
       testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Labor Validity Org', 'company') RETURNING id")).rows[0].id;
       const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Valid Area') RETURNING id", [testOrgId])).rows[0].id;
 
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [testOrgId])).rows[0].id;
+      const person = await createPendingPerson(testOrgId, 'gist');
       const profile = (await client.query(`
         INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, employment_status, started_on, ended_on)
         VALUES ($1, $2, 'Bounded Employee', 'TERMINATED', '2026-02-01', '2026-08-31') RETURNING id
@@ -1197,6 +1235,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
 
       // 1. Assignment starting before tenure started_on -> MUST FAIL
       let errBefore = null;
+      await client.query('SAVEPOINT sp_labor_before;');
       try {
         await client.query(`
           INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
@@ -1205,11 +1244,13 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       } catch (err) {
         errBefore = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_labor_before;');
       expect(errBefore).not.toBeNull();
       expect(errBefore.message).toContain('not fully contained within employee profile labor tenure');
 
       // 2. Assignment ending after tenure ended_on -> MUST FAIL
       let errAfter = null;
+      await client.query('SAVEPOINT sp_labor_after;');
       try {
         await client.query(`
           INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
@@ -1218,11 +1259,13 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       } catch (err) {
         errAfter = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_labor_after;');
       expect(errAfter).not.toBeNull();
       expect(errAfter.message).toContain('not fully contained within employee profile labor tenure');
 
       // 3. Open assignment (valid_to IS NULL) on terminated employee -> MUST FAIL
       let errOpen = null;
+      await client.query('SAVEPOINT sp_labor_open;');
       try {
         await client.query(`
           INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
@@ -1231,6 +1274,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       } catch (err) {
         errOpen = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_labor_open;');
       expect(errOpen).not.toBeNull();
       expect(errOpen.message).toContain('not fully contained within employee profile labor tenure');
 
@@ -1241,20 +1285,19 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       `, [testOrgId, profile, area]);
       expect(validPeriod.rows.length).toBe(1);
     } finally {
-      if (testOrgId) {
-        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
-      }
+      await client.query('ROLLBACK;');
     }
   });
 
   // Section 2 Requirement: Same-Area Overlap & Duplicate Rejection by GiST Exclusion
   it('Scenario: GiST exclusion constraint rejects overlapping and duplicate assignments for the exact same area', async () => {
     let testOrgId = null;
+    await client.query('BEGIN;');
     try {
       testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Same Area GiST Org', 'company') RETURNING id")).rows[0].id;
       const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Target Area') RETURNING id", [testOrgId])).rows[0].id;
 
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [testOrgId])).rows[0].id;
+      const person = await createPendingPerson(testOrgId, 'tenure');
       const profile = (await client.query(`
         INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, employment_status, started_on, ended_on)
         VALUES ($1, $2, 'Active Worker', 'ACTIVE', '2026-01-01', NULL) RETURNING id
@@ -1268,6 +1311,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
 
       // 1. Overlapping period for same area -> MUST FAIL by employee_area_periods_no_same_area_overlap_excl
       let errOverlap = null;
+      await client.query('SAVEPOINT sp_same_area_overlap;');
       try {
         await client.query(`
           INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
@@ -1276,11 +1320,13 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       } catch (err) {
         errOverlap = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_same_area_overlap;');
       expect(errOverlap).not.toBeNull();
       expect(errOverlap.message).toContain('employee_area_periods_no_same_area_overlap_excl');
 
       // 2. Exact duplicate period for same area -> MUST FAIL by GiST constraint
       let errDup = null;
+      await client.query('SAVEPOINT sp_same_area_duplicate;');
       try {
         await client.query(`
           INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
@@ -1289,23 +1335,23 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       } catch (err) {
         errDup = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_same_area_duplicate;');
       expect(errDup).not.toBeNull();
       expect(errDup.message).toContain('employee_area_periods_no_same_area_overlap_excl');
     } finally {
-      if (testOrgId) {
-        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
-      }
+      await client.query('ROLLBACK;');
     }
   });
 
   // Section 6 Requirement: Inverse Labor Tenure Integrity (Trigger trg_check_employee_profile_labor_tenure)
   it('Scenario: Inverse labor tenure integrity rejects profile contraction leaving area periods outside, allows valid updates and coordinated closure', async () => {
     let testOrgId = null;
+    await client.query('BEGIN;');
     try {
       testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Labor Tenure Integrity Org', 'company') RETURNING id")).rows[0].id;
       const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Operational Area') RETURNING id", [testOrgId])).rows[0].id;
 
-      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [testOrgId])).rows[0].id;
+      const person = await createPendingPerson(testOrgId, 'labor-validity');
       const profile = (await client.query(`
         INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, employment_status, started_on, ended_on)
         VALUES ($1, $2, 'Tenure Bound Employee', 'ACTIVE', '2026-02-01', '2026-11-30') RETURNING id
@@ -1319,15 +1365,19 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
 
       // 1. Shortening ended_on to 2026-08-31 leaves area period (ends 2026-09-30) outside -> MUST FAIL
       let errShorten = null;
+      await client.query('SAVEPOINT sp_tenure_shorten;');
       try {
         await client.query(`
           UPDATE employee_profiles
           SET ended_on = '2026-08-31'
           WHERE id = $1
         `, [profile]);
+        await client.query('SET CONSTRAINTS trg_check_employee_profile_labor_tenure IMMEDIATE;');
       } catch (err) {
         errShorten = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_tenure_shorten;');
+      await client.query('SET CONSTRAINTS trg_check_employee_profile_labor_tenure DEFERRED;');
       expect(errShorten).not.toBeNull();
       expect(errShorten.message).toContain('existing area assignment extends beyond new ended_on');
 
@@ -1337,15 +1387,19 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
 
       // 2. Delaying started_on to 2026-04-01 leaves area period (starts 2026-03-01) outside -> MUST FAIL
       let errDelay = null;
+      await client.query('SAVEPOINT sp_tenure_delay;');
       try {
         await client.query(`
           UPDATE employee_profiles
           SET started_on = '2026-04-01'
           WHERE id = $1
         `, [profile]);
+        await client.query('SET CONSTRAINTS trg_check_employee_profile_labor_tenure IMMEDIATE;');
       } catch (err) {
         errDelay = err;
       }
+      await client.query('ROLLBACK TO SAVEPOINT sp_tenure_delay;');
+      await client.query('SET CONSTRAINTS trg_check_employee_profile_labor_tenure DEFERRED;');
       expect(errDelay).not.toBeNull();
       expect(errDelay.message).toContain('existing area assignment starts before new started_on');
 
@@ -1365,7 +1419,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       expect(pCheck3.ended_on).toBe('2026-10-31');
 
       // 4. Coordinated closure in same transaction -> MUST SUCCEED (deferred constraint trigger)
-      await client.query('BEGIN;');
+      await client.query('SAVEPOINT sp_coordinated_closure;');
       try {
         // Contract profile tenure ended_on to 2026-06-30 (which temporarily leaves area assignment ending 2026-09-30 outside)
         await client.query(`
@@ -1381,9 +1435,9 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
           WHERE id = $1
         `, [areaPeriod]);
 
-        await client.query('COMMIT;');
+        await client.query('RELEASE SAVEPOINT sp_coordinated_closure;');
       } catch (err) {
-        await client.query('ROLLBACK;');
+        await client.query('ROLLBACK TO SAVEPOINT sp_coordinated_closure;');
         throw err;
       }
 
@@ -1395,9 +1449,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       const aFinal = (await client.query("SELECT valid_from::text, valid_to::text FROM employee_area_periods WHERE id = $1", [areaPeriod])).rows[0];
       expect(aFinal.valid_to).toBe('2026-06-30');
     } finally {
-      if (testOrgId) {
-        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
-      }
+      await client.query('ROLLBACK;');
     }
   });
 });

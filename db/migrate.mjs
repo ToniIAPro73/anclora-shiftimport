@@ -560,7 +560,15 @@ export const MIGRATION_SENTINELS = {
   '0039_user_access_invitations_and_preferences.sql': (cat) =>
     cat.tables.has('user_access_invitations') &&
     cat.tables.has('user_preferences') &&
-    cat.columns.has('users.account_status'),
+    cat.columns.has('users.account_status') &&
+    cat.constraints.has('users_account_status_check') &&
+    cat.constraints.has('user_access_invitations_token_hash_key') &&
+    cat.constraints.has('user_access_invitations_person_org_fkey') &&
+    cat.indexes.has('user_access_invitations_pending_org_email_uidx') &&
+    cat.routines.has('check_user_access_invitation_integrity') &&
+    cat.routines.has('check_user_access_pending_person_invitation_integrity') &&
+    cat.routines.has('guard_user_access_invitation_mutation') &&
+    cat.routines.has('guard_user_access_invitation_delete'),
 };
 
 /**
