@@ -190,7 +190,7 @@ El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` 
 - Aplicación: `0039_user_access_invitations_and_preferences.sql`, ejecutada el 2026-09-12 mediante `db/migrate.mjs`, conexión directa no pooled y acreditación explícita de `main`.
 - SHA-256 publicado y aplicado: `7680b4a1e8572e05ecfc10ea240247ffa07cc0a841039308238db67706231dd8`.
 - Estado comprobado después de aplicar: `UP_TO_DATE`, 39 registros consecutivos, 0 pendientes, 0 gaps, 0 desconocidas y 39 checksums coincidentes byte a byte con el repositorio.
-- Objetos 0039 comprobados: `user_access_invitations`, `user_preferences`, `users.account_status`, 6 índices específicos, 6 constraints específicas, 4 rutinas de integridad y 5 triggers específicos.
+- Objetos 0039 comprobados: `user_access_invitations`, `user_preferences`, `users.account_status`, 6 índices específicos, 8 constraints específicas, 4 rutinas de integridad y 5 triggers específicos.
 - Recuentos funcionales conservados: 1 organización, 2 usuarios, 2 memberships, 1 empleado, 1 identidad OAuth, 2 personas organizativas, 1 perfil de empleado, 2 periodos de rol, 2 periodos de ámbito y 0 turnos/áreas.
 - Las dos cuentas existentes quedaron `ACTIVE`; la identidad OAuth sigue sin contraseña local. El digest comparativo de credenciales no cambió; los hashes no se registran en esta documentación.
 - El plan `free_v3` no permite ramas protegidas: actualmente hay 0 ramas protegidas y el backup pre-0039 queda conservado sin protección y sin TTL. La protección debe activarse al pasar a un plan compatible; no se debe simular con cambios de aplicación.
