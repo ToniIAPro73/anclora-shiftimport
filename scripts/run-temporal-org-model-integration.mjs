@@ -1189,10 +1189,20 @@ export async function runTemporalIntegrationHarness(options = {}) {
     // Step 2: Apply migrations
     console.log("[runner] Step 2: Applying migrations (0036, 0037)...");
     const migrateTarget = branchId || branchName || "ephemeral";
-    const migrateResult = spawnSyncFn("node", ["db/migrate.mjs", `--target-branch=${migrateTarget}`], {
-      env: { ...env, DATABASE_URL: connectionString, TARGET_BRANCH: migrateTarget },
-      encoding: "utf-8",
-    });
+    const migrateResult = spawnSyncFn(
+      "node",
+      ["db/migrate.mjs", `--target-branch=${migrateTarget}`, `--project-id=${PROJECT_ID}`],
+      {
+        env: {
+          ...env,
+          DATABASE_URL: connectionString,
+          DATABASE_URL_UNPOOLED: connectionString,
+          NEON_PROJECT_ID: PROJECT_ID,
+          TARGET_BRANCH: migrateTarget,
+        },
+        encoding: "utf-8",
+      }
+    );
     if (migrateResult.status !== 0) {
       console.error(migrateResult.stdout);
       console.error(migrateResult.stderr);

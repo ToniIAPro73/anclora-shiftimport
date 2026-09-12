@@ -74,12 +74,13 @@ La comparación formal entre la rama de referencia limpia (aplicando `0001`–`0
 - `transfer_organization_ownership_temporal`
 - `check_employee_profile_labor_tenure_update`
 
-### 3.3 Triggers Canónicos Verificados
-- `trg_check_employee_profile_person_link` (en `employee_profiles`)
-- `trg_check_organization_person_employee_link` (en `organization_people`)
-- `trg_check_reporting_relationship` (en `reporting_relationship_periods`)
-- `trg_check_employee_area_period_labor_validity` (en `employee_area_periods`)
-- `trg_check_employee_profile_labor_tenure` (en `employee_profiles`)
+### 3.3 Triggers Canónicos Verificados (Triggers Totales del Esquema: 5 / Triggers Temporales: 5)
+El esquema completo de la base de datos cuenta exactamente con **5 triggers en total**, los cuales corresponden unívocamente a los **5 triggers del modelo organizativo temporal** introducidos en las migraciones `0036` y `0037` (no existen triggers legacy adicionales en el esquema):
+1. `trg_check_employee_profile_person_link` (en `employee_profiles`, migración 0036)
+2. `trg_check_organization_person_employee_link` (en `organization_people`, migración 0036)
+3. `trg_check_reporting_relationship` (en `reporting_relationship_periods`, migración 0036)
+4. `trg_check_employee_area_period_labor_validity` (en `employee_area_periods`, migración 0036)
+5. `trg_check_employee_profile_labor_tenure` (en `employee_profiles`, migración 0037)
 
 ---
 
@@ -152,6 +153,13 @@ Todas las 37 migraciones se encuentran debidamente registradas en `_migrations` 
 | 0036 | `0036_temporal_organizational_model.sql` | `49793386495759efc39bf5ceeb6ba2d287bb24f72782e34bf54c6052f5822f7a` | APPLIED | Registro en ledger (DDL preexistente) |
 | 0037 | `0037_temporal_ownership_transfer_and_labor_integrity.sql` | `9cf3769c615878fe943f606834b6f005fbc5725287f3b52d9a62bc7ff6e65a04` | APPLIED | Registro en ledger (DDL preexistente) |
 
+
+### 5.1 Estado Actual de `main` y Migración `0038`
+- **Neon `main` permanece en la migración `0037`**: El ledger `_migrations` en `main` contiene exactamente 37 registros continuos y válidos.
+- **Migración `0038_migration_ledger_checksums.sql` preparada en repositorio**: Introduce la columna `checksum` en `_migrations`, impone la restricción `CHECK (checksum ~ '^[0-9a-f]{64}$')`, retroalimenta los checksums canónicos SHA-256 de las migraciones `0001`–`0037`, y fija la columna como `NOT NULL`.
+- **Validada exclusivamente en ramas efímeras**: Ha sido probada con éxito total en ramas efímeras hijas acreditadas creadas a partir de `preview/development`, verificando rollback atómico y materialización sin errores.
+- **Pendiente de autorización en `main`**: **NO ha sido aplicada a Neon `main`**. Al inspeccionar Neon `main` con `node db/migrate.mjs --status`, se reporta exactamente como 1 migración pendiente (`PENDING`), con estado global `READY` y código de salida `0`.
+
 ---
 
 ## 6. Procedimiento Obligatorio para Futuros Cambios
@@ -159,3 +167,5 @@ Todas las 37 migraciones se encuentran debidamente registradas en `_migrations` 
 1. **PROHIBICIÓN DE EJECUCIÓN MANUAL**: Toda evolución del esquema debe realizarse mediante migraciones versionadas y aplicarse mediante `npm run db:migrate`.
 2. **VERIFICACIÓN READ-ONLY PREVIA**: Todo agente o desarrollador debe ejecutar previamente `npm run db:migrate:status`.
 3. **RAMAS EFÍMERAS ACREDITADAS**: Queda prohibido usar ramas persistentes para pruebas de integración. Las suites deben utilizar ramas efímeras creadas a partir de `preview/development`.
+4. **PROTECCIÓN NO ELUDIBLE DE MAIN**: Toda migración que apunte a Neon `main` exige de forma simultánea: `--allow-main-migration`, el ID exacto de rama `--target-branch=br-solitary-thunder-b1hm9low` (no el alias "main") y confirmación explícita `--confirm-main-branch-id=br-solitary-thunder-b1hm9low`.
+

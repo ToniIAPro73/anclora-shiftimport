@@ -9,11 +9,25 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { neon } from '@neondatabase/serverless';
+import { neon, Client } from '@neondatabase/serverless';
 
 export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 export const BASELINE_MANIFEST_PATH = join(dirname(fileURLToPath(import.meta.url)), '../docs/database/migration-baseline-main.json');
-export const PROJECT_ID = process.env.NEON_PROJECT_ID || 'holy-cake-85660318';
+export const ACCREDITATION_TOKEN = Symbol.for('anclora.migration.accreditation.token');
+
+/**
+ * Resolves the Neon project ID explicitly from args or env without hardcoded fallback.
+ */
+export function getNeonProjectId(env = process.env, args = []) {
+  const arg = args.find((a) => a.startsWith('--project-id='));
+  if (arg) {
+    return arg.split('=')[1].trim();
+  }
+  if (env.NEON_PROJECT_ID && env.NEON_PROJECT_ID.trim()) {
+    return env.NEON_PROJECT_ID.trim();
+  }
+  return null;
+}
 
 /**
  * Computes SHA-256 checksum for a migration file buffer or string.
@@ -23,20 +37,62 @@ export function computeMigrationChecksum(content) {
 }
 
 /**
- * Loads the baseline manifest JSON if it exists.
+ * Loads the baseline manifest JSON in a strictly fail-closed manner.
+ * Throws on missing file, invalid JSON, duplicate entries, or malformed fields.
  */
 export async function loadBaselineManifest(manifestPath = BASELINE_MANIFEST_PATH) {
+  let raw;
   try {
-    const raw = await readFile(manifestPath, 'utf8');
-    const parsed = JSON.parse(raw);
-    const map = new Map();
-    for (const entry of parsed) {
-      map.set(entry.name, entry);
-    }
-    return map;
-  } catch {
-    return null;
+    raw = await readFile(manifestPath, 'utf8');
+  } catch (err) {
+    throw new Error(`Baseline manifest file not found or inaccessible at '${manifestPath}': ${err.message}`);
   }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`Invalid baseline manifest JSON in '${manifestPath}': ${err.message}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Baseline manifest in '${manifestPath}' must contain a JSON array`);
+  }
+
+  const map = new Map();
+  const hex64Regex = /^[0-9a-f]{64}$/;
+
+  for (let i = 0; i < parsed.length; i++) {
+    const entry = parsed[i];
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`Invalid baseline manifest entry at index ${i}: entry must be an object`);
+    }
+
+    const { name, sha256, baselineVersion, reconciliationMethod } = entry;
+    if (!name || typeof name !== 'string' || !/^\d{4}_.*\.sql$/.test(name)) {
+      throw new Error(`Invalid baseline manifest entry at index ${i}: invalid or missing migration 'name' ('${name}')`);
+    }
+
+    if (map.has(name)) {
+      throw new Error(`Duplicate entry for migration '${name}' in baseline manifest '${manifestPath}'`);
+    }
+
+    if (!sha256 || typeof sha256 !== 'string' || !hex64Regex.test(sha256)) {
+      throw new Error(`Invalid baseline manifest entry for '${name}': 'sha256' must be a 64-character lowercase hex string`);
+    }
+
+    if (!baselineVersion || typeof baselineVersion !== 'string' || !baselineVersion.trim()) {
+      throw new Error(`Invalid baseline manifest entry for '${name}': missing or empty 'baselineVersion'`);
+    }
+
+    if (!reconciliationMethod || typeof reconciliationMethod !== 'string' || !reconciliationMethod.trim()) {
+      throw new Error(`Invalid baseline manifest entry for '${name}': missing or empty 'reconciliationMethod'`);
+    }
+
+    map.set(name, entry);
+  }
+
+  return map;
 }
 
 /**
@@ -49,14 +105,19 @@ export const MIGRATION_SENTINELS = {
   '0003_login_attempts.sql': (cat) => cat.tables.has('login_attempts'),
   '0004_organization_plan.sql': (cat) => cat.columns.has('organizations.plan'),
   '0005_employee_lifecycle.sql': (cat) => cat.columns.has('employees.deactivated_at'),
-  '0006_employee_pending_access.sql': (cat) => cat.constraints.has('employees_status_check'),
-  '0007_remove_manager_role.sql': (cat) => cat.tables.has('memberships'),
+  '0006_employee_pending_access.sql': (cat) =>
+    Boolean(cat.constraintDefs?.get('employees_status_check')?.includes('pending_access') && cat.columns.has('employees.deactivated_at')),
+  '0007_remove_manager_role.sql': (cat) =>
+    Boolean(!cat.constraintDefs?.get('memberships_role_check')?.includes('MANAGER') && cat.columns.has('employees.deactivated_at')),
   '0008_areas_optional.sql': (cat) => cat.tables.has('areas'),
   '0009_format_profiles.sql': (cat) => cat.tables.has('format_profiles'),
   '0010_import_history.sql': (cat) => cat.columns.has('imports.import_mode'),
   '0011_import_idempotency.sql': (cat) => cat.columns.has('imports.employee_id'),
   '0012_format_profiles_structurehash_uniqueness.sql': (cat) => cat.indexes.has('format_profiles_org_structurehash_active_idx'),
-  '0013_membership_roles_owner.sql': (cat) => cat.tables.has('memberships'),
+  '0013_membership_roles_owner.sql': (cat) => {
+    const def = cat.constraintDefs?.get('memberships_role_check') || '';
+    return def.includes('OWNER') && def.includes('PLANNER');
+  },
   '0014_single_owner_per_organization.sql': (cat) => cat.indexes.has('memberships_one_owner_per_org_idx'),
   '0015_membership_scoped_area.sql': (cat) => cat.columns.has('memberships.scoped_area_id'),
   '0016_organization_audit_events.sql': (cat) => cat.tables.has('organization_audit_events'),
@@ -74,32 +135,57 @@ export const MIGRATION_SENTINELS = {
   '0028_approval_requests.sql': (cat) => cat.tables.has('approval_requests'),
   '0029_approval_decision_metadata.sql': (cat) => cat.columns.has('approval_requests.approved_by_user_id'),
   '0030_approval_rejection_metadata.sql': (cat) => cat.columns.has('approval_requests.rejected_by_user_id'),
-  '0031_approval_audit_event_types.sql': (cat) => cat.constraints.has('organization_audit_events_event_type_check'),
+  '0031_approval_audit_event_types.sql': (cat) =>
+    Boolean(cat.constraintDefs?.get('organization_audit_events_event_type_check')?.includes('approval_request.created')),
   '0032_change_request_application.sql': (cat) => cat.columns.has('change_requests.requested_start_time'),
   '0033_import_outcome.sql': (cat) => cat.columns.has('imports.outcome_reason'),
   '0034_shift_type_semantics.sql': (cat) => cat.columns.has('shifts.shift_type'),
   '0035_operational_assignments.sql': (cat) => cat.tables.has('operational_assignments'),
   '0036_temporal_organizational_model.sql': (cat) => cat.tables.has('organization_people'),
   '0037_temporal_ownership_transfer_and_labor_integrity.sql': (cat) => cat.routines.has('transfer_organization_ownership_temporal'),
+  '0038_migration_ledger_checksums.sql': (cat) => cat.columns.has('_migrations.checksum'),
 };
+
+/**
+ * Universal query runner: supports neon tagged template function, client.query, or mock sql.
+ */
+export async function executeSql(sqlOrClient, queryText, params = []) {
+  if (sqlOrClient && typeof sqlOrClient.query === 'function') {
+    const res = await sqlOrClient.query(queryText, params);
+    return Array.isArray(res) ? res : res.rows || [];
+  }
+  if (typeof sqlOrClient === 'function') {
+    const templateStrings = Object.assign([queryText], { raw: [queryText] });
+    const res = await sqlOrClient(templateStrings, ...params);
+    return Array.isArray(res) ? res : res.rows || [];
+  }
+  throw new Error('Invalid SQL client provided: expected function or object with .query()');
+}
 
 /**
  * Extracts schema catalog items in a strictly read-only fashion.
  */
-export async function extractSchemaCatalog(sql) {
+export async function extractSchemaCatalog(sqlOrClient) {
   const [hasMigrationsRes, tablesRes, columnsRes, routinesRes, indexesRes, constraintsRes] = await Promise.all([
-    sql`SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'`,
-    sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`,
-    sql`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`,
-    sql`SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public'`,
-    sql`SELECT indexname FROM pg_indexes WHERE schemaname = 'public'`,
-    sql`SELECT conname FROM pg_constraint WHERE connamespace = 'public'::regnamespace`,
+    executeSql(sqlOrClient, "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'"),
+    executeSql(sqlOrClient, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"),
+    executeSql(sqlOrClient, "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'"),
+    executeSql(sqlOrClient, "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public'"),
+    executeSql(sqlOrClient, "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'"),
+    executeSql(sqlOrClient, "SELECT conname, pg_get_constraintdef(oid) AS def, conrelid::regclass::text AS table_name FROM pg_constraint WHERE connamespace = 'public'::regnamespace"),
   ]);
 
   const tableExists = hasMigrationsRes.length > 0;
   let appliedRows = [];
   if (tableExists) {
-    appliedRows = await sql`SELECT name, applied_at FROM _migrations ORDER BY name`;
+    const hasChecksumCol = columnsRes.some(
+      (r) => r.table_name === '_migrations' && r.column_name === 'checksum'
+    );
+    if (hasChecksumCol) {
+      appliedRows = await executeSql(sqlOrClient, 'SELECT name, applied_at, checksum FROM _migrations ORDER BY name');
+    } else {
+      appliedRows = await executeSql(sqlOrClient, 'SELECT name, applied_at FROM _migrations ORDER BY name');
+    }
   }
 
   const tables = new Set(tablesRes.map((r) => r.table_name));
@@ -107,6 +193,15 @@ export async function extractSchemaCatalog(sql) {
   const routines = new Set(routinesRes.map((r) => r.routine_name));
   const indexes = new Set(indexesRes.map((r) => r.indexname));
   const constraints = new Set(constraintsRes.map((r) => r.conname));
+  const constraintDefs = new Map();
+  for (const r of constraintsRes) {
+    if (r.conname) {
+      constraintDefs.set(r.conname, r.def || '');
+      if (r.table_name) {
+        constraintDefs.set(`${r.table_name}.${r.conname}`, r.def || '');
+      }
+    }
+  }
 
   return {
     tableExists,
@@ -116,6 +211,7 @@ export async function extractSchemaCatalog(sql) {
     routines,
     indexes,
     constraints,
+    constraintDefs,
   };
 }
 
@@ -135,7 +231,7 @@ export function isMigrationMaterialized(name, catalog) {
  * Validates repository files, ledger, baseline manifest, and materialized database objects.
  */
 export async function inspectMigrationsStatus(
-  sql,
+  sqlOrClient,
   {
     migrationsDir = MIGRATIONS_DIR,
     baselineManifestPath = BASELINE_MANIFEST_PATH,
@@ -153,9 +249,13 @@ export async function inspectMigrationsStatus(
   }
 
   const baselineMap = await loadBaselineManifest(baselineManifestPath);
-  const dbCatalog = catalog || (await extractSchemaCatalog(sql));
+  if (!baselineMap || !(baselineMap instanceof Map)) {
+    throw new Error('Failed to load baseline manifest: expected a Map of verified migration entries');
+  }
 
-  const appliedMap = new Map(dbCatalog.appliedRows.map((r) => [r.name, r.applied_at]));
+  const dbCatalog = catalog || (await extractSchemaCatalog(sqlOrClient));
+
+  const appliedMap = new Map(dbCatalog.appliedRows.map((r) => [r.name, r]));
   const appliedNames = new Set(appliedMap.keys());
 
   const items = [];
@@ -165,35 +265,81 @@ export async function inspectMigrationsStatus(
   const missingFromDatabase = [];
   const unknownInLedger = [];
   const checksumMismatches = [];
+  const checksumUnverifiable = [];
 
   for (const file of repoFiles) {
     const isRegistered = appliedNames.has(file);
     const isMaterialized = isMigrationMaterialized(file, dbCatalog);
     const repoChecksum = fileChecksums.get(file);
-    const baselineEntry = baselineMap ? baselineMap.get(file) : null;
-    const checksumMatches = baselineEntry ? baselineEntry.sha256 === repoChecksum : true;
-
-    if (!checksumMatches) {
-      checksumMismatches.push({
-        name: file,
-        expectedSha256: baselineEntry.sha256,
-        actualSha256: repoChecksum,
-      });
-    }
+    const baselineEntry = baselineMap.get(file);
+    const appliedRow = appliedMap.get(file);
 
     let status = 'UNKNOWN';
-    if (isRegistered && isMaterialized) {
-      status = checksumMatches ? 'APPLIED' : 'CHECKSUM_MISMATCH';
-      applied.push({ name: file, applied_at: appliedMap.get(file), sha256: repoChecksum });
-    } else if (isRegistered && !isMaterialized) {
-      status = 'MISSING_FROM_DATABASE';
-      missingFromDatabase.push({ name: file, applied_at: appliedMap.get(file), sha256: repoChecksum });
-    } else if (!isRegistered && isMaterialized) {
-      status = 'MATERIALIZED_UNREGISTERED';
-      materializedUnregistered.push({ name: file, sha256: repoChecksum });
+    let baselineMatches = false;
+
+    if (isRegistered) {
+      if (baselineEntry) {
+        baselineMatches = baselineEntry.sha256 === repoChecksum;
+        if (!baselineMatches) {
+          status = 'CHECKSUM_MISMATCH';
+          checksumMismatches.push({
+            name: file,
+            expectedSha256: baselineEntry.sha256,
+            actualSha256: repoChecksum,
+            source: 'baseline_manifest',
+          });
+        } else if (!isMaterialized) {
+          status = 'MISSING_FROM_DATABASE';
+          missingFromDatabase.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+        } else {
+          status = 'APPLIED';
+          applied.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+        }
+      } else if (appliedRow && appliedRow.checksum) {
+        // Migration is not in baseline manifest, but recorded in ledger with a checksum column
+        const ledgerChecksumMatches = appliedRow.checksum === repoChecksum;
+        if (!ledgerChecksumMatches) {
+          status = 'CHECKSUM_MISMATCH';
+          checksumMismatches.push({
+            name: file,
+            expectedSha256: appliedRow.checksum,
+            actualSha256: repoChecksum,
+            source: 'ledger_checksum',
+          });
+        } else if (!isMaterialized) {
+          status = 'MISSING_FROM_DATABASE';
+          missingFromDatabase.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+        } else {
+          status = 'APPLIED';
+          applied.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+          baselineMatches = true;
+        }
+      } else {
+        // Registered in database but has NO verifiable checksum anywhere!
+        status = 'CHECKSUM_UNVERIFIABLE';
+        checksumUnverifiable.push({
+          name: file,
+          reason: 'Migration is recorded in ledger but has no verifiable checksum in baseline manifest or ledger column',
+        });
+      }
     } else {
-      status = checksumMatches ? 'PENDING' : 'CHECKSUM_MISMATCH';
-      pending.push({ name: file, sha256: repoChecksum });
+      // Not registered
+      if (baselineEntry && baselineEntry.sha256 !== repoChecksum) {
+        status = 'CHECKSUM_MISMATCH';
+        checksumMismatches.push({
+          name: file,
+          expectedSha256: baselineEntry.sha256,
+          actualSha256: repoChecksum,
+          source: 'baseline_manifest',
+        });
+      } else if (isMaterialized) {
+        status = 'MATERIALIZED_UNREGISTERED';
+        materializedUnregistered.push({ name: file, sha256: repoChecksum });
+      } else {
+        status = 'PENDING';
+        pending.push({ name: file, sha256: repoChecksum });
+        baselineMatches = Boolean(baselineEntry && baselineEntry.sha256 === repoChecksum);
+      }
     }
 
     items.push({
@@ -202,7 +348,7 @@ export async function inspectMigrationsStatus(
       isRegistered,
       isMaterialized,
       sha256: repoChecksum,
-      baselineMatches: checksumMatches,
+      baselineMatches,
     });
   }
 
@@ -210,7 +356,7 @@ export async function inspectMigrationsStatus(
     if (!fileChecksums.has(name)) {
       unknownInLedger.push({
         name,
-        applied_at: appliedMap.get(name),
+        applied_at: appliedMap.get(name)?.applied_at,
       });
     }
   }
@@ -237,6 +383,7 @@ export async function inspectMigrationsStatus(
     missingFromDatabase.length > 0 ||
     unknownInLedger.length > 0 ||
     checksumMismatches.length > 0 ||
+    checksumUnverifiable.length > 0 ||
     gaps.length > 0;
 
   let state = 'UNKNOWN';
@@ -259,6 +406,7 @@ export async function inspectMigrationsStatus(
     missingFromDatabase,
     unknownInLedger,
     checksumMismatches,
+    checksumUnverifiable,
     gaps,
     isContinuous: gaps.length === 0,
     isUpToDate: state === 'UP_TO_DATE',
@@ -270,12 +418,25 @@ export async function inspectMigrationsStatus(
 /**
  * Prints formatted human-readable migration status.
  */
-export function printStatus(status) {
+export function printStatus(status, { neonInfo = null } = {}) {
   console.log('=== NEON MIGRATION STATUS ===');
+  if (neonInfo) {
+    console.log(`Neon Project ID: ${neonInfo.projectId || 'N/A'}`);
+    console.log(`Neon Branch ID: ${neonInfo.branchId || 'N/A'}`);
+    console.log(`Neon Branch Name: ${neonInfo.branchName || 'N/A'}`);
+    console.log(`Neon Endpoint: ${neonInfo.endpointId || 'N/A'}`);
+  }
   console.log(`_migrations table: ${status.tableExists ? 'EXISTS' : 'NOT CREATED'}`);
   console.log(`Total repository migrations: ${status.totalRepoFiles}`);
   console.log(`Applied migrations in ledger: ${status.applied.length}`);
   console.log(`Pending migrations: ${status.pending.length}`);
+
+  if (status.checksumUnverifiable && status.checksumUnverifiable.length > 0) {
+    console.log(`\n[CRITICAL] Registered migrations without verifiable baseline checksum (${status.checksumUnverifiable.length}):`);
+    for (const m of status.checksumUnverifiable) {
+      console.log(`  ! ${m.name}: ${m.reason}`);
+    }
+  }
 
   if (status.materializedUnregistered.length > 0) {
     console.log(`\n[CRITICAL] Materialized objects without ledger registration (${status.materializedUnregistered.length}):`);
@@ -301,7 +462,7 @@ export function printStatus(status) {
   if (status.checksumMismatches.length > 0) {
     console.log(`\n[ERROR] Checksum mismatches against baseline manifest (${status.checksumMismatches.length}):`);
     for (const m of status.checksumMismatches) {
-      console.log(`  ! ${m.name} actual SHA-256 does not match verified baseline`);
+      console.log(`  ! ${m.name} actual SHA-256 does not match verified baseline (source: ${m.source})`);
     }
   }
 
@@ -335,7 +496,7 @@ export function printStatus(status) {
 export function resolveNeonBranchFromConnectionString(
   connectionString,
   {
-    projectId = PROJECT_ID,
+    projectId = null,
     neonctlExec = execFileSync,
     endpoints = null,
     branches = null,
@@ -343,6 +504,11 @@ export function resolveNeonBranchFromConnectionString(
     expectedBranchId = null,
   } = {}
 ) {
+  const resolvedProjectId = projectId || getNeonProjectId();
+  if (!resolvedProjectId) {
+    throw new Error('NEON_PROJECT_ID environment variable or --project-id flag is required. Hardcoded default project ID has been removed.');
+  }
+
   let parsedUrl;
   try {
     parsedUrl = new URL(connectionString);
@@ -357,7 +523,7 @@ export function resolveNeonBranchFromConnectionString(
 
   let endpointList = endpoints;
   if (!endpointList) {
-    const raw = neonctlExec('npx', ['neonctl', 'api', `/projects/${projectId}/endpoints`], {
+    const raw = neonctlExec('npx', ['neonctl', 'api', `/projects/${resolvedProjectId}/endpoints`], {
       encoding: 'utf-8',
     });
     const parsed = JSON.parse(raw);
@@ -373,7 +539,7 @@ export function resolveNeonBranchFromConnectionString(
   });
 
   if (!matchedEndpoint) {
-    throw new Error(`Could not identify Neon endpoint for host '${hostname}' in project '${projectId}'. Refusing to connect.`);
+    throw new Error(`Could not identify Neon endpoint for host '${hostname}' in project '${resolvedProjectId}'. Refusing to connect.`);
   }
 
   if (expectedEndpointId && matchedEndpoint.id !== expectedEndpointId) {
@@ -395,7 +561,7 @@ export function resolveNeonBranchFromConnectionString(
 
   let branchList = branches;
   if (!branchList) {
-    const raw = neonctlExec('npx', ['neonctl', 'branches', 'list', '--project-id', projectId, '--output', 'json'], {
+    const raw = neonctlExec('npx', ['neonctl', 'branches', 'list', '--project-id', resolvedProjectId, '--output', 'json'], {
       encoding: 'utf-8',
     });
     branchList = JSON.parse(raw);
@@ -403,7 +569,7 @@ export function resolveNeonBranchFromConnectionString(
 
   const matchedBranch = branchList.find((b) => b.id === branchId);
   if (!matchedBranch) {
-    throw new Error(`Branch '${branchId}' associated with endpoint '${matchedEndpoint.id}' was not found in project '${projectId}'.`);
+    throw new Error(`Branch '${branchId}' associated with endpoint '${matchedEndpoint.id}' was not found in project '${resolvedProjectId}'.`);
   }
 
   return {
@@ -418,16 +584,32 @@ export function resolveNeonBranchFromConnectionString(
 export function accreditDestinationBranch({
   connectionString,
   targetBranch = null,
+  confirmMainBranchId = null,
   expectedBranchId = null,
   expectedBranchName = null,
   allowMainMigration = false,
-  projectId = PROJECT_ID,
+  projectId = null,
   neonctlExec = execFileSync,
   endpoints = null,
   branches = null,
+  forWrite = true,
 } = {}) {
   if (!connectionString) {
     throw new Error('connectionString is required for destination accreditation');
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(connectionString);
+  } catch (err) {
+    throw new Error(`Invalid connection string: ${err.message}`);
+  }
+
+  const hostname = parsedUrl.hostname || '';
+  if (forWrite && hostname.includes('-pooler')) {
+    throw new Error(
+      `Migration write operations require a direct unpooled connection (DATABASE_URL_UNPOOLED or direct host without '-pooler'). Host '${hostname}' is pooled. Use direct connection.`
+    );
   }
 
   // Require explicit branch or target environment selection for migration write operations
@@ -437,8 +619,13 @@ export function accreditDestinationBranch({
     );
   }
 
+  const resolvedProjectId = projectId || getNeonProjectId();
+  if (!resolvedProjectId) {
+    throw new Error('NEON_PROJECT_ID environment variable or --project-id flag is required. Hardcoded default project ID has been removed.');
+  }
+
   const { branch, endpoint } = resolveNeonBranchFromConnectionString(connectionString, {
-    projectId,
+    projectId: resolvedProjectId,
     neonctlExec,
     endpoints,
     branches,
@@ -450,7 +637,37 @@ export function accreditDestinationBranch({
   const isDefault = Boolean(branch.default || branch.is_default || branch.primary);
   const isProtected = Boolean(branch.protected);
 
-  if (targetBranch) {
+  const isMainBranch =
+    branchName === 'main' ||
+    branchId === 'br-solitary-thunder-b1hm9low' ||
+    branchName === 'production' ||
+    branchName === 'preview/production' ||
+    isDefault ||
+    isProtected;
+
+  if (isMainBranch) {
+    if (!allowMainMigration) {
+      throw new Error(
+        `Refusing to apply migrations to production/main branch '${branchName}' (${branchId}) without explicit authorization flag (--allow-main-migration).`
+      );
+    }
+    const target = (targetBranch || '').trim();
+    if (target.toLowerCase() === 'main') {
+      throw new Error(
+        `Refusing to migrate Neon main branch: target branch must be specified by its exact branch ID ('${branchId}'), not the alias 'main'.`
+      );
+    }
+    if (target !== branchId) {
+      throw new Error(
+        `Refusing to migrate Neon main branch: target branch '${targetBranch}' does not match exact main branch ID '${branchId}'.`
+      );
+    }
+    if (confirmMainBranchId !== branchId) {
+      throw new Error(
+        `Refusing to migrate Neon main branch: requires explicit confirmation flag --confirm-main-branch-id=${branchId}.`
+      );
+    }
+  } else if (targetBranch) {
     const target = targetBranch.trim().toLowerCase();
     const matchesId = branchId.toLowerCase() === target;
     const matchesName = branchName.toLowerCase() === target;
@@ -467,24 +684,12 @@ export function accreditDestinationBranch({
     );
   }
 
-  // Safeguard: refuse to run migration against main, primary, or protected branches without explicit flag
-  const isMainBranch =
-    branchName === 'main' ||
-    branchName === 'production' ||
-    branchName === 'preview/production' ||
-    isDefault ||
-    isProtected;
-
-  if (isMainBranch && !allowMainMigration) {
-    throw new Error(
-      `Refusing to apply migrations to production/main branch '${branchName}' (${branchId}) without explicit authorization flag (--allow-main-migration).`
-    );
-  }
-
   return {
+    [ACCREDITATION_TOKEN]: true,
     accredited: true,
     branch,
     endpoint,
+    targetBranch,
   };
 }
 
@@ -493,97 +698,172 @@ export function accreditDestinationBranch({
  * Each migration DDL and its corresponding ledger INSERT are executed atomically inside a single transaction.
  */
 export async function runMigrations(
-  sql,
+  sqlOrClient,
   {
     migrationsDir = MIGRATIONS_DIR,
     baselineManifestPath = BASELINE_MANIFEST_PATH,
     connectionString = null,
     targetBranch = null,
+    confirmMainBranchId = null,
     allowMainMigration = false,
     accreditation = null,
     accreditOptions = {},
+    ClientClass = Client,
+    projectId = null,
+    neonctlExec = execFileSync,
+    endpoints = null,
+    branches = null,
   } = {}
 ) {
-  // If connection string is provided, strictly accredit target before running migrations
-  if (connectionString && !accreditation) {
-    accreditDestinationBranch({
+  let effectiveAccreditation = accreditation;
+
+  if (effectiveAccreditation) {
+    if (!effectiveAccreditation[ACCREDITATION_TOKEN]) {
+      throw new Error(
+        'Invalid accreditation token: destination branch accreditation cannot be forged or bypassed.'
+      );
+    }
+  } else {
+    if (!connectionString) {
+      throw new Error(
+        'Destination branch must be accredited before running migrations. Provide connectionString to accredit or supply verified accreditation.'
+      );
+    }
+    effectiveAccreditation = accreditDestinationBranch({
       connectionString,
       targetBranch,
+      confirmMainBranchId,
       allowMainMigration,
+      forWrite: true,
+      projectId,
+      neonctlExec,
+      endpoints,
+      branches,
       ...accreditOptions,
     });
   }
 
-  // Preflight check: analyze state before touching anything
-  const status = await inspectMigrationsStatus(sql, {
-    migrationsDir,
-    baselineManifestPath,
-  });
+  let client = null;
+  let shouldCloseClient = false;
 
-  if (status.state === 'RECONCILIATION_REQUIRED') {
-    const reasons = [];
-    if (status.materializedUnregistered.length > 0) {
-      reasons.push(`${status.materializedUnregistered.length} materialized unregistered migrations`);
+  if (sqlOrClient && typeof sqlOrClient.query === 'function') {
+    client = sqlOrClient;
+  } else if (connectionString) {
+    client = new ClientClass(connectionString);
+    if (typeof client.connect === 'function') {
+      await client.connect();
     }
-    if (status.missingFromDatabase.length > 0) {
-      reasons.push(`${status.missingFromDatabase.length} missing migrations recorded in ledger`);
-    }
-    if (status.unknownInLedger.length > 0) {
-      reasons.push(`${status.unknownInLedger.length} unknown migrations in ledger`);
-    }
-    if (status.checksumMismatches.length > 0) {
-      reasons.push(`${status.checksumMismatches.length} checksum mismatches against baseline`);
-    }
-    if (status.gaps.length > 0) {
-      reasons.push(`${status.gaps.length} sequence gaps`);
-    }
-    throw new Error(
-      `Cannot apply migrations: database is in RECONCILIATION_REQUIRED state (${reasons.join(', ')}). Manual or automated reconciliation required.`
-    );
+    shouldCloseClient = true;
+  } else {
+    throw new Error('runMigrations requires a Client instance or connectionString to execute transactions.');
   }
 
-  if (status.pending.length === 0) {
-    console.log('migrations up to date (0 pending)');
-    return { appliedCount: 0, pendingCount: 0 };
+  try {
+    const status = await inspectMigrationsStatus(client, {
+      migrationsDir,
+      baselineManifestPath,
+    });
+
+    if (status.state === 'RECONCILIATION_REQUIRED') {
+      const reasons = [];
+      if (status.materializedUnregistered.length > 0) {
+        reasons.push(`${status.materializedUnregistered.length} materialized unregistered migrations`);
+      }
+      if (status.missingFromDatabase.length > 0) {
+        reasons.push(`${status.missingFromDatabase.length} missing migrations recorded in ledger`);
+      }
+      if (status.unknownInLedger.length > 0) {
+        reasons.push(`${status.unknownInLedger.length} unknown migrations in ledger`);
+      }
+      if (status.checksumMismatches.length > 0) {
+        reasons.push(`${status.checksumMismatches.length} checksum mismatches against baseline`);
+      }
+      if (status.checksumUnverifiable.length > 0) {
+        reasons.push(`${status.checksumUnverifiable.length} registered migrations with unverifiable checksums`);
+      }
+      if (status.gaps.length > 0) {
+        reasons.push(`${status.gaps.length} sequence gaps`);
+      }
+      throw new Error(
+        `Cannot apply migrations: database is in RECONCILIATION_REQUIRED state (${reasons.join(', ')}). Manual or automated reconciliation required.`
+      );
+    }
+
+    if (status.pending.length === 0) {
+      console.log('migrations up to date (0 pending)');
+      return { appliedCount: 0, pendingCount: 0 };
+    }
+
+    console.log(`Pending migrations to apply (${status.pending.length}):`);
+    for (const p of status.pending) {
+      console.log(`  - ${p.name}`);
+    }
+
+    // Ensure _migrations exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        name TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Check if _migrations already has checksum column
+    const colCheckRes = await client.query(`
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'
+    `);
+    let hasChecksumCol = (Array.isArray(colCheckRes) ? colCheckRes : colCheckRes?.rows || []).length > 0;
+
+    let appliedCount = 0;
+    for (const item of status.pending) {
+      const file = item.name;
+      const body = await readFile(join(migrationsDir, file), 'utf8');
+      const fileChecksum = computeMigrationChecksum(body);
+
+      console.log(`apply ${file}`);
+
+      await client.query('BEGIN');
+      try {
+        await client.query(body);
+        if (file === '0038_migration_ledger_checksums.sql') {
+          hasChecksumCol = true;
+        }
+        if (hasChecksumCol || file >= '0038_') {
+          await client.query(
+            'INSERT INTO _migrations (name, checksum) VALUES ($1, $2)',
+            [file, fileChecksum]
+          );
+        } else {
+          await client.query(
+            'INSERT INTO _migrations (name) VALUES ($1)',
+            [file]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // preserve original error
+        }
+        throw err;
+      }
+
+      console.log(`done ${file}`);
+      appliedCount++;
+    }
+
+    console.log(`migrations up to date (${appliedCount} applied)`);
+    return { appliedCount, pendingCount: 0 };
+  } finally {
+    if (shouldCloseClient && typeof client.end === 'function') {
+      try {
+        await client.end();
+      } catch {
+        // ignore client close error
+      }
+    }
   }
-
-  console.log(`Pending migrations to apply (${status.pending.length}):`);
-  for (const p of status.pending) {
-    console.log(`  - ${p.name}`);
-  }
-
-  // Ensure _migrations exists
-  await sql`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      name TEXT PRIMARY KEY,
-      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `;
-
-  let appliedCount = 0;
-  for (const item of status.pending) {
-    const file = item.name;
-    const body = await readFile(join(migrationsDir, file), 'utf8');
-    const statements = body
-      .split(/;\s*(?:\n|$)/)
-      .map((statement) => statement.trim())
-      .filter(Boolean);
-
-    console.log(`apply ${file} (${statements.length} statements)`);
-
-    // ATOMIC EXECUTION: DDL and _migrations INSERT run inside a single transaction
-    const transactionQueries = [
-      ...statements.map((statement) => sql.query(statement)),
-      sql.query('INSERT INTO _migrations (name) VALUES ($1)', [file]),
-    ];
-
-    await sql.transaction(transactionQueries);
-    console.log(`done ${file}`);
-    appliedCount++;
-  }
-
-  console.log(`migrations up to date (${appliedCount} applied)`);
-  return { appliedCount, pendingCount: 0 };
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
@@ -601,26 +881,77 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     targetBranch = env.MIGRATION_TARGET_BRANCH;
   }
 
-  const connectionString = env.DATABASE_URL || env.POSTGRES_URL;
-  if (!connectionString) {
-    throw new Error('DATABASE_URL is not configured');
+  let confirmMainBranchId = null;
+  const confirmMainArg = args.find((a) => a.startsWith('--confirm-main-branch-id='));
+  if (confirmMainArg) {
+    confirmMainBranchId = confirmMainArg.split('=')[1];
+  } else if (env.CONFIRM_MAIN_BRANCH_ID) {
+    confirmMainBranchId = env.CONFIRM_MAIN_BRANCH_ID;
   }
 
-  const sql = neon(connectionString);
+  const projectId = getNeonProjectId(env, args);
 
   if (isStatusMode) {
+    // Read-only status allows pooled connections
+    const connectionString = env.DATABASE_URL || env.POSTGRES_URL || env.DATABASE_URL_UNPOOLED;
+    if (!connectionString) {
+      throw new Error('DATABASE_URL is not configured for status inspection');
+    }
+
+    let neonInfo = null;
+    if (projectId) {
+      try {
+        const resolved = resolveNeonBranchFromConnectionString(connectionString, { projectId });
+        neonInfo = {
+          projectId,
+          branchId: resolved.branch.id,
+          branchName: resolved.branch.name,
+          endpointId: resolved.endpoint.id,
+        };
+      } catch {
+        // Neon CLI resolution optional for offline/mock inspect
+      }
+    }
+
+    const sql = neon(connectionString);
     const status = await inspectMigrationsStatus(sql);
-    printStatus(status);
+    printStatus(status, { neonInfo });
     if (status.exitCode !== 0) {
       process.exitCode = status.exitCode;
     }
     return;
   }
 
-  await runMigrations(sql, {
+  // Apply mode (db:migrate write): direct unpooled connection required
+  const connectionString =
+    env.DATABASE_URL_UNPOOLED ||
+    env.POSTGRES_URL_NON_POOLING ||
+    env.DATABASE_URL ||
+    env.POSTGRES_URL;
+
+  if (!connectionString) {
+    throw new Error('DATABASE_URL_UNPOOLED (or DATABASE_URL) is not configured');
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(connectionString);
+  } catch (err) {
+    throw new Error(`Invalid connection string: ${err.message}`);
+  }
+
+  if (parsedUrl.hostname.includes('-pooler')) {
+    throw new Error(
+      `Migration write operations require a direct unpooled connection (DATABASE_URL_UNPOOLED or direct host without '-pooler'). Host '${parsedUrl.hostname}' is pooled.`
+    );
+  }
+
+  await runMigrations(null, {
     connectionString,
     targetBranch,
+    confirmMainBranchId,
     allowMainMigration,
+    projectId,
   });
 }
 

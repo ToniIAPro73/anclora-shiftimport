@@ -135,8 +135,13 @@ La conciliación se realizó mediante una conexión directa no pooled y dentro d
    - Índices: 0 discrepancias.
    - Vistas: 4 vs 4 (`current_person_roles`, `current_employee_areas`, `current_person_access_scopes`, `current_reporting_relationships`).
    - Rutinas/Funciones: 218 vs 218 (incluyendo funciones de integridad laboral y `transfer_organization_ownership_temporal`).
-   - Triggers: 5 vs 5 (todos los triggers canónicos de `0036` y `0037`).
+   - Triggers: 5 vs 5 (Triggers totales en todo el esquema: 5 / Triggers temporales: 5; los 5 triggers del esquema son exactamente los 5 triggers del modelo temporal introducidos en `0036` y `0037`, sin triggers legacy adicionales).
    - Extensiones: Coincidentes (`btree_gist`, `plpgsql`).
+
+3. **Estado de Neon `main` y Migración `0038`**:
+   - Neon `main` permanece exactamente en la migración `0037` (37 migraciones aplicadas en ledger, continuo y datos funcionales intactos).
+   - La migración `0038_migration_ledger_checksums.sql` fue creada en el repositorio y validada al 100% en ramas efímeras hijas acreditadas (incluyendo rollback atómico y verificación de restricciones `NOT NULL` y SHA-256 en el ledger), pero **permanece pendiente de autorización para Neon `main`**.
+   - En `npm run db:migrate:status`, Neon `main` reporta `0038` como 1 migración pendiente (`PENDING`) con estado global `READY` y exit code `0`.
 
 ---
 
@@ -146,3 +151,5 @@ La conciliación se realizó mediante una conexión directa no pooled y dentro d
 2. **MODO STATUS PREVIO**: Antes de cualquier tarea de base de datos, es obligatorio ejecutar `npm run db:migrate:status`.
 3. **MIGRACIONES NORMALIZADAS**: Nuevos cambios de esquema deben crearse secuencialmente como `0038_...` y aplicarse a través de `db/migrate.mjs` con la acreditación de rama correspondiente.
 4. **RAMAS EFÍMERAS**: Las suites de integración y pruebas deben ejecutarse exclusivamente sobre ramas efímeras acreditadas derivadas de `preview/development`.
+5. **PROTECCIÓN NO ELUDIBLE DE MAIN**: El runner de migraciones rechaza cualquier intento de migrar `main` salvo que se especifiquen simultáneamente: `--allow-main-migration`, el ID exacto `--target-branch=br-solitary-thunder-b1hm9low` (no el alias "main") y `--confirm-main-branch-id=br-solitary-thunder-b1hm9low`.
+
