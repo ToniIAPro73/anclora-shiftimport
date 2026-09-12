@@ -132,7 +132,14 @@ export function fetchNeonEndpoints({ projectId = PROJECT_ID, neonctlExec = execF
  */
 export function resolveBranchFromConnectionString(
   connectionString,
-  { projectId = PROJECT_ID, neonctlExec = execFileSync, branches = null, endpoints = null } = {}
+  {
+    projectId = PROJECT_ID,
+    neonctlExec = execFileSync,
+    branches = null,
+    endpoints = null,
+    expectedBranchId = null,
+    expectedEndpointId = null,
+  } = {}
 ) {
   if (!connectionString || typeof connectionString !== "string") {
     throw new Error("connectionString is required to resolve branch");
@@ -163,9 +170,21 @@ export function resolveBranchFromConnectionString(
     throw new Error(`Could not identify Neon endpoint for host '${hostname}' in project '${projectId}'. Refusing to connect.`);
   }
 
+  if (expectedEndpointId && matchedEndpoint.id !== expectedEndpointId) {
+    throw new Error(
+      `Endpoint mismatch: expected endpoint '${expectedEndpointId}', but host '${hostname}' mapped to endpoint '${matchedEndpoint.id}'. Refusing to connect.`
+    );
+  }
+
   const branchId = matchedEndpoint.branch_id;
   if (!branchId) {
     throw new Error(`Neon endpoint '${matchedEndpoint.id}' has no associated branch_id. Refusing to connect.`);
+  }
+
+  if (expectedBranchId && branchId !== expectedBranchId) {
+    throw new Error(
+      `Branch mismatch: expected branch '${expectedBranchId}', but endpoint '${matchedEndpoint.id}' belongs to branch '${branchId}'. Refusing to connect.`
+    );
   }
 
   const branchList = branches || fetchNeonBranches({ projectId, neonctlExec });
@@ -183,9 +202,34 @@ export function resolveBranchFromConnectionString(
  */
 export function assertSafeTemporalDatabaseUrl(
   connectionString,
-  { projectId = PROJECT_ID, neonctlExec = execFileSync, targetBranch = null, branches = null, endpoints = null } = {}
+  {
+    projectId = PROJECT_ID,
+    neonctlExec = execFileSync,
+    targetBranch = null,
+    branches = null,
+    endpoints = null,
+    expectedBranchId = null,
+    expectedEndpointId = null,
+  } = {}
 ) {
-  const branch = targetBranch || resolveBranchFromConnectionString(connectionString, { projectId, neonctlExec, branches, endpoints });
+  if (targetBranch) {
+    if (expectedBranchId && targetBranch.id && targetBranch.id !== expectedBranchId) {
+      throw new Error(
+        `Branch mismatch: expected branch '${expectedBranchId}', but target branch has id '${targetBranch.id}'. Refusing to connect.`
+      );
+    }
+  }
+
+  const branch =
+    targetBranch ||
+    resolveBranchFromConnectionString(connectionString, {
+      projectId,
+      neonctlExec,
+      branches,
+      endpoints,
+      expectedBranchId,
+      expectedEndpointId,
+    });
   validateTargetBranch(branch);
   return branch;
 }
@@ -212,6 +256,8 @@ export function resolveRunnerConfig(env = process.env, options = {}) {
       targetBranch: options.targetBranch,
       branches: options.branches,
       endpoints: options.endpoints,
+      expectedBranchId: options.expectedBranchId,
+      expectedEndpointId: options.expectedEndpointId,
     });
 
     return {
@@ -793,8 +839,8 @@ export async function runTemporalIntegrationHarness(options = {}) {
       await client.end();
     }
 
-    // Step 2: Apply migration 0036
-    console.log("[runner] Step 2: Applying migration 0036_temporal_organizational_model.sql...");
+    // Step 2: Apply migrations
+    console.log("[runner] Step 2: Applying migrations (0036, 0037)...");
     const migrateResult = spawnSyncFn("node", ["db/migrate.mjs"], {
       env: { ...env, DATABASE_URL: connectionString },
       encoding: "utf-8",
@@ -804,7 +850,7 @@ export async function runTemporalIntegrationHarness(options = {}) {
       console.error(migrateResult.stderr);
       throw new Error(`Migration runner db/migrate.mjs failed with status ${migrateResult.status}`);
     }
-    console.log("[runner] Migration 0036 applied successfully.");
+    console.log("[runner] Migrations 0036 and 0037 applied successfully.");
 
     // Step 3: Verify backfill results against seed
     console.log("[runner] Step 3: Verifying 5 legacy backfill cases and link invariants...");
@@ -834,7 +880,7 @@ export async function runTemporalIntegrationHarness(options = {}) {
         env: {
           ...env,
           TEMPORAL_MODEL_DATABASE_URL: connectionString,
-          TEMPORAL_RUNNER_ACCREDITED: "true",
+          TEMPORAL_RUNNER_BRANCH_ID: branchId || "",
           // Explicitly clear generic DB URLs
           DATABASE_URL: "",
           POSTGRES_URL: "",
@@ -844,19 +890,34 @@ export async function runTemporalIntegrationHarness(options = {}) {
     );
 
     // Extract actual test results dynamically from vitest json report
+    let reportParsedSuccessfully = false;
     try {
       if (fs.existsSync(reportFilePath)) {
         const rawReport = fs.readFileSync(reportFilePath, "utf-8");
         const parsedReport = JSON.parse(rawReport);
         passedCount = Number(parsedReport.numPassedTests) || 0;
-        fs.unlinkSync(reportFilePath);
+        reportParsedSuccessfully = true;
       }
     } catch (parseErr) {
       console.warn(`[runner] Warning: Could not parse vitest JSON report: ${parseErr.message}`);
+    } finally {
+      if (fs.existsSync(reportFilePath)) {
+        try {
+          fs.unlinkSync(reportFilePath);
+        } catch {
+          // ignore cleanup error
+        }
+      }
     }
 
     if (testResult.status !== 0) {
       throw new Error(`Integration test suite failed with exit code ${testResult.status}`);
+    }
+
+    if (!reportParsedSuccessfully || passedCount <= 0) {
+      throw new Error(
+        `Integration test suite reported 0 passed tests or missing/unreadable JSON report (passed: ${passedCount})`
+      );
     }
 
     console.log(`[runner] All ${passedCount} integration scenarios PASSED.`);

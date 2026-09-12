@@ -350,33 +350,47 @@ Para simplificar el consumo en servicios de backend y frontend sin necesidad de 
 
 ## 9. Servicio de Transferencia Temporal de Propiedad (`transferOwnershipTemporal`)
 
-La función `transferOwnershipTemporal` (`api/_lib/temporal-org-model.js`) implementa la transferencia atómica y segura del rol `OWNER` con protección estricta contra condiciones de carrera TOCTOU:
-1. **Transacción interactiva única**: toda la operación se ejecuta dentro de un callback interactivo iniciado por `sql.transaction(async (txn) => { ... })`.
-2. **Bloqueo exclusivo inmediato contra TOCTOU**: adquiere el bloqueo de fila `SELECT id FROM organizations WHERE id = $1 FOR UPDATE` al inicio de la transacción, antes de cualquier lectura, verificación de propietario o validación de estado. Esto serializa cualquier intento concurrente garantizando que solo uno consolide el traspaso y el segundo reciba un conflicto controlado.
-3. **Validación de requisitos del nuevo propietario**:
-   - Pertenencia a la organización.
-   - Presencia de `user_id`.
-   - Estado `status = 'ACTIVE'`.
-   - Membresía válida existente en `memberships`.
-4. **Rechazo de fechas futuras**: transacciones con fecha efectiva posterior a hoy se rechazan explícitamente a la espera del scheduler automatizado.
-5. **Cero `DELETE` y detección explícita de conflictos**: no destruye periodos futuros; si existen periodos incompatibles en o después de la fecha efectiva, aborta con conflicto explícito.
-6. **Sincronización retroactiva atómica**: actualiza sincronizadamente los periodos de rol en `person_role_periods` y la tabla legacy `memberships`.
+La función `transferOwnershipTemporal` (`api/_lib/temporal-org-model.js`) delega la operación en la función PostgreSQL transaccional `transfer_organization_ownership_temporal(...)` introducida en la migración `0037_temporal_ownership_transfer_and_labor_integrity.sql`:
+1. **Compatible al 100% con el driver HTTP Serverless de Neon**: ejecuta una única invocación `SELECT * FROM transfer_organization_ownership_temporal(...)`, eliminando la dependencia de `sql.transaction(async (txn) => ...)` (incompatible con el cliente HTTP stateless de `@neondatabase/serverless`).
+2. **Bloqueo exclusivo inmediato contra TOCTOU**: dentro de la función PL/pgSQL, adquiere inmediatamente el bloqueo `SELECT id FROM organizations WHERE id = p_organization_id FOR UPDATE`, antes de cualquier lectura o validación. Esto serializa estrictamente cualquier invocación concurrente garantizando que una sola gane y la otra reciba un conflicto controlado con rollback atómico garantizado por el motor.
+3. **Validaciones integradas en PostgreSQL**:
+   - Existencia de la organización y coincidencia de propietario actual.
+   - Requisitos del nuevo propietario: pertenencia a la organización, presencia obligatoria de `user_id`, estado `ACTIVE` y membresía existente en `memberships`.
+   - Fecha efectiva válida y verificación de ausencia de periodos incompatibles en o después de la fecha efectiva.
+4. **Cero `DELETE` y sincronización retroactiva atómica**:
+   - Cierra el periodo de rol de owner anterior en `effectiveDate - 1`.
+   - Inserta el nuevo rol degradado para el owner anterior desde `effectiveDate`.
+   - Cierra el rol previo del nuevo owner e inserta su periodo `OWNER` desde `effectiveDate`.
+   - Sincroniza atómicamente la tabla legacy `memberships`.
+   - En caso de error o violación de invariantes, se lanza una excepción y PostgreSQL revierte cualquier mutación parcial.
 
 ---
 
-## 10. Harness de Integración Reproducible y Seguro
+## 10. Integridad Bidireccional de la Vigencia Laboral (Migración 0037)
+
+Para garantizar la consistencia relacional completa entre el contrato laboral y las asignaciones de área:
+1. **Trigger de inserción/actualización de área (`trg_check_employee_area_period_labor_tenure`)**: impide crear o modificar `employee_area_periods` fuera del rango `[started_on, ended_on]` del perfil del empleado.
+2. **Trigger inverso sobre perfil (`trg_check_employee_profile_labor_tenure`)**: trigger `DEFERRABLE INITIALLY DEFERRED` sobre `employee_profiles` ante `UPDATE OF started_on, ended_on`.
+   - Si se acorta `ended_on` dejando una asignación de área existente que finaliza después o es abierta (`valid_to IS NULL`), rechaza la modificación.
+   - Si se retrasa `started_on` dejando una asignación de área existente que comienza antes, rechaza la modificación.
+   - Si se actualizan `started_on` o `ended_on` manteniendo todas las asignaciones dentro del nuevo rango, la operación prospera.
+   - Permite **cierre coordinado en la misma transacción**: gracias a `DEFERRABLE INITIALLY DEFERRED`, dentro de un bloque `BEGIN ... COMMIT` se puede actualizar primero `ended_on` del perfil y seguidamente `valid_to` del área antes del commit sin que salte el trigger intermedio.
+
+---
+
+## 11. Harness de Integración Reproducible y Seguro
 
 El script `scripts/run-temporal-org-model-integration.mjs` incorpora garantías integrales contra mutaciones accidentales:
 1. **Prohibición de URLs genéricas**: ignora estrictamente `DATABASE_URL` y `POSTGRES_URL`.
 2. **Resolución obligatoria de rama por endpoint (Neon API)**: si se especifica `TEMPORAL_MODEL_DATABASE_URL`, el runner mapea obligatoriamente el host contra los endpoints del proyecto Neon (`/projects/:id/endpoints`), localiza la rama real asociada y rechaza cualquier rama `main`, default, protegida, staging, production, development o sin prefijo temporal inequívoco (`tmp-`, `test-`, `ephemeral-`), fallando cerrado antes de cualquier conexión.
-3. **Aislamiento en rama efímera**: en modo por defecto, provisiona una rama hija temporal (`tmp-temporal-*`) de `main`, ejecuta semillas legacy (incluyendo los 4 casos de misma área y los 2 de vigencia laboral), migración 0036, verificaciones y pruebas exclusivamente allí.
+3. **Aislamiento en rama efímera**: en modo por defecto, provisiona una rama hija temporal (`tmp-temporal-*`) de `main`, ejecuta semillas legacy (incluyendo los casos de misma área y vigencia laboral), migraciones 0036 y 0037, verificaciones y pruebas exclusivamente allí.
 4. **Destrucción garantizada en `finally`**: destruye la rama efímera tanto si las pruebas pasan como si fallan. Si la destrucción falla, reporta `FAIL` y expone el ID de rama para limpieza manual.
-5. **Acreditación de runner en pruebas directas**: `db/temporal-org-model.integration.test.mjs` exige acreditación de runner (`TEMPORAL_RUNNER_ACCREDITED=true`) o ejecuta validación contra Neon API antes de conectar.
-6. **Contabilización dinámica y real**: extrae el número de escenarios ejecutados directamente del informe estructurado JSON de Vitest, sin cifras hardcodeadas.
+5. **Validación incondicional en pruebas directas**: `db/temporal-org-model.integration.test.mjs` valida incondicionalmente contra la API de Neon (`assertSafeTemporalDatabaseUrl`) antes de `Client.connect()`, sin banderas booleanas de bypass. Comprueba `TEMPORAL_RUNNER_BRANCH_ID` cuando es invocado desde el harness para verificar correspondencia exacta con la rama efímera.
+6. **Contabilización dinámica real**: extrae el número de escenarios ejecutados directamente del informe estructurado JSON de Vitest. Si el informe no existe, es ilegible o devuelve `<= 0` pruebas pasadas, el harness falla cerrado.
 
 ---
 
-## 11. Próximos Pasos (Fases 2 y 3)
+## 12. Próximos Pasos (Fases 2 y 3)
 
 * **Fase 2 (Doble Escritura y Capa de Dominio)**:
   - Los endpoints de onboarding, gestión de miembros y asignación de turnos escribirán simultáneamente en el modelo legacy y en el modelo temporal.

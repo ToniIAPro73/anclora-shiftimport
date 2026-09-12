@@ -71,7 +71,7 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
       expect(config.isEphemeral).toBe(false);
     });
 
-    it("rejects connection pointing to Neon 'main' branch even if ALLOW_EXISTING_TEMPORAL_TEST_DATABASE=true", () => {
+    it("rejects connection pointing to Neon 'main' branch even if ALLOW_EXISTING_TEMPORAL_TEST_DATABASE=true and TEMPORAL_RUNNER_ACCREDITED=true", () => {
       const mockEndpoints = [
         {
           id: "ep-lingering-dew-b1atfd0w",
@@ -92,6 +92,7 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
       const env = {
         TEMPORAL_MODEL_DATABASE_URL: "postgresql://neondb_owner:secret@ep-lingering-dew-b1atfd0w.c-5.eu-central-1.aws.neon.tech/neondb?sslmode=require",
         ALLOW_EXISTING_TEMPORAL_TEST_DATABASE: "true",
+        TEMPORAL_RUNNER_ACCREDITED: "true", // even with this flag set, it MUST be rejected!
       };
 
       expect(() =>
@@ -100,6 +101,70 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
           branches: mockBranches,
         })
       ).toThrow(/Refusing to target default branch: 'main'/);
+    });
+
+    it("rejects when expectedBranchId does not match the actual branch of the endpoint", () => {
+      const mockEndpoints = [
+        {
+          id: "ep-test-temporal-1",
+          host: "ep-test-temporal-1.aws.neon.tech",
+          branch_id: "br-tmp-branch-actual",
+        },
+      ];
+      const mockBranches = [
+        {
+          id: "br-tmp-branch-actual",
+          name: "tmp-temporal-actual",
+          default: false,
+          primary: false,
+          protected: false,
+        },
+      ];
+
+      const env = {
+        TEMPORAL_MODEL_DATABASE_URL: "postgresql://user:pass@ep-test-temporal-1.aws.neon.tech/neondb",
+        ALLOW_EXISTING_TEMPORAL_TEST_DATABASE: "true",
+      };
+
+      expect(() =>
+        resolveRunnerConfig(env, {
+          endpoints: mockEndpoints,
+          branches: mockBranches,
+          expectedBranchId: "br-tmp-branch-different",
+        })
+      ).toThrow(/Branch mismatch: expected branch 'br-tmp-branch-different'/);
+    });
+
+    it("accepts verified connection pointing to a safe temporal branch with matching expectedBranchId", () => {
+      const mockEndpoints = [
+        {
+          id: "ep-test-temporal-1",
+          host: "ep-test-temporal-1.aws.neon.tech",
+          branch_id: "br-tmp-branch-valid",
+        },
+      ];
+      const mockBranches = [
+        {
+          id: "br-tmp-branch-valid",
+          name: "tmp-temporal-valid",
+          default: false,
+          primary: false,
+          protected: false,
+        },
+      ];
+
+      const env = {
+        TEMPORAL_MODEL_DATABASE_URL: "postgresql://user:pass@ep-test-temporal-1.aws.neon.tech/neondb",
+        ALLOW_EXISTING_TEMPORAL_TEST_DATABASE: "true",
+      };
+
+      const config = resolveRunnerConfig(env, {
+        endpoints: mockEndpoints,
+        branches: mockBranches,
+        expectedBranchId: "br-tmp-branch-valid",
+      });
+      expect(config.mode).toBe("existing");
+      expect(config.targetBranch.name).toBe("tmp-temporal-valid");
     });
 
     it("fails closed in harness before any connection if TEMPORAL_MODEL_DATABASE_URL points to main", async () => {
@@ -412,6 +477,158 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
       expect(caughtError).not.toBeNull();
       expect(caughtError.message).toContain("Branch cleanup failed for branchId 'br-tmp-cleanup-fail'");
       expect(caughtError.branchId).toBe("br-tmp-cleanup-fail");
+    });
+  });
+
+  describe("7. Dynamic report validation & zero-pass rejection", () => {
+    it("fails with error when Vitest JSON report is missing", async () => {
+      class SuccessClient {
+        async connect() {}
+        async query(sql) {
+          if (sql.includes("_migrations")) return { rows: [] };
+          if (sql.includes("organizations")) return { rows: [{ id: "org-1" }] };
+          return { rows: [] };
+        }
+        async end() {}
+      }
+
+      const mockNeonctl = vi.fn((cmd, args) => {
+        if (args.includes("list")) {
+          return JSON.stringify([{ id: "br-main", name: "main", default: true }]);
+        }
+        if (args.includes("create")) {
+          return JSON.stringify({
+            branch: { id: "br-tmp-missing-report" },
+            connection_uris: [{ connection_uri: "postgres://fake:conn@host/db" }],
+          });
+        }
+        if (args.includes("delete")) return "";
+        return "";
+      });
+
+      // SpawnSync that DOES NOT create the report file
+      const mockSpawnSync = vi.fn(() => ({ status: 0, stdout: "", stderr: "" }));
+
+      let caughtError = null;
+      try {
+        await runTemporalIntegrationHarness({
+          env: {},
+          neonctlExec: mockNeonctl,
+          spawnSyncFn: mockSpawnSync,
+          ClientClass: SuccessClient,
+          seedCasesFn: vi.fn().mockResolvedValue({}),
+          verifyBackfillFn: vi.fn().mockResolvedValue(),
+        });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError.message).toContain("reported 0 passed tests or missing/unreadable JSON report");
+    });
+
+    it("fails with error when Vitest JSON report reports 0 passed tests", async () => {
+      class SuccessClient {
+        async connect() {}
+        async query(sql) {
+          if (sql.includes("_migrations")) return { rows: [] };
+          if (sql.includes("organizations")) return { rows: [{ id: "org-1" }] };
+          return { rows: [] };
+        }
+        async end() {}
+      }
+
+      const mockNeonctl = vi.fn((cmd, args) => {
+        if (args.includes("list")) {
+          return JSON.stringify([{ id: "br-main", name: "main", default: true }]);
+        }
+        if (args.includes("create")) {
+          return JSON.stringify({
+            branch: { id: "br-tmp-zero-pass" },
+            connection_uris: [{ connection_uri: "postgres://fake:conn@host/db" }],
+          });
+        }
+        if (args.includes("delete")) return "";
+        return "";
+      });
+
+      const mockSpawnSync = vi.fn((cmd, args) => {
+        const outArg = args.find((a) => typeof a === "string" && a.startsWith("--outputFile="));
+        if (outArg) {
+          const filePath = outArg.split("=")[1];
+          fs.writeFileSync(filePath, JSON.stringify({ numPassedTests: 0, numTotalTests: 0 }));
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      });
+
+      let caughtError = null;
+      try {
+        await runTemporalIntegrationHarness({
+          env: {},
+          neonctlExec: mockNeonctl,
+          spawnSyncFn: mockSpawnSync,
+          ClientClass: SuccessClient,
+          seedCasesFn: vi.fn().mockResolvedValue({}),
+          verifyBackfillFn: vi.fn().mockResolvedValue(),
+        });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError.message).toContain("reported 0 passed tests or missing/unreadable JSON report");
+    });
+
+    it("fails with error when Vitest JSON report is corrupt", async () => {
+      class SuccessClient {
+        async connect() {}
+        async query(sql) {
+          if (sql.includes("_migrations")) return { rows: [] };
+          if (sql.includes("organizations")) return { rows: [{ id: "org-1" }] };
+          return { rows: [] };
+        }
+        async end() {}
+      }
+
+      const mockNeonctl = vi.fn((cmd, args) => {
+        if (args.includes("list")) {
+          return JSON.stringify([{ id: "br-main", name: "main", default: true }]);
+        }
+        if (args.includes("create")) {
+          return JSON.stringify({
+            branch: { id: "br-tmp-corrupt" },
+            connection_uris: [{ connection_uri: "postgres://fake:conn@host/db" }],
+          });
+        }
+        if (args.includes("delete")) return "";
+        return "";
+      });
+
+      const mockSpawnSync = vi.fn((cmd, args) => {
+        const outArg = args.find((a) => typeof a === "string" && a.startsWith("--outputFile="));
+        if (outArg) {
+          const filePath = outArg.split("=")[1];
+          fs.writeFileSync(filePath, "CORRUPTED NOT JSON{{{");
+        }
+        return { status: 0, stdout: "", stderr: "" };
+      });
+
+      let caughtError = null;
+      try {
+        await runTemporalIntegrationHarness({
+          env: {},
+          neonctlExec: mockNeonctl,
+          spawnSyncFn: mockSpawnSync,
+          ClientClass: SuccessClient,
+          seedCasesFn: vi.fn().mockResolvedValue({}),
+          verifyBackfillFn: vi.fn().mockResolvedValue(),
+        });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError.message).toContain("reported 0 passed tests or missing/unreadable JSON report");
     });
   });
 });

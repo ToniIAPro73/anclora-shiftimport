@@ -752,9 +752,7 @@ export async function transferOwnershipTemporal(sql, {
   effectiveDate,
   newPreviousOwnerRole = 'ADMIN',
 }) {
-  if (typeof sql?.transaction !== 'function') {
-    throw new Error('Transaction support is required for atomic ownership transfer');
-  }
+  if (!sql) throw new Error('sql client is required');
   if (!organizationId) throw new Error('organizationId is required');
   if (!newOwnerPersonId) throw new Error('newOwnerPersonId is required');
   if (!['ADMIN', 'PLANNER'].includes(newPreviousOwnerRole)) {
@@ -766,160 +764,35 @@ export async function transferOwnershipTemporal(sql, {
   if (effDate > today) {
     throw new Error('Future-dated ownership transfers are not allowed without an automated scheduler');
   }
-  const dayBefore = getDayBefore(effDate);
 
-  return await sql.transaction(async (txn) => {
-    // 1. Concurrency lock: serialize transfers on organization first before reading data
-    const orgRows = await txn`
-      SELECT id FROM organizations WHERE id = ${organizationId} FOR UPDATE;
-    `;
-    if (orgRows.length === 0) {
-      throw new Error(`Organization ${organizationId} not found`);
-    }
+  const rows = await sql`
+    SELECT 
+      out_transferred AS transferred,
+      out_organization_id AS organization_id,
+      out_previous_owner_person_id AS previous_owner_person_id,
+      out_new_owner_person_id AS new_owner_person_id,
+      out_effective_date::text AS effective_date,
+      out_previous_owner_role AS previous_owner_role
+    FROM transfer_organization_ownership_temporal(
+      ${organizationId}::uuid,
+      ${newOwnerPersonId}::uuid,
+      ${effDate}::date,
+      ${newPreviousOwnerRole}::text,
+      ${currentOwnerPersonId}::uuid
+    );
+  `;
 
-    // 2. Read and validate target person using transactional client
-    const newOwnerPersonRows = await txn`
-      SELECT id, user_id, status
-      FROM organization_people
-      WHERE id = ${newOwnerPersonId} AND organization_id = ${organizationId};
-    `;
-    if (newOwnerPersonRows.length === 0) {
-      throw new Error(`Target person ${newOwnerPersonId} not found in organization ${organizationId}`);
-    }
-    const newOwnerPerson = newOwnerPersonRows[0];
-    if (!newOwnerPerson.user_id) {
-      throw new Error('New owner must have an associated user_id');
-    }
-    if (newOwnerPerson.status !== 'ACTIVE') {
-      throw new Error('New owner must be in ACTIVE status');
-    }
+  if (rows.length === 0) {
+    throw new Error('Ownership transfer failed: No result returned from database');
+  }
 
-    // 3. Validate new owner membership using transactional client
-    const newOwnerMembershipRows = await txn`
-      SELECT role
-      FROM memberships
-      WHERE organization_id = ${organizationId} AND user_id = ${newOwnerPerson.user_id};
-    `;
-    if (newOwnerMembershipRows.length === 0) {
-      throw new Error('New owner must have an existing membership in the organization');
-    }
-
-    // 4. Discover or verify current owner using transactional client
-    let currentOwner;
-    if (currentOwnerPersonId) {
-      const rows = await txn`
-        SELECT prp.id, prp.organization_person_id, prp.valid_from, prp.valid_to, op.user_id
-        FROM person_role_periods prp
-        JOIN organization_people op ON op.id = prp.organization_person_id AND op.organization_id = prp.organization_id
-        WHERE prp.organization_id = ${organizationId}
-          AND prp.organization_person_id = ${currentOwnerPersonId}
-          AND prp.role = 'OWNER'
-          AND prp.valid_from <= ${effDate}::date
-          AND (prp.valid_to IS NULL OR prp.valid_to >= ${effDate}::date)
-        ORDER BY prp.valid_from DESC
-        LIMIT 1;
-      `;
-      if (rows.length === 0) {
-        throw new Error(`Current owner period for person ${currentOwnerPersonId} not active on ${effDate}`);
-      }
-      currentOwner = rows[0];
-    } else {
-      const rows = await txn`
-        SELECT prp.id, prp.organization_person_id, prp.valid_from, prp.valid_to, op.user_id
-        FROM person_role_periods prp
-        JOIN organization_people op ON op.id = prp.organization_person_id AND op.organization_id = prp.organization_id
-        WHERE prp.organization_id = ${organizationId}
-          AND prp.role = 'OWNER'
-          AND prp.valid_from <= ${effDate}::date
-          AND (prp.valid_to IS NULL OR prp.valid_to >= ${effDate}::date)
-        ORDER BY prp.valid_from DESC
-        LIMIT 1;
-      `;
-      if (rows.length === 0) {
-        throw new Error(`No active OWNER role period found in organization ${organizationId} on ${effDate}`);
-      }
-      currentOwner = rows[0];
-    }
-
-    if (currentOwner.organization_person_id === newOwnerPersonId) {
-      throw new Error('Target owner cannot be the same as current owner');
-    }
-
-    const curOwnerValidFrom = normalizeDate(currentOwner.valid_from);
-    if (curOwnerValidFrom > dayBefore) {
-      throw new Error(`Effective date ${effDate} is on or before current owner start date ${curOwnerValidFrom}`);
-    }
-
-    // 5. Incompatible future role periods check using transactional client
-    const futureRoleRows = await txn`
-      SELECT id, role, organization_person_id, valid_from
-      FROM person_role_periods
-      WHERE organization_id = ${organizationId}
-        AND (
-          (organization_person_id = ${currentOwner.organization_person_id} AND valid_from > ${effDate}::date)
-          OR (organization_person_id = ${newOwnerPersonId} AND valid_from >= ${effDate}::date)
-          OR (role = 'OWNER' AND valid_from >= ${effDate}::date)
-        );
-    `;
-    if (futureRoleRows.length > 0) {
-      throw new Error('Ownership transfer conflict: Incompatible future role periods exist on or after effective date');
-    }
-
-    // 6. Execute close, open role periods and sync legacy memberships using transactional client
-    await txn`
-      UPDATE person_role_periods
-      SET valid_to = ${dayBefore}::date, updated_at = NOW()
-      WHERE id = ${currentOwner.id};
-    `;
-
-    await txn`
-      INSERT INTO person_role_periods (
-        organization_id, organization_person_id, role, valid_from, valid_to, source, created_at, updated_at
-      ) VALUES (
-        ${organizationId}, ${currentOwner.organization_person_id}, ${newPreviousOwnerRole}, ${effDate}::date, NULL, 'USER', NOW(), NOW()
-      );
-    `;
-
-    await txn`
-      UPDATE person_role_periods
-      SET valid_to = ${dayBefore}::date, updated_at = NOW()
-      WHERE organization_id = ${organizationId}
-        AND organization_person_id = ${newOwnerPersonId}
-        AND valid_from <= ${dayBefore}::date
-        AND (valid_to IS NULL OR valid_to >= ${effDate}::date);
-    `;
-
-    await txn`
-      INSERT INTO person_role_periods (
-        organization_id, organization_person_id, role, valid_from, valid_to, source, created_at, updated_at
-      ) VALUES (
-        ${organizationId}, ${newOwnerPersonId}, 'OWNER', ${effDate}::date, NULL, 'USER', NOW(), NOW()
-      );
-    `;
-
-    if (currentOwner.user_id) {
-      await txn`
-        UPDATE memberships
-        SET role = ${newPreviousOwnerRole}, scoped_area_id = NULL, planner_scope_type = NULL
-        WHERE organization_id = ${organizationId} AND user_id = ${currentOwner.user_id};
-      `;
-    }
-
-    if (newOwnerPerson.user_id) {
-      await txn`
-        UPDATE memberships
-        SET role = 'OWNER', scoped_area_id = NULL, planner_scope_type = NULL
-        WHERE organization_id = ${organizationId} AND user_id = ${newOwnerPerson.user_id};
-      `;
-    }
-
-    return {
-      transferred: true,
-      organizationId,
-      previousOwnerPersonId: currentOwner.organization_person_id,
-      newOwnerPersonId,
-      effectiveDate: effDate,
-      previousOwnerRole: newPreviousOwnerRole,
-    };
-  });
+  const row = rows[0];
+  return {
+    transferred: Boolean(row.transferred ?? row.out_transferred),
+    organizationId: row.organization_id ?? row.out_organization_id,
+    previousOwnerPersonId: row.previous_owner_person_id ?? row.out_previous_owner_person_id,
+    newOwnerPersonId: row.new_owner_person_id ?? row.out_new_owner_person_id,
+    effectiveDate: row.effective_date ?? row.out_effective_date,
+    previousOwnerRole: row.previous_owner_role ?? row.out_previous_owner_role,
+  };
 }

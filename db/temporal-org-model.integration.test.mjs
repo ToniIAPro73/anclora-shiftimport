@@ -29,33 +29,18 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       );
     }
 
-    // Safety accreditation check: ensure tests only run against accredited/temporal databases
-    if (process.env.TEMPORAL_RUNNER_ACCREDITED !== 'true') {
-      const { assertSafeTemporalDatabaseUrl } = await import(
-        '../scripts/run-temporal-org-model-integration.mjs'
-      );
-      assertSafeTemporalDatabaseUrl(connectionString);
-    }
+    // Unconditional safety validation: ensure connection string points to a verified, safe temporal branch in Neon.
+    // Never bypasses validation with boolean accreditation flags.
+    const { assertSafeTemporalDatabaseUrl } = await import(
+      '../scripts/run-temporal-org-model-integration.mjs'
+    );
+    assertSafeTemporalDatabaseUrl(connectionString, {
+      expectedBranchId: process.env.TEMPORAL_RUNNER_BRANCH_ID || null,
+      expectedEndpointId: process.env.TEMPORAL_RUNNER_ENDPOINT_ID || null,
+    });
 
     client = new Client(connectionString);
     await client.connect();
-
-    sqlAdapter.transaction = async (callback) => {
-      await client.query('BEGIN;');
-      try {
-        let result;
-        if (typeof callback === 'function') {
-          result = await callback(sqlAdapter);
-        } else if (Array.isArray(callback)) {
-          result = await Promise.all(callback);
-        }
-        await client.query('COMMIT;');
-        return result;
-      } catch (err) {
-        await client.query('ROLLBACK;');
-        throw err;
-      }
-    };
   });
 
   afterAll(async () => {
@@ -1040,6 +1025,8 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
 
       const personA = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [org, userA])).rows[0].id;
       const personB = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, $2, 'ACTIVE') RETURNING id", [org, userB])).rows[0].id;
+      // Person without user_id
+      const personUnlinked = (await client.query("INSERT INTO organization_people (organization_id, user_id, status) VALUES ($1, NULL, 'PENDING_INVITATION') RETURNING id", [org])).rows[0].id;
 
       await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'OWNER')", [org, userA]);
       await client.query("INSERT INTO memberships (organization_id, user_id, role) VALUES ($1, $2, 'ADMIN')", [org, userB]);
@@ -1053,34 +1040,13 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
         VALUES ($1, $2, 'ADMIN', '2026-01-01', NULL)
       `, [org, personB]);
 
-      // Create a failing sql adapter that simulates failure in the transaction
-      let queryCount = 0;
-      const failingAdapter = async (strings, ...values) => {
-        queryCount++;
-        if (queryCount >= 5) {
-          throw new Error('Simulated failure on last transaction statement');
-        }
-        return sqlAdapter(strings, ...values);
-      };
-      failingAdapter.transaction = async (callback) => {
-        await client.query('BEGIN;');
-        try {
-          const result = await callback(failingAdapter);
-          await client.query('COMMIT;');
-          return result;
-        } catch (err) {
-          await client.query('ROLLBACK;');
-          throw err;
-        }
-      };
-
-      // Attempt transfer using failingAdapter -> MUST FAIL and ROLLBACK
+      // 1. Attempt transfer with unlinked person -> MUST FAIL and ROLLBACK atomically
       let transferError = null;
       try {
-        await transferOwnershipTemporal(failingAdapter, {
+        await transferOwnershipTemporal(sqlAdapter, {
           organizationId: org,
           currentOwnerPersonId: personA,
-          newOwnerPersonId: personB,
+          newOwnerPersonId: personUnlinked,
           effectiveDate: '2026-06-01',
           newPreviousOwnerRole: 'ADMIN',
         });
@@ -1088,7 +1054,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
         transferError = err;
       }
       expect(transferError).not.toBeNull();
-      expect(transferError.message).toContain('Simulated failure on last transaction statement');
+      expect(transferError.message).toContain('Target new owner person has no linked user_id');
 
       // Verify that NO partial changes remain in database (rollback succeeded)
       const rolesA = await client.query("SELECT role, valid_to FROM person_role_periods WHERE organization_person_id = $1", [personA]);
@@ -1106,7 +1072,7 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       const memB = await client.query("SELECT role FROM memberships WHERE user_id = $1", [userB]);
       expect(memB.rows[0].role).toBe('ADMIN');
 
-      // Now run with normal sqlAdapter -> MUST SUCCEED
+      // 2. Now run with valid parameters -> MUST SUCCEED
       const successResult = await transferOwnershipTemporal(sqlAdapter, {
         organizationId: org,
         currentOwnerPersonId: personA,
@@ -1142,22 +1108,6 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       }
       const res = await client2.query(text, params);
       return res.rows;
-    };
-    sqlAdapter2.transaction = async (callback) => {
-      await client2.query('BEGIN;');
-      try {
-        let result;
-        if (typeof callback === 'function') {
-          result = await callback(sqlAdapter2);
-        } else if (Array.isArray(callback)) {
-          result = await Promise.all(callback);
-        }
-        await client2.query('COMMIT;');
-        return result;
-      } catch (err) {
-        await client2.query('ROLLBACK;');
-        throw err;
-      }
     };
 
     let testOrgId = null;
@@ -1200,8 +1150,9 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       const rejected = [r1, r2].filter((r) => r.status === 'rejected');
 
       expect(fulfilled.length).toBe(1);
-      expect(rejected.length).toBe(1);
-      expect(rejected[0].reason.message).toMatch(/(conflict|Incompatible future role periods|not active|no active OWNER)/i);
+      expect(rejected[0].reason.message).toMatch(
+        /(conflict|Incompatible future role periods|not active|no active OWNER|does not match|on or before current owner start date)/i
+      );
 
       // Verify database state: exactly 1 OWNER active on and after 2026-07-01
       const ownerRoles = await client.query(`
@@ -1340,6 +1291,109 @@ describe('PostgreSQL Temporal Organizational Model Integration Tests (Phase 1)',
       }
       expect(errDup).not.toBeNull();
       expect(errDup.message).toContain('employee_area_periods_no_same_area_overlap_excl');
+    } finally {
+      if (testOrgId) {
+        await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);
+      }
+    }
+  });
+
+  // Section 6 Requirement: Inverse Labor Tenure Integrity (Trigger trg_check_employee_profile_labor_tenure)
+  it('Scenario: Inverse labor tenure integrity rejects profile contraction leaving area periods outside, allows valid updates and coordinated closure', async () => {
+    let testOrgId = null;
+    try {
+      testOrgId = (await client.query("INSERT INTO organizations (name, type) VALUES ('Labor Tenure Integrity Org', 'company') RETURNING id")).rows[0].id;
+      const area = (await client.query("INSERT INTO areas (organization_id, name) VALUES ($1, 'Operational Area') RETURNING id", [testOrgId])).rows[0].id;
+
+      const person = (await client.query("INSERT INTO organization_people (organization_id, status) VALUES ($1, 'PENDING_INVITATION') RETURNING id", [testOrgId])).rows[0].id;
+      const profile = (await client.query(`
+        INSERT INTO employee_profiles (organization_id, organization_person_id, employee_name, employment_status, started_on, ended_on)
+        VALUES ($1, $2, 'Tenure Bound Employee', 'ACTIVE', '2026-02-01', '2026-11-30') RETURNING id
+      `, [testOrgId, person])).rows[0].id;
+
+      // Create an area assignment fully within tenure [2026-03-01, 2026-09-30]
+      const areaPeriod = (await client.query(`
+        INSERT INTO employee_area_periods (organization_id, employee_profile_id, area_id, valid_from, valid_to, is_primary)
+        VALUES ($1, $2, $3, '2026-03-01', '2026-09-30', true) RETURNING id
+      `, [testOrgId, profile, area])).rows[0].id;
+
+      // 1. Shortening ended_on to 2026-08-31 leaves area period (ends 2026-09-30) outside -> MUST FAIL
+      let errShorten = null;
+      try {
+        await client.query(`
+          UPDATE employee_profiles
+          SET ended_on = '2026-08-31'
+          WHERE id = $1
+        `, [profile]);
+      } catch (err) {
+        errShorten = err;
+      }
+      expect(errShorten).not.toBeNull();
+      expect(errShorten.message).toContain('existing area assignment extends beyond new ended_on');
+
+      // Verify profile dates did not change
+      const pCheck1 = (await client.query("SELECT started_on::text, ended_on::text FROM employee_profiles WHERE id = $1", [profile])).rows[0];
+      expect(pCheck1.ended_on).toBe('2026-11-30');
+
+      // 2. Delaying started_on to 2026-04-01 leaves area period (starts 2026-03-01) outside -> MUST FAIL
+      let errDelay = null;
+      try {
+        await client.query(`
+          UPDATE employee_profiles
+          SET started_on = '2026-04-01'
+          WHERE id = $1
+        `, [profile]);
+      } catch (err) {
+        errDelay = err;
+      }
+      expect(errDelay).not.toBeNull();
+      expect(errDelay.message).toContain('existing area assignment starts before new started_on');
+
+      // Verify profile dates did not change
+      const pCheck2 = (await client.query("SELECT started_on::text, ended_on::text FROM employee_profiles WHERE id = $1", [profile])).rows[0];
+      expect(pCheck2.started_on).toBe('2026-02-01');
+
+      // 3. Valid update of started_on and ended_on keeping existing area period inside [2026-02-15, 2026-10-31] -> MUST SUCCEED
+      await client.query(`
+        UPDATE employee_profiles
+        SET started_on = '2026-02-15', ended_on = '2026-10-31'
+        WHERE id = $1
+      `, [profile]);
+
+      const pCheck3 = (await client.query("SELECT started_on::text, ended_on::text FROM employee_profiles WHERE id = $1", [profile])).rows[0];
+      expect(pCheck3.started_on).toBe('2026-02-15');
+      expect(pCheck3.ended_on).toBe('2026-10-31');
+
+      // 4. Coordinated closure in same transaction -> MUST SUCCEED (deferred constraint trigger)
+      await client.query('BEGIN;');
+      try {
+        // Contract profile tenure ended_on to 2026-06-30 (which temporarily leaves area assignment ending 2026-09-30 outside)
+        await client.query(`
+          UPDATE employee_profiles
+          SET ended_on = '2026-06-30', employment_status = 'TERMINATED'
+          WHERE id = $1
+        `, [profile]);
+
+        // Within same transaction, close the area assignment to 2026-06-30 as well
+        await client.query(`
+          UPDATE employee_area_periods
+          SET valid_to = '2026-06-30'
+          WHERE id = $1
+        `, [areaPeriod]);
+
+        await client.query('COMMIT;');
+      } catch (err) {
+        await client.query('ROLLBACK;');
+        throw err;
+      }
+
+      // Verify both profile and area assignment closed coordinately
+      const pFinal = (await client.query("SELECT started_on::text, ended_on::text, employment_status FROM employee_profiles WHERE id = $1", [profile])).rows[0];
+      expect(pFinal.ended_on).toBe('2026-06-30');
+      expect(pFinal.employment_status).toBe('TERMINATED');
+
+      const aFinal = (await client.query("SELECT valid_from::text, valid_to::text FROM employee_area_periods WHERE id = $1", [areaPeriod])).rows[0];
+      expect(aFinal.valid_to).toBe('2026-06-30');
     } finally {
       if (testOrgId) {
         await client.query('DELETE FROM organizations WHERE id = $1', [testOrgId]);

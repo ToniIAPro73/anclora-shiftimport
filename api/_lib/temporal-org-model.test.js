@@ -642,26 +642,18 @@ describe('temporal organizational model domain service', () => {
   });
 
   describe('transferOwnershipTemporal domain helper', () => {
-    it('rejects if sql.transaction is not available', async () => {
-      const fakeSqlWithoutTxn = async () => [];
+    it('rejects if sql client is not provided', async () => {
       await expect(
-        transferOwnershipTemporal(fakeSqlWithoutTxn, {
+        transferOwnershipTemporal(null, {
           organizationId: orgId,
           newOwnerPersonId: personB,
           effectiveDate: '2026-07-01',
         })
-      ).rejects.toThrow('Transaction support is required for atomic ownership transfer');
+      ).rejects.toThrow('sql client is required');
     });
 
     it('rejects future-dated transfers without automated scheduler', async () => {
-      const fakeSql = async (strings) => {
-        const text = strings.join('?');
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        return [];
-      };
-      fakeSql.transaction = async (fn) => fn(fakeSql);
+      const fakeSql = async () => [];
       await expect(
         transferOwnershipTemporal(fakeSql, {
           organizationId: orgId,
@@ -671,18 +663,14 @@ describe('temporal organizational model domain service', () => {
       ).rejects.toThrow('Future-dated ownership transfers are not allowed without an automated scheduler');
     });
 
-    it('rejects transfer if target person has no associated user_id', async () => {
-      const fakeSql = async (strings) => {
+    it('propagates database error when target person has no user_id', async () => {
+      const fakeSql = async (strings, ...values) => {
         const text = strings.join('?');
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        if (text.includes('FROM organization_people')) {
-          return [{ id: personB, user_id: null, status: 'PENDING_INVITATION' }];
+        if (text.includes('transfer_organization_ownership_temporal')) {
+          throw new Error('New owner must have an associated user_id');
         }
         return [];
       };
-      fakeSql.transaction = async (fn) => fn(fakeSql);
 
       await expect(
         transferOwnershipTemporal(fakeSql, {
@@ -693,18 +681,14 @@ describe('temporal organizational model domain service', () => {
       ).rejects.toThrow('New owner must have an associated user_id');
     });
 
-    it('rejects transfer if target person is not in ACTIVE status', async () => {
-      const fakeSql = async (strings) => {
+    it('propagates database error when target person is not in ACTIVE status', async () => {
+      const fakeSql = async (strings, ...values) => {
         const text = strings.join('?');
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        if (text.includes('FROM organization_people')) {
-          return [{ id: personB, user_id: 'user-b-uuid', status: 'SUSPENDED' }];
+        if (text.includes('transfer_organization_ownership_temporal')) {
+          throw new Error('New owner must be in ACTIVE status');
         }
         return [];
       };
-      fakeSql.transaction = async (fn) => fn(fakeSql);
 
       await expect(
         transferOwnershipTemporal(fakeSql, {
@@ -715,21 +699,14 @@ describe('temporal organizational model domain service', () => {
       ).rejects.toThrow('New owner must be in ACTIVE status');
     });
 
-    it('rejects transfer if target person has no existing membership', async () => {
-      const fakeSql = async (strings) => {
+    it('propagates database error when target person has no existing membership', async () => {
+      const fakeSql = async (strings, ...values) => {
         const text = strings.join('?');
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        if (text.includes('FROM organization_people')) {
-          return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
-        }
-        if (text.includes('FROM memberships')) {
-          return [];
+        if (text.includes('transfer_organization_ownership_temporal')) {
+          throw new Error('New owner must have an existing membership in the organization');
         }
         return [];
       };
-      fakeSql.transaction = async (fn) => fn(fakeSql);
 
       await expect(
         transferOwnershipTemporal(fakeSql, {
@@ -740,34 +717,14 @@ describe('temporal organizational model domain service', () => {
       ).rejects.toThrow('New owner must have an existing membership in the organization');
     });
 
-    it('rejects transfer if incompatible future role periods exist', async () => {
-      const fakeSql = async (strings) => {
+    it('propagates database error when incompatible future role periods exist', async () => {
+      const fakeSql = async (strings, ...values) => {
         const text = strings.join('?');
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        if (text.includes('FROM organization_people')) {
-          return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
-        }
-        if (text.includes('FROM memberships')) {
-          return [{ id: 'mem-b', role: 'ADMIN' }];
-        }
-        if (text.includes("FROM person_role_periods prp") && text.includes("role = 'OWNER'")) {
-          return [{
-            id: 'role-current-owner',
-            organization_person_id: personA,
-            valid_from: '2026-01-01',
-            valid_to: null,
-            user_id: 'user-a-uuid',
-          }];
-        }
-        // Future role periods conflict check
-        if (text.includes('FROM person_role_periods') && text.includes('valid_from >=')) {
-          return [{ id: 'future-role-1', role: 'ADMIN', organization_person_id: personB, valid_from: '2026-08-01' }];
+        if (text.includes('transfer_organization_ownership_temporal')) {
+          throw new Error('Ownership transfer conflict: Incompatible future role periods exist on or after effective date');
         }
         return [];
       };
-      fakeSql.transaction = async (fn) => fn(fakeSql);
 
       await expect(
         transferOwnershipTemporal(fakeSql, {
@@ -778,39 +735,23 @@ describe('temporal organizational model domain service', () => {
       ).rejects.toThrow('Ownership transfer conflict: Incompatible future role periods exist');
     });
 
-    it('validates required inputs and role transitions atomically', async () => {
-      const executedQueries = [];
+    it('executes single stored function call compatible with neon() and returns transfer result', async () => {
+      const executedCalls = [];
       const fakeSql = async (strings, ...values) => {
         const text = strings.join('?');
-        executedQueries.push({ text, values });
+        executedCalls.push({ text, values });
 
-        // Organization lock
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        // Target person lookup
-        if (text.includes('FROM organization_people')) {
-          return [{ id: personB, user_id: 'user-b-uuid', status: 'ACTIVE' }];
-        }
-        // Target membership lookup
-        if (text.includes('FROM memberships')) {
-          return [{ id: 'mem-b', role: 'ADMIN' }];
-        }
-        // Current owner lookup
-        if (text.includes("FROM person_role_periods prp") && text.includes("role = 'OWNER'")) {
+        if (text.includes('transfer_organization_ownership_temporal')) {
           return [{
-            id: 'role-period-current-owner',
-            organization_person_id: personA,
-            valid_from: '2026-01-01',
-            valid_to: null,
-            user_id: 'user-a-uuid',
+            transferred: true,
+            organization_id: orgId,
+            previous_owner_person_id: personA,
+            new_owner_person_id: personB,
+            effective_date: '2026-07-01',
+            previous_owner_role: 'ADMIN',
           }];
         }
         return [];
-      };
-
-      fakeSql.transaction = async (fn) => {
-        return await fn(fakeSql);
       };
 
       const result = await transferOwnershipTemporal(fakeSql, {
@@ -825,56 +766,26 @@ describe('temporal organizational model domain service', () => {
       expect(result.previousOwnerPersonId).toBe(personA);
       expect(result.newOwnerPersonId).toBe(personB);
       expect(result.effectiveDate).toBe('2026-07-01');
+      expect(result.previousOwnerRole).toBe('ADMIN');
 
-      // Verify row lock on organization
-      const lockOrgQuery = executedQueries.find((q) =>
-        q.text.includes('SELECT id FROM organizations') && q.text.includes('FOR UPDATE')
-      );
-      expect(lockOrgQuery).toBeDefined();
-
-      // Verify closing period at 2026-06-30
-      const closeOwnerQuery = executedQueries.find((q) =>
-        q.text.includes('UPDATE person_role_periods') && q.values.includes('2026-06-30')
-      );
-      expect(closeOwnerQuery).toBeDefined();
-
-      // Verify inserting new OWNER period at 2026-07-01
-      const insertNewOwner = executedQueries.find((q) =>
-        q.text.includes('INSERT INTO person_role_periods') && q.text.includes("'OWNER'") && q.values.includes('2026-07-01')
-      );
-      expect(insertNewOwner).toBeDefined();
-
-      // Verify memberships compatibility updates
-      const membershipUpdate = executedQueries.find((q) =>
-        q.text.includes('UPDATE memberships') && q.text.includes("'OWNER'")
-      );
-      expect(membershipUpdate).toBeDefined();
+      // Verify single call to transfer_organization_ownership_temporal
+      expect(executedCalls.length).toBe(1);
+      expect(executedCalls[0].text).toContain('transfer_organization_ownership_temporal');
+      expect(executedCalls[0].values).toContain(orgId);
+      expect(executedCalls[0].values).toContain(personB);
+      expect(executedCalls[0].values).toContain('2026-07-01');
+      expect(executedCalls[0].values).toContain('ADMIN');
+      expect(executedCalls[0].values).toContain(personA);
     });
 
-    it('rejects transfer if target is same as current owner', async () => {
-      const fakeSql = async (strings) => {
+    it('propagates database error when target is same as current owner', async () => {
+      const fakeSql = async (strings, ...values) => {
         const text = strings.join('?');
-        if (text.includes('FROM organizations')) {
-          return [{ id: orgId }];
-        }
-        if (text.includes('FROM organization_people')) {
-          return [{ id: personA, user_id: 'user-a-uuid', status: 'ACTIVE' }];
-        }
-        if (text.includes('FROM memberships')) {
-          return [{ id: 'mem-a', role: 'OWNER' }];
-        }
-        if (text.includes("FROM person_role_periods")) {
-          return [{
-            id: 'role-owner-1',
-            organization_person_id: personA,
-            valid_from: '2026-01-01',
-            valid_to: null,
-            user_id: 'user-a-uuid',
-          }];
+        if (text.includes('transfer_organization_ownership_temporal')) {
+          throw new Error('Target owner cannot be the same as current owner');
         }
         return [];
       };
-      fakeSql.transaction = async (fn) => fn(fakeSql);
 
       await expect(
         transferOwnershipTemporal(fakeSql, {
