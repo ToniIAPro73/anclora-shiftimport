@@ -145,17 +145,28 @@ async function runFreshChainTest() {
     freshDbUrlObj.pathname = `/${FRESH_DB_NAME}`;
     const freshDbUrl = freshDbUrlObj.toString();
 
-    // 5. Apply full migration chain (0001 to 0038) from scratch via runMigrations()
-    console.log('[test] Running full migration chain 0001-0038 from scratch via runMigrations()...');
+    // 5. Apply full migration chain (0001 to 0038) from scratch via runMigrations() [Pass 1]
+    console.log('[test] Running full migration chain 0001-0038 from scratch via runMigrations() [Pass 1]...');
     const result = await runMigrations({
       connectionString: freshDbUrl,
       targetBranch: branchName,
       projectId,
-      migrationsDir: MIGRATIONS_DIR,
     });
-    console.log(`[test] Successfully applied ${result.appliedCount} migrations from scratch.`);
+    console.log(`[test] Successfully applied ${result.appliedCount} migrations from scratch (Pass 1).`);
     if (result.appliedCount !== 38) {
-      throw new Error(`Expected exactly 38 applied migrations, got: ${result.appliedCount}`);
+      throw new Error(`Expected exactly 38 applied migrations in Pass 1, got: ${result.appliedCount}`);
+    }
+
+    // 5b. Run 2nd pass via runMigrations() — must result in 0 applied, state UP_TO_DATE [Pass 2]
+    console.log('[test] Running 2nd pass via runMigrations() [Pass 2]...');
+    const resultPass2 = await runMigrations({
+      connectionString: freshDbUrl,
+      targetBranch: branchName,
+      projectId,
+    });
+    console.log(`[test] Pass 2 result: ${resultPass2.appliedCount} applied, ${resultPass2.pendingCount} pending.`);
+    if (resultPass2.appliedCount !== 0) {
+      throw new Error(`Expected exactly 0 applied migrations in Pass 2, got: ${resultPass2.appliedCount}`);
     }
 
     // 6. Connect to fresh database and verify status, ledger, checksums, and catalog

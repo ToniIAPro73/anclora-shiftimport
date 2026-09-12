@@ -16,6 +16,7 @@ export const BASELINE_MANIFEST_PATH = join(dirname(fileURLToPath(import.meta.url
 
 /**
  * Scans SQL string into tokens outside comments, string literals, and dollar-quoted blocks.
+ * Fails closed on unclosed string literals, quoted identifiers, block comments, or dollar-quoted blocks.
  */
 export function scanSqlTokens(sql) {
   let i = 0;
@@ -29,7 +30,7 @@ export function scanSqlTokens(sql) {
       while (i < len && sql[i] !== '\n') i++;
       continue;
     }
-    // Block comment (support nesting)
+    // Block comment (supports nesting)
     if (sql[i] === '/' && sql[i + 1] === '*') {
       i += 2;
       let depth = 1;
@@ -44,39 +45,52 @@ export function scanSqlTokens(sql) {
           i++;
         }
       }
+      if (depth > 0) {
+        throw new Error('Unterminated block comment in SQL');
+      }
       continue;
     }
     // Standard string literal
     if (sql[i] === "'") {
       i++;
+      let closed = false;
       while (i < len) {
         if (sql[i] === "'") {
           if (sql[i + 1] === "'") {
             i += 2;
           } else {
             i++;
+            closed = true;
             break;
           }
         } else {
           i++;
         }
       }
+      if (!closed) {
+        throw new Error('Unterminated string literal in SQL');
+      }
       continue;
     }
     // Quoted identifier
     if (sql[i] === '"') {
       i++;
+      let closed = false;
       while (i < len) {
         if (sql[i] === '"') {
           if (sql[i + 1] === '"') {
             i += 2;
           } else {
             i++;
+            closed = true;
             break;
           }
         } else {
           i++;
         }
+      }
+      if (!closed) {
+        throw new Error('Unterminated quoted identifier in SQL');
       }
       continue;
     }
@@ -113,96 +127,238 @@ export function scanSqlTokens(sql) {
 }
 
 /**
+ * Splits token stream into statements delimited by semicolons.
+ */
+function splitStatements(tokens) {
+  const statements = [];
+  let currentTokens = [];
+  let stmtStart = null;
+
+  for (let idx = 0; idx < tokens.length; idx++) {
+    const t = tokens[idx];
+    if (t.word === ';') {
+      if (currentTokens.length > 0) {
+        statements.push({
+          tokens: currentTokens,
+          start: stmtStart,
+          end: t.end,
+        });
+        currentTokens = [];
+        stmtStart = null;
+      }
+    } else {
+      if (currentTokens.length === 0) {
+        stmtStart = t.start;
+      }
+      currentTokens.push(t);
+    }
+  }
+
+  if (currentTokens.length > 0) {
+    statements.push({
+      tokens: currentTokens,
+      start: stmtStart,
+      end: currentTokens[currentTokens.length - 1].end,
+    });
+  }
+
+  return statements;
+}
+
+/**
+ * Identifies if a statement is a transaction control statement.
+ * Distinguishes standalone END from CASE ... END expressions.
+ */
+function getStatementTransactionType(tokens) {
+  if (!tokens || tokens.length === 0) return null;
+
+  // Track CASE ... END depth across the statement tokens
+  let caseDepth = 0;
+  const annotated = tokens.map((tok) => {
+    const upper = tok.word.toUpperCase();
+    if (upper === 'CASE') {
+      caseDepth++;
+      return { ...tok, upper, isCaseEnd: false };
+    }
+    if (upper === 'END') {
+      if (caseDepth > 0) {
+        caseDepth--;
+        return { ...tok, upper, isCaseEnd: true };
+      }
+      return { ...tok, upper, isCaseEnd: false };
+    }
+    return { ...tok, upper, isCaseEnd: false };
+  });
+
+  const w0 = annotated[0]?.upper;
+  const w1 = annotated[1]?.upper;
+
+  if (w0 === 'BEGIN') return 'BEGIN';
+  if (w0 === 'START' && w1 === 'TRANSACTION') return 'START TRANSACTION';
+  if (w0 === 'COMMIT') {
+    if (w1 === 'PREPARED') return 'COMMIT PREPARED';
+    return 'COMMIT';
+  }
+  if (w0 === 'ROLLBACK') {
+    if (w1 === 'PREPARED') return 'ROLLBACK PREPARED';
+    return 'ROLLBACK';
+  }
+  if (w0 === 'END') {
+    if (!annotated[0].isCaseEnd) return 'END';
+  }
+  if (w0 === 'ABORT') return 'ABORT';
+  if (w0 === 'SAVEPOINT') return 'SAVEPOINT';
+  if (w0 === 'RELEASE') {
+    if (w1 === 'SAVEPOINT') return 'RELEASE SAVEPOINT';
+    return 'RELEASE';
+  }
+  if (w0 === 'PREPARE' && w1 === 'TRANSACTION') return 'PREPARE TRANSACTION';
+
+  // Check if any non-case transaction keyword appears within the statement
+  for (let k = 1; k < annotated.length; k++) {
+    const tok = annotated[k];
+    if (tok.upper === 'BEGIN') return 'BEGIN';
+    if (tok.upper === 'START' && annotated[k + 1]?.upper === 'TRANSACTION') return 'START TRANSACTION';
+    if (tok.upper === 'COMMIT') {
+      if (annotated[k + 1]?.upper === 'PREPARED') return 'COMMIT PREPARED';
+      return 'COMMIT';
+    }
+    if (tok.upper === 'ROLLBACK') {
+      if (annotated[k + 1]?.upper === 'PREPARED') return 'ROLLBACK PREPARED';
+      return 'ROLLBACK';
+    }
+    if (tok.upper === 'END' && !tok.isCaseEnd) return 'END';
+    if (tok.upper === 'ABORT') return 'ABORT';
+    if (tok.upper === 'SAVEPOINT') return 'SAVEPOINT';
+    if (tok.upper === 'RELEASE') return 'RELEASE';
+    if (tok.upper === 'PREPARE' && annotated[k + 1]?.upper === 'TRANSACTION') return 'PREPARE TRANSACTION';
+  }
+
+  return null;
+}
+
+/**
  * Normalizes migration SQL by safely removing legacy top-level BEGIN and COMMIT wrappers.
- * Enforces that new migrations (>= 0038) contain no internal transaction control.
+ * Enforces strict prohibition of internal transaction control for migrations >= 0038.
+ * Fails closed on syntax errors, unbalanced wrappers, and empty normalized SQL.
  */
 export function normalizeMigrationSql(sql, migrationName = '') {
-  const tokens = scanSqlTokens(sql);
-  const txTokens = tokens.filter((t) => /^(BEGIN|COMMIT|ROLLBACK)$/i.test(t.word));
+  // Check empty raw input
+  const strippedRaw = sql.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  if (!strippedRaw) {
+    throw new Error(`Migration '${migrationName}': Normalized migration SQL is empty.`);
+  }
 
-  if (txTokens.length === 0) {
-    return { normalizedSql: sql, hadWrapper: false };
+  const tokens = scanSqlTokens(sql);
+  const statements = splitStatements(tokens);
+
+  if (statements.length === 0) {
+    throw new Error(`Migration '${migrationName}': Normalized migration SQL is empty.`);
   }
 
   const matchNum = migrationName.match(/^(\d{4})/);
   const num = matchNum ? parseInt(matchNum[1], 10) : null;
-  if (num !== null && num >= 38) {
-    throw new Error(
-      `Migration '${migrationName}' contains forbidden transaction control statement '${txTokens[0].word.toUpperCase()}'. Migrations from 0038 onwards must not manage transactions internally.`
-    );
+
+  // Identify transaction statements
+  const txStatements = [];
+  for (let idx = 0; idx < statements.length; idx++) {
+    const stmt = statements[idx];
+    const txType = getStatementTransactionType(stmt.tokens);
+    if (txType) {
+      txStatements.push({
+        index: idx,
+        type: txType,
+        stmt,
+      });
+    }
   }
 
-  if (txTokens.some((t) => t.word.toUpperCase() === 'ROLLBACK')) {
+  // Enforce prohibition for migrations >= 0038
+  if (num !== null && num >= 38) {
+    if (txStatements.length > 0) {
+      const first = txStatements[0];
+      throw new Error(
+        `Migration '${migrationName}' contains forbidden transaction control statement '${first.type}'. Migrations from 0038 onwards must not manage transactions internally.`
+      );
+    }
+    return { normalizedSql: sql, hadWrapper: false };
+  }
+
+  // For legacy migrations (< 0038):
+  if (txStatements.length === 0) {
+    return { normalizedSql: sql, hadWrapper: false };
+  }
+
+  // Explicit ROLLBACK or ABORT check:
+  if (txStatements.some((t) => t.type === 'ROLLBACK' || t.type === 'ABORT' || t.type === 'ROLLBACK PREPARED')) {
     throw new Error(
       `Migration '${migrationName}' contains explicit ROLLBACK statement; cannot normalize legacy transaction wrapper.`
     );
   }
 
-  const beginTokens = txTokens.filter((t) => t.word.toUpperCase() === 'BEGIN');
-  const commitTokens = txTokens.filter((t) => t.word.toUpperCase() === 'COMMIT');
+  // Check for unbalanced wrapper: must have exactly BEGIN as first and COMMIT/END as last
+  const hasBegin = txStatements.some((t) => t.type === 'BEGIN');
+  const hasCommit = txStatements.some((t) => t.type === 'COMMIT' || t.type === 'END');
 
-  if (beginTokens.length !== 1 || commitTokens.length !== 1) {
+  if (!hasBegin || !hasCommit || txStatements.length !== 2) {
+    if (txStatements.length > 2) {
+      throw new Error(
+        `Migration '${migrationName}' contains multiple or unbalanced transaction statements (${txStatements.map((t) => t.type).join(', ')}). Legacy migrations may only contain a single outer BEGIN/COMMIT wrapper.`
+      );
+    }
+    const missing = !hasBegin ? 'BEGIN' : 'COMMIT';
     throw new Error(
-      `Migration '${migrationName}' contains multiple or unbalanced transaction statements (${beginTokens.length} BEGIN, ${commitTokens.length} COMMIT); cannot normalize legacy transaction wrapper.`
+      `Migration '${migrationName}' contains multiple or unbalanced transaction statements (missing ${missing}).`
     );
   }
 
-  const beginTok = beginTokens[0];
-  const commitTok = commitTokens[0];
+  const firstTx = txStatements[0];
+  const secondTx = txStatements[1];
 
-  if (beginTok.start >= commitTok.start) {
-    throw new Error(`Migration '${migrationName}' has COMMIT before BEGIN; invalid transaction structure.`);
+  if (firstTx.type !== 'BEGIN') {
+    throw new Error(
+      `Migration '${migrationName}' has invalid transaction wrapper order: '${firstTx.type}' before 'BEGIN'.`
+    );
+  }
+
+  if (secondTx.type !== 'COMMIT' && secondTx.type !== 'END') {
+    throw new Error(
+      `Migration '${migrationName}' has invalid transaction wrapper: expected COMMIT or END as closing statement, found '${secondTx.type}'.`
+    );
   }
 
   // Statements before BEGIN?
-  const tokensBeforeBegin = tokens.filter((t) => t.start < beginTok.start && t.word !== ';');
-  if (tokensBeforeBegin.length > 0) {
+  if (firstTx.index !== 0) {
     throw new Error(
       `Migration '${migrationName}' contains statements before top-level BEGIN; cannot normalize legacy transaction wrapper.`
     );
   }
 
-  // Find end of BEGIN statement (including optional WORK/TRANSACTION and ;)
-  let beginEnd = beginTok.end;
-  while (beginEnd < sql.length && /[ \t]/.test(sql[beginEnd])) beginEnd++;
-  const afterBegin = sql.slice(beginEnd);
-  const optBeginWord = afterBegin.match(/^(WORK|TRANSACTION)\b/i);
-  if (optBeginWord) {
-    beginEnd += optBeginWord[0].length;
-    while (beginEnd < sql.length && /[ \t]/.test(sql[beginEnd])) beginEnd++;
-  }
-  if (sql[beginEnd] === ';') {
-    beginEnd++;
-  }
-  if (sql[beginEnd] === '\r') beginEnd++;
-  if (sql[beginEnd] === '\n') beginEnd++;
-
-  // Find end of COMMIT statement (including optional WORK/TRANSACTION and ;)
-  let commitEnd = commitTok.end;
-  while (commitEnd < sql.length && /[ \t]/.test(sql[commitEnd])) commitEnd++;
-  const afterCommit = sql.slice(commitEnd);
-  const optCommitWord = afterCommit.match(/^(WORK|TRANSACTION)\b/i);
-  if (optCommitWord) {
-    commitEnd += optCommitWord[0].length;
-    while (commitEnd < sql.length && /[ \t]/.test(sql[commitEnd])) commitEnd++;
-  }
-  if (sql[commitEnd] === ';') {
-    commitEnd++;
-  }
-  if (sql[commitEnd] === '\r') commitEnd++;
-  if (sql[commitEnd] === '\n') commitEnd++;
-
-  // Check if any statement exists after COMMIT statement
-  const tokensAfterCommit = tokens.filter((t) => t.start >= commitEnd && t.word !== ';');
-  if (tokensAfterCommit.length > 0) {
+  // Statements after COMMIT?
+  if (secondTx.index !== statements.length - 1) {
     throw new Error(
-      `Migration '${migrationName}' contains statements after top-level COMMIT (intermediate COMMIT or trailing statements); cannot normalize legacy transaction wrapper.`
+      `Migration '${migrationName}' contains statements after top-level COMMIT; cannot normalize legacy transaction wrapper.`
     );
   }
 
   // Remove COMMIT first, then BEGIN to preserve byte offsets
-  let normalized = sql.slice(0, commitTok.start) + sql.slice(commitEnd);
-  normalized = normalized.slice(0, beginTok.start) + normalized.slice(beginEnd);
+  let commitCutEnd = secondTx.stmt.end;
+  while (commitCutEnd < sql.length && /[ \t]/.test(sql[commitCutEnd])) commitCutEnd++;
+  if (sql[commitCutEnd] === '\r') commitCutEnd++;
+  if (sql[commitCutEnd] === '\n') commitCutEnd++;
+
+  let beginCutEnd = firstTx.stmt.end;
+  while (beginCutEnd < sql.length && /[ \t]/.test(sql[beginCutEnd])) beginCutEnd++;
+  if (sql[beginCutEnd] === '\r') beginCutEnd++;
+  if (sql[beginCutEnd] === '\n') beginCutEnd++;
+
+  let normalized = sql.slice(0, secondTx.stmt.start) + sql.slice(commitCutEnd);
+  normalized = normalized.slice(0, firstTx.stmt.start) + normalized.slice(beginCutEnd);
+
+  const strippedNormalized = normalized.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').trim();
+  if (!strippedNormalized) {
+    throw new Error(`Migration '${migrationName}': Normalized migration SQL is empty.`);
+  }
 
   return { normalizedSql: normalized, hadWrapper: true };
 }
@@ -340,6 +496,116 @@ export const MIGRATION_SENTINELS = {
 };
 
 /**
+ * Validates repository migration files, sequence, sentinels, and baseline manifest
+ * strictly before connecting to database or performing any write operations.
+ */
+export async function validateRepositoryMigrations({
+  migrationsDir = MIGRATIONS_DIR,
+  baselineManifestPath = BASELINE_MANIFEST_PATH,
+  sentinels = MIGRATION_SENTINELS,
+} = {}) {
+  const dirEntries = await readdir(migrationsDir, { withFileTypes: true });
+
+  const files = [];
+  for (const entry of dirEntries) {
+    const name = entry.name;
+    if (name.startsWith('.')) continue; // ignore hidden files e.g. .DS_Store
+    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+
+    if (!/^\d{4}_[a-z0-9_]+\.sql$/.test(name)) {
+      throw new Error(
+        `Invalid migration filename '${name}'. Migration files must match pattern '^\\d{4}_[a-z0-9_]+\\.sql$'`
+      );
+    }
+    files.push(name);
+  }
+
+  if (files.length === 0) {
+    throw new Error(`No migration files found in '${migrationsDir}'`);
+  }
+
+  // Check unique numeric prefixes
+  const prefixMap = new Map();
+  for (const file of files) {
+    const prefixStr = file.substring(0, 4);
+    const prefixNum = parseInt(prefixStr, 10);
+    if (prefixMap.has(prefixNum)) {
+      const existing = prefixMap.get(prefixNum);
+      throw new Error(
+        `Duplicate migration prefix '${prefixStr}': found both '${existing}' and '${file}'`
+      );
+    }
+    prefixMap.set(prefixNum, file);
+  }
+
+  // Sort strictly by numeric value
+  files.sort((a, b) => parseInt(a.substring(0, 4), 10) - parseInt(b.substring(0, 4), 10));
+
+  // Check continuous sequence starting from 0001 to N
+  for (let i = 0; i < files.length; i++) {
+    const expectedNum = i + 1;
+    const actualNum = parseInt(files[i].substring(0, 4), 10);
+    if (actualNum !== expectedNum) {
+      const expectedStr = String(expectedNum).padStart(4, '0');
+      const actualStr = String(actualNum).padStart(4, '0');
+      throw new Error(
+        `Migration sequence gap: expected sequence prefix '${expectedStr}' at index ${i}, but found '${files[i]}' (prefix '${actualStr}')`
+      );
+    }
+  }
+
+  const fileSet = new Set(files);
+
+  // Check sentinels: every file in repo must have a sentinel
+  for (const file of files) {
+    if (!sentinels || !sentinels[file] || typeof sentinels[file] !== 'function') {
+      throw new Error(
+        `Migration '${file}' does not have a defined sentinel in MIGRATION_SENTINELS.`
+      );
+    }
+  }
+
+  // Check sentinels: no sentinels for nonexistent files
+  if (sentinels) {
+    for (const sentinelName of Object.keys(sentinels)) {
+      if (!fileSet.has(sentinelName)) {
+        throw new Error(
+          `MIGRATION_SENTINELS contains sentinel for nonexistent migration file '${sentinelName}'.`
+        );
+      }
+    }
+  }
+
+  // Load baseline manifest and verify entries
+  const baselineMap = await loadBaselineManifest(baselineManifestPath);
+  const fileChecksums = new Map();
+  for (const file of files) {
+    const content = await readFile(join(migrationsDir, file));
+    fileChecksums.set(file, computeMigrationChecksum(content));
+  }
+
+  for (const [manifestName, manifestEntry] of baselineMap.entries()) {
+    if (!fileSet.has(manifestName)) {
+      throw new Error(
+        `Baseline manifest contains migration '${manifestName}' which does not exist in repository '${migrationsDir}'.`
+      );
+    }
+    const diskHash = fileChecksums.get(manifestName);
+    if (diskHash !== manifestEntry.sha256) {
+      throw new Error(
+        `Checksum mismatch for migration '${manifestName}': manifest SHA-256 '${manifestEntry.sha256}' does not match disk SHA-256 '${diskHash}'.`
+      );
+    }
+  }
+
+  return {
+    files,
+    fileChecksums,
+    baselineMap,
+  };
+}
+
+/**
  * Universal query runner: supports neon tagged template function, client.query, or mock sql.
  */
 export async function executeSql(sqlOrClient, queryText, params = []) {
@@ -431,22 +697,17 @@ export async function inspectMigrationsStatus(
     migrationsDir = MIGRATIONS_DIR,
     baselineManifestPath = BASELINE_MANIFEST_PATH,
     catalog = null,
+    sentinels = MIGRATION_SENTINELS,
   } = {}
 ) {
-  const repoFiles = (await readdir(migrationsDir))
-    .filter((file) => file.endsWith('.sql'))
-    .sort();
-
-  const fileChecksums = new Map();
-  for (const file of repoFiles) {
-    const content = await readFile(join(migrationsDir, file));
-    fileChecksums.set(file, computeMigrationChecksum(content));
-  }
-
-  const baselineMap = await loadBaselineManifest(baselineManifestPath);
-  if (!baselineMap || !(baselineMap instanceof Map)) {
-    throw new Error('Failed to load baseline manifest: expected a Map of verified migration entries');
-  }
+  const repoValidation = await validateRepositoryMigrations({
+    migrationsDir,
+    baselineManifestPath,
+    sentinels,
+  });
+  const repoFiles = repoValidation.files;
+  const fileChecksums = repoValidation.fileChecksums;
+  const baselineMap = repoValidation.baselineMap;
 
   const dbCatalog = catalog || (await extractSchemaCatalog(sqlOrClient));
 
@@ -949,22 +1210,137 @@ export function accreditDestinationBranch(
 }
 
 /**
- * Runs migrations forward in filename order with strict safety validations.
- * Accredits branch, creates internal Client, executes normalized SQL, and ensures atomic transaction rollback.
+ * Internal helper to execute pending migrations on an already-connected Client.
  */
-export async function runMigrations(
-  optionsOrConnectionString = {},
-  deprecatedOptions = {}
+async function _executeMigrationsOnClient(
+  client,
+  { migrationsDir = MIGRATIONS_DIR, baselineManifestPath = BASELINE_MANIFEST_PATH } = {}
 ) {
-  let opts = {};
-  if (typeof optionsOrConnectionString === 'string') {
-    opts = { connectionString: optionsOrConnectionString, ...deprecatedOptions };
-  } else if (optionsOrConnectionString && typeof optionsOrConnectionString === 'object') {
-    // If an external Client object was passed as first argument, ignore it for security
-    if (typeof optionsOrConnectionString.query === 'function') {
-      opts = { ...deprecatedOptions };
-    } else {
-      opts = { ...optionsOrConnectionString };
+  const status = await inspectMigrationsStatus(client, {
+    migrationsDir,
+    baselineManifestPath,
+  });
+
+  if (status.state === 'RECONCILIATION_REQUIRED') {
+    const reasons = [];
+    if (status.materializedUnregistered.length > 0) {
+      reasons.push(`${status.materializedUnregistered.length} materialized unregistered migrations`);
+    }
+    if (status.missingFromDatabase.length > 0) {
+      reasons.push(`${status.missingFromDatabase.length} missing migrations recorded in ledger`);
+    }
+    if (status.unknownInLedger.length > 0) {
+      reasons.push(`${status.unknownInLedger.length} unknown migrations in ledger`);
+    }
+    if (status.checksumMismatches.length > 0) {
+      reasons.push(`${status.checksumMismatches.length} checksum mismatches against baseline`);
+    }
+    if (status.checksumUnverifiable.length > 0) {
+      reasons.push(`${status.checksumUnverifiable.length} registered migrations with unverifiable checksums`);
+    }
+    if (status.gaps.length > 0) {
+      reasons.push(`${status.gaps.length} sequence gaps`);
+    }
+    throw new Error(
+      `Cannot apply migrations: database is in RECONCILIATION_REQUIRED state (${reasons.join(', ')}). Manual or automated reconciliation required.`
+    );
+  }
+
+  if (status.pending.length === 0) {
+    console.log('migrations up to date (0 pending)');
+    return { appliedCount: 0, pendingCount: 0 };
+  }
+
+  console.log(`Pending migrations to apply (${status.pending.length}):`);
+  for (const p of status.pending) {
+    console.log(`  - ${p.name}`);
+  }
+
+  // Ensure _migrations exists
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      name TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Check if _migrations already has checksum column
+  const colCheckRes = await client.query(`
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'
+  `);
+  let hasChecksumCol = (Array.isArray(colCheckRes) ? colCheckRes : colCheckRes?.rows || []).length > 0;
+
+  let appliedCount = 0;
+  for (const item of status.pending) {
+    const file = item.name;
+    const body = await readFile(join(migrationsDir, file), 'utf8');
+    const fileChecksum = computeMigrationChecksum(body);
+    const { normalizedSql } = normalizeMigrationSql(body, file);
+
+    console.log(`apply ${file}`);
+
+    await client.query('BEGIN');
+    try {
+      await client.query(normalizedSql);
+      if (file === '0038_migration_ledger_checksums.sql') {
+        hasChecksumCol = true;
+      }
+      if (hasChecksumCol || file >= '0038_') {
+        await client.query(
+          'INSERT INTO _migrations (name, checksum) VALUES ($1, $2)',
+          [file, fileChecksum]
+        );
+      } else {
+        await client.query(
+          'INSERT INTO _migrations (name) VALUES ($1)',
+          [file]
+        );
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // preserve original error
+      }
+      throw err;
+    }
+
+    console.log(`done ${file}`);
+    appliedCount++;
+  }
+
+  console.log(`migrations up to date (${appliedCount} applied)`);
+  return { appliedCount, pendingCount: 0 };
+}
+
+/**
+ * Runs migrations forward in filename order with strict safety validations.
+ * Accepts ONLY 5 permitted options: connectionString, projectId, targetBranch, allowMainMigration, confirmMainBranchId.
+ * Rejects any unknown option or injection hook immediately before creating Client or connecting.
+ */
+export async function runMigrations(options = {}) {
+  if (arguments.length > 1) {
+    throw new Error('runMigrations accepts only a single options object.');
+  }
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new Error('runMigrations requires an options object with connectionString.');
+  }
+
+  const allowedKeys = new Set([
+    'connectionString',
+    'projectId',
+    'targetBranch',
+    'allowMainMigration',
+    'confirmMainBranchId',
+  ]);
+
+  for (const key of Object.keys(options)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(
+        `runMigrations: unknown or forbidden option '${key}'. Injection hooks are strictly forbidden.`
+      );
     }
   }
 
@@ -974,136 +1350,37 @@ export async function runMigrations(
     targetBranch = null,
     confirmMainBranchId = null,
     allowMainMigration = false,
-    migrationsDir = MIGRATIONS_DIR,
-    baselineManifestPath = BASELINE_MANIFEST_PATH,
-    ClientClass = Client,
-    branchResolver = null,
-    endpoints = null,
-    branches = null,
-    neonctlExec = execFileSync,
-  } = opts;
+  } = options;
 
   if (!connectionString) {
     throw new Error('connectionString is required for runMigrations.');
   }
 
-  // 1 & 2 & 3. Accredit branch: resolves URL -> hostname -> endpoint -> branch, validates unpooled host and safeguards
+  // 1. Validate repository migrations before connecting to database
+  await validateRepositoryMigrations({
+    migrationsDir: MIGRATIONS_DIR,
+    baselineManifestPath: BASELINE_MANIFEST_PATH,
+    sentinels: MIGRATION_SENTINELS,
+  });
+
+  // 2. Accredit destination branch before connecting
   accreditDestinationBranch(connectionString, {
     targetBranch,
     confirmMainBranchId,
     allowMainMigration,
     projectId,
-    branchResolver,
-    endpoints,
-    branches,
-    neonctlExec,
     forWrite: true,
   });
 
-  // 4 & 5. Create Client internally using EXACTLY the accredited connectionString, and connect AFTER accrediting
-  const client = new ClientClass(connectionString);
-  if (typeof client.connect === 'function') {
-    await client.connect();
-  }
+  // 3. Create real Client internally using connectionString and connect AFTER accreditation
+  const client = new Client(connectionString);
+  await client.connect();
 
   try {
-    const status = await inspectMigrationsStatus(client, {
-      migrationsDir,
-      baselineManifestPath,
+    return await _executeMigrationsOnClient(client, {
+      migrationsDir: MIGRATIONS_DIR,
+      baselineManifestPath: BASELINE_MANIFEST_PATH,
     });
-
-    if (status.state === 'RECONCILIATION_REQUIRED') {
-      const reasons = [];
-      if (status.materializedUnregistered.length > 0) {
-        reasons.push(`${status.materializedUnregistered.length} materialized unregistered migrations`);
-      }
-      if (status.missingFromDatabase.length > 0) {
-        reasons.push(`${status.missingFromDatabase.length} missing migrations recorded in ledger`);
-      }
-      if (status.unknownInLedger.length > 0) {
-        reasons.push(`${status.unknownInLedger.length} unknown migrations in ledger`);
-      }
-      if (status.checksumMismatches.length > 0) {
-        reasons.push(`${status.checksumMismatches.length} checksum mismatches against baseline`);
-      }
-      if (status.checksumUnverifiable.length > 0) {
-        reasons.push(`${status.checksumUnverifiable.length} registered migrations with unverifiable checksums`);
-      }
-      if (status.gaps.length > 0) {
-        reasons.push(`${status.gaps.length} sequence gaps`);
-      }
-      throw new Error(
-        `Cannot apply migrations: database is in RECONCILIATION_REQUIRED state (${reasons.join(', ')}). Manual or automated reconciliation required.`
-      );
-    }
-
-    if (status.pending.length === 0) {
-      console.log('migrations up to date (0 pending)');
-      return { appliedCount: 0, pendingCount: 0 };
-    }
-
-    console.log(`Pending migrations to apply (${status.pending.length}):`);
-    for (const p of status.pending) {
-      console.log(`  - ${p.name}`);
-    }
-
-    // Ensure _migrations exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS _migrations (
-        name TEXT PRIMARY KEY,
-        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-
-    // Check if _migrations already has checksum column
-    const colCheckRes = await client.query(`
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'
-    `);
-    let hasChecksumCol = (Array.isArray(colCheckRes) ? colCheckRes : colCheckRes?.rows || []).length > 0;
-
-    let appliedCount = 0;
-    for (const item of status.pending) {
-      const file = item.name;
-      const body = await readFile(join(migrationsDir, file), 'utf8');
-      const fileChecksum = computeMigrationChecksum(body);
-      const { normalizedSql } = normalizeMigrationSql(body, file);
-
-      console.log(`apply ${file}`);
-
-      await client.query('BEGIN');
-      try {
-        await client.query(normalizedSql);
-        if (file === '0038_migration_ledger_checksums.sql') {
-          hasChecksumCol = true;
-        }
-        if (hasChecksumCol || file >= '0038_') {
-          await client.query(
-            'INSERT INTO _migrations (name, checksum) VALUES ($1, $2)',
-            [file, fileChecksum]
-          );
-        } else {
-          await client.query(
-            'INSERT INTO _migrations (name) VALUES ($1)',
-            [file]
-          );
-        }
-        await client.query('COMMIT');
-      } catch (err) {
-        try {
-          await client.query('ROLLBACK');
-        } catch {
-          // preserve original error
-        }
-        throw err;
-      }
-
-      console.log(`done ${file}`);
-      appliedCount++;
-    }
-
-    console.log(`migrations up to date (${appliedCount} applied)`);
-    return { appliedCount, pendingCount: 0 };
   } finally {
     if (typeof client.end === 'function') {
       try {

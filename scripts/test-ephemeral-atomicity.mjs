@@ -105,7 +105,6 @@ function deleteTestEphemeralBranch(projectId, branchId) {
 async function runRealAtomicityTest() {
   const projectId = getRequiredProjectId();
   let ephemeralInfo = null;
-  let tmpMigrationsDir = null;
 
   try {
     // 1. Create ephemeral child branch of preview/development
@@ -134,25 +133,7 @@ async function runRealAtomicityTest() {
       await prepClient.end();
     }
 
-    // 4. Create temporary migrations directory containing applied migrations + probe migration
-    tmpMigrationsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atomicity-probe-'));
-    const realFiles = fs.readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith('.sql')).sort();
-    for (const file of realFiles) {
-      if (appliedNames.includes(file)) {
-        fs.copyFileSync(path.join(MIGRATIONS_DIR, file), path.join(tmpMigrationsDir, file));
-      }
-    }
-
-    // Determine next sequential migration file name
-    const nextSeq = String(appliedNames.length + 1).padStart(4, '0');
-    const probeFileName = `${nextSeq}_atomicity_runner_probe.sql`;
-    fs.writeFileSync(
-      path.join(tmpMigrationsDir, probeFileName),
-      'CREATE TABLE _atomicity_runner_probe (id int primary key, marker text);\n'
-    );
-    console.log(`[test] Created probe migration in tmp dir: ${probeFileName}`);
-
-    // 5. Install temporary trigger on _migrations that fails on INSERT
+    // 4. Install temporary trigger on _migrations that fails on INSERT
     const triggerClient = new Client(connectionString);
     await triggerClient.connect();
     try {
@@ -174,15 +155,14 @@ async function runRealAtomicityTest() {
       await triggerClient.end();
     }
 
-    // 6. Invoke runMigrations() with probe directory — must fail and roll back completely
-    console.log('[test] Invoking runMigrations() against temporary probe directory...');
+    // 5. Invoke public runMigrations() — must attempt to apply 0038, fail on ledger insert, and roll back completely
+    console.log('[test] Invoking public runMigrations() — expecting trigger failure on 0038 insertion...');
     let errorCaught = null;
     try {
       await runMigrations({
         connectionString,
         targetBranch: branchName,
         projectId,
-        migrationsDir: tmpMigrationsDir,
       });
     } catch (err) {
       errorCaught = err;
@@ -195,25 +175,37 @@ async function runRealAtomicityTest() {
       );
     }
 
-    // 7. Verify rollback: table absent, ledger entry absent, connection operative
+    // 6. Verify rollback: table absent, ledger entry absent, connection operative
     const verifyClient = new Client(connectionString);
     await verifyClient.connect();
     try {
-      const probeRes = await verifyClient.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_atomicity_runner_probe'"
+      // The first pending migration was 0036, which creates organization_people
+      const tableRes = await verifyClient.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'organization_people'"
       );
-      const probeExists = (Array.isArray(probeRes) ? probeRes : probeRes.rows || []).length > 0;
-      if (probeExists) {
-        throw new Error('ATOMICITY FAILURE: _atomicity_runner_probe table exists after transaction rollback!');
+      const tableExists = (Array.isArray(tableRes) ? tableRes : tableRes.rows || []).length > 0;
+      if (tableExists) {
+        throw new Error('ATOMICITY FAILURE: organization_people table exists after transaction rollback!');
       }
-      console.log('[test] PASS: Table _atomicity_runner_probe absent after rollback.');
+      console.log('[test] PASS: Table organization_people absent after rollback.');
 
-      const ledgerRes = await verifyClient.query('SELECT 1 FROM _migrations WHERE name = $1', [probeFileName]);
+      const colRes = await verifyClient.query(
+        "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'"
+      );
+      const colExists = (Array.isArray(colRes) ? colRes : colRes.rows || []).length > 0;
+      if (colExists) {
+        throw new Error('ATOMICITY FAILURE: _migrations.checksum column exists after transaction rollback!');
+      }
+      console.log('[test] PASS: Column _migrations.checksum absent after rollback.');
+
+      const ledgerRes = await verifyClient.query(
+        "SELECT 1 FROM _migrations WHERE name = '0036_temporal_organizational_model.sql'"
+      );
       const ledgerExists = (Array.isArray(ledgerRes) ? ledgerRes : ledgerRes.rows || []).length > 0;
       if (ledgerExists) {
-        throw new Error(`ATOMICITY FAILURE: ${probeFileName} recorded in _migrations after rollback!`);
+        throw new Error('ATOMICITY FAILURE: 0036_temporal_organizational_model.sql recorded in _migrations after rollback!');
       }
-      console.log(`[test] PASS: ${probeFileName} absent from _migrations after rollback.`);
+      console.log('[test] PASS: 0036_temporal_organizational_model.sql absent from _migrations after rollback.');
 
       // Verify connection and transaction state
       const pingRes = await verifyClient.query('SELECT 1 AS alive');
@@ -223,7 +215,7 @@ async function runRealAtomicityTest() {
       }
       console.log('[test] PASS: Connection is healthy and transaction is closed.');
 
-      // 8. Uninstall temporary trigger
+      // 7. Uninstall temporary trigger
       console.log('[test] Uninstalling temporary trigger...');
       await verifyClient.query('DROP TRIGGER IF EXISTS trg_test_fail_insert ON _migrations');
       await verifyClient.query('DROP FUNCTION IF EXISTS trg_fail_on_ledger_insert()');
@@ -231,17 +223,20 @@ async function runRealAtomicityTest() {
       await verifyClient.end();
     }
 
-    // 9. Execute real migrations up to 0038 using real repository migrations directory
-    console.log('[test] Applying real migrations (including 0038) on ephemeral branch...');
+    // 8. Execute real migrations cleanly using public runMigrations()
+    console.log('[test] Applying remaining migrations cleanly on ephemeral branch...');
     const runResult = await runMigrations({
       connectionString,
       targetBranch: branchName,
       projectId,
-      migrationsDir: MIGRATIONS_DIR,
     });
-    console.log(`[test] Applied ${runResult.appliedCount} real migrations.`);
+    const expectedToApply = 38 - appliedNames.length;
+    console.log(`[test] Applied ${runResult.appliedCount} real migrations (expected: ${expectedToApply}).`);
+    if (runResult.appliedCount !== expectedToApply) {
+      throw new Error(`Expected exactly ${expectedToApply} applied migrations, got ${runResult.appliedCount}`);
+    }
 
-    // 10. Verify post-migration status and 0038 checksum column
+    // 9. Verify post-migration status and 0038 checksum column
     const finalClient = new Client(connectionString);
     await finalClient.connect();
     try {
@@ -276,11 +271,6 @@ async function runRealAtomicityTest() {
     console.log('ALL REAL EPHEMERAL ATOMICITY & MIGRATION TESTS PASSED!');
     console.log('======================================================\n');
   } finally {
-    if (tmpMigrationsDir && fs.existsSync(tmpMigrationsDir)) {
-      try {
-        fs.rmSync(tmpMigrationsDir, { recursive: true, force: true });
-      } catch {}
-    }
     if (ephemeralInfo) {
       deleteTestEphemeralBranch(projectId, ephemeralInfo.branchId);
     }

@@ -1,6 +1,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import * as childProcess from 'node:child_process';
 import { describe, it, expect, vi } from 'vitest';
+import { Client } from '@neondatabase/serverless';
+
+let mockExecFileSyncImpl = null;
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    execFileSync: (...args) => {
+      if (mockExecFileSyncImpl) {
+        return mockExecFileSyncImpl(...args);
+      }
+      return actual.execFileSync(...args);
+    },
+  };
+});
+
 import {
   computeMigrationChecksum,
   inspectMigrationsStatus,
@@ -12,7 +31,10 @@ import {
   isMigrationMaterialized,
   normalizeMigrationSql,
   scanSqlTokens,
+  validateRepositoryMigrations,
   MIGRATION_SENTINELS,
+  MIGRATIONS_DIR,
+  BASELINE_MANIFEST_PATH,
 } from './migrate.mjs';
 
 function createFlexibleMockSql({
@@ -787,19 +809,125 @@ COMMIT;
   });
 
   describe('6. Ineludible Destination Accreditation & Atomic Execution in runMigrations', () => {
-    class MockTestClient {
-      constructor(connectionString) {
-        this.connectionString = connectionString;
-        this.connected = false;
-        this.ended = false;
-        this.queries = [];
+    describe('Rejection of forbidden options (fail-closed before Client instantiation or network)', () => {
+      const forbiddenOptions = [
+        'ClientClass',
+        'branchResolver',
+        'neonctlExec',
+        'endpoints',
+        'branches',
+        'migrationsDir',
+        'baselineManifestPath',
+        'client',
+        'sql',
+        'customInject',
+      ];
+
+      for (const forbidden of forbiddenOptions) {
+        it(`rejects option '${forbidden}' before Client creation, connect, or queries`, async () => {
+          const connectSpy = vi.spyOn(Client.prototype, 'connect');
+          const querySpy = vi.spyOn(Client.prototype, 'query');
+          let execCalled = false;
+          mockExecFileSyncImpl = () => {
+            execCalled = true;
+          };
+
+          try {
+            await expect(
+              runMigrations({
+                connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
+                targetBranch: 'tmp-temporal-test',
+                projectId: TEST_PROJECT_ID,
+                [forbidden]: 'forbidden_value',
+              })
+            ).rejects.toThrow(new RegExp(`runMigrations: unknown or forbidden option '${forbidden}'`));
+
+            expect(connectSpy).not.toHaveBeenCalled();
+            expect(querySpy).not.toHaveBeenCalled();
+            expect(execCalled).toBe(false);
+          } finally {
+            connectSpy.mockRestore();
+            querySpy.mockRestore();
+            mockExecFileSyncImpl = null;
+          }
+        });
       }
-      async connect() {
-        this.connected = true;
+
+      it('rejects multiple arguments to runMigrations', async () => {
+        await expect(
+          runMigrations(
+            { connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require' },
+            { targetBranch: 'something' }
+          )
+        ).rejects.toThrow(/runMigrations accepts only a single options object/);
+      });
+
+      it('rejects non-object or null options to runMigrations', async () => {
+        await expect(runMigrations(null)).rejects.toThrow(/runMigrations requires an options object/);
+        await expect(runMigrations('postgresql://...')).rejects.toThrow(/runMigrations requires an options object/);
+      });
+    });
+
+    it('rejects write operations on pooled connections (-pooler)', async () => {
+      await expect(
+        runMigrations({
+          connectionString: 'postgresql://neondb_owner:secret@ep-test-pooler.neon.tech/neondb?sslmode=require',
+          targetBranch: 'br-ephemeral-123',
+          projectId: TEST_PROJECT_ID,
+        })
+      ).rejects.toThrow(/Migration write operations require a direct unpooled connection/);
+    });
+
+    it('rejects execution if target branch does not match accredited destination', async () => {
+      mockExecFileSyncImpl = (cmd, args) => {
+        if (args.includes(`/projects/${TEST_PROJECT_ID}/endpoints`)) {
+          return JSON.stringify([mockEndpoint]);
+        }
+        if (args.includes('branches') && args.includes('list')) {
+          return JSON.stringify([mockBranch]);
+        }
+        return '[]';
+      };
+
+      try {
+        await expect(
+          runMigrations({
+            connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
+            targetBranch: 'wrong-target-branch',
+            projectId: TEST_PROJECT_ID,
+          })
+        ).rejects.toThrow(/Destination accreditation failure.*wrong-target-branch/);
+      } finally {
+        mockExecFileSyncImpl = null;
       }
-      async query(text, params = []) {
-        this.queries.push({ text: (text || '').trim(), params });
+    });
+
+    it('creates Client internally with accredited connectionString, connects, executes, and closes client', async () => {
+      mockExecFileSyncImpl = (cmd, args) => {
+        if (args.includes(`/projects/${TEST_PROJECT_ID}/endpoints`)) {
+          return JSON.stringify([mockEndpoint]);
+        }
+        if (args.includes('branches') && args.includes('list')) {
+          return JSON.stringify([mockBranch]);
+        }
+        return '[]';
+      };
+
+      let connectCalled = false;
+      let endCalled = false;
+      const queriesExecuted = [];
+
+      const connectSpy = vi.spyOn(Client.prototype, 'connect').mockImplementation(async function () {
+        connectCalled = true;
+      });
+      const endSpy = vi.spyOn(Client.prototype, 'end').mockImplementation(async function () {
+        endCalled = true;
+      });
+
+      const querySpy = vi.spyOn(Client.prototype, 'query').mockImplementation(async function (text, params = []) {
         const trimmed = (text || '').trim();
+        queriesExecuted.push({ text: trimmed, params });
+
         if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'")) {
           return [{ exists: 1 }];
         }
@@ -864,7 +992,6 @@ COMMIT;
           ];
         }
         if (trimmed.includes('SELECT name, applied_at FROM _migrations')) {
-          // Return 37 applied migrations to leave 0038 pending
           const rows = [];
           for (let i = 1; i <= 37; i++) {
             const num = String(i).padStart(4, '0');
@@ -877,89 +1004,145 @@ COMMIT;
           return [{ name: params[0] }];
         }
         return [];
-      }
-      async end() {
-        this.ended = true;
-      }
-    }
-
-    it('rejects write operations on pooled connections (-pooler)', async () => {
-      await expect(
-        runMigrations({
-          connectionString: 'postgresql://neondb_owner:secret@ep-test-pooler.neon.tech/neondb?sslmode=require',
-          targetBranch: 'br-ephemeral-123',
-          projectId: TEST_PROJECT_ID,
-        })
-      ).rejects.toThrow(/Migration write operations require a direct unpooled connection/);
-    });
-
-    it('rejects execution if target branch does not match accredited destination', async () => {
-      await expect(
-        runMigrations({
-          connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
-          targetBranch: 'wrong-target-branch',
-          projectId: TEST_PROJECT_ID,
-          endpoints: [mockEndpoint],
-          branches: [mockBranch],
-          ClientClass: MockTestClient,
-        })
-      ).rejects.toThrow(/Destination accreditation failure/);
-    });
-
-    it('creates Client internally with accredited connectionString, connects, executes, and closes client', async () => {
-      let createdClientInstance = null;
-      class TrackingClient extends MockTestClient {
-        constructor(conn) {
-          super(conn);
-          createdClientInstance = this;
-        }
-      }
-
-      const res = await runMigrations({
-        connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
-        targetBranch: 'tmp-temporal-test',
-        projectId: TEST_PROJECT_ID,
-        endpoints: [mockEndpoint],
-        branches: [mockBranch],
-        ClientClass: TrackingClient,
       });
 
-      expect(res.appliedCount).toBe(1); // Applied 0038
-      expect(createdClientInstance).not.toBeNull();
-      expect(createdClientInstance.connectionString).toBe(
-        'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require'
-      );
-      expect(createdClientInstance.connected).toBe(true);
-      expect(createdClientInstance.ended).toBe(true);
-
-      // Verify BEGIN and COMMIT wrapped the 0038 execution
-      const beginQueries = createdClientInstance.queries.filter((q) => q.text === 'BEGIN');
-      const commitQueries = createdClientInstance.queries.filter((q) => q.text === 'COMMIT');
-      expect(beginQueries.length).toBe(1);
-      expect(commitQueries.length).toBe(1);
-    });
-
-    it('rolls back completely on query failure during migration execution', async () => {
-      class FailingClient extends MockTestClient {
-        async query(text, params = []) {
-          const trimmed = (text || '').trim();
-          if (trimmed.startsWith('INSERT INTO _migrations')) {
-            throw new Error('Trigger failure on ledger insert');
-          }
-          return super.query(text, params);
-        }
-      }
-
-      await expect(
-        runMigrations({
+      try {
+        const res = await runMigrations({
           connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
           targetBranch: 'tmp-temporal-test',
           projectId: TEST_PROJECT_ID,
-          endpoints: [mockEndpoint],
-          branches: [mockBranch],
-          ClientClass: FailingClient,
-        })
-      ).rejects.toThrow(/Trigger failure on ledger insert/);
+        });
+
+        expect(res.appliedCount).toBe(1);
+        expect(connectCalled).toBe(true);
+        expect(endCalled).toBe(true);
+
+        const beginQueries = queriesExecuted.filter((q) => q.text === 'BEGIN');
+        const commitQueries = queriesExecuted.filter((q) => q.text === 'COMMIT');
+        expect(beginQueries.length).toBe(1);
+        expect(commitQueries.length).toBe(1);
+      } finally {
+        mockExecFileSyncImpl = null;
+        connectSpy.mockRestore();
+        endSpy.mockRestore();
+        querySpy.mockRestore();
+      }
+    });
+
+    it('rolls back completely on query failure during migration execution', async () => {
+      mockExecFileSyncImpl = (cmd, args) => {
+        if (args.includes(`/projects/${TEST_PROJECT_ID}/endpoints`)) {
+          return JSON.stringify([mockEndpoint]);
+        }
+        if (args.includes('branches') && args.includes('list')) {
+          return JSON.stringify([mockBranch]);
+        }
+        return '[]';
+      };
+
+      const queriesExecuted = [];
+      const connectSpy = vi.spyOn(Client.prototype, 'connect').mockImplementation(async () => {});
+      const endSpy = vi.spyOn(Client.prototype, 'end').mockImplementation(async () => {});
+
+      const querySpy = vi.spyOn(Client.prototype, 'query').mockImplementation(async function (text, params = []) {
+        const trimmed = (text || '').trim();
+        queriesExecuted.push({ text: trimmed, params });
+
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'")) {
+          return [{ exists: 1 }];
+        }
+        if (trimmed.includes("FROM information_schema.columns WHERE table_schema = 'public'")) {
+          return [
+            { table_name: 'organizations', column_name: 'id' },
+            { table_name: '_migrations', column_name: 'name' },
+            { table_name: '_migrations', column_name: 'applied_at' },
+            { table_name: 'organizations', column_name: 'plan' },
+            { table_name: 'employees', column_name: 'deactivated_at' },
+            { table_name: 'imports', column_name: 'import_mode' },
+            { table_name: 'imports', column_name: 'employee_id' },
+            { table_name: 'memberships', column_name: 'scoped_area_id' },
+            { table_name: 'shifts', column_name: 'schedule_version_id' },
+            { table_name: 'shift_assignments', column_name: 'import_id' },
+            { table_name: 'organizations', column_name: 'approval_policy' },
+            { table_name: 'approval_requests', column_name: 'approved_by_user_id' },
+            { table_name: 'approval_requests', column_name: 'rejected_by_user_id' },
+            { table_name: 'change_requests', column_name: 'requested_start_time' },
+            { table_name: 'imports', column_name: 'outcome_reason' },
+            { table_name: 'shifts', column_name: 'shift_type' },
+          ];
+        }
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public'")) {
+          return [
+            { table_name: 'organizations' },
+            { table_name: 'password_reset_tokens' },
+            { table_name: 'login_attempts' },
+            { table_name: 'areas' },
+            { table_name: 'format_profiles' },
+            { table_name: 'organization_audit_events' },
+            { table_name: 'schedules' },
+            { table_name: 'schedule_versions' },
+            { table_name: 'shift_assignments' },
+            { table_name: 'shift_comments' },
+            { table_name: 'change_requests' },
+            { table_name: 'notifications' },
+            { table_name: 'oauth_identities' },
+            { table_name: 'approval_requests' },
+            { table_name: 'operational_assignments' },
+            { table_name: 'organization_people' },
+            { table_name: 'memberships' },
+            { table_name: 'employees' },
+            { table_name: '_migrations' },
+          ];
+        }
+        if (trimmed.includes('FROM information_schema.routines')) {
+          return [{ routine_name: 'transfer_organization_ownership_temporal' }];
+        }
+        if (trimmed.includes('FROM pg_indexes')) {
+          return [
+            { indexname: 'format_profiles_org_structurehash_active_idx' },
+            { indexname: 'memberships_one_owner_per_org_idx' },
+            { indexname: 'shifts_id_employee_unique_idx' },
+          ];
+        }
+        if (trimmed.includes('FROM pg_constraint')) {
+          return [
+            { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
+            { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
+            { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
+          ];
+        }
+        if (trimmed.includes('SELECT name, applied_at FROM _migrations')) {
+          const rows = [];
+          for (let i = 1; i <= 37; i++) {
+            const num = String(i).padStart(4, '0');
+            const file = fs.readdirSync('db/migrations').find((f) => f.startsWith(num));
+            if (file) rows.push({ name: file, applied_at: '2026-09-12T00:00:00Z' });
+          }
+          return rows;
+        }
+        if (trimmed.startsWith('INSERT INTO _migrations')) {
+          throw new Error('Trigger failure on ledger insert');
+        }
+        return [];
+      });
+
+      try {
+        await expect(
+          runMigrations({
+            connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
+            targetBranch: 'tmp-temporal-test',
+            projectId: TEST_PROJECT_ID,
+          })
+        ).rejects.toThrow(/Trigger failure on ledger insert/);
+
+        const rollbackQueries = queriesExecuted.filter((q) => q.text === 'ROLLBACK');
+        expect(rollbackQueries.length).toBe(1);
+      } finally {
+        mockExecFileSyncImpl = null;
+        connectSpy.mockRestore();
+        endSpy.mockRestore();
+        querySpy.mockRestore();
+      }
     });
   });
 
@@ -1094,6 +1277,207 @@ COMMIT;
 
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Neon Branch: UNRESOLVED (Endpoint ep-unknown not found in project)'));
       logSpy.mockRestore();
+    });
+  });
+
+  describe('8. Repository Migration Registry & Sequence Validation (validateRepositoryMigrations)', () => {
+    it('passes for canonical repository files and baseline manifest', async () => {
+      const result = await validateRepositoryMigrations();
+      expect(result.files.length).toBe(38);
+      expect(result.files[0]).toBe('0001_init.sql');
+      expect(result.files[37]).toBe('0038_migration_ledger_checksums.sql');
+      expect(result.baselineMap.size).toBe(37);
+      expect(result.fileChecksums.size).toBe(38);
+    });
+
+    it('rejects invalid migration filename patterns', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-repo-filename-'));
+      try {
+        fs.writeFileSync(path.join(tmpDir, '0001_valid.sql'), 'SELECT 1;');
+        fs.writeFileSync(path.join(tmpDir, 'foo.sql'), 'SELECT 1;');
+
+        await expect(
+          validateRepositoryMigrations({ migrationsDir: tmpDir })
+        ).rejects.toThrow(/Invalid migration filename 'foo.sql'/);
+
+        fs.unlinkSync(path.join(tmpDir, 'foo.sql'));
+        fs.writeFileSync(path.join(tmpDir, '039_example.sql'), 'SELECT 1;');
+        await expect(
+          validateRepositoryMigrations({ migrationsDir: tmpDir })
+        ).rejects.toThrow(/Invalid migration filename '039_example.sql'/);
+
+        fs.unlinkSync(path.join(tmpDir, '039_example.sql'));
+        fs.writeFileSync(path.join(tmpDir, '0039-example.sql'), 'SELECT 1;');
+        await expect(
+          validateRepositoryMigrations({ migrationsDir: tmpDir })
+        ).rejects.toThrow(/Invalid migration filename '0039-example.sql'/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects duplicate numeric prefixes', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-repo-dup-'));
+      try {
+        fs.writeFileSync(path.join(tmpDir, '0001_init.sql'), 'SELECT 1;');
+        fs.writeFileSync(path.join(tmpDir, '0002_first.sql'), 'SELECT 1;');
+        fs.writeFileSync(path.join(tmpDir, '0002_second.sql'), 'SELECT 2;');
+
+        await expect(
+          validateRepositoryMigrations({ migrationsDir: tmpDir })
+        ).rejects.toThrow(/Duplicate migration prefix '0002'/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects sequence gaps and missing 0001', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-repo-gap-'));
+      try {
+        // Starts at 0002 instead of 0001
+        fs.writeFileSync(path.join(tmpDir, '0002_start.sql'), 'SELECT 1;');
+        await expect(
+          validateRepositoryMigrations({ migrationsDir: tmpDir })
+        ).rejects.toThrow(/Migration sequence gap: expected sequence prefix '0001'/);
+
+        fs.unlinkSync(path.join(tmpDir, '0002_start.sql'));
+        // Has 0001 and 0003, missing 0002
+        fs.writeFileSync(path.join(tmpDir, '0001_init.sql'), 'SELECT 1;');
+        fs.writeFileSync(path.join(tmpDir, '0003_after_gap.sql'), 'SELECT 1;');
+        await expect(
+          validateRepositoryMigrations({ migrationsDir: tmpDir })
+        ).rejects.toThrow(/Migration sequence gap: expected sequence prefix '0002'/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects migration files without defined sentinels in MIGRATION_SENTINELS', async () => {
+      const restrictedSentinels = {
+        '0001_init.sql': () => true,
+      };
+
+      await expect(
+        validateRepositoryMigrations({ sentinels: restrictedSentinels })
+      ).rejects.toThrow(/Migration '0002_password_reset.sql' does not have a defined sentinel in MIGRATION_SENTINELS/);
+    });
+
+    it('rejects nonexistent migration files present in MIGRATION_SENTINELS', async () => {
+      const extendedSentinels = {
+        ...MIGRATION_SENTINELS,
+        '9999_nonexistent_migration.sql': () => true,
+      };
+
+      await expect(
+        validateRepositoryMigrations({ sentinels: extendedSentinels })
+      ).rejects.toThrow(
+        /MIGRATION_SENTINELS contains sentinel for nonexistent migration file '9999_nonexistent_migration.sql'/
+      );
+    });
+
+    it('rejects baseline manifest entries that do not exist on disk', async () => {
+      const tmpManifest = fs.mkdtempSync(path.join(os.tmpdir(), 'test-manifest-missing-'));
+      const manifestPath = path.join(tmpManifest, 'baseline.json');
+      try {
+        const canonicalRaw = fs.readFileSync(BASELINE_MANIFEST_PATH, 'utf8');
+        const list = JSON.parse(canonicalRaw);
+        list.push({
+          name: '9999_ghost_migration.sql',
+          sha256: 'a'.repeat(64),
+          baselineVersion: 'v1.0.0',
+          reconciliationMethod: 'verified_prior_execution',
+        });
+        fs.writeFileSync(manifestPath, JSON.stringify(list));
+
+        await expect(
+          validateRepositoryMigrations({ baselineManifestPath: manifestPath })
+        ).rejects.toThrow(
+          /Baseline manifest contains migration '9999_ghost_migration.sql' which does not exist/
+        );
+      } finally {
+        fs.rmSync(tmpManifest, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects baseline manifest entry if disk checksum does not match manifest', async () => {
+      const tmpManifest = fs.mkdtempSync(path.join(os.tmpdir(), 'test-manifest-mismatch-'));
+      const manifestPath = path.join(tmpManifest, 'baseline.json');
+      try {
+        const canonicalRaw = fs.readFileSync(BASELINE_MANIFEST_PATH, 'utf8');
+        const list = JSON.parse(canonicalRaw);
+        list[0].sha256 = 'f'.repeat(64); // Tamper 0001 hash
+        fs.writeFileSync(manifestPath, JSON.stringify(list));
+
+        await expect(
+          validateRepositoryMigrations({ baselineManifestPath: manifestPath })
+        ).rejects.toThrow(
+          /Checksum mismatch for migration '0001_init.sql'/
+        );
+      } finally {
+        fs.rmSync(tmpManifest, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('9. Comprehensive Transaction Syntax Control & CASE Expression Safety', () => {
+    it('scanSqlTokens fails closed on unclosed string literals, identifiers, comments, and dollar blocks', () => {
+      expect(() => scanSqlTokens("SELECT 'unclosed string;")).toThrow(/Unterminated string literal/);
+      expect(() => scanSqlTokens('SELECT "unclosed identifier;')).toThrow(/Unterminated quoted identifier/);
+      expect(() => scanSqlTokens('SELECT /* unclosed block comment;')).toThrow(/Unterminated block comment/);
+      expect(() => scanSqlTokens('SELECT $$ unclosed dollar quote;')).toThrow(/Unterminated dollar-quoted block/);
+      expect(() => scanSqlTokens('SELECT $func$ unclosed named dollar;')).toThrow(/Unterminated dollar-quoted block/);
+    });
+
+    it('normalizeMigrationSql blocks all 11 transaction control statements for migrations >= 0038', () => {
+      const forbiddenVariants = [
+        'BEGIN',
+        'START TRANSACTION',
+        'COMMIT',
+        'END',
+        'ROLLBACK',
+        'ABORT',
+        'SAVEPOINT sp_test',
+        'RELEASE SAVEPOINT sp_test',
+        'RELEASE sp_test',
+        "PREPARE TRANSACTION 'test_tx'",
+        "COMMIT PREPARED 'test_tx'",
+        "ROLLBACK PREPARED 'test_tx'",
+      ];
+
+      for (const stmt of forbiddenVariants) {
+        const sql = `${stmt};\nCREATE TABLE test_table (id INT);`;
+        expect(() => normalizeMigrationSql(sql, '0038_migration_ledger_checksums.sql')).toThrow(
+          /forbidden transaction control statement/i
+        );
+      }
+    });
+
+    it('normalizeMigrationSql allows CASE ... END expressions without false positive for END', () => {
+      const sqlWithCase = `
+        CREATE TABLE shift_eval (
+          id INT PRIMARY KEY,
+          status TEXT,
+          category TEXT GENERATED ALWAYS AS (
+            CASE
+              WHEN status = 'active' THEN 'CURRENT'
+              WHEN status = 'archived' THEN 'OLD'
+              ELSE 'UNKNOWN'
+            END
+          ) STORED
+        );
+      `;
+      const result = normalizeMigrationSql(sqlWithCase, '0038_migration_ledger_checksums.sql');
+      expect(result.hadWrapper).toBe(false);
+      expect(result.normalizedSql).toBe(sqlWithCase);
+    });
+
+    it('normalizeMigrationSql fails closed if normalized SQL is empty', () => {
+      expect(() => normalizeMigrationSql('   \n-- only comments\n   ', '0038_test.sql')).toThrow(
+        /Normalized migration SQL is empty/
+      );
+      expect(() => normalizeMigrationSql('BEGIN;\n-- wrapper with nothing inside\nCOMMIT;', '0010_test.sql')).toThrow(
+        /Normalized migration SQL is empty/
+      );
     });
   });
 });
