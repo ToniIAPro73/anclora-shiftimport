@@ -4,7 +4,7 @@
  *
  * Safety properties:
  * 1. NEVER automatically consumes DATABASE_URL, POSTGRES_URL, or generic env vars.
- * 2. Default mode: dynamically resolves Neon 'main' branch, provisions ephemeral child branch,
+ * 2. Default mode: dynamically resolves base branch ('preview/development'), provisions ephemeral child branch,
  *    runs seed, migration, backfill assertions and integration tests exclusively there,
  *    and destroys ephemeral branch in finally block.
  * 3. If TEMPORAL_MODEL_DATABASE_URL is provided, explicitly requires
@@ -435,20 +435,20 @@ export const TEMPORAL_VIEWS = [
 ];
 
 export const TEMPORAL_ROUTINES = [
+  "check_employee_profile_person_link_validity",
+  "check_organization_person_employee_link_validity",
+  "check_reporting_relationship_validity",
+  "check_employee_area_period_labor_validity",
   "transfer_organization_ownership_temporal",
   "check_employee_profile_labor_tenure_update",
-  "check_employee_profile_labor_tenure_insert",
-  "check_person_role_owner_temporal_excl",
-  "check_employee_primary_area_temporal_excl",
 ];
 
 export const TEMPORAL_TRIGGERS = [
-  "trg_employee_profiles_sync_status",
-  "trg_employee_profiles_sync_area",
-  "trg_employee_profiles_labor_tenure",
-  "trg_employee_profiles_labor_tenure_update",
-  "trg_employee_area_periods_primary_excl",
-  "trg_person_role_periods_owner_excl",
+  "trg_check_employee_profile_person_link",
+  "trg_check_organization_person_employee_link",
+  "trg_check_reporting_relationship",
+  "trg_check_employee_area_period_labor_validity",
+  "trg_check_employee_profile_labor_tenure",
 ];
 
 export const TEMPORAL_MIGRATIONS = [
@@ -564,12 +564,28 @@ export async function assertTemporalObjectsMaterialized(client, { context = "dat
     }
   }
 
-  // 4. Check routine
+  // 4. Check routines
   const routines = await client.query(
-    "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_name = 'transfer_organization_ownership_temporal'"
+    "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_name = ANY($1::text[])",
+    [TEMPORAL_ROUTINES]
   );
-  if (routines.rows.length === 0) {
-    throw new Error(`Post-migration assertion failed: routine 'transfer_organization_ownership_temporal' not found in ${context}`);
+  const foundRoutines = new Set(routines.rows.map((r) => r.routine_name));
+  for (const r of TEMPORAL_ROUTINES) {
+    if (!foundRoutines.has(r)) {
+      throw new Error(`Post-migration assertion failed: routine '${r}' not found in ${context}`);
+    }
+  }
+
+  // 5. Check triggers
+  const triggers = await client.query(
+    "SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public' AND trigger_name = ANY($1::text[])",
+    [TEMPORAL_TRIGGERS]
+  );
+  const foundTriggers = new Set(triggers.rows.map((t) => t.trigger_name));
+  for (const trg of TEMPORAL_TRIGGERS) {
+    if (!foundTriggers.has(trg)) {
+      throw new Error(`Post-migration assertion failed: trigger '${trg}' not found in ${context}`);
+    }
   }
 
   return true;
@@ -1172,8 +1188,9 @@ export async function runTemporalIntegrationHarness(options = {}) {
 
     // Step 2: Apply migrations
     console.log("[runner] Step 2: Applying migrations (0036, 0037)...");
-    const migrateResult = spawnSyncFn("node", ["db/migrate.mjs"], {
-      env: { ...env, DATABASE_URL: connectionString },
+    const migrateTarget = branchId || branchName || "ephemeral";
+    const migrateResult = spawnSyncFn("node", ["db/migrate.mjs", `--target-branch=${migrateTarget}`], {
+      env: { ...env, DATABASE_URL: connectionString, TARGET_BRANCH: migrateTarget },
       encoding: "utf-8",
     });
     if (migrateResult.status !== 0) {

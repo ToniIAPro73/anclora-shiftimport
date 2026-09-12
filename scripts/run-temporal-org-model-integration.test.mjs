@@ -531,8 +531,11 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
           if (sql.includes("information_schema.views WHERE")) {
             return { rows: TEMPORAL_VIEWS.map((v) => ({ table_name: v })) };
           }
-          if (sql.includes("routine_name = 'transfer_organization_ownership_temporal'")) {
-            return { rows: [{ routine_name: "transfer_organization_ownership_temporal" }] };
+          if (sql.includes("information_schema.routines")) {
+            return { rows: TEMPORAL_ROUTINES.map((r) => ({ routine_name: r })) };
+          }
+          if (sql.includes("information_schema.triggers")) {
+            return { rows: TEMPORAL_TRIGGERS.map((t) => ({ trigger_name: t })) };
           }
           return { rows: [] };
         },
@@ -591,8 +594,11 @@ describe("Temporal Org Model Runner Safety Guarantees", () => {
           if (sql.includes("information_schema.views WHERE") && sql.includes("ANY")) {
             return { rows: TEMPORAL_VIEWS.map((v) => ({ table_name: v })) };
           }
-          if (sql.includes("routine_name = 'transfer_organization_ownership_temporal'")) {
-            return { rows: [{ routine_name: "transfer_organization_ownership_temporal" }] };
+          if (sql.includes("information_schema.routines")) {
+            return { rows: TEMPORAL_ROUTINES.map((r) => ({ routine_name: r })) };
+          }
+          if (sql.includes("information_schema.triggers")) {
+            return { rows: TEMPORAL_TRIGGERS.map((t) => ({ trigger_name: t })) };
           }
           if (sql.includes("information_schema")) return { rows: [] };
           if (sql.includes("organizations")) return { rows: [{ id: "org-1" }] };
