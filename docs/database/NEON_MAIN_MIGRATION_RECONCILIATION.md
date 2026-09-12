@@ -39,6 +39,14 @@ Antes de cualquier escritura en Neon `main`, se crearon y verificaron ramas de r
    - Parent Timestamp: `2026-09-12T04:48:17Z`
    - Estado: `ready` (Preservada de forma permanente)
 
+3. **Backup Previo a Aplicación de Migración 0038**:
+   - ID: `br-withered-forest-b17sj88w`
+   - Nombre: `backup/pre-0038-application-20260912-124444`
+   - Parent Branch: `br-solitary-thunder-b1hm9low`
+   - Parent LSN: `0/3E219F0`
+   - Parent Timestamp: `2026-09-12T10:44:46Z`
+   - Estado: `ready` (Preservada de forma permanente)
+
 ---
 
 ## 3. Procedimiento de Conciliación Atómica
@@ -118,20 +126,21 @@ La conciliación se realizó mediante una conexión directa no pooled y dentro d
 ## 5. Resultados de la Postverificación
 
 1. **Estado del Ledger (`npm run db:migrate:status`)**:
-   - Total de migraciones del repositorio: 37
-   - Migraciones aplicadas: 37
+   - Total de migraciones del repositorio: 38
+   - Migraciones aplicadas: 38
    - Migraciones pendientes: 0
    - Gaps de secuencia: 0
    - Desconocidas en ledger: 0
    - Checksum mismatches: 0
+   - Checksums verificados contra disco (SHA-256): 38 de 38 (100% exactos)
    - Estado: `UP_TO_DATE` / `READY`
    - Código de salida (exit code): `0`
 
 2. **Equivalencia Catalográfica Normalizada**:
-   - Comparación contra rama efímera generada aplicando secuencialmente `0001`–`0037`.
+   - Comparación contra rama efímera generada aplicando secuencialmente `0001`–`0038`.
    - Tablas: 29 vs 29 (0 discrepancias).
-   - Columnas: 0 discrepancias.
-   - Restricciones: 0 discrepancias.
+   - Columnas: 0 discrepancias (incluyendo columna `checksum` en `_migrations`).
+   - Restricciones: 0 discrepancias (incluyendo `_migrations_checksum_format_chk`).
    - Índices: 0 discrepancias.
    - Vistas: 4 vs 4 (`current_person_roles`, `current_employee_areas`, `current_person_access_scopes`, `current_reporting_relationships`).
    - Rutinas/Funciones: 218 vs 218 (incluyendo funciones de integridad laboral y `transfer_organization_ownership_temporal`).
@@ -139,9 +148,12 @@ La conciliación se realizó mediante una conexión directa no pooled y dentro d
    - Extensiones: Coincidentes (`btree_gist`, `plpgsql`).
 
 3. **Estado de Neon `main` y Migración `0038`**:
-   - Neon `main` permanece exactamente en la migración `0037` (37 migraciones aplicadas en ledger, continuo y datos funcionales intactos).
-   - La migración `0038_migration_ledger_checksums.sql` fue creada en el repositorio y validada al 100% en ramas efímeras hijas acreditadas (incluyendo rollback atómico, verificación de restricción `_migrations_checksum_format_chk`, `NOT NULL` y SHA-256 en el ledger), pero **permanece pendiente de autorización para Neon `main`**.
-   - En `npm run db:migrate:status`, Neon `main` reporta `0038` como 1 migración pendiente (`PENDING`) con estado global `READY` y exit code `0`.
+   - Neon `main` se encuentra actualizado de forma íntegra a la migración `0038` (38 migraciones aplicadas en ledger, continuo, con columna `checksum` `NOT NULL` y datos funcionales 100% intactos).
+   - La migración `0038_migration_ledger_checksums.sql` fue aplicada mediante el runner endurecido con API cerrada (`af6f96e`) tras crear la rama de respaldo time-travel `br-withered-forest-b17sj88w`.
+   - El ledger valida al 100% el triple control:
+     1. Formato estricto regex `^[0-9a-f]{64}$` enforced por base de datos (`_migrations_checksum_format_chk`).
+     2. Verificación de hash SHA-256 en tiempo real entre el contenido del archivo de disco y el valor persistido en `_migrations.checksum`.
+     3. Verificación de integridad cruzada contra el manifiesto canónico `migration-baseline-main.json` para migraciones conciliadas.
 
 ---
 

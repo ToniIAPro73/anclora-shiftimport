@@ -2,10 +2,10 @@
 
 **Fecha de conciliación y cierre**: 2026-09-12  
 **Proyecto Neon**: `holy-cake-85660318`  
-**Rama Neon conciliada**: `main` (`br-solitary-thunder-b1hm9low`)  
+**Rama Neon conciliada y migrada**: `main` (`br-solitary-thunder-b1hm9low`)  
 **Rama base de integración**: `preview/development` (`br-falling-heart-b1d6u2cx`)  
-**Estado final del ledger (`_migrations`)**: **37 de 37 aplicadas (100% continuo, 0 pendientes)**  
-**Equivalencia de catálogo**: **100% PASS (29 tablas, 4 vistas, 218 rutinas, 5 triggers)**  
+**Estado final del ledger (`_migrations`)**: **38 de 38 aplicadas (100% continuo, 0 pendientes, checksums NOT NULL verificados)**  
+**Equivalencia de catálogo**: **100% PASS (29 tablas, 4 vistas, 218 rutinas, 5 triggers, columna `checksum` + constraint de formato)**  
 
 ---
 
@@ -20,12 +20,13 @@ El 2026-09-12 se llevó a cabo una **conciliación formal y atómica**:
 - Se materializó de forma exacta la migración `0002_password_reset.sql` (creando la tabla `password_reset_tokens` y su índice `password_reset_tokens_user_idx`).
 - Se registraron en `_migrations` las migraciones `0002`–`0037` dentro de una única transacción atómica, sin re-ejecutar el DDL de `0003`–`0037`.
 - Se verificó la equivalencia normalizada completa de catálogos y la integridad total de los datos operativos preexistentes.
+- Posteriormente, tras endurecer de forma integral el runner de migraciones (`af6f96e`), validar ramas efímeras y certificar rollback atómico, se aplicó con éxito la migración `0038_migration_ledger_checksums.sql`.
 
 ---
 
 ## 2. Salvaguardas y Ramas de Respaldo Preservadas
 
-Se mantienen dos ramas de respaldo independientes tipo time-travel en Neon:
+Se mantienen tres ramas de respaldo independientes tipo time-travel en Neon:
 
 1. **Backup Pre-Auditoría Inicial**:
    - ID: `br-misty-mud-b1rxqbgt`
@@ -41,6 +42,14 @@ Se mantienen dos ramas de respaldo independientes tipo time-travel en Neon:
    - Rama padre: `br-solitary-thunder-b1hm9low`
    - Parent LSN: `0/3D031F0`
    - Parent Timestamp: `2026-09-12T04:48:17Z`
+   - Estado: `ready` (Preservada de forma permanente)
+
+3. **Backup Previo a Aplicación de Migración 0038**:
+   - ID: `br-withered-forest-b17sj88w`
+   - Nombre: `backup/pre-0038-application-20260912-124444`
+   - Rama padre: `br-solitary-thunder-b1hm9low`
+   - Parent LSN: `0/3E219F0`
+   - Parent Timestamp: `2026-09-12T10:44:46Z`
    - Estado: `ready` (Preservada de forma permanente)
 
 ---
@@ -123,15 +132,20 @@ Dicho manifiesto constituye la **fuente canónica única de verdad** para los ch
 El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` de forma estricta (fail-closed): valida la presencia del archivo, integridad JSON, unicidad de entradas, formato de 64 caracteres hexadecimales, versionado y método. Cualquier discrepancia o ausencia de registro produce de inmediato el estado `CHECKSUM_MISMATCH` o `CHECKSUM_UNVERIFIABLE` y un código de salida `1`.
 
 ### 5.1 Estado Actual de Neon `main` y Migración `0038`
-- **Neon `main` permanece exactamente en la migración `0037`**: El ledger `_migrations` en `main` contiene 37 registros continuos y válidos.
-- **Migración `0038_migration_ledger_checksums.sql` preparada en repositorio**:
+- **Neon `main` actualizado a la migración `0038`**: El ledger `_migrations` en `main` contiene 38 registros continuos, íntegros y válidos.
+- **Migración `0038_migration_ledger_checksums.sql` aplicada con éxito**:
+  - Respaldo time-travel previo creado y preservado: `br-withered-forest-b17sj88w` (`backup/pre-0038-application-20260912-124444`, parent LSN `0/3E219F0`).
+  - Ejecutada mediante el runner endurecido con API cerrada (`af6f96e`) y conexión directa no pooled.
   - Introduce la columna `checksum` en `_migrations` (`ALTER TABLE _migrations ADD COLUMN checksum TEXT;`).
   - Retroalimenta los 37 checksums canónicos SHA-256 de las migraciones `0001`–`0037`.
   - Impone la restricción de formato `_migrations_checksum_format_chk` (`CHECK (checksum ~ '^[0-9a-f]{64}$')`).
   - Fija la columna como obligatoria (`ALTER TABLE _migrations ALTER COLUMN checksum SET NOT NULL;`).
-  - No contiene sentencias `BEGIN` ni `COMMIT` internas.
-- **Validada en ramas efímeras**: Ha sido probada con éxito total en ramas efímeras acreditadas derivadas de `preview/development`, certificando rollback atómico e inserción íntegra.
-- **Pendiente en Neon `main`**: **NO ha sido aplicada a Neon `main`**. Al inspeccionar Neon `main` con `node db/migrate.mjs --status`, se reporta exactamente 1 migración pendiente (`PENDING`), con estado global `READY` y código de salida `0`.
+  - Registra atómicamente el checksum SHA-256 de `0038`.
+- **Verificación en Neon `main`**:
+  - `npm run db:migrate:status` (o `node db/migrate.mjs --status` con credenciales de `main`) reporta: 38 migraciones en repositorio, 38 aplicadas, 0 pendientes, 0 gaps, 0 desconocidas, estado `UP_TO_DATE`, exit code `0`.
+  - Verificación de catálogo: columna `checksum` `is_nullable = 'NO'`, `data_type = 'text'`; constraint `_migrations_checksum_format_chk` presente.
+  - Verificación de datos: Todos los 38 hashes coinciden exactamente con los archivos del repositorio en disco.
+  - Preservación funcional 100%: Los recuentos de tablas funcionales (organizaciones: 1, usuarios: 2, membresías: 2, etc.) permanecieron exactamente idénticos tras la migración.
 
 ### 5.2 Normalización de Wrappers Legacy y Prohibición de Control Transaccional (>= 0038)
 - **Normalizador de SQL Legacy (`normalizeMigrationSql`)**: Históricamente, 29 migraciones heredadas (`0007`–`0013`, `0015`–`0036`) contenían wrappers exteriores `BEGIN;` y `COMMIT;`. Para evitar transacciones anidadas o confirmaciones prematuras del DDL antes de registrar el ledger, el runner utiliza un tokenizer SQL consciente de comentarios (`--` y `/* ... */`), cadenas de texto y bloques dólar (`$$`). En migraciones `0001`–`0037`, elimina de forma limpia el wrapper exterior y ejecuta el DDL dentro de la transacción unificada del runner.
