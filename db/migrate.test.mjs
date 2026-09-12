@@ -35,7 +35,13 @@ import {
   MIGRATION_SENTINELS,
   MIGRATIONS_DIR,
   BASELINE_MANIFEST_PATH,
+  LEGACY_BASELINE_MIGRATION_NAMES,
 } from './migrate.mjs';
+
+const repositoryMigrationFiles = () => fs.readdirSync(MIGRATIONS_DIR)
+  .filter((f) => /^\d{4}_[a-z0-9_]+\.sql$/.test(f))
+  .sort();
+const latestMigrationName = () => repositoryMigrationFiles().at(-1);
 
 function createFlexibleMockSql({
   tableExists = false,
@@ -309,7 +315,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
   });
 
   describe('3. Read-Only Status & State Classification (inspectMigrationsStatus)', () => {
-    it('reports READY on clean database (tableExists: false) with 38 pending and exitCode 0', async () => {
+    it('reports READY on clean database (tableExists: false) with all repository migrations pending and exitCode 0', async () => {
       const mockSql = createFlexibleMockSql({
         tableExists: false,
         appliedRows: [],
@@ -321,7 +327,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
       expect(status.exitCode).toBe(0);
       expect(status.tableExists).toBe(false);
       expect(status.applied.length).toBe(0);
-      expect(status.pending.length).toBe(38);
+      expect(status.pending.length).toBe(repositoryMigrationFiles().length);
       expect(status.materializedUnregistered.length).toBe(0);
       expect(status.canMigrateNormally).toBe(true);
 
@@ -331,9 +337,9 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
       expect(writeCalls.length).toBe(0);
     });
 
-    it('reports READY when 0001-0037 are applied and 0038 is pending (matches Neon main state)', async () => {
+    it('reports READY when the legacy baseline is applied and post-baseline migrations are pending', async () => {
       const dir = path.join(process.cwd(), 'db/migrations');
-      const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql') && f < '0038_').sort();
+      const files = repositoryMigrationFiles().filter((f) => Number(f.slice(0, 4)) <= LEGACY_BASELINE_MIGRATION_NAMES.length);
 
       const mockSql = createFlexibleMockSql({
         tableExists: true,
@@ -390,14 +396,14 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
       expect(status.state).toBe('READY');
       expect(status.exitCode).toBe(0);
       expect(status.applied.length).toBe(37);
-      expect(status.pending.length).toBe(1);
+      expect(status.pending.length).toBe(repositoryMigrationFiles().length - files.length);
       expect(status.pending[0].name).toBe('0038_migration_ledger_checksums.sql');
       expect(status.materializedUnregistered.length).toBe(0);
       expect(status.missingFromDatabase.length).toBe(0);
       expect(status.canMigrateNormally).toBe(true);
     });
 
-    it('reports UP_TO_DATE when all 38 migrations are registered and materialized with checksum column', async () => {
+    it('reports UP_TO_DATE when every repository migration is registered and materialized with checksum column', async () => {
       const dir = path.join(process.cwd(), 'db/migrations');
       const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
 
@@ -428,6 +434,8 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'memberships',
           'employees',
           '_migrations',
+          'user_access_invitations',
+          'user_preferences',
         ],
         columns: [
           'organizations.plan',
@@ -444,6 +452,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'imports.outcome_reason',
           'shifts.shift_type',
           '_migrations.checksum',
+          'users.account_status',
         ],
         routines: ['transfer_organization_ownership_temporal'],
         indexes: [
@@ -462,7 +471,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
       const status = await inspectMigrationsStatus(mockSql);
       expect(status.state).toBe('UP_TO_DATE');
       expect(status.exitCode).toBe(0);
-      expect(status.applied.length).toBe(38);
+      expect(status.applied.length).toBe(repositoryMigrationFiles().length);
       expect(status.pending.length).toBe(0);
       expect(status.canMigrateNormally).toBe(true);
     });
@@ -796,14 +805,14 @@ COMMIT;
       );
     });
 
-    it('rejects new migrations (>= 0038) if they contain internal transaction control statements', () => {
+    it('rejects post-baseline migrations if they contain internal transaction control statements', () => {
       const sql = `
         BEGIN;
         ALTER TABLE _migrations ADD COLUMN test INT;
         COMMIT;
       `;
-      expect(() => normalizeMigrationSql(sql, '0038_migration_ledger_checksums.sql')).toThrow(
-        /forbidden transaction control statement 'BEGIN'.*0038/i
+      expect(() => normalizeMigrationSql(sql, latestMigrationName())).toThrow(
+        /forbidden transaction control statement 'BEGIN'/i
       );
     });
   });
@@ -1013,14 +1022,14 @@ COMMIT;
           projectId: TEST_PROJECT_ID,
         });
 
-        expect(res.appliedCount).toBe(1);
+        expect(res.appliedCount).toBe(repositoryMigrationFiles().length - LEGACY_BASELINE_MIGRATION_NAMES.length);
         expect(connectCalled).toBe(true);
         expect(endCalled).toBe(true);
 
         const beginQueries = queriesExecuted.filter((q) => q.text === 'BEGIN');
         const commitQueries = queriesExecuted.filter((q) => q.text === 'COMMIT');
-        expect(beginQueries.length).toBe(1);
-        expect(commitQueries.length).toBe(1);
+        expect(beginQueries.length).toBe(repositoryMigrationFiles().length - LEGACY_BASELINE_MIGRATION_NAMES.length);
+        expect(commitQueries.length).toBe(repositoryMigrationFiles().length - LEGACY_BASELINE_MIGRATION_NAMES.length);
       } finally {
         mockExecFileSyncImpl = null;
         connectSpy.mockRestore();
@@ -1222,7 +1231,7 @@ COMMIT;
       const mockStatus = {
         state: 'RECONCILIATION_REQUIRED',
         tableExists: true,
-        totalRepoFiles: 38,
+        totalRepoFiles: repositoryMigrationFiles().length,
         applied: [{ name: '0001_init.sql' }],
         pending: [{ name: '0002_password_reset.sql', sha256: 'abc1234567890' }],
         materializedUnregistered: [{ name: '0003_login_attempts.sql' }],
@@ -1256,7 +1265,7 @@ COMMIT;
       const mockStatus = {
         state: 'READY',
         tableExists: true,
-        totalRepoFiles: 38,
+        totalRepoFiles: repositoryMigrationFiles().length,
         applied: [],
         pending: [],
         materializedUnregistered: [],
@@ -1283,11 +1292,74 @@ COMMIT;
   describe('8. Repository Migration Registry & Sequence Validation (validateRepositoryMigrations)', () => {
     it('passes for canonical repository files and baseline manifest', async () => {
       const result = await validateRepositoryMigrations();
-      expect(result.files.length).toBe(38);
+      expect(result.files.length).toBe(repositoryMigrationFiles().length);
       expect(result.files[0]).toBe('0001_init.sql');
-      expect(result.files[37]).toBe('0038_migration_ledger_checksums.sql');
+      expect(result.files.at(-1)).toBe(latestMigrationName());
       expect(result.baselineMap.size).toBe(37);
-      expect(result.fileChecksums.size).toBe(38);
+      expect(result.fileChecksums.size).toBe(repositoryMigrationFiles().length);
+    });
+
+    it.each([
+      ['missing legacy entry', (list) => list.slice(0, -1), /legacy migrations/],
+      ['duplicate legacy entry', (list) => [...list, { ...list[0] }], /Duplicate entry for migration '0001_init.sql'/],
+      ['foreign post-baseline entry', (list) => [...list, {
+        name: '0038_migration_ledger_checksums.sql',
+        sha256: computeMigrationChecksum(fs.readFileSync(path.join(MIGRATIONS_DIR, '0038_migration_ledger_checksums.sql'))),
+        baselineVersion: '0038',
+        reconciliationMethod: 'test',
+      }], /legacy migrations/],
+      ['wrong legacy name', (list) => list.map((entry, index) => index === 0 ? { ...entry, name: '0001_wrong_name.sql' } : entry), /legacy migrations/],
+      ['wrong legacy hash', (list) => list.map((entry, index) => index === 0 ? { ...entry, sha256: 'f'.repeat(64) } : entry), /Checksum mismatch for migration '0001_init.sql'/],
+      ['incomplete legacy sequence', (list) => list.filter((entry) => entry.name !== '0020_shifts_schedule_version.sql'), /legacy migrations/],
+    ])('rejects %s before opening a database connection', async (_label, mutate, expected) => {
+      const original = fs.readFileSync(BASELINE_MANIFEST_PATH, 'utf8');
+      const canonical = JSON.parse(original);
+      fs.writeFileSync(BASELINE_MANIFEST_PATH, JSON.stringify(mutate(canonical)));
+      const connectSpy = vi.spyOn(Client.prototype, 'connect').mockImplementation(async () => {});
+      const querySpy = vi.spyOn(Client.prototype, 'query').mockImplementation(async () => []);
+      try {
+        await expect(validateRepositoryMigrations()).rejects.toThrow(expected);
+        expect(connectSpy).not.toHaveBeenCalled();
+        expect(querySpy).not.toHaveBeenCalled();
+        await expect(runMigrations({
+          connectionString: 'postgresql://invalid.example/neondb',
+          targetBranch: 'tmp-never-connects',
+          projectId: 'holy-cake-85660318',
+        })).rejects.toThrow(expected);
+        expect(connectSpy).not.toHaveBeenCalled();
+        expect(querySpy).not.toHaveBeenCalled();
+      } finally {
+        connectSpy.mockRestore();
+        querySpy.mockRestore();
+        fs.writeFileSync(BASELINE_MANIFEST_PATH, original);
+      }
+    });
+
+    it('rejects a baseline manifest symlink', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-manifest-symlink-'));
+      try {
+        const realPath = path.join(tmpDir, 'real.json');
+        const linkPath = path.join(tmpDir, 'baseline.json');
+        fs.copyFileSync(BASELINE_MANIFEST_PATH, realPath);
+        fs.symlinkSync(realPath, linkPath);
+        await expect(loadBaselineManifest(linkPath)).rejects.toThrow(/symbolic links are forbidden/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects migration symlinks and .sql directories before loading the database', async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-migration-file-kind-'));
+      try {
+        fs.symlinkSync(path.join(MIGRATIONS_DIR, '0001_init.sql'), path.join(tmpDir, '0001_init.sql'));
+        await expect(validateRepositoryMigrations({ migrationsDir: tmpDir })).rejects.toThrow(/symbolic links are forbidden/);
+
+        fs.unlinkSync(path.join(tmpDir, '0001_init.sql'));
+        fs.mkdirSync(path.join(tmpDir, '0001_init.sql'));
+        await expect(validateRepositoryMigrations({ migrationsDir: tmpDir })).rejects.toThrow(/regular file/);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
 
     it('rejects invalid migration filename patterns', async () => {
@@ -1391,9 +1463,7 @@ COMMIT;
 
         await expect(
           validateRepositoryMigrations({ baselineManifestPath: manifestPath })
-        ).rejects.toThrow(
-          /Baseline manifest contains migration '9999_ghost_migration.sql' which does not exist/
-        );
+        ).rejects.toThrow(/exactly cover legacy migrations.*9999_ghost_migration\.sql/);
       } finally {
         fs.rmSync(tmpManifest, { recursive: true, force: true });
       }
@@ -1428,7 +1498,7 @@ COMMIT;
       expect(() => scanSqlTokens('SELECT $func$ unclosed named dollar;')).toThrow(/Unterminated dollar-quoted block/);
     });
 
-    it('normalizeMigrationSql blocks all 11 transaction control statements for migrations >= 0038', () => {
+    it('normalizeMigrationSql blocks all transaction control statements after the legacy baseline', () => {
       const forbiddenVariants = [
         'BEGIN',
         'START TRANSACTION',
@@ -1446,7 +1516,7 @@ COMMIT;
 
       for (const stmt of forbiddenVariants) {
         const sql = `${stmt};\nCREATE TABLE test_table (id INT);`;
-        expect(() => normalizeMigrationSql(sql, '0038_migration_ledger_checksums.sql')).toThrow(
+        expect(() => normalizeMigrationSql(sql, latestMigrationName())).toThrow(
           /forbidden transaction control statement/i
         );
       }
@@ -1466,13 +1536,24 @@ COMMIT;
           ) STORED
         );
       `;
-      const result = normalizeMigrationSql(sqlWithCase, '0038_migration_ledger_checksums.sql');
+      const result = normalizeMigrationSql(sqlWithCase, latestMigrationName());
       expect(result.hadWrapper).toBe(false);
       expect(result.normalizedSql).toBe(sqlWithCase);
     });
 
+    it('does not treat transaction words inside non-transaction SQL as controls', () => {
+      const sql = `
+        CREATE TABLE "BEGIN" ("COMMIT" TEXT, note TEXT);
+        INSERT INTO "BEGIN" ("COMMIT", note) VALUES ('ROLLBACK', 'SAVEPOINT');
+        CREATE OR REPLACE PROCEDURE p() LANGUAGE SQL BEGIN ATOMIC
+          SELECT CASE WHEN TRUE THEN 'ABORT' ELSE 'RELEASE' END;
+        END;
+      `;
+      expect(() => normalizeMigrationSql(sql, latestMigrationName())).not.toThrow();
+    });
+
     it('normalizeMigrationSql fails closed if normalized SQL is empty', () => {
-      expect(() => normalizeMigrationSql('   \n-- only comments\n   ', '0038_test.sql')).toThrow(
+      expect(() => normalizeMigrationSql('   \n-- only comments\n   ', latestMigrationName())).toThrow(
         /Normalized migration SQL is empty/
       );
       expect(() => normalizeMigrationSql('BEGIN;\n-- wrapper with nothing inside\nCOMMIT;', '0010_test.sql')).toThrow(

@@ -10,6 +10,10 @@ const WINDOW_MS = 5 * 60 * 1000;
 const MAX_ATTEMPTS_PER_EMAIL = 10;
 const MAX_ATTEMPTS_PER_IP = 30;
 
+export function isPasswordLoginAllowed(user, password) {
+  return user?.account_status === 'ACTIVE' && verifyPassword(String(password ?? ''), user.password_hash);
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -32,13 +36,13 @@ export default async function handler(req, res) {
     }
 
     const rows = await sql`
-      SELECT id, email, display_name, password_hash
+      SELECT id, email, display_name, password_hash, account_status
       FROM users WHERE lower(email) = ${normalizedEmail}
     `;
     const user = rows[0];
     // Generic message for both unknown email and wrong password
     // (no user enumeration).
-    if (!user || !verifyPassword(String(password ?? ''), user.password_hash)) {
+    if (!isPasswordLoginAllowed(user, password)) {
       await Promise.all([
         recordFailedLogin(sql, ipKey, { windowMs: WINDOW_MS, maxAttempts: MAX_ATTEMPTS_PER_IP }),
         recordFailedLogin(sql, emailKey, { windowMs: WINDOW_MS, maxAttempts: MAX_ATTEMPTS_PER_EMAIL }),

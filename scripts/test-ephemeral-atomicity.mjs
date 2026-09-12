@@ -1,15 +1,16 @@
 /**
  * scripts/test-ephemeral-atomicity.mjs
  *
- * Verifies real database transaction atomicity, rollback, and migration 0038
+ * Verifies real database transaction atomicity, rollback, and the current
+ * repository migration chain
  * in an accredited, isolated Neon ephemeral child branch.
  *
  * Guarantees:
  * 1. ZERO writes or connections to Neon 'main'.
- * 2. Ephemeral branch created as child of 'preview/development'.
+ * 2. Ephemeral branch created as child of the explicitly selected accredited branch.
  * 3. Accreditation of branch identity and unpooled connection prior to execution.
  * 4. DDL + intentional ledger failure rolls back completely (probe table absent, ledger absent).
- * 5. Migration 0038 applies atomically with ledger checksums backfilled and NOT NULL.
+ * 5. The complete repository migration chain applies atomically with checksums preserved.
  * 6. Branch is destroyed in finally; deletion failure is fail-closed with residual branchId logged.
  */
 
@@ -27,11 +28,13 @@ import {
   accreditDestinationBranch,
   runMigrations,
   inspectMigrationsStatus,
+  extractSchemaCatalog,
+  isMigrationMaterialized,
   getNeonProjectId,
   MIGRATIONS_DIR,
 } from '../db/migrate.mjs';
 
-const BASE_BRANCH_ID = 'br-falling-heart-b1d6u2cx'; // preview/development
+const BASE_BRANCH_ID = process.env.MIGRATION_TEST_BASE_BRANCH_ID || 'br-falling-heart-b1d6u2cx'; // preview/development by default
 
 function getRequiredProjectId() {
   const projectId = getNeonProjectId();
@@ -102,13 +105,30 @@ function deleteTestEphemeralBranch(projectId, branchId) {
   }
 }
 
+function useExistingAccreditedBranch(projectId) {
+  const branchId = process.env.MIGRATION_TEST_EXISTING_BRANCH_ID;
+  const branchName = process.env.MIGRATION_TEST_EXISTING_BRANCH_NAME;
+  if (!branchId || !branchName) return null;
+  const connectionString = execFileSync(
+    'npx',
+    ['neonctl', 'connection-string', branchId, '--project-id', projectId, '--database-name', 'neondb'],
+    { encoding: 'utf-8' }
+  ).trim();
+  return { branchId, branchName, connectionString, ownsBranch: false };
+}
+
 async function runRealAtomicityTest() {
   const projectId = getRequiredProjectId();
+  const repoFiles = fs.readdirSync(MIGRATIONS_DIR)
+    .filter((f) => /^\d{4}_[a-z0-9_]+\.sql$/.test(f))
+    .sort();
+  const expectedCount = repoFiles.length;
+  const firstPendingName = (appliedNames) => repoFiles.find((name) => !appliedNames.includes(name));
   let ephemeralInfo = null;
 
   try {
     // 1. Create ephemeral child branch of preview/development
-    ephemeralInfo = createTestEphemeralBranch(projectId, BASE_BRANCH_ID);
+    ephemeralInfo = useExistingAccreditedBranch(projectId) || createTestEphemeralBranch(projectId, BASE_BRANCH_ID);
     const { branchId, branchName, connectionString } = ephemeralInfo;
 
     // 2. Accredit branch before connection
@@ -155,8 +175,9 @@ async function runRealAtomicityTest() {
       await triggerClient.end();
     }
 
-    // 5. Invoke public runMigrations() — must attempt to apply 0038, fail on ledger insert, and roll back completely
-    console.log('[test] Invoking public runMigrations() — expecting trigger failure on 0038 insertion...');
+    // 5. Invoke public runMigrations() — the first pending migration must fail
+    // at ledger insertion and roll back completely.
+    console.log('[test] Invoking public runMigrations() — expecting trigger failure during ledger insertion...');
     let errorCaught = null;
     try {
       await runMigrations({
@@ -179,33 +200,19 @@ async function runRealAtomicityTest() {
     const verifyClient = new Client(connectionString);
     await verifyClient.connect();
     try {
-      // The first pending migration was 0036, which creates organization_people
-      const tableRes = await verifyClient.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'organization_people'"
-      );
-      const tableExists = (Array.isArray(tableRes) ? tableRes : tableRes.rows || []).length > 0;
-      if (tableExists) {
-        throw new Error('ATOMICITY FAILURE: organization_people table exists after transaction rollback!');
+      const catalog = await extractSchemaCatalog(verifyClient);
+      const firstPending = firstPendingName(appliedNames);
+      if (firstPending && isMigrationMaterialized(firstPending, catalog)) {
+        throw new Error(`ATOMICITY FAILURE: sentinel for ${firstPending} exists after transaction rollback!`);
       }
-      console.log('[test] PASS: Table organization_people absent after rollback.');
+      console.log(`[test] PASS: First pending migration ${firstPending || '(none)'} left no materialized sentinel.`);
 
-      const colRes = await verifyClient.query(
-        "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'"
-      );
-      const colExists = (Array.isArray(colRes) ? colRes : colRes.rows || []).length > 0;
-      if (colExists) {
-        throw new Error('ATOMICITY FAILURE: _migrations.checksum column exists after transaction rollback!');
-      }
-      console.log('[test] PASS: Column _migrations.checksum absent after rollback.');
-
-      const ledgerRes = await verifyClient.query(
-        "SELECT 1 FROM _migrations WHERE name = '0036_temporal_organizational_model.sql'"
-      );
+      const ledgerRes = await verifyClient.query('SELECT 1 FROM _migrations WHERE name = $1', [firstPending]);
       const ledgerExists = (Array.isArray(ledgerRes) ? ledgerRes : ledgerRes.rows || []).length > 0;
       if (ledgerExists) {
-        throw new Error('ATOMICITY FAILURE: 0036_temporal_organizational_model.sql recorded in _migrations after rollback!');
+        throw new Error(`ATOMICITY FAILURE: ${firstPending} recorded in _migrations after rollback!`);
       }
-      console.log('[test] PASS: 0036_temporal_organizational_model.sql absent from _migrations after rollback.');
+      console.log(`[test] PASS: ${firstPending || 'No pending migration'} absent from _migrations after rollback.`);
 
       // Verify connection and transaction state
       const pingRes = await verifyClient.query('SELECT 1 AS alive');
@@ -230,13 +237,13 @@ async function runRealAtomicityTest() {
       targetBranch: branchName,
       projectId,
     });
-    const expectedToApply = 38 - appliedNames.length;
+    const expectedToApply = expectedCount - appliedNames.length;
     console.log(`[test] Applied ${runResult.appliedCount} real migrations (expected: ${expectedToApply}).`);
     if (runResult.appliedCount !== expectedToApply) {
       throw new Error(`Expected exactly ${expectedToApply} applied migrations, got ${runResult.appliedCount}`);
     }
 
-    // 9. Verify post-migration status and 0038 checksum column
+    // 9. Verify post-migration status and checksum column
     const finalClient = new Client(connectionString);
     await finalClient.connect();
     try {
@@ -259,10 +266,10 @@ async function runRealAtomicityTest() {
 
       const countRes = await finalClient.query('SELECT count(*)::int AS count FROM _migrations');
       const count = (Array.isArray(countRes) ? countRes : countRes.rows || [])[0]?.count;
-      if (count !== 38) {
-        throw new Error(`Expected 38 migrations in ledger, found: ${count}`);
+      if (count !== expectedCount) {
+        throw new Error(`Expected ${expectedCount} migrations in ledger, found: ${count}`);
       }
-      console.log(`[test] PASS: Ledger contains exactly 38 applied migrations with verified checksums.`);
+      console.log(`[test] PASS: Ledger contains exactly ${expectedCount} applied migrations with verified checksums.`);
     } finally {
       await finalClient.end();
     }
@@ -272,7 +279,7 @@ async function runRealAtomicityTest() {
     console.log('======================================================\n');
   } finally {
     if (ephemeralInfo) {
-      deleteTestEphemeralBranch(projectId, ephemeralInfo.branchId);
+      if (ephemeralInfo.ownsBranch !== false) deleteTestEphemeralBranch(projectId, ephemeralInfo.branchId);
     }
   }
 }

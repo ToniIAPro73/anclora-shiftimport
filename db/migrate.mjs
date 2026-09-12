@@ -4,7 +4,7 @@
 //   Status: node db/migrate.mjs --status (strictly read-only)
 //
 // Connection string comes from process.env (DATABASE_URL or POSTGRES_URL).
-import { readdir, readFile } from 'node:fs/promises';
+import { lstat, readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
@@ -13,6 +13,66 @@ import { neon, Client } from '@neondatabase/serverless';
 
 export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 export const BASELINE_MANIFEST_PATH = join(dirname(fileURLToPath(import.meta.url)), '../docs/database/migration-baseline-main.json');
+
+// This is the historical reconciliation boundary. It is intentionally the
+// only fixed migration limit in the runner; all post-baseline behavior is
+// derived from the repository contents.
+export const LEGACY_BASELINE_MAX_VERSION = 37;
+export const LEGACY_BASELINE_VERSION = String(LEGACY_BASELINE_MAX_VERSION).padStart(4, '0');
+export const LEGACY_BASELINE_MIGRATION_NAMES = Object.freeze([
+  '0001_init.sql',
+  '0002_password_reset.sql',
+  '0003_login_attempts.sql',
+  '0004_organization_plan.sql',
+  '0005_employee_lifecycle.sql',
+  '0006_employee_pending_access.sql',
+  '0007_remove_manager_role.sql',
+  '0008_areas_optional.sql',
+  '0009_format_profiles.sql',
+  '0010_import_history.sql',
+  '0011_import_idempotency.sql',
+  '0012_format_profiles_structurehash_uniqueness.sql',
+  '0013_membership_roles_owner.sql',
+  '0014_single_owner_per_organization.sql',
+  '0015_membership_scoped_area.sql',
+  '0016_organization_audit_events.sql',
+  '0017_schedules.sql',
+  '0018_schedule_versions.sql',
+  '0019_shift_assignments.sql',
+  '0020_shifts_schedule_version.sql',
+  '0021_shift_assignments_import_id.sql',
+  '0022_shift_acknowledgements.sql',
+  '0023_shift_comments.sql',
+  '0024_change_requests.sql',
+  '0025_notifications.sql',
+  '0026_oauth_identities.sql',
+  '0027_approval_policy.sql',
+  '0028_approval_requests.sql',
+  '0029_approval_decision_metadata.sql',
+  '0030_approval_rejection_metadata.sql',
+  '0031_approval_audit_event_types.sql',
+  '0032_change_request_application.sql',
+  '0033_import_outcome.sql',
+  '0034_shift_type_semantics.sql',
+  '0035_operational_assignments.sql',
+  '0036_temporal_organizational_model.sql',
+  '0037_temporal_ownership_transfer_and_labor_integrity.sql',
+]);
+
+async function assertRegularFile(filePath, label) {
+  let stats;
+  try {
+    stats = await lstat(filePath);
+  } catch (err) {
+    throw new Error(`${label} is not accessible at '${filePath}': ${err.message}`);
+  }
+  if (stats.isSymbolicLink()) {
+    throw new Error(`${label} must be a regular file, but symbolic links are forbidden: '${filePath}'`);
+  }
+  if (!stats.isFile()) {
+    throw new Error(`${label} must be a regular file: '${filePath}'`);
+  }
+}
 
 /**
  * Scans SQL string into tokens outside comments, string literals, and dollar-quoted blocks.
@@ -133,11 +193,13 @@ function splitStatements(tokens) {
   const statements = [];
   let currentTokens = [];
   let stmtStart = null;
+  let atomicBodyDepth = 0;
+  let caseDepth = 0;
 
   for (let idx = 0; idx < tokens.length; idx++) {
     const t = tokens[idx];
     if (t.word === ';') {
-      if (currentTokens.length > 0) {
+      if (currentTokens.length > 0 && atomicBodyDepth === 0) {
         statements.push({
           tokens: currentTokens,
           start: stmtStart,
@@ -151,6 +213,24 @@ function splitStatements(tokens) {
         stmtStart = t.start;
       }
       currentTokens.push(t);
+
+      const upper = t.word.toUpperCase();
+      if (
+        upper === 'ATOMIC' &&
+        tokens[idx - 1]?.word.toUpperCase() === 'BEGIN' &&
+        currentTokens[0]?.word.toUpperCase() === 'CREATE' &&
+        currentTokens.some((token) => ['PROCEDURE', 'FUNCTION'].includes(token.word.toUpperCase()))
+      ) {
+        atomicBodyDepth++;
+      } else if (atomicBodyDepth > 0 && upper === 'CASE') {
+        caseDepth++;
+      } else if (atomicBodyDepth > 0 && upper === 'END') {
+        if (caseDepth > 0) {
+          caseDepth--;
+        } else {
+          atomicBodyDepth--;
+        }
+      }
     }
   }
 
@@ -166,32 +246,15 @@ function splitStatements(tokens) {
 }
 
 /**
- * Identifies if a statement is a transaction control statement.
- * Distinguishes standalone END from CASE ... END expressions.
+ * Identifies transaction control only when the command begins the top-level
+ * statement. Keywords inside a non-transaction command are identifiers,
+ * expressions, procedure bodies, or other SQL content and are not controls.
  */
 function getStatementTransactionType(tokens) {
   if (!tokens || tokens.length === 0) return null;
 
-  // Track CASE ... END depth across the statement tokens
-  let caseDepth = 0;
-  const annotated = tokens.map((tok) => {
-    const upper = tok.word.toUpperCase();
-    if (upper === 'CASE') {
-      caseDepth++;
-      return { ...tok, upper, isCaseEnd: false };
-    }
-    if (upper === 'END') {
-      if (caseDepth > 0) {
-        caseDepth--;
-        return { ...tok, upper, isCaseEnd: true };
-      }
-      return { ...tok, upper, isCaseEnd: false };
-    }
-    return { ...tok, upper, isCaseEnd: false };
-  });
-
-  const w0 = annotated[0]?.upper;
-  const w1 = annotated[1]?.upper;
+  const w0 = tokens[0]?.word.toUpperCase();
+  const w1 = tokens[1]?.word.toUpperCase();
 
   if (w0 === 'BEGIN') return 'BEGIN';
   if (w0 === 'START' && w1 === 'TRANSACTION') return 'START TRANSACTION';
@@ -203,9 +266,7 @@ function getStatementTransactionType(tokens) {
     if (w1 === 'PREPARED') return 'ROLLBACK PREPARED';
     return 'ROLLBACK';
   }
-  if (w0 === 'END') {
-    if (!annotated[0].isCaseEnd) return 'END';
-  }
+  if (w0 === 'END') return 'END';
   if (w0 === 'ABORT') return 'ABORT';
   if (w0 === 'SAVEPOINT') return 'SAVEPOINT';
   if (w0 === 'RELEASE') {
@@ -214,32 +275,12 @@ function getStatementTransactionType(tokens) {
   }
   if (w0 === 'PREPARE' && w1 === 'TRANSACTION') return 'PREPARE TRANSACTION';
 
-  // Check if any non-case transaction keyword appears within the statement
-  for (let k = 1; k < annotated.length; k++) {
-    const tok = annotated[k];
-    if (tok.upper === 'BEGIN') return 'BEGIN';
-    if (tok.upper === 'START' && annotated[k + 1]?.upper === 'TRANSACTION') return 'START TRANSACTION';
-    if (tok.upper === 'COMMIT') {
-      if (annotated[k + 1]?.upper === 'PREPARED') return 'COMMIT PREPARED';
-      return 'COMMIT';
-    }
-    if (tok.upper === 'ROLLBACK') {
-      if (annotated[k + 1]?.upper === 'PREPARED') return 'ROLLBACK PREPARED';
-      return 'ROLLBACK';
-    }
-    if (tok.upper === 'END' && !tok.isCaseEnd) return 'END';
-    if (tok.upper === 'ABORT') return 'ABORT';
-    if (tok.upper === 'SAVEPOINT') return 'SAVEPOINT';
-    if (tok.upper === 'RELEASE') return 'RELEASE';
-    if (tok.upper === 'PREPARE' && annotated[k + 1]?.upper === 'TRANSACTION') return 'PREPARE TRANSACTION';
-  }
-
   return null;
 }
 
 /**
  * Normalizes migration SQL by safely removing legacy top-level BEGIN and COMMIT wrappers.
- * Enforces strict prohibition of internal transaction control for migrations >= 0038.
+ * Enforces strict prohibition of internal transaction control after the legacy baseline.
  * Fails closed on syntax errors, unbalanced wrappers, and empty normalized SQL.
  */
 export function normalizeMigrationSql(sql, migrationName = '') {
@@ -273,18 +314,18 @@ export function normalizeMigrationSql(sql, migrationName = '') {
     }
   }
 
-  // Enforce prohibition for migrations >= 0038
-  if (num !== null && num >= 38) {
+  // Enforce prohibition for migrations after the legacy baseline.
+  if (num !== null && num > LEGACY_BASELINE_MAX_VERSION) {
     if (txStatements.length > 0) {
       const first = txStatements[0];
       throw new Error(
-        `Migration '${migrationName}' contains forbidden transaction control statement '${first.type}'. Migrations from 0038 onwards must not manage transactions internally.`
+        `Migration '${migrationName}' contains forbidden transaction control statement '${first.type}'. Migrations after the legacy baseline must not manage transactions internally.`
       );
     }
     return { normalizedSql: sql, hadWrapper: false };
   }
 
-  // For legacy migrations (< 0038):
+  // For legacy migrations through the historical baseline:
   if (txStatements.length === 0) {
     return { normalizedSql: sql, hadWrapper: false };
   }
@@ -389,6 +430,14 @@ export function computeMigrationChecksum(content) {
  * Throws on missing file, invalid JSON, duplicate entries, or malformed fields.
  */
 export async function loadBaselineManifest(manifestPath = BASELINE_MANIFEST_PATH) {
+  try {
+    await assertRegularFile(manifestPath, 'Baseline manifest');
+  } catch (err) {
+    if (err.message.includes('not accessible')) {
+      throw new Error(`Baseline manifest file not found or inaccessible at '${manifestPath}': ${err.message}`);
+    }
+    throw err;
+  }
   let raw;
   try {
     raw = await readFile(manifestPath, 'utf8');
@@ -438,6 +487,21 @@ export async function loadBaselineManifest(manifestPath = BASELINE_MANIFEST_PATH
     }
 
     map.set(name, entry);
+  }
+
+  const actualNames = [...map.keys()].sort();
+  const expectedNames = [...LEGACY_BASELINE_MIGRATION_NAMES].sort();
+  const unexpected = actualNames.filter((name) => !expectedNames.includes(name));
+  const missing = expectedNames.filter((name) => !actualNames.includes(name));
+  if (unexpected.length > 0 || missing.length > 0) {
+    throw new Error(
+      `Baseline manifest must exactly cover legacy migrations ${LEGACY_BASELINE_MIGRATION_NAMES[0]} through ${LEGACY_BASELINE_MIGRATION_NAMES.at(-1)}; missing=[${missing.join(', ')}], unexpected=[${unexpected.join(', ')}]`
+    );
+  }
+  if (parsed.length !== LEGACY_BASELINE_MIGRATION_NAMES.length) {
+    throw new Error(
+      `Baseline manifest must contain exactly ${LEGACY_BASELINE_MIGRATION_NAMES.length} legacy migrations (${LEGACY_BASELINE_MIGRATION_NAMES[0]} through ${LEGACY_BASELINE_MIGRATION_NAMES.at(-1)}); found ${parsed.length}`
+    );
   }
 
   return map;
@@ -493,6 +557,10 @@ export const MIGRATION_SENTINELS = {
   '0037_temporal_ownership_transfer_and_labor_integrity.sql': (cat) => cat.routines.has('transfer_organization_ownership_temporal'),
   '0038_migration_ledger_checksums.sql': (cat) =>
     cat.columns.has('_migrations.checksum') && cat.constraints.has('_migrations_checksum_format_chk'),
+  '0039_user_access_invitations_and_preferences.sql': (cat) =>
+    cat.tables.has('user_access_invitations') &&
+    cat.tables.has('user_preferences') &&
+    cat.columns.has('users.account_status'),
 };
 
 /**
@@ -510,7 +578,15 @@ export async function validateRepositoryMigrations({
   for (const entry of dirEntries) {
     const name = entry.name;
     if (name.startsWith('.')) continue; // ignore hidden files e.g. .DS_Store
-    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+    if (entry.isSymbolicLink()) {
+      throw new Error(`Migration entries must be regular files; symbolic links are forbidden: '${join(migrationsDir, name)}'`);
+    }
+    if (!entry.isFile()) {
+      if (name.endsWith('.sql')) {
+        throw new Error(`Migration file must be a regular file: '${join(migrationsDir, name)}'`);
+      }
+      continue;
+    }
 
     if (!/^\d{4}_[a-z0-9_]+\.sql$/.test(name)) {
       throw new Error(
@@ -580,7 +656,9 @@ export async function validateRepositoryMigrations({
   const baselineMap = await loadBaselineManifest(baselineManifestPath);
   const fileChecksums = new Map();
   for (const file of files) {
-    const content = await readFile(join(migrationsDir, file));
+    const filePath = join(migrationsDir, file);
+    await assertRegularFile(filePath, `Migration '${file}'`);
+    const content = await readFile(filePath);
     fileChecksums.set(file, computeMigrationChecksum(content));
   }
 
@@ -1280,13 +1358,21 @@ async function _executeMigrationsOnClient(
 
     console.log(`apply ${file}`);
 
-    await client.query('BEGIN');
-    try {
-      await client.query(normalizedSql);
-      if (file === '0038_migration_ledger_checksums.sql') {
-        hasChecksumCol = true;
+      await client.query('BEGIN');
+      try {
+        await client.query(normalizedSql);
+      // The checksum column is introduced by a migration in the chain. Read
+      // the catalog after its DDL instead of coupling the runner to a version
+      // number, so every later migration automatically uses the checksum
+      // ledger.
+      if (!hasChecksumCol) {
+        const afterDdl = await client.query(`
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'
+        `);
+        hasChecksumCol = (Array.isArray(afterDdl) ? afterDdl : afterDdl?.rows || []).length > 0;
       }
-      if (hasChecksumCol || file >= '0038_') {
+      if (hasChecksumCol) {
         await client.query(
           'INSERT INTO _migrations (name, checksum) VALUES ($1, $2)',
           [file, fileChecksum]

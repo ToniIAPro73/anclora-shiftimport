@@ -82,10 +82,11 @@ export async function resolveContext(req, sql) {
   }
 
   const rows = await sql`
-    SELECT u.id, u.email, u.display_name, s.expires_at
+    SELECT u.id, u.email, u.display_name, u.account_status, s.expires_at
     FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.token_hash = ${hashToken(token)}
+      AND u.account_status = 'ACTIVE'
       AND s.expires_at > NOW()
   `;
   if (rows.length === 0) {

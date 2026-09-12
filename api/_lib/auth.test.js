@@ -15,7 +15,7 @@ function makeAuthFakeSql({ session = null, memberships = [], employees = [] } = 
     if (text.includes('FROM sessions')) {
       return Promise.resolve(
         session && session.token_hash === values[0] && new Date(session.expires_at) > new Date()
-          ? [{ id: session.user_id, email: 'u@example.com', display_name: 'U', expires_at: session.expires_at }]
+          ? [{ id: session.user_id, email: 'u@example.com', display_name: 'U', account_status: 'ACTIVE', expires_at: session.expires_at }]
           : [],
       );
     }

@@ -147,9 +147,9 @@ El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` 
   - Verificación de datos: Todos los 38 hashes coinciden exactamente con los archivos del repositorio en disco.
   - Preservación funcional 100%: Los recuentos de tablas funcionales (organizaciones: 1, usuarios: 2, membresías: 2, etc.) permanecieron exactamente idénticos tras la migración.
 
-### 5.2 Normalización de Wrappers Legacy y Prohibición de Control Transaccional (>= 0038)
+### 5.2 Normalización de Wrappers Legacy y Prohibición de Control Transaccional (después del baseline legacy)
 - **Normalizador de SQL Legacy (`normalizeMigrationSql`)**: Históricamente, 29 migraciones heredadas (`0007`–`0013`, `0015`–`0036`) contenían wrappers exteriores `BEGIN;` y `COMMIT;`. Para evitar transacciones anidadas o confirmaciones prematuras del DDL antes de registrar el ledger, el runner utiliza un tokenizer SQL consciente de comentarios (`--` y `/* ... */`), cadenas de texto y bloques dólar (`$$`). En migraciones `0001`–`0037`, elimina de forma limpia el wrapper exterior y ejecuta el DDL dentro de la transacción unificada del runner.
-- **Prohibición Estricta en Migraciones >= 0038**: A partir de la migración `0038`, está estrictamente prohibido incluir sentencias de control transaccional (`BEGIN`, `COMMIT`, `ROLLBACK`) dentro de los archivos de migración. El runner rechaza de forma fail-closed cualquier migración >= 0038 que contenga estas sentencias en nivel superior.
+- **Prohibición Estricta Después del Baseline Legacy**: A partir de la migración posterior al baseline legacy (`0001`–`0037`), está estrictamente prohibido incluir sentencias de control transaccional (`BEGIN`, `COMMIT`, `ROLLBACK`) dentro de los archivos de migración. El runner rechaza de forma fail-closed cualquier migración posterior al baseline que contenga estas sentencias en nivel superior.
 - **Atomicidad Unificada del Runner**: Cada migración se ejecuta bajo una única transacción gobernada exclusivamente por el runner:
   ```sql
   BEGIN;
@@ -167,4 +167,3 @@ El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` 
 2. **VERIFICACIÓN READ-ONLY PREVIA**: Todo agente o desarrollador debe ejecutar previamente `npm run db:migrate:status`.
 3. **RAMAS EFÍMERAS ACREDITADAS**: Queda prohibido usar ramas persistentes para pruebas de integración. Las suites deben utilizar ramas efímeras creadas a partir de `preview/development`.
 4. **PROTECCIÓN NO ELUDIBLE DE MAIN**: Toda migración que apunte a Neon `main` exige de forma simultánea: `--allow-main-migration`, el ID exacto de rama `--target-branch=br-solitary-thunder-b1hm9low` (no el alias "main") y confirmación explícita `--confirm-main-branch-id=br-solitary-thunder-b1hm9low`.
-

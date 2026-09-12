@@ -1,11 +1,17 @@
 async function findUserByOAuthIdentity(sql, provider, providerAccountId) {
   const rows = await sql`
-    SELECT u.id, u.email, u.display_name
+    SELECT u.id, u.email, u.display_name, u.account_status
     FROM oauth_identities oi
     JOIN users u ON u.id = oi.user_id
     WHERE oi.provider = ${provider} AND oi.provider_account_id = ${providerAccountId}
   `;
-  return rows[0] ?? null;
+  const user = rows[0] ?? null;
+  if (user && user.account_status !== 'ACTIVE') {
+    const error = new Error('Account is not available');
+    error.code = 'ACCOUNT_NOT_ACTIVE';
+    throw error;
+  }
+  return user;
 }
 
 async function linkOAuthIdentity(sql, userId, identity) {
@@ -31,9 +37,14 @@ export async function loginWithExternalIdentity(sql, identity) {
     return linkedUser;
   }
 
-  const existingRows = await sql`SELECT id, email, display_name FROM users WHERE lower(email) = ${email}`;
+  const existingRows = await sql`SELECT id, email, display_name, account_status FROM users WHERE lower(email) = ${email}`;
   const existingUser = existingRows[0];
   if (existingUser) {
+    if (existingUser.account_status !== 'ACTIVE') {
+      const error = new Error('Account is not available');
+      error.code = 'ACCOUNT_NOT_ACTIVE';
+      throw error;
+    }
     await linkOAuthIdentity(sql, existingUser.id, { ...identity, email });
     return existingUser;
   }
