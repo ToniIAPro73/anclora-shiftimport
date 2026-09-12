@@ -10,7 +10,8 @@ import {
   resolveNeonBranchFromConnectionString,
   loadBaselineManifest,
   isMigrationMaterialized,
-  ACCREDITATION_TOKEN,
+  normalizeMigrationSql,
+  scanSqlTokens,
   MIGRATION_SENTINELS,
 } from './migrate.mjs';
 
@@ -89,6 +90,31 @@ function createFlexibleMockSql({
 
 describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
   const TEST_PROJECT_ID = 'holy-cake-85660318';
+
+  const mockEndpoint = {
+    id: 'ep-test-123',
+    host: 'ep-test-123.neon.tech',
+    branch_id: 'br-ephemeral-123',
+  };
+  const mockBranch = {
+    id: 'br-ephemeral-123',
+    name: 'tmp-temporal-test',
+    default: false,
+    primary: false,
+    protected: false,
+  };
+  const mockMainEndpoint = {
+    id: 'ep-main-456',
+    host: 'ep-main-456.neon.tech',
+    branch_id: 'br-solitary-thunder-b1hm9low',
+  };
+  const mockMainBranch = {
+    id: 'br-solitary-thunder-b1hm9low',
+    name: 'main',
+    default: true,
+    primary: true,
+    protected: false,
+  };
 
   describe('1. Checksum Calculation & Fail-Closed Baseline Manifest', () => {
     it('computes exact SHA-256 for a given buffer', () => {
@@ -228,7 +254,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
       // 0031 requires approval_request.created in audit constraint -> FALSE
       expect(isMigrationMaterialized('0031_approval_audit_event_types.sql', catalog0001)).toBe(false);
 
-      // 0038 requires _migrations.checksum -> FALSE
+      // 0038 requires _migrations.checksum and constraint -> FALSE
       expect(isMigrationMaterialized('0038_migration_ledger_checksums.sql', catalog0001)).toBe(false);
     });
 
@@ -238,11 +264,17 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         columns: new Set(['employees.deactivated_at', '_migrations.checksum']),
         indexes: new Set(),
         routines: new Set(),
-        constraints: new Set(['employees_status_check', 'memberships_role_check', 'organization_audit_events_event_type_check']),
+        constraints: new Set([
+          'employees_status_check',
+          'memberships_role_check',
+          'organization_audit_events_event_type_check',
+          '_migrations_checksum_format_chk',
+        ]),
         constraintDefs: new Map([
           ['employees_status_check', "CHECK (status IN ('pending_access', 'active', 'inactive'))"],
           ['memberships_role_check', "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))"],
           ['organization_audit_events_event_type_check', "CHECK (event_type IN ('MEMBER_ADDED', 'approval_request.created'))"],
+          ['_migrations_checksum_format_chk', "CHECK (checksum ~ '^[0-9a-f]{64}$')"],
         ]),
       };
 
@@ -401,6 +433,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
           { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
           { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
+          { conname: '_migrations_checksum_format_chk', def: "CHECK (checksum ~ '^[0-9a-f]{64}$')" },
         ],
       });
 
@@ -440,7 +473,17 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'areas', // from 0008
           'organization_people', // from 0036
         ],
-        routines: ['transfer_organization_ownership_temporal'], // from 0037
+        columns: [
+          'organizations.plan',
+          'employees.deactivated_at',
+          '_migrations.checksum',
+        ],
+        indexes: ['format_profiles_org_structurehash_active_idx'],
+        routines: ['transfer_organization_ownership_temporal'],
+        constraints: [
+          { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
+          { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
+        ],
       });
 
       const status = await inspectMigrationsStatus(mockSql);
@@ -486,30 +529,6 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
   });
 
   describe('4. Destination Branch Accreditation & Connection Safety', () => {
-    const mockEndpoint = {
-      id: 'ep-test-123',
-      host: 'ep-test-123.neon.tech',
-      branch_id: 'br-ephemeral-123',
-    };
-    const mockBranch = {
-      id: 'br-ephemeral-123',
-      name: 'tmp-temporal-test',
-      default: false,
-      primary: false,
-      protected: false,
-    };
-    const mockMainEndpoint = {
-      id: 'ep-main-456',
-      host: 'ep-main-456.neon.tech',
-      branch_id: 'br-solitary-thunder-b1hm9low',
-    };
-    const mockMainBranch = {
-      id: 'br-solitary-thunder-b1hm9low',
-      name: 'main',
-      default: true,
-      primary: true,
-      protected: false,
-    };
 
     it('fails if targetBranch is not specified (disallows generic connection)', () => {
       expect(() =>
@@ -631,7 +650,6 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         branches: [mockMainBranch],
       });
       expect(res.accredited).toBe(true);
-      expect(res[ACCREDITATION_TOKEN]).toBe(true);
       expect(res.branch.id).toBe('br-solitary-thunder-b1hm9low');
     });
 
@@ -645,99 +663,376 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         branches: [mockBranch],
       });
       expect(res.accredited).toBe(true);
-      expect(res[ACCREDITATION_TOKEN]).toBe(true);
       expect(res.branch.id).toBe('br-ephemeral-123');
     });
   });
 
-  describe('5. Atomic Migration Transactions & Unforgeable Accreditation', () => {
-    it('rejects execution if accreditation is forged without ACCREDITATION_TOKEN', async () => {
-      const mockSql = createFlexibleMockSql({ tableExists: false });
-      await expect(
-        runMigrations(mockSql, {
-          accreditation: { accredited: true }, // forged plain object!
-        })
-      ).rejects.toThrow(/Invalid accreditation token: destination branch accreditation cannot be forged or bypassed/);
+  describe('5. Legacy Migration Normalizer (normalizeMigrationSql)', () => {
+    it('preserves line comments and block comments containing BEGIN/COMMIT without treating them as transaction wrappers', () => {
+      const sql = '-- Line comment with BEGIN and COMMIT\n/* Block comment with BEGIN and COMMIT */\nCREATE TABLE comment_test (id INT);';
+      const res = normalizeMigrationSql(sql, '0005_test.sql');
+      expect(res.hadWrapper).toBe(false);
+      expect(res.normalizedSql).toBe(sql);
     });
 
-    it('executes DDL and ledger INSERT atomically inside a BEGIN ... COMMIT block', async () => {
-      const queries = [];
-      const mockSql = createFlexibleMockSql({
-        tableExists: false,
-        onQuery: (text, params) => {
-          queries.push({ text, params });
-        },
-      });
-
-      const accreditedObj = {
-        [ACCREDITATION_TOKEN]: true,
-        accredited: true,
-        branch: { id: 'br-ephemeral-123', name: 'tmp-test' },
-      };
-
-      const res = await runMigrations(mockSql, {
-        accreditation: accreditedObj,
-      });
-
-      expect(res.appliedCount).toBe(38);
-
-      // Verify BEGIN and COMMIT were invoked for every applied migration
-      const beginCount = queries.filter((q) => q.text === 'BEGIN').length;
-      const commitCount = queries.filter((q) => q.text === 'COMMIT').length;
-      expect(beginCount).toBe(38);
-      expect(commitCount).toBe(38);
-
-      // Verify INSERT INTO _migrations occurred within transaction
-      const inserts = queries.filter((q) => q.text.startsWith('INSERT INTO _migrations'));
-      expect(inserts.length).toBe(38);
+    it('ignores strings containing BEGIN or COMMIT keywords', () => {
+      const sql = "INSERT INTO test_tbl (note) VALUES ('BEGIN test', 'COMMIT test');";
+      const res = normalizeMigrationSql(sql, '0005_test.sql');
+      expect(res.hadWrapper).toBe(false);
+      expect(res.normalizedSql).toBe(sql);
     });
 
-    it('rolls back completely if DDL or ledger INSERT fails in transaction', async () => {
-      const queries = [];
-      const mockSql = createFlexibleMockSql({
-        tableExists: false,
-        onQuery: (text) => {
-          queries.push(text);
-          if (text.startsWith('INSERT INTO _migrations')) {
-            throw new Error('Disk quota exceeded on ledger insert');
+    it('ignores BEGIN inside PL/pgSQL dollar-quoted function definitions', () => {
+      const sql = `
+        CREATE OR REPLACE FUNCTION test_func() RETURNS void AS $$
+        BEGIN
+          NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+      `;
+      const res = normalizeMigrationSql(sql, '0037_temporal_ownership_transfer_and_labor_integrity.sql');
+      expect(res.hadWrapper).toBe(false);
+      expect(res.normalizedSql).toBe(sql);
+    });
+
+    it('ignores BEGIN inside anonymous DO $$ blocks', () => {
+      const sql = `
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'test') THEN
+            NULL;
+          END IF;
+        END $$;
+      `;
+      const res = normalizeMigrationSql(sql, '0038_migration_ledger_checksums.sql');
+      expect(res.hadWrapper).toBe(false);
+      expect(res.normalizedSql).toBe(sql);
+    });
+
+    it('returns migration without transaction wrapper as-is', () => {
+      const sql = 'CREATE TABLE standalone (id UUID PRIMARY KEY);\nCREATE INDEX standalone_idx ON standalone (id);';
+      const res = normalizeMigrationSql(sql, '0001_init.sql');
+      expect(res.hadWrapper).toBe(false);
+      expect(res.normalizedSql).toBe(sql);
+    });
+
+    it('correctly removes valid legacy transaction wrapper while preserving surrounding comments and code', () => {
+      const sql = `-- Migration 0007: remove manager role
+-- Historical context
+BEGIN;
+
+ALTER TABLE memberships DROP CONSTRAINT IF EXISTS memberships_role_check;
+ALTER TABLE memberships ADD CONSTRAINT memberships_role_check CHECK (role IN ('ADMIN', 'EMPLOYEE'));
+
+COMMIT;
+-- End of migration
+`;
+      const res = normalizeMigrationSql(sql, '0007_remove_manager_role.sql');
+      expect(res.hadWrapper).toBe(true);
+      expect(res.normalizedSql).not.toContain('BEGIN;');
+      expect(res.normalizedSql).not.toContain('COMMIT;');
+      expect(res.normalizedSql).toContain('-- Migration 0007: remove manager role');
+      expect(res.normalizedSql).toContain('ALTER TABLE memberships ADD CONSTRAINT');
+      expect(res.normalizedSql).toContain('-- End of migration');
+    });
+
+    it('rejects legacy migration with intermediate COMMIT', () => {
+      const sql = `
+        BEGIN;
+        CREATE TABLE part1 (id INT);
+        COMMIT;
+        CREATE TABLE part2 (id INT);
+        COMMIT;
+      `;
+      expect(() => normalizeMigrationSql(sql, '0010_test.sql')).toThrow(
+        /multiple or unbalanced transaction statements/
+      );
+    });
+
+    it('rejects multiple transaction blocks', () => {
+      const sql = `
+        BEGIN;
+        CREATE TABLE a (id INT);
+        COMMIT;
+        BEGIN;
+        CREATE TABLE b (id INT);
+        COMMIT;
+      `;
+      expect(() => normalizeMigrationSql(sql, '0010_test.sql')).toThrow(
+        /multiple or unbalanced transaction statements/
+      );
+    });
+
+    it('rejects migration with explicit ROLLBACK', () => {
+      const sql = `
+        BEGIN;
+        CREATE TABLE doomed (id INT);
+        ROLLBACK;
+      `;
+      expect(() => normalizeMigrationSql(sql, '0010_test.sql')).toThrow(
+        /contains explicit ROLLBACK statement/
+      );
+    });
+
+    it('rejects new migrations (>= 0038) if they contain internal transaction control statements', () => {
+      const sql = `
+        BEGIN;
+        ALTER TABLE _migrations ADD COLUMN test INT;
+        COMMIT;
+      `;
+      expect(() => normalizeMigrationSql(sql, '0038_migration_ledger_checksums.sql')).toThrow(
+        /forbidden transaction control statement 'BEGIN'.*0038/i
+      );
+    });
+  });
+
+  describe('6. Ineludible Destination Accreditation & Atomic Execution in runMigrations', () => {
+    class MockTestClient {
+      constructor(connectionString) {
+        this.connectionString = connectionString;
+        this.connected = false;
+        this.ended = false;
+        this.queries = [];
+      }
+      async connect() {
+        this.connected = true;
+      }
+      async query(text, params = []) {
+        this.queries.push({ text: (text || '').trim(), params });
+        const trimmed = (text || '').trim();
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'")) {
+          return [{ exists: 1 }];
+        }
+        if (trimmed.includes("FROM information_schema.columns WHERE table_schema = 'public'")) {
+          return [
+            { table_name: 'organizations', column_name: 'id' },
+            { table_name: '_migrations', column_name: 'name' },
+            { table_name: '_migrations', column_name: 'applied_at' },
+            { table_name: 'organizations', column_name: 'plan' },
+            { table_name: 'employees', column_name: 'deactivated_at' },
+            { table_name: 'imports', column_name: 'import_mode' },
+            { table_name: 'imports', column_name: 'employee_id' },
+            { table_name: 'memberships', column_name: 'scoped_area_id' },
+            { table_name: 'shifts', column_name: 'schedule_version_id' },
+            { table_name: 'shift_assignments', column_name: 'import_id' },
+            { table_name: 'organizations', column_name: 'approval_policy' },
+            { table_name: 'approval_requests', column_name: 'approved_by_user_id' },
+            { table_name: 'approval_requests', column_name: 'rejected_by_user_id' },
+            { table_name: 'change_requests', column_name: 'requested_start_time' },
+            { table_name: 'imports', column_name: 'outcome_reason' },
+            { table_name: 'shifts', column_name: 'shift_type' },
+          ];
+        }
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public'")) {
+          return [
+            { table_name: 'organizations' },
+            { table_name: 'password_reset_tokens' },
+            { table_name: 'login_attempts' },
+            { table_name: 'areas' },
+            { table_name: 'format_profiles' },
+            { table_name: 'organization_audit_events' },
+            { table_name: 'schedules' },
+            { table_name: 'schedule_versions' },
+            { table_name: 'shift_assignments' },
+            { table_name: 'shift_comments' },
+            { table_name: 'change_requests' },
+            { table_name: 'notifications' },
+            { table_name: 'oauth_identities' },
+            { table_name: 'approval_requests' },
+            { table_name: 'operational_assignments' },
+            { table_name: 'organization_people' },
+            { table_name: 'memberships' },
+            { table_name: 'employees' },
+            { table_name: '_migrations' },
+          ];
+        }
+        if (trimmed.includes('FROM information_schema.routines')) {
+          return [{ routine_name: 'transfer_organization_ownership_temporal' }];
+        }
+        if (trimmed.includes('FROM pg_indexes')) {
+          return [
+            { indexname: 'format_profiles_org_structurehash_active_idx' },
+            { indexname: 'memberships_one_owner_per_org_idx' },
+            { indexname: 'shifts_id_employee_unique_idx' },
+          ];
+        }
+        if (trimmed.includes('FROM pg_constraint')) {
+          return [
+            { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
+            { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
+            { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
+          ];
+        }
+        if (trimmed.includes('SELECT name, applied_at FROM _migrations')) {
+          // Return 37 applied migrations to leave 0038 pending
+          const rows = [];
+          for (let i = 1; i <= 37; i++) {
+            const num = String(i).padStart(4, '0');
+            const file = fs.readdirSync('db/migrations').find((f) => f.startsWith(num));
+            if (file) rows.push({ name: file, applied_at: '2026-09-12T00:00:00Z' });
           }
-        },
-      });
+          return rows;
+        }
+        if (trimmed.startsWith('INSERT INTO _migrations')) {
+          return [{ name: params[0] }];
+        }
+        return [];
+      }
+      async end() {
+        this.ended = true;
+      }
+    }
 
-      const accreditedObj = {
-        [ACCREDITATION_TOKEN]: true,
-        accredited: true,
-        branch: { id: 'br-ephemeral-123', name: 'tmp-test' },
-      };
-
+    it('rejects write operations on pooled connections (-pooler)', async () => {
       await expect(
-        runMigrations(mockSql, {
-          accreditation: accreditedObj,
+        runMigrations({
+          connectionString: 'postgresql://neondb_owner:secret@ep-test-pooler.neon.tech/neondb?sslmode=require',
+          targetBranch: 'br-ephemeral-123',
+          projectId: TEST_PROJECT_ID,
         })
-      ).rejects.toThrow(/Disk quota exceeded on ledger insert/);
-
-      expect(queries).toContain('ROLLBACK');
+      ).rejects.toThrow(/Migration write operations require a direct unpooled connection/);
     });
 
-    it('refuses execution when database is in RECONCILIATION_REQUIRED state', async () => {
+    it('rejects execution if target branch does not match accredited destination', async () => {
+      await expect(
+        runMigrations({
+          connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
+          targetBranch: 'wrong-target-branch',
+          projectId: TEST_PROJECT_ID,
+          endpoints: [mockEndpoint],
+          branches: [mockBranch],
+          ClientClass: MockTestClient,
+        })
+      ).rejects.toThrow(/Destination accreditation failure/);
+    });
+
+    it('creates Client internally with accredited connectionString, connects, executes, and closes client', async () => {
+      let createdClientInstance = null;
+      class TrackingClient extends MockTestClient {
+        constructor(conn) {
+          super(conn);
+          createdClientInstance = this;
+        }
+      }
+
+      const res = await runMigrations({
+        connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
+        targetBranch: 'tmp-temporal-test',
+        projectId: TEST_PROJECT_ID,
+        endpoints: [mockEndpoint],
+        branches: [mockBranch],
+        ClientClass: TrackingClient,
+      });
+
+      expect(res.appliedCount).toBe(1); // Applied 0038
+      expect(createdClientInstance).not.toBeNull();
+      expect(createdClientInstance.connectionString).toBe(
+        'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require'
+      );
+      expect(createdClientInstance.connected).toBe(true);
+      expect(createdClientInstance.ended).toBe(true);
+
+      // Verify BEGIN and COMMIT wrapped the 0038 execution
+      const beginQueries = createdClientInstance.queries.filter((q) => q.text === 'BEGIN');
+      const commitQueries = createdClientInstance.queries.filter((q) => q.text === 'COMMIT');
+      expect(beginQueries.length).toBe(1);
+      expect(commitQueries.length).toBe(1);
+    });
+
+    it('rolls back completely on query failure during migration execution', async () => {
+      class FailingClient extends MockTestClient {
+        async query(text, params = []) {
+          const trimmed = (text || '').trim();
+          if (trimmed.startsWith('INSERT INTO _migrations')) {
+            throw new Error('Trigger failure on ledger insert');
+          }
+          return super.query(text, params);
+        }
+      }
+
+      await expect(
+        runMigrations({
+          connectionString: 'postgresql://neondb_owner:secret@ep-test-123.neon.tech/neondb?sslmode=require',
+          targetBranch: 'tmp-temporal-test',
+          projectId: TEST_PROJECT_ID,
+          endpoints: [mockEndpoint],
+          branches: [mockBranch],
+          ClientClass: FailingClient,
+        })
+      ).rejects.toThrow(/Trigger failure on ledger insert/);
+    });
+  });
+
+  describe('7. Triple Checksum Validation & Integrity in inspectMigrationsStatus', () => {
+    it('passes triple validation when ledger checksum === manifest checksum === file checksum', async () => {
+      const canonicalManifest = await loadBaselineManifest();
+      const entry0001 = canonicalManifest.get('0001_init.sql');
+
       const mockSql = createFlexibleMockSql({
         tableExists: true,
-        appliedRows: [{ name: '0001_init.sql', applied_at: '2026-08-20T15:35:50Z' }],
-        tables: ['organizations', 'login_attempts'], // 0003 materialized unregistered!
+        tables: ['organizations'],
+        columns: ['organizations.id', '_migrations.name', '_migrations.checksum'],
+        appliedRows: [
+          {
+            name: '0001_init.sql',
+            applied_at: '2026-09-12T00:00:00Z',
+            checksum: entry0001.sha256,
+          },
+        ],
       });
 
-      const accreditedObj = {
-        [ACCREDITATION_TOKEN]: true,
-        accredited: true,
-      };
-
-      await expect(
-        runMigrations(mockSql, {
-          accreditation: accreditedObj,
-        })
-      ).rejects.toThrow(/database is in RECONCILIATION_REQUIRED state/);
+      const status = await inspectMigrationsStatus(mockSql);
+      const item0001 = status.items.find((i) => i.name === '0001_init.sql');
+      expect(item0001.status).toBe('APPLIED');
+      expect(item0001.baselineMatches).toBe(true);
     });
 
+    it('fails with CHECKSUM_MISMATCH and RECONCILIATION_REQUIRED when ledger checksum does not match repo file', async () => {
+      const mockSql = createFlexibleMockSql({
+        tableExists: true,
+        tables: ['organizations'],
+        columns: ['organizations.id', '_migrations.name', '_migrations.checksum'],
+        appliedRows: [
+          {
+            name: '0001_init.sql',
+            applied_at: '2026-09-12T00:00:00Z',
+            checksum: '0000000000000000000000000000000000000000000000000000000000000000', // tampered ledger!
+          },
+        ],
+      });
+
+      const status = await inspectMigrationsStatus(mockSql);
+      expect(status.state).toBe('RECONCILIATION_REQUIRED');
+      expect(status.exitCode).toBe(1);
+      expect(status.checksumMismatches.length).toBeGreaterThan(0);
+      expect(status.checksumMismatches[0].source).toBe('triple_validation_mismatch');
+    });
+
+    it('validates post-baseline migration (not in manifest) against ledger checksum === repo file', async () => {
+      const file0038Body = fs.readFileSync('db/migrations/0038_migration_ledger_checksums.sql', 'utf8');
+      const sha0038 = computeMigrationChecksum(file0038Body);
+
+      const mockSql = createFlexibleMockSql({
+        tableExists: true,
+        tables: ['organizations'],
+        columns: ['organizations.id', '_migrations.name', '_migrations.checksum'],
+        constraints: ['_migrations_checksum_format_chk'],
+        appliedRows: [
+          {
+            name: '0038_migration_ledger_checksums.sql',
+            applied_at: '2026-09-12T00:00:00Z',
+            checksum: sha0038,
+          },
+        ],
+      });
+
+      const status = await inspectMigrationsStatus(mockSql);
+      const item0038 = status.items.find((i) => i.name === '0038_migration_ledger_checksums.sql');
+      expect(item0038.status).toBe('APPLIED');
+    });
+  });
+
+  describe('8. Status Report Formatting and Fail-Closed Resolution', () => {
     it('prints informative messages and does not crash when printing status', () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -769,6 +1064,35 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Result: RECONCILIATION_REQUIRED'));
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Registered migrations without verifiable baseline checksum'));
 
+      logSpy.mockRestore();
+    });
+
+    it('prints UNRESOLVED when branch resolution fails in status mode', () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const mockStatus = {
+        state: 'READY',
+        tableExists: true,
+        totalRepoFiles: 38,
+        applied: [],
+        pending: [],
+        materializedUnregistered: [],
+        missingFromDatabase: [],
+        unknownInLedger: [],
+        checksumMismatches: [],
+        checksumUnverifiable: [],
+        gaps: [],
+      };
+
+      printStatus(mockStatus, {
+        neonInfo: {
+          projectId: 'holy-cake-85660318',
+          unresolved: true,
+          error: 'Endpoint ep-unknown not found in project',
+        },
+      });
+
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Neon Branch: UNRESOLVED (Endpoint ep-unknown not found in project)'));
       logSpy.mockRestore();
     });
   });

@@ -135,12 +135,12 @@ La conciliación se realizó mediante una conexión directa no pooled y dentro d
    - Índices: 0 discrepancias.
    - Vistas: 4 vs 4 (`current_person_roles`, `current_employee_areas`, `current_person_access_scopes`, `current_reporting_relationships`).
    - Rutinas/Funciones: 218 vs 218 (incluyendo funciones de integridad laboral y `transfer_organization_ownership_temporal`).
-   - Triggers: 5 vs 5 (Triggers totales en todo el esquema: 5 / Triggers temporales: 5; los 5 triggers del esquema son exactamente los 5 triggers del modelo temporal introducidos en `0036` y `0037`, sin triggers legacy adicionales).
+   - Triggers: 5 vs 5 (5 objetos trigger definidos en el catálogo que originan 9 filas en `information_schema.triggers` debido a que 4 triggers se registran para eventos `INSERT` y `UPDATE` [4 × 2 = 8] y 1 trigger para `UPDATE` [1]; todos introducidos por `0036` y `0037`, sin triggers legacy adicionales).
    - Extensiones: Coincidentes (`btree_gist`, `plpgsql`).
 
 3. **Estado de Neon `main` y Migración `0038`**:
    - Neon `main` permanece exactamente en la migración `0037` (37 migraciones aplicadas en ledger, continuo y datos funcionales intactos).
-   - La migración `0038_migration_ledger_checksums.sql` fue creada en el repositorio y validada al 100% en ramas efímeras hijas acreditadas (incluyendo rollback atómico y verificación de restricciones `NOT NULL` y SHA-256 en el ledger), pero **permanece pendiente de autorización para Neon `main`**.
+   - La migración `0038_migration_ledger_checksums.sql` fue creada en el repositorio y validada al 100% en ramas efímeras hijas acreditadas (incluyendo rollback atómico, verificación de restricción `_migrations_checksum_format_chk`, `NOT NULL` y SHA-256 en el ledger), pero **permanece pendiente de autorización para Neon `main`**.
    - En `npm run db:migrate:status`, Neon `main` reporta `0038` como 1 migración pendiente (`PENDING`) con estado global `READY` y exit code `0`.
 
 ---

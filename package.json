@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:temporal:integration": "node scripts/run-temporal-org-model-integration.mjs",
+    "test:migration:atomicity": "node scripts/test-ephemeral-atomicity.mjs",
+    "test:migration:fresh-chain": "node scripts/test-fresh-chain-0001-0038.mjs",
     "preview": "vite preview",
     "seed:dev": "node --env-file=.env.development.local db/seed-dev.mjs",
     "db:migrate": "node db/migrate.mjs",

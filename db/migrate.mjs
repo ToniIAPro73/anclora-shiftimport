@@ -13,7 +13,199 @@ import { neon, Client } from '@neondatabase/serverless';
 
 export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 export const BASELINE_MANIFEST_PATH = join(dirname(fileURLToPath(import.meta.url)), '../docs/database/migration-baseline-main.json');
-export const ACCREDITATION_TOKEN = Symbol.for('anclora.migration.accreditation.token');
+
+/**
+ * Scans SQL string into tokens outside comments, string literals, and dollar-quoted blocks.
+ */
+export function scanSqlTokens(sql) {
+  let i = 0;
+  const len = sql.length;
+  const tokens = [];
+
+  while (i < len) {
+    // Line comment
+    if (sql[i] === '-' && sql[i + 1] === '-') {
+      i += 2;
+      while (i < len && sql[i] !== '\n') i++;
+      continue;
+    }
+    // Block comment (support nesting)
+    if (sql[i] === '/' && sql[i + 1] === '*') {
+      i += 2;
+      let depth = 1;
+      while (i < len && depth > 0) {
+        if (sql[i] === '/' && sql[i + 1] === '*') {
+          depth++;
+          i += 2;
+        } else if (sql[i] === '*' && sql[i + 1] === '/') {
+          depth--;
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      continue;
+    }
+    // Standard string literal
+    if (sql[i] === "'") {
+      i++;
+      while (i < len) {
+        if (sql[i] === "'") {
+          if (sql[i + 1] === "'") {
+            i += 2;
+          } else {
+            i++;
+            break;
+          }
+        } else {
+          i++;
+        }
+      }
+      continue;
+    }
+    // Quoted identifier
+    if (sql[i] === '"') {
+      i++;
+      while (i < len) {
+        if (sql[i] === '"') {
+          if (sql[i + 1] === '"') {
+            i += 2;
+          } else {
+            i++;
+            break;
+          }
+        } else {
+          i++;
+        }
+      }
+      continue;
+    }
+    // Dollar-quoted block: $$ or $tag$
+    if (sql[i] === '$') {
+      const match = sql.slice(i).match(/^\$([a-zA-Z0-9_]*)\$/);
+      if (match) {
+        const tag = match[0];
+        i += tag.length;
+        const closeIdx = sql.indexOf(tag, i);
+        if (closeIdx === -1) {
+          throw new Error(`Unterminated dollar-quoted block (${tag}) in SQL`);
+        }
+        i = closeIdx + tag.length;
+        continue;
+      }
+    }
+    // Identifier / keyword token
+    if (/[a-zA-Z_]/.test(sql[i])) {
+      const start = i;
+      while (i < len && /[a-zA-Z0-9_]/.test(sql[i])) i++;
+      tokens.push({ word: sql.slice(start, i), start, end: i });
+      continue;
+    }
+    // Semicolon
+    if (sql[i] === ';') {
+      tokens.push({ word: ';', start: i, end: i + 1 });
+      i++;
+      continue;
+    }
+    i++;
+  }
+  return tokens;
+}
+
+/**
+ * Normalizes migration SQL by safely removing legacy top-level BEGIN and COMMIT wrappers.
+ * Enforces that new migrations (>= 0038) contain no internal transaction control.
+ */
+export function normalizeMigrationSql(sql, migrationName = '') {
+  const tokens = scanSqlTokens(sql);
+  const txTokens = tokens.filter((t) => /^(BEGIN|COMMIT|ROLLBACK)$/i.test(t.word));
+
+  if (txTokens.length === 0) {
+    return { normalizedSql: sql, hadWrapper: false };
+  }
+
+  const matchNum = migrationName.match(/^(\d{4})/);
+  const num = matchNum ? parseInt(matchNum[1], 10) : null;
+  if (num !== null && num >= 38) {
+    throw new Error(
+      `Migration '${migrationName}' contains forbidden transaction control statement '${txTokens[0].word.toUpperCase()}'. Migrations from 0038 onwards must not manage transactions internally.`
+    );
+  }
+
+  if (txTokens.some((t) => t.word.toUpperCase() === 'ROLLBACK')) {
+    throw new Error(
+      `Migration '${migrationName}' contains explicit ROLLBACK statement; cannot normalize legacy transaction wrapper.`
+    );
+  }
+
+  const beginTokens = txTokens.filter((t) => t.word.toUpperCase() === 'BEGIN');
+  const commitTokens = txTokens.filter((t) => t.word.toUpperCase() === 'COMMIT');
+
+  if (beginTokens.length !== 1 || commitTokens.length !== 1) {
+    throw new Error(
+      `Migration '${migrationName}' contains multiple or unbalanced transaction statements (${beginTokens.length} BEGIN, ${commitTokens.length} COMMIT); cannot normalize legacy transaction wrapper.`
+    );
+  }
+
+  const beginTok = beginTokens[0];
+  const commitTok = commitTokens[0];
+
+  if (beginTok.start >= commitTok.start) {
+    throw new Error(`Migration '${migrationName}' has COMMIT before BEGIN; invalid transaction structure.`);
+  }
+
+  // Statements before BEGIN?
+  const tokensBeforeBegin = tokens.filter((t) => t.start < beginTok.start && t.word !== ';');
+  if (tokensBeforeBegin.length > 0) {
+    throw new Error(
+      `Migration '${migrationName}' contains statements before top-level BEGIN; cannot normalize legacy transaction wrapper.`
+    );
+  }
+
+  // Find end of BEGIN statement (including optional WORK/TRANSACTION and ;)
+  let beginEnd = beginTok.end;
+  while (beginEnd < sql.length && /[ \t]/.test(sql[beginEnd])) beginEnd++;
+  const afterBegin = sql.slice(beginEnd);
+  const optBeginWord = afterBegin.match(/^(WORK|TRANSACTION)\b/i);
+  if (optBeginWord) {
+    beginEnd += optBeginWord[0].length;
+    while (beginEnd < sql.length && /[ \t]/.test(sql[beginEnd])) beginEnd++;
+  }
+  if (sql[beginEnd] === ';') {
+    beginEnd++;
+  }
+  if (sql[beginEnd] === '\r') beginEnd++;
+  if (sql[beginEnd] === '\n') beginEnd++;
+
+  // Find end of COMMIT statement (including optional WORK/TRANSACTION and ;)
+  let commitEnd = commitTok.end;
+  while (commitEnd < sql.length && /[ \t]/.test(sql[commitEnd])) commitEnd++;
+  const afterCommit = sql.slice(commitEnd);
+  const optCommitWord = afterCommit.match(/^(WORK|TRANSACTION)\b/i);
+  if (optCommitWord) {
+    commitEnd += optCommitWord[0].length;
+    while (commitEnd < sql.length && /[ \t]/.test(sql[commitEnd])) commitEnd++;
+  }
+  if (sql[commitEnd] === ';') {
+    commitEnd++;
+  }
+  if (sql[commitEnd] === '\r') commitEnd++;
+  if (sql[commitEnd] === '\n') commitEnd++;
+
+  // Check if any statement exists after COMMIT statement
+  const tokensAfterCommit = tokens.filter((t) => t.start >= commitEnd && t.word !== ';');
+  if (tokensAfterCommit.length > 0) {
+    throw new Error(
+      `Migration '${migrationName}' contains statements after top-level COMMIT (intermediate COMMIT or trailing statements); cannot normalize legacy transaction wrapper.`
+    );
+  }
+
+  // Remove COMMIT first, then BEGIN to preserve byte offsets
+  let normalized = sql.slice(0, commitTok.start) + sql.slice(commitEnd);
+  normalized = normalized.slice(0, beginTok.start) + normalized.slice(beginEnd);
+
+  return { normalizedSql: normalized, hadWrapper: true };
+}
 
 /**
  * Resolves the Neon project ID explicitly from args or env without hardcoded fallback.
@@ -143,7 +335,8 @@ export const MIGRATION_SENTINELS = {
   '0035_operational_assignments.sql': (cat) => cat.tables.has('operational_assignments'),
   '0036_temporal_organizational_model.sql': (cat) => cat.tables.has('organization_people'),
   '0037_temporal_ownership_transfer_and_labor_integrity.sql': (cat) => cat.routines.has('transfer_organization_ownership_temporal'),
-  '0038_migration_ledger_checksums.sql': (cat) => cat.columns.has('_migrations.checksum'),
+  '0038_migration_ledger_checksums.sql': (cat) =>
+    cat.columns.has('_migrations.checksum') && cat.constraints.has('_migrations_checksum_format_chk'),
 };
 
 /**
@@ -176,11 +369,12 @@ export async function extractSchemaCatalog(sqlOrClient) {
   ]);
 
   const tableExists = hasMigrationsRes.length > 0;
+  const hasChecksumCol = columnsRes.some(
+    (r) => r.table_name === '_migrations' && r.column_name === 'checksum'
+  );
+
   let appliedRows = [];
   if (tableExists) {
-    const hasChecksumCol = columnsRes.some(
-      (r) => r.table_name === '_migrations' && r.column_name === 'checksum'
-    );
     if (hasChecksumCol) {
       appliedRows = await executeSql(sqlOrClient, 'SELECT name, applied_at, checksum FROM _migrations ORDER BY name');
     } else {
@@ -206,6 +400,7 @@ export async function extractSchemaCatalog(sqlOrClient) {
   return {
     tableExists,
     appliedRows,
+    hasChecksumCol,
     tables,
     columns,
     routines,
@@ -277,16 +472,26 @@ export async function inspectMigrationsStatus(
     let status = 'UNKNOWN';
     let baselineMatches = false;
 
+    const hasChecksumCol = Boolean(dbCatalog.hasChecksumCol);
+
     if (isRegistered) {
-      if (baselineEntry) {
-        baselineMatches = baselineEntry.sha256 === repoChecksum;
-        if (!baselineMatches) {
+      const hasLedgerVal = Boolean(appliedRow && appliedRow.checksum);
+      const ledgerChecksum = appliedRow?.checksum || null;
+
+      if (baselineEntry && hasLedgerVal) {
+        // TRIPLE VALIDATION: ledger checksum === manifest checksum === file checksum
+        const manifestMatchesRepo = baselineEntry.sha256 === repoChecksum;
+        const ledgerMatchesRepo = ledgerChecksum === repoChecksum;
+        const ledgerMatchesManifest = ledgerChecksum === baselineEntry.sha256;
+
+        if (!manifestMatchesRepo || !ledgerMatchesRepo || !ledgerMatchesManifest) {
           status = 'CHECKSUM_MISMATCH';
           checksumMismatches.push({
             name: file,
             expectedSha256: baselineEntry.sha256,
             actualSha256: repoChecksum,
-            source: 'baseline_manifest',
+            ledgerSha256: ledgerChecksum,
+            source: 'triple_validation_mismatch',
           });
         } else if (!isMaterialized) {
           status = 'MISSING_FROM_DATABASE';
@@ -294,15 +499,42 @@ export async function inspectMigrationsStatus(
         } else {
           status = 'APPLIED';
           applied.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+          baselineMatches = true;
         }
-      } else if (appliedRow && appliedRow.checksum) {
-        // Migration is not in baseline manifest, but recorded in ledger with a checksum column
-        const ledgerChecksumMatches = appliedRow.checksum === repoChecksum;
-        if (!ledgerChecksumMatches) {
+      } else if (baselineEntry && !hasLedgerVal) {
+        if (hasChecksumCol) {
+          status = 'CHECKSUM_UNVERIFIABLE';
+          checksumUnverifiable.push({
+            name: file,
+            reason: 'Migration recorded in ledger but checksum column is NULL or empty',
+          });
+        } else {
+          const manifestMatchesRepo = baselineEntry.sha256 === repoChecksum;
+          if (!manifestMatchesRepo) {
+            status = 'CHECKSUM_MISMATCH';
+            checksumMismatches.push({
+              name: file,
+              expectedSha256: baselineEntry.sha256,
+              actualSha256: repoChecksum,
+              source: 'baseline_manifest',
+            });
+          } else if (!isMaterialized) {
+            status = 'MISSING_FROM_DATABASE';
+            missingFromDatabase.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+          } else {
+            status = 'APPLIED';
+            applied.push({ name: file, applied_at: appliedRow.applied_at, sha256: repoChecksum });
+            baselineMatches = true;
+          }
+        }
+      } else if (!baselineEntry && hasLedgerVal) {
+        // Future / post-baseline migration: verify ledger checksum === file checksum
+        const ledgerMatchesRepo = ledgerChecksum === repoChecksum;
+        if (!ledgerMatchesRepo) {
           status = 'CHECKSUM_MISMATCH';
           checksumMismatches.push({
             name: file,
-            expectedSha256: appliedRow.checksum,
+            expectedSha256: ledgerChecksum,
             actualSha256: repoChecksum,
             source: 'ledger_checksum',
           });
@@ -408,6 +640,7 @@ export async function inspectMigrationsStatus(
     checksumMismatches,
     checksumUnverifiable,
     gaps,
+    hasChecksumCol: Boolean(dbCatalog.hasChecksumCol),
     isContinuous: gaps.length === 0,
     isUpToDate: state === 'UP_TO_DATE',
     canMigrateNormally: state === 'READY' || state === 'UP_TO_DATE',
@@ -421,10 +654,15 @@ export async function inspectMigrationsStatus(
 export function printStatus(status, { neonInfo = null } = {}) {
   console.log('=== NEON MIGRATION STATUS ===');
   if (neonInfo) {
-    console.log(`Neon Project ID: ${neonInfo.projectId || 'N/A'}`);
-    console.log(`Neon Branch ID: ${neonInfo.branchId || 'N/A'}`);
-    console.log(`Neon Branch Name: ${neonInfo.branchName || 'N/A'}`);
-    console.log(`Neon Endpoint: ${neonInfo.endpointId || 'N/A'}`);
+    if (neonInfo.unresolved) {
+      console.log(`Neon Project ID: ${neonInfo.projectId || 'N/A'}`);
+      console.log(`Neon Branch: UNRESOLVED (${neonInfo.error})`);
+    } else {
+      console.log(`Neon Project ID: ${neonInfo.projectId || 'N/A'}`);
+      console.log(`Neon Branch ID: ${neonInfo.branchId || 'N/A'}`);
+      console.log(`Neon Branch Name: ${neonInfo.branchName || 'N/A'}`);
+      console.log(`Neon Endpoint: ${neonInfo.endpointId || 'N/A'}`);
+    }
   }
   console.log(`_migrations table: ${status.tableExists ? 'EXISTS' : 'NOT CREATED'}`);
   console.log(`Total repository migrations: ${status.totalRepoFiles}`);
@@ -460,9 +698,13 @@ export function printStatus(status, { neonInfo = null } = {}) {
   }
 
   if (status.checksumMismatches.length > 0) {
-    console.log(`\n[ERROR] Checksum mismatches against baseline manifest (${status.checksumMismatches.length}):`);
+    console.log(`\n[ERROR] Checksum mismatches detected (${status.checksumMismatches.length}):`);
     for (const m of status.checksumMismatches) {
-      console.log(`  ! ${m.name} actual SHA-256 does not match verified baseline (source: ${m.source})`);
+      if (m.source === 'triple_validation_mismatch') {
+        console.log(`  ! ${m.name} triple mismatch: repo=${m.actualSha256}, manifest=${m.expectedSha256}, ledger=${m.ledgerSha256}`);
+      } else {
+        console.log(`  ! ${m.name} actual SHA-256 does not match verified baseline (source: ${m.source})`);
+      }
     }
   }
 
@@ -581,19 +823,32 @@ export function resolveNeonBranchFromConnectionString(
 /**
  * Accredit destination branch before allowing write operations.
  */
-export function accreditDestinationBranch({
-  connectionString,
-  targetBranch = null,
-  confirmMainBranchId = null,
-  expectedBranchId = null,
-  expectedBranchName = null,
-  allowMainMigration = false,
-  projectId = null,
-  neonctlExec = execFileSync,
-  endpoints = null,
-  branches = null,
-  forWrite = true,
-} = {}) {
+export function accreditDestinationBranch(
+  connectionStringOrOptions,
+  deprecatedOptions = {}
+) {
+  let opts = {};
+  if (typeof connectionStringOrOptions === 'string') {
+    opts = { connectionString: connectionStringOrOptions, ...deprecatedOptions };
+  } else if (connectionStringOrOptions && typeof connectionStringOrOptions === 'object') {
+    opts = { ...connectionStringOrOptions };
+  }
+
+  const {
+    connectionString,
+    targetBranch = null,
+    confirmMainBranchId = null,
+    expectedBranchId = null,
+    expectedBranchName = null,
+    allowMainMigration = false,
+    projectId = null,
+    branchResolver = null,
+    neonctlExec = execFileSync,
+    endpoints = null,
+    branches = null,
+    forWrite = true,
+  } = opts;
+
   if (!connectionString) {
     throw new Error('connectionString is required for destination accreditation');
   }
@@ -624,7 +879,8 @@ export function accreditDestinationBranch({
     throw new Error('NEON_PROJECT_ID environment variable or --project-id flag is required. Hardcoded default project ID has been removed.');
   }
 
-  const { branch, endpoint } = resolveNeonBranchFromConnectionString(connectionString, {
+  const resolver = branchResolver || resolveNeonBranchFromConnectionString;
+  const { branch, endpoint } = resolver(connectionString, {
     projectId: resolvedProjectId,
     neonctlExec,
     endpoints,
@@ -685,7 +941,6 @@ export function accreditDestinationBranch({
   }
 
   return {
-    [ACCREDITATION_TOKEN]: true,
     accredited: true,
     branch,
     endpoint,
@@ -695,67 +950,60 @@ export function accreditDestinationBranch({
 
 /**
  * Runs migrations forward in filename order with strict safety validations.
- * Each migration DDL and its corresponding ledger INSERT are executed atomically inside a single transaction.
+ * Accredits branch, creates internal Client, executes normalized SQL, and ensures atomic transaction rollback.
  */
 export async function runMigrations(
-  sqlOrClient,
-  {
-    migrationsDir = MIGRATIONS_DIR,
-    baselineManifestPath = BASELINE_MANIFEST_PATH,
-    connectionString = null,
+  optionsOrConnectionString = {},
+  deprecatedOptions = {}
+) {
+  let opts = {};
+  if (typeof optionsOrConnectionString === 'string') {
+    opts = { connectionString: optionsOrConnectionString, ...deprecatedOptions };
+  } else if (optionsOrConnectionString && typeof optionsOrConnectionString === 'object') {
+    // If an external Client object was passed as first argument, ignore it for security
+    if (typeof optionsOrConnectionString.query === 'function') {
+      opts = { ...deprecatedOptions };
+    } else {
+      opts = { ...optionsOrConnectionString };
+    }
+  }
+
+  const {
+    connectionString,
+    projectId = null,
     targetBranch = null,
     confirmMainBranchId = null,
     allowMainMigration = false,
-    accreditation = null,
-    accreditOptions = {},
+    migrationsDir = MIGRATIONS_DIR,
+    baselineManifestPath = BASELINE_MANIFEST_PATH,
     ClientClass = Client,
-    projectId = null,
-    neonctlExec = execFileSync,
+    branchResolver = null,
     endpoints = null,
     branches = null,
-  } = {}
-) {
-  let effectiveAccreditation = accreditation;
+    neonctlExec = execFileSync,
+  } = opts;
 
-  if (effectiveAccreditation) {
-    if (!effectiveAccreditation[ACCREDITATION_TOKEN]) {
-      throw new Error(
-        'Invalid accreditation token: destination branch accreditation cannot be forged or bypassed.'
-      );
-    }
-  } else {
-    if (!connectionString) {
-      throw new Error(
-        'Destination branch must be accredited before running migrations. Provide connectionString to accredit or supply verified accreditation.'
-      );
-    }
-    effectiveAccreditation = accreditDestinationBranch({
-      connectionString,
-      targetBranch,
-      confirmMainBranchId,
-      allowMainMigration,
-      forWrite: true,
-      projectId,
-      neonctlExec,
-      endpoints,
-      branches,
-      ...accreditOptions,
-    });
+  if (!connectionString) {
+    throw new Error('connectionString is required for runMigrations.');
   }
 
-  let client = null;
-  let shouldCloseClient = false;
+  // 1 & 2 & 3. Accredit branch: resolves URL -> hostname -> endpoint -> branch, validates unpooled host and safeguards
+  accreditDestinationBranch(connectionString, {
+    targetBranch,
+    confirmMainBranchId,
+    allowMainMigration,
+    projectId,
+    branchResolver,
+    endpoints,
+    branches,
+    neonctlExec,
+    forWrite: true,
+  });
 
-  if (sqlOrClient && typeof sqlOrClient.query === 'function') {
-    client = sqlOrClient;
-  } else if (connectionString) {
-    client = new ClientClass(connectionString);
-    if (typeof client.connect === 'function') {
-      await client.connect();
-    }
-    shouldCloseClient = true;
-  } else {
-    throw new Error('runMigrations requires a Client instance or connectionString to execute transactions.');
+  // 4 & 5. Create Client internally using EXACTLY the accredited connectionString, and connect AFTER accrediting
+  const client = new ClientClass(connectionString);
+  if (typeof client.connect === 'function') {
+    await client.connect();
   }
 
   try {
@@ -819,12 +1067,13 @@ export async function runMigrations(
       const file = item.name;
       const body = await readFile(join(migrationsDir, file), 'utf8');
       const fileChecksum = computeMigrationChecksum(body);
+      const { normalizedSql } = normalizeMigrationSql(body, file);
 
       console.log(`apply ${file}`);
 
       await client.query('BEGIN');
       try {
-        await client.query(body);
+        await client.query(normalizedSql);
         if (file === '0038_migration_ledger_checksums.sql') {
           hasChecksumCol = true;
         }
@@ -856,7 +1105,7 @@ export async function runMigrations(
     console.log(`migrations up to date (${appliedCount} applied)`);
     return { appliedCount, pendingCount: 0 };
   } finally {
-    if (shouldCloseClient && typeof client.end === 'function') {
+    if (typeof client.end === 'function') {
       try {
         await client.end();
       } catch {
@@ -899,6 +1148,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     }
 
     let neonInfo = null;
+    let resolutionError = null;
     if (projectId) {
       try {
         const resolved = resolveNeonBranchFromConnectionString(connectionString, { projectId });
@@ -908,14 +1158,26 @@ export async function main(args = process.argv.slice(2), env = process.env) {
           branchName: resolved.branch.name,
           endpointId: resolved.endpoint.id,
         };
-      } catch {
-        // Neon CLI resolution optional for offline/mock inspect
+      } catch (err) {
+        resolutionError = err;
+        neonInfo = {
+          projectId,
+          unresolved: true,
+          error: err.message,
+        };
       }
     }
 
     const sql = neon(connectionString);
     const status = await inspectMigrationsStatus(sql);
     printStatus(status, { neonInfo });
+
+    if (resolutionError) {
+      console.error(`\n[CRITICAL] Branch resolution failed for project '${projectId}': ${resolutionError.message}`);
+      process.exitCode = 1;
+      return;
+    }
+
     if (status.exitCode !== 0) {
       process.exitCode = status.exitCode;
     }
@@ -946,7 +1208,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     );
   }
 
-  await runMigrations(null, {
+  await runMigrations({
     connectionString,
     targetBranch,
     confirmMainBranchId,
