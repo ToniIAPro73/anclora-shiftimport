@@ -32,7 +32,8 @@
 - `npm run build`: validación principal (tsc + vite build).
 - `npm run lint`: linting estricto (`--max-warnings 0`).
 - `npm test`: Vitest (src + api).
-- `node --env-file=.env.development.local db/migrate.mjs`: aplicar migraciones Neon.
+- `npm run db:migrate:status`: inspeccionar estado de migraciones en modo solo lectura (detecta pendientes, huecos de secuencia y alteraciones).
+- `npm run db:migrate`: aplicar migraciones Neon de forma secuencial y controlada (usa `.env.development.local`).
 - `node --env-file=.env.development.local scripts/smoke-api.mjs`: smoke test E2E de la API (crea y limpia datos de prueba).
 
 ## Convenciones del proyecto
@@ -67,3 +68,10 @@
 - Antes de tocar el parser, revisar `sdd/` y los perfiles de ingesta.
 - Validar siempre con `npm run lint && npm run build` (y tests cuando existan).
 - Si cambias `ImportModal`, verifica que siga permitiendo editar y borrar filas antes de confirmar.
+- **Obligaciones estrictas de base de datos**:
+  - Antes de realizar cualquier tarea sobre base de datos, ejecutar `npm run db:migrate:status`.
+  - Identificar explícitamente el proyecto Neon (`holy-cake-85660318`) y la rama de destino (`preview/development` vs `main` vs rama efímera).
+  - Comprobar que el comando de estado es de solo lectura y verificar el ledger de migraciones.
+  - **NUNCA** ejecutar migraciones a mano ni ejecutar scripts DDL destructivos en la rama Neon `main` persistente.
+  - Para pruebas, suites y validaciones de integración, recurrir siempre a ramas efímeras acreditadas creadas y destruidas por tooling automatizado.
+  - Consultar siempre `docs/db-environments.md` y `docs/database/NEON_MAIN_MIGRATION_BASELINE.md` antes de diagnosticar o planificar cambios de esquema.
