@@ -4,8 +4,8 @@
 **Proyecto Neon**: `holy-cake-85660318`  
 **Rama Neon conciliada y migrada**: `main` (`br-solitary-thunder-b1hm9low`)  
 **Rama base de integración**: `preview/development` (`br-falling-heart-b1d6u2cx`)  
-**Estado final del ledger (`_migrations`)**: **38 de 38 aplicadas (100% continuo, 0 pendientes, checksums NOT NULL verificados)**  
-**Equivalencia de catálogo**: **100% PASS (29 tablas, 4 vistas, 218 rutinas, 5 triggers, columna `checksum` + constraint de formato)**  
+**Estado final del ledger (`_migrations`)**: **39 de 39 aplicadas (100% continuo, 0 pendientes, checksums NOT NULL verificados)**
+**Catálogo post-0039**: **verificado (32 tablas públicas, 4 vistas, 222 rutinas, 10 triggers no internos, columna `checksum` + constraint de formato)**
 
 ---
 
@@ -52,22 +52,32 @@ Se mantienen tres ramas de respaldo independientes tipo time-travel en Neon:
    - Parent Timestamp: `2026-09-12T10:44:46Z`
    - Estado: `ready` (Preservada de forma permanente)
 
+4. **Backup Previo a Aplicación de Migración 0039**:
+   - ID: `br-quiet-sky-b10jw99v`
+   - Nombre: `backup/pre-0039-application-20260912-174713`
+   - Rama padre: `br-solitary-thunder-b1hm9low`
+   - Parent LSN: `0/3EF0160`
+   - Parent Timestamp: `2026-09-12T17:46:55Z`
+   - Estado: `ready` (Preservada de forma permanente)
+   - Protección: `false`, porque el proyecto usa el plan `free_v3`, que no admite ramas protegidas.
+   - TTL: no configurado/visible en la respuesta de la API.
+
 ---
 
-## 3. Catálogos Normalizados de Neon `main`
+## 3. Catálogo actual de Neon `main`
 
-La comparación formal entre la rama de referencia limpia (aplicando `0001`–`0037` secuencialmente) y Neon `main` certifica:
+El catálogo se volvió a consultar después de aplicar 0039. Los conteos siguientes son observaciones directas de PostgreSQL; los triggers se cuentan como objetos en `pg_trigger` excluyendo los internos.
 
-| Tipo de Objeto | Conteo en Referencia | Conteo en `main` | Discrepancias | Veredicto |
-|---|---|---|---|---|
-| Tablas base | 29 | 29 | 0 | **MATCH** |
-| Columnas | 165 | 165 | 0 | **MATCH** |
-| Restricciones (Constraints) | 68 | 68 | 0 | **MATCH** |
-| Índices secundarios | 136 | 136 | 0 | **MATCH** |
-| Vistas | 4 | 4 | 0 | **MATCH** |
-| Rutinas / Funciones | 218 | 218 | 0 | **MATCH** |
-| Triggers | 5 | 5 | 0 | **MATCH** |
-| Extensiones | 2 (`btree_gist`, `plpgsql`) | 2 (`btree_gist`, `plpgsql`) | 0 | **MATCH** |
+| Tipo de objeto | Conteo observado en `main` | Verificación |
+|---|---:|---|
+| Tablas base públicas | 32 | **PASS** |
+| Columnas públicas | 358 | **PASS** |
+| Restricciones públicas | 409 | **PASS** |
+| Índices públicos | 147 | **PASS** |
+| Vistas públicas | 4 | **PASS** |
+| Rutinas públicas | 222 | **PASS** |
+| Triggers no internos | 10 | **PASS** |
+| Extensiones | 2 (`btree_gist`, `plpgsql`) | **PASS** |
 
 ### 3.1 Vistas Canónicas Verificadas
 - `current_person_roles`
@@ -83,17 +93,24 @@ La comparación formal entre la rama de referencia limpia (aplicando `0001`–`0
 - `transfer_organization_ownership_temporal`
 - `check_employee_profile_labor_tenure_update`
 
-### 3.3 Triggers Canónicos Verificados (5 Objetos Trigger / 9 Filas en `information_schema.triggers`)
-El esquema cuenta exactamente con **5 objetos trigger** en total, correspondientes a los **5 triggers de integridad temporal** introducidos en las migraciones `0036` y `0037` (sin triggers adicionales ni legacy):
+### 3.3 Triggers Canónicos Verificados (10 Objetos Trigger / 20 Filas en `information_schema.triggers`)
+El esquema cuenta exactamente con **10 objetos trigger** no internos: los **5 triggers de integridad temporal** de `0036`/`0037` y los **5 triggers de integridad de acceso** de `0039` (sin triggers adicionales ni legacy):
 1. `trg_check_employee_profile_person_link` (en `employee_profiles`, migración `0036`, eventos: `INSERT`, `UPDATE`)
 2. `trg_check_organization_person_employee_link` (en `organization_people`, migración `0036`, eventos: `INSERT`, `UPDATE`)
 3. `trg_check_reporting_relationship` (en `reporting_relationship_periods`, migración `0036`, eventos: `INSERT`, `UPDATE`)
 4. `trg_check_employee_area_period_labor_validity` (en `employee_area_periods`, migración `0036`, eventos: `INSERT`, `UPDATE`)
 5. `trg_check_employee_profile_labor_tenure` (en `employee_profiles`, migración `0037`, evento: `UPDATE`)
 
+Triggers de acceso 0039:
+6. `trg_check_user_access_invitation_integrity` (en `user_access_invitations`)
+7. `trg_check_user_access_pending_person_on_person` (en `organization_people`)
+8. `trg_check_user_access_pending_person_on_invitation` (en `user_access_invitations`)
+9. `trg_guard_user_access_invitation_delete` (en `user_access_invitations`)
+10. `trg_guard_user_access_invitation_mutation` (en `user_access_invitations`)
+
 > [!NOTE]
 > **Diferencia entre objetos trigger y filas en `information_schema.triggers`**:
-> Una consulta directa a `information_schema.triggers` devuelve **9 filas** porque el estándar SQL modela cada combinación de (trigger, evento de disparo) como una fila independiente: 4 triggers se disparan tanto en `INSERT` como en `UPDATE` (4 × 2 = 8 filas) y 1 trigger se dispara únicamente en `UPDATE` (1 fila). El recuento real de objetos trigger en el catálogo (`pg_trigger` donde no sea interno) es exactamente **5**.
+> Una consulta directa a `information_schema.triggers` devuelve **20 filas** porque el estándar SQL modela cada combinación de (trigger, evento de disparo) como una fila independiente. El recuento real de objetos trigger en el catálogo (`pg_trigger` donde no sea interno) es exactamente **10**.
 
 ---
 
@@ -125,14 +142,14 @@ Se garantizó la total preservación de datos sin exponer datos personales (PII)
 ## 5. Manifiesto Canónico del Ledger de Migraciones (0001–0037)
 
 Todas las 37 migraciones base se encuentran registradas en `_migrations` de Neon `main` y auditadas contra el archivo de manifiesto canónico versionado:
-[`docs/database/migration-baseline-main.json`](file:///Users/toni/developer/anclora/anclora-shiftimport/docs/database/migration-baseline-main.json).
+[`docs/database/migration-baseline-main.json`](./migration-baseline-main.json).
 
 Dicho manifiesto constituye la **fuente canónica única de verdad** para los checksums SHA-256, versiones de baseline (`1.0.0`) y métodos de conciliación (`baseline_init`, `materialized_reconciliation`, `ledger_registration`) de las migraciones `0001` a `0037`.
 
 El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` de forma estricta (fail-closed): valida la presencia del archivo, integridad JSON, unicidad de entradas, formato de 64 caracteres hexadecimales, versionado y método. Cualquier discrepancia o ausencia de registro produce de inmediato el estado `CHECKSUM_MISMATCH` o `CHECKSUM_UNVERIFIABLE` y un código de salida `1`.
 
-### 5.1 Estado Actual de Neon `main` y Migración `0038`
-- **Neon `main` actualizado a la migración `0038`**: El ledger `_migrations` en `main` contiene 38 registros continuos, íntegros y válidos.
+### 5.1 Estado histórico de Neon `main` y Migración `0038`
+- **Neon `main` actualizado a la migración `0038` antes de 0039**: El ledger `_migrations` en `main` contenía 38 registros continuos, íntegros y válidos.
 - **Migración `0038_migration_ledger_checksums.sql` aplicada con éxito**:
   - Respaldo time-travel previo creado y preservado: `br-withered-forest-b17sj88w` (`backup/pre-0038-application-20260912-124444`, parent LSN `0/3E219F0`).
   - Ejecutada mediante el runner endurecido con API cerrada (`af6f96e`) y conexión directa no pooled.
@@ -167,3 +184,14 @@ El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` 
 2. **VERIFICACIÓN READ-ONLY PREVIA**: Todo agente o desarrollador debe ejecutar previamente `npm run db:migrate:status`.
 3. **RAMAS EFÍMERAS ACREDITADAS**: Queda prohibido usar ramas persistentes para pruebas de integración. Las suites deben utilizar ramas efímeras creadas a partir de `preview/development`.
 4. **PROTECCIÓN NO ELUDIBLE DE MAIN**: Toda migración que apunte a Neon `main` exige de forma simultánea: `--allow-main-migration`, el ID exacto de rama `--target-branch=br-solitary-thunder-b1hm9low` (no el alias "main") y confirmación explícita `--confirm-main-branch-id=br-solitary-thunder-b1hm9low`.
+
+## 7. Cierre post-0039
+
+- Aplicación: `0039_user_access_invitations_and_preferences.sql`, ejecutada el 2026-09-12 mediante `db/migrate.mjs`, conexión directa no pooled y acreditación explícita de `main`.
+- SHA-256 publicado y aplicado: `7680b4a1e8572e05ecfc10ea240247ffa07cc0a841039308238db67706231dd8`.
+- Estado comprobado después de aplicar: `UP_TO_DATE`, 39 registros consecutivos, 0 pendientes, 0 gaps, 0 desconocidas y 39 checksums coincidentes byte a byte con el repositorio.
+- Objetos 0039 comprobados: `user_access_invitations`, `user_preferences`, `users.account_status`, 6 índices específicos, 6 constraints específicas, 4 rutinas de integridad y 5 triggers específicos.
+- Recuentos funcionales conservados: 1 organización, 2 usuarios, 2 memberships, 1 empleado, 1 identidad OAuth, 2 personas organizativas, 1 perfil de empleado, 2 periodos de rol, 2 periodos de ámbito y 0 turnos/áreas.
+- Las dos cuentas existentes quedaron `ACTIVE`; la identidad OAuth sigue sin contraseña local. El digest comparativo de credenciales no cambió; los hashes no se registran en esta documentación.
+- El plan `free_v3` no permite ramas protegidas: actualmente hay 0 ramas protegidas y el backup pre-0039 queda conservado sin protección y sin TTL. La protección debe activarse al pasar a un plan compatible; no se debe simular con cambios de aplicación.
+- Se generó un backup lógico custom independiente fuera del repositorio y se verificó con `pg_restore --list` y una restauración de prueba en una rama efímera. La ruta y el SHA-256 del archivo se entregan en el informe operativo, nunca su contenido.
