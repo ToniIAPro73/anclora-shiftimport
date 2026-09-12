@@ -21,6 +21,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { Client } from "@neondatabase/serverless";
 
 export const PROJECT_ID = process.env.NEON_PROJECT_ID || "holy-cake-85660318";
+export const DEFAULT_BASE_BRANCH_ID = "br-falling-heart-b1d6u2cx"; // preview/development
 
 /**
  * Validates whether a branch name is unequivocally temporal or test.
@@ -41,7 +42,7 @@ export function isTemporalBranchName(name) {
 /**
  * Validates that a target branch is safe for destructive test operations.
  */
-export function validateTargetBranch(branch) {
+export function validateTargetBranch(branch, { expectedParentBranchId = null } = {}) {
   if (!branch) {
     throw new Error("Target branch information is required for validation");
   }
@@ -49,6 +50,7 @@ export function validateTargetBranch(branch) {
   const name = typeof branch === "string" ? branch : branch.name;
   const isDefault = typeof branch === "object" ? Boolean(branch.default || branch.is_default || branch.primary) : false;
   const isProtected = typeof branch === "object" ? Boolean(branch.protected) : false;
+  const parentId = typeof branch === "object" ? (branch.parent_id || null) : null;
 
   if (!name || typeof name !== "string") {
     throw new Error("Target branch must have a valid name");
@@ -80,11 +82,60 @@ export function validateTargetBranch(branch) {
     );
   }
 
+  if (expectedParentBranchId && parentId && parentId !== expectedParentBranchId) {
+    throw new Error(
+      `Target branch '${name}' parent '${parentId}' does not match expected parent '${expectedParentBranchId}'`
+    );
+  }
+
   return true;
 }
 
 /**
- * Dynamically resolves the 'main' branch of a Neon project.
+ * Resolves the base branch for ephemeral branching.
+ * Strictly rejects 'main', 'master', 'production', default, or primary branches.
+ */
+export function resolveNeonBaseBranch(branches, requestedBaseBranchId = DEFAULT_BASE_BRANCH_ID) {
+  if (!Array.isArray(branches) || branches.length === 0) {
+    throw new Error("No Neon branches found to resolve base branch");
+  }
+
+  const baseBranch = branches.find(
+    (b) => b.id === requestedBaseBranchId || b.name === requestedBaseBranchId
+  );
+
+  if (!baseBranch || !baseBranch.id) {
+    throw new Error(`Base branch '${requestedBaseBranchId}' not found in Neon project branches`);
+  }
+
+  const lowerName = (baseBranch.name || "").toLowerCase().trim();
+  const isDefault = Boolean(baseBranch.default || baseBranch.is_default || baseBranch.primary);
+  const isProtected = Boolean(baseBranch.protected);
+
+  if (
+    lowerName === "main" ||
+    lowerName === "master" ||
+    lowerName === "production" ||
+    lowerName === "preview/production" ||
+    lowerName === "preview/staging" ||
+    isDefault
+  ) {
+    throw new Error(
+      `Refusing to use 'main' or default/primary branch as base branch: '${baseBranch.name}' (${baseBranch.id})`
+    );
+  }
+
+  if (isProtected) {
+    throw new Error(
+      `Refusing to use protected branch as base branch: '${baseBranch.name}' (${baseBranch.id})`
+    );
+  }
+
+  return baseBranch;
+}
+
+/**
+ * Dynamically resolves the 'main' branch of a Neon project (retained for introspection).
  */
 export function resolveNeonMainBranch(branches) {
   if (!Array.isArray(branches) || branches.length === 0) {
@@ -198,6 +249,7 @@ export function resolveBranchFromConnectionString(
 
 /**
  * Asserts that a connection string points to a verified, safe, temporal Neon branch.
+ * Strictly resolves: connectionString -> host -> endpoint -> branch -> validation.
  * Fails closed before any database connection.
  */
 export function assertSafeTemporalDatabaseUrl(
@@ -205,31 +257,20 @@ export function assertSafeTemporalDatabaseUrl(
   {
     projectId = PROJECT_ID,
     neonctlExec = execFileSync,
-    targetBranch = null,
     branches = null,
     endpoints = null,
     expectedBranchId = null,
     expectedEndpointId = null,
   } = {}
 ) {
-  if (targetBranch) {
-    if (expectedBranchId && targetBranch.id && targetBranch.id !== expectedBranchId) {
-      throw new Error(
-        `Branch mismatch: expected branch '${expectedBranchId}', but target branch has id '${targetBranch.id}'. Refusing to connect.`
-      );
-    }
-  }
-
-  const branch =
-    targetBranch ||
-    resolveBranchFromConnectionString(connectionString, {
-      projectId,
-      neonctlExec,
-      branches,
-      endpoints,
-      expectedBranchId,
-      expectedEndpointId,
-    });
+  const branch = resolveBranchFromConnectionString(connectionString, {
+    projectId,
+    neonctlExec,
+    branches,
+    endpoints,
+    expectedBranchId,
+    expectedEndpointId,
+  });
   validateTargetBranch(branch);
   return branch;
 }
@@ -253,7 +294,6 @@ export function resolveRunnerConfig(env = process.env, options = {}) {
     const targetBranch = assertSafeTemporalDatabaseUrl(temporalDbUrl, {
       projectId,
       neonctlExec,
-      targetBranch: options.targetBranch,
       branches: options.branches,
       endpoints: options.endpoints,
       expectedBranchId: options.expectedBranchId,
@@ -269,13 +309,270 @@ export function resolveRunnerConfig(env = process.env, options = {}) {
     };
   }
 
+  const baseBranchId = env.TEMPORAL_BASE_BRANCH_ID || options.baseBranchId || DEFAULT_BASE_BRANCH_ID;
+
   // Ephemeral mode is the only default. DATABASE_URL and POSTGRES_URL are strictly ignored.
   return {
     mode: "ephemeral",
     connectionString: null,
     isEphemeral: true,
+    baseBranchId,
     ignoredGenericUrl: Boolean(genericDbUrl),
   };
+}
+
+/**
+ * Accredits an ephemeral branch before any connection, seed, or migration.
+ * Verifies exact branch ID, temporal naming pattern, parent_id, not default/primary/protected,
+ * and that connection string hostname resolves to an endpoint belonging to this exact branch.
+ */
+export function accreditBranchBeforeConnection({
+  branchId,
+  connectionString,
+  baseBranchId,
+  expectedEndpointId = null,
+  projectId = PROJECT_ID,
+  neonctlExec = execFileSync,
+  branches = null,
+  endpoints = null,
+} = {}) {
+  if (!branchId) {
+    throw new Error("accreditBranchBeforeConnection: branchId is required");
+  }
+  if (!connectionString) {
+    throw new Error("accreditBranchBeforeConnection: connectionString is required");
+  }
+  if (!baseBranchId) {
+    throw new Error("accreditBranchBeforeConnection: baseBranchId is required");
+  }
+
+  const branchList = branches || fetchNeonBranches({ projectId, neonctlExec });
+  const matchedBranch = branchList.find((b) => b.id === branchId);
+  if (!matchedBranch) {
+    throw new Error(`Accreditation failure: Created branch '${branchId}' not found in Neon project branches`);
+  }
+
+  if (!isTemporalBranchName(matchedBranch.name)) {
+    throw new Error(
+      `Accreditation failure: Branch '${matchedBranch.name}' does not have an unequivocally temporal name (must start with tmp-, test-, or ephemeral-)`
+    );
+  }
+
+  if (matchedBranch.parent_id !== baseBranchId) {
+    throw new Error(
+      `Accreditation failure: Branch '${matchedBranch.name}' parent_id '${matchedBranch.parent_id}' does not match expected base branch '${baseBranchId}'`
+    );
+  }
+
+  if (matchedBranch.default || matchedBranch.is_default || matchedBranch.primary) {
+    throw new Error(
+      `Accreditation failure: Branch '${matchedBranch.name}' is marked as default or primary branch`
+    );
+  }
+
+  if (matchedBranch.protected) {
+    throw new Error(
+      `Accreditation failure: Branch '${matchedBranch.name}' is marked as protected branch`
+    );
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(connectionString);
+  } catch (err) {
+    throw new Error(`Accreditation failure: Invalid connection string: ${err.message}`);
+  }
+
+  const hostname = parsedUrl.hostname;
+  if (!hostname) {
+    throw new Error(`Accreditation failure: Could not extract hostname from connection string`);
+  }
+
+  const endpointList = endpoints || fetchNeonEndpoints({ projectId, neonctlExec });
+  const matchedEndpoint = endpointList.find((ep) => {
+    if (ep.host === hostname) return true;
+    if (ep.hosts?.read_write_host === hostname) return true;
+    if (ep.hosts?.read_write_pooled_host === hostname) return true;
+    if (ep.id && (hostname.startsWith(ep.id + '.') || hostname.startsWith(ep.id + '-'))) return true;
+    return false;
+  });
+
+  if (!matchedEndpoint) {
+    throw new Error(
+      `Accreditation failure: Host '${hostname}' does not map to any endpoint in Neon project '${projectId}'`
+    );
+  }
+
+  if (matchedEndpoint.branch_id !== branchId) {
+    throw new Error(
+      `Accreditation failure: Endpoint '${matchedEndpoint.id}' belongs to branch '${matchedEndpoint.branch_id}', not the accredited ephemeral branch '${branchId}'`
+    );
+  }
+
+  if (expectedEndpointId && matchedEndpoint.id !== expectedEndpointId) {
+    throw new Error(
+      `Accreditation failure: Expected endpoint ID '${expectedEndpointId}', but host '${hostname}' resolved to endpoint '${matchedEndpoint.id}'`
+    );
+  }
+
+  return { branch: matchedBranch, endpoint: matchedEndpoint };
+}
+
+export const TEMPORAL_TABLES = [
+  "organization_people",
+  "employee_profiles",
+  "person_role_periods",
+  "employee_area_periods",
+  "person_access_scope_periods",
+  "reporting_relationship_periods",
+];
+
+export const TEMPORAL_VIEWS = [
+  "current_person_roles",
+  "current_employee_areas",
+  "current_person_access_scopes",
+  "current_reporting_relationships",
+];
+
+export const TEMPORAL_ROUTINES = [
+  "transfer_organization_ownership_temporal",
+  "check_employee_profile_labor_tenure_update",
+  "check_employee_profile_labor_tenure_insert",
+  "check_person_role_owner_temporal_excl",
+  "check_employee_primary_area_temporal_excl",
+];
+
+export const TEMPORAL_TRIGGERS = [
+  "trg_employee_profiles_sync_status",
+  "trg_employee_profiles_sync_area",
+  "trg_employee_profiles_labor_tenure",
+  "trg_employee_profiles_labor_tenure_update",
+  "trg_employee_area_periods_primary_excl",
+  "trg_person_role_periods_owner_excl",
+];
+
+export const TEMPORAL_MIGRATIONS = [
+  "0036_temporal_organizational_model.sql",
+  "0037_temporal_ownership_transfer_and_labor_integrity.sql",
+];
+
+/**
+ * Asserts that no temporal tables, views, routines, triggers, or migrations are present.
+ * Fails closed if any temporal artifact is found.
+ */
+export async function assertNoTemporalObjectsPresent(client, { context = "database" } = {}) {
+  // 1. Check _migrations
+  const hasMigrationsTable = await client.query(
+    "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'"
+  );
+  if (hasMigrationsTable.rows.length > 0) {
+    const migs = await client.query(
+      "SELECT name FROM _migrations WHERE name = ANY($1::text[])",
+      [TEMPORAL_MIGRATIONS]
+    );
+    if (migs.rows.length > 0) {
+      throw new Error(
+        `Preflight assertion failed: temporal migration(s) [${migs.rows.map((r) => r.name).join(", ")}] already recorded in _migrations in ${context}`
+      );
+    }
+  }
+
+  // 2. Check tables
+  const tables = await client.query(
+    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
+    [TEMPORAL_TABLES]
+  );
+  if (tables.rows.length > 0) {
+    throw new Error(
+      `Preflight assertion failed: temporal table(s) [${tables.rows.map((r) => r.table_name).join(", ")}] already exist in ${context}`
+    );
+  }
+
+  // 3. Check views
+  const views = await client.query(
+    "SELECT table_name FROM information_schema.views WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
+    [TEMPORAL_VIEWS]
+  );
+  if (views.rows.length > 0) {
+    throw new Error(
+      `Preflight assertion failed: temporal view(s) [${views.rows.map((r) => r.table_name).join(", ")}] already exist in ${context}`
+    );
+  }
+
+  // 4. Check routines
+  const routines = await client.query(
+    "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_name = ANY($1::text[])",
+    [TEMPORAL_ROUTINES]
+  );
+  if (routines.rows.length > 0) {
+    throw new Error(
+      `Preflight assertion failed: temporal routine(s) [${routines.rows.map((r) => r.routine_name).join(", ")}] already exist in ${context}`
+    );
+  }
+
+  // 5. Check triggers
+  const triggers = await client.query(
+    "SELECT trigger_name FROM information_schema.triggers WHERE trigger_schema = 'public' AND trigger_name = ANY($1::text[])",
+    [TEMPORAL_TRIGGERS]
+  );
+  if (triggers.rows.length > 0) {
+    throw new Error(
+      `Preflight assertion failed: temporal trigger(s) [${triggers.rows.map((r) => r.trigger_name).join(", ")}] already exist in ${context}`
+    );
+  }
+
+  return true;
+}
+
+/**
+ * Asserts that all temporal tables, views, routines, and migrations are materialized after migration.
+ */
+export async function assertTemporalObjectsMaterialized(client, { context = "database" } = {}) {
+  // 1. Check _migrations
+  const migs = await client.query(
+    "SELECT name FROM _migrations WHERE name = ANY($1::text[])",
+    [TEMPORAL_MIGRATIONS]
+  );
+  const foundMigs = new Set(migs.rows.map((r) => r.name));
+  for (const m of TEMPORAL_MIGRATIONS) {
+    if (!foundMigs.has(m)) {
+      throw new Error(`Post-migration assertion failed: migration '${m}' was not recorded in _migrations in ${context}`);
+    }
+  }
+
+  // 2. Check tables
+  const tables = await client.query(
+    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
+    [TEMPORAL_TABLES]
+  );
+  const foundTables = new Set(tables.rows.map((r) => r.table_name));
+  for (const t of TEMPORAL_TABLES) {
+    if (!foundTables.has(t)) {
+      throw new Error(`Post-migration assertion failed: temporal table '${t}' was not created in ${context}`);
+    }
+  }
+
+  // 3. Check views
+  const views = await client.query(
+    "SELECT table_name FROM information_schema.views WHERE table_schema = 'public' AND table_name = ANY($1::text[])",
+    [TEMPORAL_VIEWS]
+  );
+  const foundViews = new Set(views.rows.map((r) => r.table_name));
+  for (const v of TEMPORAL_VIEWS) {
+    if (!foundViews.has(v)) {
+      throw new Error(`Post-migration assertion failed: temporal view '${v}' was not created in ${context}`);
+    }
+  }
+
+  // 4. Check routine
+  const routines = await client.query(
+    "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public' AND routine_name = 'transfer_organization_ownership_temporal'"
+  );
+  if (routines.rows.length === 0) {
+    throw new Error(`Post-migration assertion failed: routine 'transfer_organization_ownership_temporal' not found in ${context}`);
+  }
+
+  return true;
 }
 
 /**
@@ -770,27 +1067,82 @@ export async function runTemporalIntegrationHarness(options = {}) {
 
   try {
     if (isEphemeral) {
-      console.log(`[runner] Querying branches for project '${PROJECT_ID}' to resolve 'main'...`);
+      console.log(`[runner] Querying branches for project '${PROJECT_ID}' to resolve base branch...`);
       const branches = fetchNeonBranches({ projectId: PROJECT_ID, neonctlExec });
-      const mainBranch = resolveNeonMainBranch(branches);
-      console.log(`[runner] Resolved parent branch '${mainBranch.name}' (${mainBranch.id})`);
+      const baseBranch = resolveNeonBaseBranch(branches, config.baseBranchId);
+      console.log(`[runner] Resolved base branch '${baseBranch.name}' (${baseBranch.id})`);
 
-      console.log(`[runner] Provisioning ephemeral Neon child branch from '${mainBranch.id}'...`);
+      // Preflight 1: Base branch must be in clean legacy state
+      console.log(`[runner] Preflight 1: Verifying base branch '${baseBranch.name}' (${baseBranch.id}) legacy state...`);
+      const baseConnectionString =
+        options.baseConnectionString ||
+        neonctlExec(
+          "npx",
+          [
+            "neonctl",
+            "connection-string",
+            baseBranch.id,
+            "--project-id",
+            PROJECT_ID,
+            "--database-name",
+            "neondb",
+          ],
+          { encoding: "utf-8" }
+        ).trim();
+
+      const baseClient = new ClientClass(baseConnectionString);
+      await baseClient.connect();
+      try {
+        await assertNoTemporalObjectsPresent(baseClient, {
+          context: `base branch '${baseBranch.name}' (${baseBranch.id})`,
+        });
+        console.log(`[runner] Preflight 1 PASSED: Base branch is free of temporal objects.`);
+      } finally {
+        await baseClient.end();
+      }
+
+      console.log(`[runner] Provisioning ephemeral Neon child branch from '${baseBranch.id}'...`);
       const created = createEphemeralBranch({
         projectId: PROJECT_ID,
-        parentBranchId: mainBranch.id,
+        parentBranchId: baseBranch.id,
         neonctlExec,
       });
 
       branchId = created.branchId;
       connectionString = created.connectionString;
-      console.log(`[runner] Ephemeral child branch '${created.branchName}' (${branchId}) ready.`);
+      console.log(`[runner] Ephemeral child branch '${created.branchName}' (${branchId}) created.`);
+
+      // Accreditation before ANY connection, seed or migration
+      console.log(`[runner] Accrediting ephemeral child branch '${branchId}' before connection...`);
+      try {
+        accreditBranchBeforeConnection({
+          branchId,
+          connectionString,
+          baseBranchId: baseBranch.id,
+          expectedEndpointId: options.expectedEndpointId || null,
+          projectId: PROJECT_ID,
+          neonctlExec,
+          branches: options.accreditBranches || null,
+          endpoints: options.accreditEndpoints || null,
+        });
+        console.log(`[runner] Accreditation PASSED for branch '${branchId}'.`);
+      } catch (accreditErr) {
+        console.error(`[runner] Accreditation FAILED for branch '${branchId}': ${accreditErr.message}`);
+        try {
+          deleteEphemeralBranch({ projectId: PROJECT_ID, branchId, neonctlExec });
+          console.log(`[runner] Ephemeral branch '${branchId}' deleted after failed accreditation.`);
+        } catch (delErr) {
+          console.error(`[runner] Warning: failed to delete branch '${branchId}' after failed accreditation: ${delErr.message}`);
+        }
+        branchId = null;
+        throw accreditErr;
+      }
     } else {
       console.log("[runner] Using verified explicit TEMPORAL_MODEL_DATABASE_URL.");
     }
 
-    // Step 1: Connect and seed legacy data
-    console.log("[runner] Connecting to database...");
+    // Step 1: Preflight 2 on target database & Seed legacy data
+    console.log("[runner] Step 1: Connecting to target database...");
     const client = new ClientClass(connectionString);
     await client.connect();
 
@@ -798,35 +1150,14 @@ export async function runTemporalIntegrationHarness(options = {}) {
     let seedOrgId = null;
 
     try {
-      console.log("[runner] Step 1: Checking pre-migration state and seeding legacy backfill cases...");
-      // Record baseline migrations (0001..0035) present in parent branch schema
-      await client.query("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-      const priorMigrations = [
-        "0001_init.sql", "0002_password_reset.sql", "0003_login_attempts.sql", "0004_organization_plan.sql",
-        "0005_employee_lifecycle.sql", "0006_employee_pending_access.sql", "0007_remove_manager_role.sql",
-        "0008_areas_optional.sql", "0009_format_profiles.sql", "0010_import_history.sql",
-        "0011_import_idempotency.sql", "0012_format_profiles_structurehash_uniqueness.sql",
-        "0013_membership_roles_owner.sql", "0014_single_owner_per_organization.sql",
-        "0015_membership_scoped_area.sql", "0016_organization_audit_events.sql",
-        "0017_schedules.sql", "0018_schedule_versions.sql", "0019_shift_assignments.sql",
-        "0020_shifts_schedule_version.sql", "0021_shift_assignments_import_id.sql",
-        "0022_shift_acknowledgements.sql", "0023_shift_comments.sql", "0024_change_requests.sql",
-        "0025_notifications.sql", "0026_oauth_identities.sql", "0027_approval_policy.sql",
-        "0028_approval_requests.sql", "0029_approval_decision_metadata.sql",
-        "0030_approval_rejection_metadata.sql", "0031_approval_audit_event_types.sql",
-        "0032_change_request_application.sql", "0033_import_outcome.sql",
-        "0034_shift_type_semantics.sql", "0035_operational_assignments.sql"
-      ];
-      for (const m of priorMigrations) {
-        await client.query("INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT DO NOTHING", [m]);
-      }
+      console.log("[runner] Preflight 2: Verifying target database legacy state before seed...");
+      await assertNoTemporalObjectsPresent(client, {
+        context: `target database (branch: ${branchId || "existing"})`,
+      });
+      console.log("[runner] Preflight 2 PASSED: Target database has clean legacy baseline.");
 
-      const preMig = await client.query(
-        "SELECT name FROM _migrations WHERE name = '0036_temporal_organizational_model.sql'"
-      );
-      if (preMig.rows.length > 0) {
-        throw new Error("Pre-migration assertion failed: 0036_temporal_organizational_model.sql is already applied on this target database.");
-      }
+      // Record baseline migrations if needed
+      await client.query("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
 
       const orgRes = await client.query(
         "INSERT INTO organizations (name, type) VALUES ('Temporal Backfill Verification Corp', 'company') RETURNING id"
@@ -852,11 +1183,16 @@ export async function runTemporalIntegrationHarness(options = {}) {
     }
     console.log("[runner] Migrations 0036 and 0037 applied successfully.");
 
-    // Step 3: Verify backfill results against seed
-    console.log("[runner] Step 3: Verifying 5 legacy backfill cases and link invariants...");
+    // Step 3: Verify post-migration objects and legacy backfill cases
+    console.log("[runner] Step 3: Verifying post-migration objects and legacy backfill cases...");
     const verifyClient = new ClientClass(connectionString);
     await verifyClient.connect();
     try {
+      await assertTemporalObjectsMaterialized(verifyClient, {
+        context: `target database post-migration (branch: ${branchId || "existing"})`,
+      });
+      console.log("[runner] Post-migration objects materialized assertion PASSED.");
+
       await verifyBackfillFn(verifyClient, { seedOrgId, seedData });
       console.log("[runner] Backfill verification PASSED (all 5 cases + link guarantee confirmed).");
     } finally {
