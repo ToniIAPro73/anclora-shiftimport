@@ -12,6 +12,7 @@ export default async function handler(req, res) {
     const sql = getSql();
     const result = await acceptAccessInvitation(sql, req.body ?? {}, {
       createSessionFn: (userId) => createSession(sql, userId),
+      acceptLanguageHeader: req.headers?.['accept-language'],
     });
     if (result.session) {
       res.setHeader('Set-Cookie', sessionCookieHeader(req, result.session.token, result.session.expiresAt));

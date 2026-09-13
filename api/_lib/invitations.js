@@ -272,6 +272,7 @@ export async function createAccessInvitation(sql, ctx, input, {
       organizationName: orgName,
       inviterName: ctx.user.displayName,
       role,
+      employeeName: person?.name ?? null,
       locale,
       expiresAt,
     });
@@ -392,7 +393,36 @@ export async function validateAccessInvitation(sql, token) {
   };
 }
 
-export async function acceptAccessInvitation(sql, input, { createSessionFn = null } = {}) {
+/**
+ * Server-side "browser preference" signal for the initial locale of a
+ * brand-new account — read from the standard Accept-Language request
+ * header, never from a client JSON payload field (the accept screen sends
+ * no locale at all). Only 'es'/'en' are supported; anything else, or a
+ * missing header, falls back to 'es'.
+ */
+export function resolveAcceptLanguageLocale(headerValue) {
+  const primary = String(headerValue ?? '').split(',')[0]?.split(';')[0]?.trim().toLowerCase();
+  return primary?.startsWith('en') ? 'en' : 'es';
+}
+
+/**
+ * Auto-resolves the display name for a brand-new account, in priority
+ * order, so the accept screen never has to ask for one:
+ *   1. The associated employee profile's name (`employee_profiles.employee_name`).
+ *   2. A name captured specifically for this invitation's recipient — no
+ *      such field is persisted anywhere today (adding one would be a schema
+ *      change), so this tier has no independent data source yet and
+ *      collapses into tier 1.
+ *   3. The local part of the recipient's email address (always available).
+ */
+export function resolveInvitationDisplayName({ employeeName, email }) {
+  const fromEmployee = String(employeeName ?? '').trim();
+  if (fromEmployee) return fromEmployee.slice(0, 160);
+  const localPart = String(email ?? '').split('@')[0].trim();
+  return (localPart || 'there').slice(0, 160);
+}
+
+export async function acceptAccessInvitation(sql, input, { createSessionFn = null, acceptLanguageHeader = '' } = {}) {
   const token = String(input?.token ?? '').trim();
   if (!isValidInvitationToken(token)) {
     const error = new HttpError(400, 'Invitation token is invalid');
@@ -400,22 +430,21 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
     throw error;
   }
   const tokenHash = createHash('sha256').update(token).digest('hex');
-  const email = normalizeInvitationEmail(input?.email);
   const password = String(input?.password ?? '');
-  const passwordConfirmation = String(input?.passwordConfirmation ?? '');
-  const locale = input?.locale === 'en' ? 'en' : 'es';
-  const theme = ['system', 'light', 'dark'].includes(input?.theme) ? input.theme : 'system';
-  const displayName = String(input?.displayName ?? '').trim().slice(0, 160);
 
+  // The email is authoritative from the validated invitation row only —
+  // never accepted from the client payload, so there is nothing to spoof.
   const invitationRows = await sql`
-    SELECT i.status, i.expires_at, i.email_normalized, u.account_status
+    SELECT i.status, i.expires_at, i.email_normalized, u.account_status, ep.employee_name
     FROM user_access_invitations i
     LEFT JOIN users u ON lower(u.email) = i.email_normalized
+    LEFT JOIN employee_profiles ep ON ep.organization_person_id = i.organization_person_id
+      AND ep.organization_id = i.organization_id
     WHERE i.token_hash = ${tokenHash}
   `;
   const invitation = invitationRows[0];
   const invitationState = invitationPublicState(invitation);
-  if (!invitation || invitationState !== 'VALID' || invitation.email_normalized !== email) {
+  if (!invitation || invitationState !== 'VALID') {
     const error = new HttpError(409, 'This invitation cannot be accepted');
     error.code = invitation?.status === 'ACCEPTED' ? 'INVITATION_ALREADY_ACCEPTED'
       : invitation?.status === 'REVOKED' ? 'INVITATION_REVOKED'
@@ -428,26 +457,17 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
     error.code = 'INVITATION_INVALID';
     throw error;
   }
+  const email = invitation.email_normalized;
 
   const acceptanceMode = invitation.account_status === 'ACTIVE' ? 'LINK_EXISTING' : 'CREATE_ACCOUNT';
-  if (acceptanceMode === 'LINK_EXISTING' && (password || passwordConfirmation)) {
+  if (acceptanceMode === 'LINK_EXISTING' && password) {
     const error = new HttpError(400, 'This existing account does not accept a password here');
     error.code = 'PASSWORD_NOT_ALLOWED';
-    throw error;
-  }
-  if (acceptanceMode === 'CREATE_ACCOUNT' && !displayName) {
-    const error = new HttpError(400, 'A display name is required to activate a new account');
-    error.code = 'DISPLAY_NAME_REQUIRED';
     throw error;
   }
   if (password && password.length < 8) {
     const error = new HttpError(400, 'Password must be at least 8 characters');
     error.code = 'PASSWORD_TOO_SHORT';
-    throw error;
-  }
-  if (password !== passwordConfirmation) {
-    const error = new HttpError(400, 'Passwords do not match');
-    error.code = 'PASSWORD_MISMATCH';
     throw error;
   }
   const passwordHash = acceptanceMode === 'CREATE_ACCOUNT' && password ? hashPassword(password) : null;
@@ -456,6 +476,8 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
     error.code = 'PASSWORD_REQUIRED';
     throw error;
   }
+  const displayName = resolveInvitationDisplayName({ employeeName: invitation.employee_name, email });
+  const locale = resolveAcceptLanguageLocale(acceptLanguageHeader);
   const result = await sql.transaction((txn) => [txn`
     WITH invitation AS MATERIALIZED (
       SELECT i.*
@@ -511,8 +533,11 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
       WHERE e.id = ep.id AND e.organization_id = ep.organization_id
       RETURNING e.id
     ), preferences AS (
-      INSERT INTO user_preferences (user_id, locale, theme)
-      SELECT fu.id, ${locale}, ${theme} FROM final_user fu
+      -- theme is intentionally omitted: the column's own DEFAULT ('system')
+      -- is the application default, and an existing user's row is left
+      -- untouched by ON CONFLICT DO NOTHING either way.
+      INSERT INTO user_preferences (user_id, locale)
+      SELECT fu.id, ${locale} FROM final_user fu
       ON CONFLICT (user_id) DO NOTHING
       RETURNING user_id
     ), accepted AS (
@@ -595,7 +620,7 @@ export async function resendAccessInvitation(sql, ctx, invitationId, options = {
     const email = buildInvitationEmail({
       appUrl: transport.config.appUrl, token, recipientName: row.employee_name,
       organizationName: row.organization_name, inviterName: ctx.user.displayName,
-      role: row.role, locale, expiresAt,
+      role: row.role, employeeName: row.employee_name, locale, expiresAt,
     });
     const delivery = await transport.send({ to: row.email_normalized, ...email });
     await sql`UPDATE user_access_invitations SET last_sent_at = NOW(), last_delivery_at = NOW(), delivery_status = 'SENT', send_attempts = 1, updated_at = NOW() WHERE id = ${replacementId}`;

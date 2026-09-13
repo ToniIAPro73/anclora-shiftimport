@@ -5499,6 +5499,76 @@ button[aria-busy='true'] {
 }
 .auth-divider { height: 1px; width: 50px; background: var(--color-accent); }
 .auth-app-name { margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+
+/*
+ * Accept-invitation surface: deliberately NOT `.auth-card` — the login
+ * modal's narrow single-column shape is wrong here. This is a wider,
+ * horizontal premium surface (summary left, activation right on desktop)
+ * sized so the reduced field set (no display name / locale / theme, email
+ * shown as text) always fits one viewport with zero scroll, at every
+ * contract breakpoint down to 360x800.
+ */
+.invite-card {
+  position: relative;
+  width: 100%;
+  max-width: 1040px;
+  border-radius: 24px;
+  border: 1px solid var(--glass-border);
+  background: var(--gradient-primary);
+  backdrop-filter: blur(20px);
+  padding: var(--space-xl);
+  box-shadow: 0 32px 80px -40px rgba(106, 173, 73, 0.4);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.invite-simple { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; width: 100%; }
+.invite-header { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.invite-title { margin: 0; font-size: 1.3rem; }
+.invite-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 32px;
+  align-items: start;
+  width: 100%;
+}
+.invite-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 28px;
+  border-right: 1px solid var(--glass-border);
+  min-width: 0;
+}
+.invite-summary .invite-header { align-items: flex-start; text-align: left; }
+.invite-summary-org { margin: 4px 0 0; font-size: 1.05rem; font-weight: 700; color: var(--text-primary); word-break: break-word; }
+.invite-summary-line { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
+.invite-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.invite-email-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.78rem; color: var(--text-muted); }
+.invite-email-info strong { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); word-break: break-all; }
+.invite-password-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.invite-password-hint { margin: 0; color: var(--text-muted); font-size: 0.75rem; }
+.invite-footer { display: flex; justify-content: flex-end; margin-top: 2px; }
+.invite-footer .auth-submit { min-width: 200px; }
+
+@media (max-width: 900px) {
+  .invite-card { max-width: 480px; }
+  .invite-grid { grid-template-columns: 1fr; gap: 16px; }
+  .invite-summary {
+    padding-right: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--glass-border);
+    padding-bottom: 14px;
+  }
+  .invite-summary .invite-header { align-items: center; text-align: center; }
+  .invite-password-row { grid-template-columns: 1fr; }
+  .invite-footer { justify-content: stretch; }
+  .invite-footer .auth-submit { width: 100%; min-width: 0; }
+}
+@media (max-width: 420px) {
+  .invite-card { padding: var(--space-md); }
+}
+
 .auth-form { display: grid; gap: 12px; width: 100%; }
 .auth-field { display: grid; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .auth-field .modal-input { height: 40px; box-sizing: border-box; }

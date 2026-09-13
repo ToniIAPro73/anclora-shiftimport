@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { acceptAccessInvitation, createInvitationToken, invitationPublicState, isValidInvitationToken, normalizeInvitationEmail, requireInvitationLocale, validateAccessInvitation } from './invitations.js';
+import { acceptAccessInvitation, createInvitationToken, invitationPublicState, isValidInvitationToken, normalizeInvitationEmail, requireInvitationLocale, resolveAcceptLanguageLocale, resolveInvitationDisplayName, validateAccessInvitation } from './invitations.js';
 
 describe('access invitation primitives', () => {
   it('normalizes valid email addresses and rejects malformed input', () => {
@@ -67,30 +67,53 @@ describe('access invitation primitives', () => {
     sql.transaction = () => { throw new Error('transaction should not start'); };
     await expect(acceptAccessInvitation(sql, {
       token,
-      email: 'person@example.test',
       password: 'not-used-here',
-      passwordConfirmation: 'not-used-here',
     })).rejects.toMatchObject({ code: 'PASSWORD_NOT_ALLOWED', status: 400 });
   });
 
-  it('requires both a display name and password for a new account', async () => {
+  it('ignores any email sent by the client — the invitation row is the only source', async () => {
+    const { token } = createInvitationToken();
+    const sql = () => Promise.resolve([{
+      status: 'PENDING',
+      expires_at: '2099-09-19T00:00:00.000Z',
+      email_normalized: 'real@example.test',
+      account_status: 'ACTIVE',
+    }]);
+    sql.transaction = () => { throw new Error('transaction should not start'); };
+    // A mismatched client-sent email changes nothing: the LINK_EXISTING +
+    // password guard still fires, proving email was never read from input.
+    await expect(acceptAccessInvitation(sql, {
+      token,
+      email: 'attacker@example.test',
+      password: 'irrelevant',
+    })).rejects.toMatchObject({ code: 'PASSWORD_NOT_ALLOWED', status: 400 });
+  });
+
+  it('requires a password for a new account and never requires a display name from the client', async () => {
     const { token } = createInvitationToken();
     const sql = () => Promise.resolve([{
       status: 'PENDING',
       expires_at: '2099-09-19T00:00:00.000Z',
       email_normalized: 'person@example.test',
       account_status: null,
+      employee_name: null,
     }]);
     sql.transaction = () => { throw new Error('transaction should not start'); };
-    await expect(acceptAccessInvitation(sql, {
-      token,
-      email: 'person@example.test',
-    })).rejects.toMatchObject({ code: 'DISPLAY_NAME_REQUIRED', status: 400 });
-    await expect(acceptAccessInvitation(sql, {
-      token,
-      email: 'person@example.test',
-      displayName: 'Synthetic Person',
-    })).rejects.toMatchObject({ code: 'PASSWORD_REQUIRED', status: 400 });
+    await expect(acceptAccessInvitation(sql, { token }))
+      .rejects.toMatchObject({ code: 'PASSWORD_REQUIRED', status: 400 });
+  });
+
+  it('resolves the display name automatically: employee profile name, else the email local part — never asks the client', () => {
+    expect(resolveInvitationDisplayName({ employeeName: 'Ada Lovelace', email: 'person@example.test' })).toBe('Ada Lovelace');
+    expect(resolveInvitationDisplayName({ employeeName: null, email: 'person@example.test' })).toBe('person');
+    expect(resolveInvitationDisplayName({ employeeName: '  ', email: 'jane.doe@example.test' })).toBe('jane.doe');
+  });
+
+  it('resolves the initial locale from Accept-Language, defaulting to Spanish — never from a client payload field', () => {
+    expect(resolveAcceptLanguageLocale('en-US,en;q=0.9,es;q=0.8')).toBe('en');
+    expect(resolveAcceptLanguageLocale('es-ES,es;q=0.9')).toBe('es');
+    expect(resolveAcceptLanguageLocale(undefined)).toBe('es');
+    expect(resolveAcceptLanguageLocale('')).toBe('es');
   });
 
   it('keeps a globally suspended account unavailable without exposing its state', async () => {

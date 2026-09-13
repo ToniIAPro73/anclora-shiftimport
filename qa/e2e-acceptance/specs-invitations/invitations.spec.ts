@@ -22,30 +22,57 @@ async function openInvitation(page: Page, token: string) {
   return request;
 }
 
-test('cuenta nueva limpia el fragmento, usa POST y completa la aceptación', async ({ page }, testInfo) => {
+// The three removed fields must never exist in the DOM — not merely hidden
+// by CSS — in either acceptance mode.
+async function expectRemovedFieldsAbsent(page: Page) {
+  await expect(page.locator('#invitation-displayName')).toHaveCount(0);
+  await expect(page.locator('#invitation-locale')).toHaveCount(0);
+  await expect(page.locator('#invitation-theme')).toHaveCount(0);
+  await expect(page.locator('#invitation-email')).toHaveCount(0);
+  await expect(page.locator('input[type="email"]')).toHaveCount(0);
+}
+
+test('cuenta nueva limpia el fragmento, no pide nombre/idioma/tema y envía payload mínimo', async ({ page }, testInfo) => {
   const fixture = loadFixture();
   const tokens = fixture.tokensByProject[testInfo.project.name];
   const request = await openInvitation(page, tokens.createToken);
   expect(request.method()).toBe('POST');
   expect(request.url()).not.toContain('token=');
   await expect.poll(() => page.url()).toMatch(/\/accept-invitation$/);
-  await expect(page.locator('#invitation-displayName')).toBeVisible();
   await expect(page.locator('#invitation-password')).toBeVisible();
-  await page.locator('#invitation-displayName').fill('E2E New Account');
+  await expect(page.getByTestId('invitation-email-display')).toBeVisible();
+  await expectRemovedFieldsAbsent(page);
+
   await page.locator('#invitation-password').fill('E2e-new-only-1234');
   await page.locator('#invitation-passwordConfirmation').fill('E2e-new-only-1234');
+  const acceptRequest = page.waitForRequest((r) => r.url().includes('/api/invitations/accept') && r.method() === 'POST');
   await page.getByRole('button', { name: /crear cuenta y aceptar/i }).click();
+  const sent = await acceptRequest;
+  const sentBody = JSON.parse(sent.postData() ?? '{}');
+  expect(Object.keys(sentBody).sort()).toEqual(['password', 'token']);
+  expect(sentBody).not.toHaveProperty('displayName');
+  expect(sentBody).not.toHaveProperty('locale');
+  expect(sentBody).not.toHaveProperty('theme');
+  expect(sentBody).not.toHaveProperty('email');
+  expect(sentBody).not.toHaveProperty('passwordConfirmation');
   await expect(page.getByText(/Acceso activado correctamente|Access activated successfully/i)).toBeVisible();
 });
 
-test('cuenta existente se enlaza sin mostrar ni enviar contraseña', async ({ page }, testInfo) => {
+test('cuenta existente se enlaza sin mostrar ni enviar contraseña, nombre, idioma o tema', async ({ page }, testInfo) => {
   const fixture = loadFixture();
   const tokens = fixture.tokensByProject[testInfo.project.name];
   const request = await openInvitation(page, tokens.linkToken);
   expect(request.method()).toBe('POST');
   expect(request.url()).not.toContain('token=');
   await expect(page.locator('#invitation-password')).toHaveCount(0);
+  await expect(page.getByTestId('invitation-email-display')).toBeVisible();
+  await expectRemovedFieldsAbsent(page);
   await expect(page.getByText(/Tu cuenta ya existe|Your account already exists/i)).toBeVisible();
+
+  const acceptRequest = page.waitForRequest((r) => r.url().includes('/api/invitations/accept') && r.method() === 'POST');
   await page.getByRole('button', { name: /añadir acceso y aceptar|add access and accept/i }).click();
+  const sent = await acceptRequest;
+  const sentBody = JSON.parse(sent.postData() ?? '{}');
+  expect(Object.keys(sentBody)).toEqual(['token']);
   await expect(page.getByText(/Acceso activado correctamente|Access activated successfully/i)).toBeVisible();
 });

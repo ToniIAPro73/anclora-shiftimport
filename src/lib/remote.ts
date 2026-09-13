@@ -989,14 +989,16 @@ export async function validateRemoteAccessInvitation(token: string): Promise<Inv
   });
 }
 
+/**
+ * Minimal accept payload: the email is authoritative from the validated
+ * invitation server-side (never sent here), and displayName/locale/theme
+ * are auto-resolved server-side — this screen never asks for them.
+ * `password` is only meaningful for a brand-new account; the confirmation
+ * field is validated client-side only and never transmitted.
+ */
 export async function acceptRemoteAccessInvitation(input: {
   token: string;
-  email: string;
-  displayName?: string;
   password?: string;
-  passwordConfirmation?: string;
-  locale: 'es' | 'en';
-  theme: 'system' | 'light' | 'dark';
 }): Promise<{ status: 'ACCEPTED'; organizationId: string; userId: string }> {
   return apiFetch('/api/invitations/accept', { method: 'POST', body: JSON.stringify(input) });
 }
