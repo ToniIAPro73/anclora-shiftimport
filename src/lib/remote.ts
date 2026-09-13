@@ -999,7 +999,15 @@ export async function validateRemoteAccessInvitation(token: string): Promise<Inv
 export async function acceptRemoteAccessInvitation(input: {
   token: string;
   password?: string;
-}): Promise<{ status: 'ACCEPTED'; organizationId: string; userId: string }> {
+}): Promise<{
+  status: 'ACCEPTED';
+  organizationId: string;
+  userId: string;
+  /** Present only when the caller was authenticated as a different identity
+   * than the invitation just activated: no session was created/replaced. */
+  requiresAccountSwitch?: boolean;
+  currentEmail?: string;
+}> {
   return apiFetch('/api/invitations/accept', { method: 'POST', body: JSON.stringify(input) });
 }
 

@@ -242,6 +242,18 @@ describe('EquipoModal — Tab 1: PERSONAS', () => {
     expect(screen.queryByText('Bob Admin')).not.toBeInTheDocument();
   });
 
+  it('renders translated bulk-import CSV labels, never the raw i18n keys', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    renderModal('OWNER');
+
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    expect(screen.getByTestId('bulk-import-employees-button')).toHaveTextContent('Importar empleados');
+    expect(screen.getByTestId('bulk-import-users-button')).toHaveTextContent('Importar usuarios');
+    expect(screen.queryByText('teamWorkspace.importEmployeesCsv')).not.toBeInTheDocument();
+    expect(screen.queryByText('teamWorkspace.importUsersCsv')).not.toBeInTheDocument();
+  });
+
   it('runs the 5-step wizard to create a new Persona with access and employee record', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
     mockedCreateRemoteAccessInvitation.mockResolvedValue({

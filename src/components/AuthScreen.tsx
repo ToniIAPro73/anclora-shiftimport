@@ -33,10 +33,17 @@ export const AuthScreen = ({ onAuthenticated, onContinueAsGuest, onClose, initia
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const oauthResult = new URLSearchParams(window.location.search).get('oauth');
+    const params = new URLSearchParams(window.location.search);
+    const oauthResult = params.get('oauth');
     if (oauthResult && /_(cancelled|invalid_state|error)$/.test(oauthResult)) {
       setError(t('auth.failed'));
       window.history.replaceState({}, '', window.location.pathname);
+    }
+    // Session-conflict handoff from the invitation-accept screen: the email
+    // is prefilled, the password never is — the user must authenticate fresh.
+    const emailHint = params.get('email');
+    if (emailHint) {
+      setEmail(emailHint);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

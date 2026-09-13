@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { I18nProvider } from '../lib/i18n-react';
@@ -48,5 +49,24 @@ describe('AuthScreen — login password visibility toggle', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }));
     expect(mockedLogin).toHaveBeenCalledWith('a@b.com', 'p4ssword!');
+  });
+});
+
+describe('AuthScreen — session-conflict handoff (?email= prefill)', () => {
+  afterEach(() => window.history.replaceState({}, '', '/login'));
+
+  it('prefills the email from the query string but never the password', () => {
+    window.history.replaceState({}, '', '/login?email=toni.garcia%40e2e.test');
+    renderAuthScreen();
+
+    expect(screen.getByLabelText('Correo electrónico')).toHaveValue('toni.garcia@e2e.test');
+    expect(screen.getByLabelText('Contraseña')).toHaveValue('');
+  });
+
+  it('leaves the email empty when there is no hint in the query string', () => {
+    window.history.replaceState({}, '', '/login');
+    renderAuthScreen();
+
+    expect(screen.getByLabelText('Correo electrónico')).toHaveValue('');
   });
 });

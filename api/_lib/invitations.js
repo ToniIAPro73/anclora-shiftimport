@@ -420,7 +420,19 @@ export function resolveInvitationDisplayName({ employeeName, email }) {
   return (localPart || 'there').slice(0, 160);
 }
 
-export async function acceptAccessInvitation(sql, input, { createSessionFn = null, acceptLanguageHeader = '' } = {}) {
+/**
+ * True when the request that is accepting this invitation is already
+ * authenticated as a DIFFERENT identity than the invitation's own email —
+ * the only case where acceptance must not install/replace a session. Both
+ * sides are server-authoritative (the session's user row, the invitation's
+ * normalized email), never a client-sent value.
+ */
+export function invitationCausesSessionConflict(currentUserEmail, acceptedEmail) {
+  if (!currentUserEmail) return false;
+  return String(currentUserEmail).trim().toLowerCase() !== String(acceptedEmail).trim().toLowerCase();
+}
+
+export async function acceptAccessInvitation(sql, input, { createSessionFn = null, acceptLanguageHeader = '', currentUserEmail = null } = {}) {
   const token = String(input?.token ?? '').trim();
   if (!isValidInvitationToken(token)) {
     const error = new HttpError(400, 'Invitation token is invalid');
@@ -558,10 +570,11 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
           : 'INVITATION_INVALID';
     throw error;
   }
-  if (createSessionFn) {
-    return { ...accepted, session: await createSessionFn(accepted.user_id) };
+  const requiresAccountSwitch = invitationCausesSessionConflict(currentUserEmail, email);
+  if (createSessionFn && !requiresAccountSwitch) {
+    return { ...accepted, email, requiresAccountSwitch, session: await createSessionFn(accepted.user_id) };
   }
-  return { ...accepted };
+  return { ...accepted, email, requiresAccountSwitch };
 }
 
 export async function revokeAccessInvitation(sql, ctx, invitationId) {

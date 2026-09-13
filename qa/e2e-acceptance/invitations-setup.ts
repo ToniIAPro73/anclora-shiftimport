@@ -96,7 +96,18 @@ export default async function globalSetup() {
     const existingPriorPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${priorOrgId}, ${existingUser.id}, 'ACTIVE') RETURNING id`)[0];
     await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${priorOrgId}, ${existingPriorPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${priorOwnerUser.userId}, 'USER')`;
 
-    const tokensByProject: Record<string, { createToken: string; linkToken: string; visualTokens: Record<string, string> }> = {};
+    const tokensByProject: Record<string, {
+      createToken: string;
+      linkToken: string;
+      visualTokens: Record<string, string>;
+      conflictOrgId: string;
+      conflictOwnerEmail: string;
+      conflictKeepEmail: string;
+      conflictKeepToken: string;
+      conflictSwitchEmail: string;
+      conflictSwitchToken: string;
+      sameIdentityToken: string;
+    }> = {};
     const invitedEmails: string[] = [existingEmail];
     // The responsive/visual spec runs once per (project, theme) and each run
     // completes a real accept flow to reach 'success' — every theme needs
@@ -128,7 +139,41 @@ export default async function globalSetup() {
         visualTokens[themeLabel] = visualInvite.token;
       }
 
-      tokensByProject[label] = { createToken: createInvite.token, linkToken: linkInvite.token, visualTokens };
+      // Session-conflict fixtures: owner A stays logged in on page 1 while
+      // page 2 (same BrowserContext, shared cookies) accepts B's invitation.
+      // Two separate invitations under the same A org — one consumed by the
+      // "keep session" spec, one by the "switch account" spec, single-use
+      // tokens can't be shared between them.
+      const conflictOrgId = await createOrg('Estudio Horizonte');
+      const conflictOwnerEmail = `laura.martin+conflict${projectIndex + 1}@e2e.test`;
+      const conflictOwnerUser = await createOwner(sql, conflictOrgId, conflictOwnerEmail);
+      createdUsers.push(conflictOwnerUser.userId);
+      const conflictKeepEmail = `toni.garcia+conflictkeep${projectIndex + 1}@e2e.test`;
+      const conflictSwitchEmail = `toni.garcia+conflictswitch${projectIndex + 1}@e2e.test`;
+      invitedEmails.push(conflictKeepEmail, conflictSwitchEmail);
+      const conflictKeepInvite = await seedInvitation(sql, conflictOrgId, conflictOwnerUser.userId, conflictKeepEmail);
+      const conflictSwitchInvite = await seedInvitation(sql, conflictOrgId, conflictOwnerUser.userId, conflictSwitchEmail);
+
+      // Same-identity regression: a second org invites the SAME already-
+      // existing user while they are already signed in as themselves — must
+      // link without ever showing the conflict screen.
+      const sameIdentityOrgId = await createOrg('Estudio Horizonte');
+      const sameIdentityOwnerUser = await createOwner(sql, sameIdentityOrgId, `laura.martin+sameid${projectIndex + 1}@e2e.test`);
+      createdUsers.push(sameIdentityOwnerUser.userId);
+      const sameIdentityInvite = await seedInvitation(sql, sameIdentityOrgId, sameIdentityOwnerUser.userId, existingEmail);
+
+      tokensByProject[label] = {
+        createToken: createInvite.token,
+        linkToken: linkInvite.token,
+        visualTokens,
+        conflictOrgId,
+        conflictOwnerEmail,
+        conflictKeepEmail,
+        conflictKeepToken: conflictKeepInvite.token,
+        conflictSwitchEmail,
+        conflictSwitchToken: conflictSwitchInvite.token,
+        sameIdentityToken: sameIdentityInvite.token,
+      };
     }
 
     // Guardrail (item 4): this suite must never create, seed or later
@@ -148,6 +193,10 @@ export default async function globalSetup() {
       existingUserId: existingUser.id,
       existingPasswordHash,
       existingEmail,
+      // Plaintext only for this synthetic @e2e.test fixture account — needed
+      // by the session-conflict spec to log in as the "already authenticated
+      // as the same identity" case.
+      existingPassword: 'E2e-existing-only-1234',
       protectedOrg,
       protectedCounts,
     }, null, 2));

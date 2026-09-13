@@ -502,7 +502,7 @@ function App() {
    * "app shell with null user" state. Guest data in localStorage is
    * preserved: guest mode remains reachable via "continuar como invitado".
    */
-  const resetToUnauthenticated = useCallback(async () => {
+  const resetToUnauthenticated = useCallback(async (loginEmailHint?: string) => {
     authEpochRef.current += 1;
     // Atomic transition: the auth-scoped state must COMMIT before the route
     // changes. Without flushSync, navigate()'s synchronous popstate dispatch
@@ -523,10 +523,10 @@ function App() {
     });
     clearAnonymousShiftDraft();
     setShifts([]);
-    navigate('/login');
+    navigate('/login', loginEmailHint ? `email=${encodeURIComponent(loginEmailHint)}` : undefined);
   }, []);
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(async (loginEmailHint?: string) => {
     if (isImporting) {
       return;
     }
@@ -539,7 +539,7 @@ function App() {
       // never invalidated server-side.
       console.error('Logout failed', error);
     }
-    await resetToUnauthenticated();
+    await resetToUnauthenticated(loginEmailHint);
   }, [isImporting, resetToUnauthenticated]);
 
   // A 401 on any authenticated API call means the session died server-side
@@ -1605,7 +1605,12 @@ function App() {
   // Invitation links are public and must not be intercepted by the regular
   // login gate while the recipient is completing account activation.
   if (route === '/accept-invitation') {
-    return <AcceptInvitationScreen />;
+    // The invited account may activate while a DIFFERENT identity is signed
+    // in on this same browser (session-conflict case): switching accounts is
+    // a real logout, so it goes through the same client-state teardown as
+    // the normal logout button, then lands on /login with the invited email
+    // prefilled (never its password).
+    return <AcceptInvitationScreen onSwitchAccount={(email) => void handleLogout(email)} />;
   }
 
   // Auth screen is a full-screen route-like surface (contract: no dashboard

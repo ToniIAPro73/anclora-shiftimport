@@ -184,6 +184,39 @@ describe('AcceptInvitationScreen terminal states', () => {
     expect(document.querySelector('.invite-card--terminal')).toBeInTheDocument();
   });
 
+  it('session conflict: activates the invited account without switching the current session, and offers an explicit switch', async () => {
+    window.history.replaceState({}, '', '/accept-invitation#token=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO');
+    vi.mocked(validateRemoteAccessInvitation).mockResolvedValue(validInvitation('CREATE_ACCOUNT'));
+    vi.mocked(acceptRemoteAccessInvitation).mockResolvedValue({
+      status: 'ACCEPTED',
+      organizationId: 'org-id',
+      userId: 'user-id',
+      requiresAccountSwitch: true,
+      currentEmail: 'laura.martin@e2e.test',
+    });
+    const onSwitchAccount = vi.fn();
+    render(<ThemeProvider><I18nProvider><AcceptInvitationScreen onSwitchAccount={onSwitchAccount} /></I18nProvider></ThemeProvider>);
+    await screen.findByLabelText('Crea tu contraseña');
+    fireEvent.change(screen.getByLabelText('Crea tu contraseña'), { target: { value: 'correct-horse-battery' } });
+    fireEvent.change(screen.getByLabelText('Confirma tu contraseña'), { target: { value: 'correct-horse-battery' } });
+    fireEvent.click(screen.getByRole('button', { name: /crear cuenta y aceptar/i }));
+
+    expect(await screen.findByText('Cuenta activada')).toBeInTheDocument();
+    expect(screen.getByText('La cuenta toni.garcia@e2e.test ya está preparada.')).toBeInTheDocument();
+    expect(screen.getByText('Actualmente tienes una sesión iniciada como laura.martin@e2e.test.')).toBeInTheDocument();
+
+    const primary = screen.getByRole('button', { name: 'Cerrar sesión e iniciar con la nueva cuenta' });
+    expect(primary.className).toContain('btn-gold');
+    const secondary = screen.getByRole('button', { name: 'Mantener la sesión actual' });
+    expect(secondary.className).not.toContain('btn-gold');
+
+    fireEvent.click(primary);
+    expect(onSwitchAccount).toHaveBeenCalledWith('toni.garcia@e2e.test');
+
+    fireEvent.click(secondary);
+    expect(window.location.pathname).toBe('/app');
+  });
+
   it('recoverable validation error stays compact and offers a retry', async () => {
     window.history.replaceState({}, '', '/accept-invitation#token=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO');
     vi.mocked(validateRemoteAccessInvitation)

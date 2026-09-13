@@ -7,7 +7,7 @@ import { useI18n } from '../lib/use-i18n';
 import { consumeInvitationToken } from '../lib/invitation-link';
 import { PasswordInput } from './ui/PasswordInput';
 
-type ViewState = 'loading' | 'valid' | 'success' | 'invalid';
+type ViewState = 'loading' | 'valid' | 'success' | 'conflict' | 'invalid';
 type FieldName = 'password' | 'passwordConfirmation';
 
 // The 4 terminal validation codes below all mean the same thing to the
@@ -27,7 +27,15 @@ function TerminalCard({ children }: { children: ReactNode }) {
   );
 }
 
-export function AcceptInvitationScreen() {
+interface AcceptInvitationScreenProps {
+  /** Called only for the session-conflict case (accepting while signed in as
+   * a different identity), with the invited email to prefill on /login. The
+   * caller owns the actual logout — this screen never touches cookies or
+   * client auth state directly. */
+  onSwitchAccount?: (invitedEmail: string) => void;
+}
+
+export function AcceptInvitationScreen({ onSwitchAccount }: AcceptInvitationScreenProps = {}) {
   const { t } = useI18n();
   const [state, setState] = useState<ViewState>('loading');
   const [invitation, setInvitation] = useState<InvitationValidation | null>(null);
@@ -38,6 +46,7 @@ export function AcceptInvitationScreen() {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldName, string>>>({});
   const [busy, setBusy] = useState(false);
   const [token] = useState(() => consumeInvitationToken());
+  const [conflictCurrentEmail, setConflictCurrentEmail] = useState('');
 
   const isCreateAccount = invitation?.acceptanceMode === 'CREATE_ACCOUNT';
   const firstErrorField = useMemo(() => (['password', 'passwordConfirmation'] as FieldName[])
@@ -81,11 +90,16 @@ export function AcceptInvitationScreen() {
 
     setBusy(true);
     try {
-      await acceptRemoteAccessInvitation({
+      const result = await acceptRemoteAccessInvitation({
         token,
         ...(isCreateAccount ? { password } : {}),
       });
-      setState('success');
+      if (result.requiresAccountSwitch) {
+        setConflictCurrentEmail(result.currentEmail ?? '');
+        setState('conflict');
+      } else {
+        setState('success');
+      }
     } catch (error) {
       const code = error instanceof ApiError ? (error.code ?? 'ACCEPT_ERROR') : 'NETWORK_ERROR';
       if (code === 'PASSWORD_MISMATCH') setPasswordConfirmation('');
@@ -148,6 +162,28 @@ export function AcceptInvitationScreen() {
           <div className="invite-terminal-cta">
             <button type="button" className="btn-gold invite-cta" onClick={() => navigate('/app')}>{t('acceptInvitation.goToApp')}</button>
           </div>
+        </TerminalCard>
+      </div>
+    );
+  }
+
+  if (state === 'conflict') {
+    const invitedEmail = invitation?.email ?? '';
+    return (
+      <div className="auth-screen">
+        <TerminalCard>
+          <CheckCircle2 className="invite-terminal-icon invite-terminal-icon--success" size={28} aria-hidden="true" />
+          <h1 className="invite-terminal-title">{t('acceptInvitation.conflictTitle')}</h1>
+          <p role="status" className="invite-terminal-text">{t('acceptInvitation.conflictReady', { email: invitedEmail })}</p>
+          <p className="invite-terminal-text">{t('acceptInvitation.conflictCurrent', { email: conflictCurrentEmail })}</p>
+          <div className="invite-terminal-cta">
+            <button type="button" className="btn-gold invite-cta" onClick={() => onSwitchAccount?.(invitedEmail)}>
+              {t('acceptInvitation.switchAccount')}
+            </button>
+          </div>
+          <button type="button" className="auth-link" onClick={() => navigate('/app')}>
+            {t('acceptInvitation.keepSession')}
+          </button>
         </TerminalCard>
       </div>
     );

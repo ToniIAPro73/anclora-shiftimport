@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { acceptAccessInvitation, createInvitationToken, invitationPublicState, isValidInvitationToken, normalizeInvitationEmail, requireInvitationLocale, resolveAcceptLanguageLocale, resolveInvitationDisplayName, validateAccessInvitation } from './invitations.js';
+import { acceptAccessInvitation, createInvitationToken, invitationCausesSessionConflict, invitationPublicState, isValidInvitationToken, normalizeInvitationEmail, requireInvitationLocale, resolveAcceptLanguageLocale, resolveInvitationDisplayName, validateAccessInvitation } from './invitations.js';
 
 describe('access invitation primitives', () => {
   it('normalizes valid email addresses and rejects malformed input', () => {
@@ -128,5 +128,61 @@ describe('access invitation primitives', () => {
       code: 'INVITATION_INVALID',
       status: 404,
     });
+  });
+});
+
+describe('invitation acceptance never silently replaces another identity\'s session', () => {
+  it('flags a conflict only when the authenticated caller differs from the invitation email', () => {
+    expect(invitationCausesSessionConflict('owner@example.test', 'employee@example.test')).toBe(true);
+    expect(invitationCausesSessionConflict('Owner@Example.test', 'owner@example.test')).toBe(false);
+    expect(invitationCausesSessionConflict(null, 'employee@example.test')).toBe(false);
+    expect(invitationCausesSessionConflict(undefined, 'employee@example.test')).toBe(false);
+  });
+
+  function fakeAcceptSql({ email, accountStatus = 'ACTIVE', userId = 'user-1', organizationId = 'org-1' }) {
+    const sql = () => Promise.resolve([{
+      status: 'PENDING',
+      expires_at: '2099-09-19T00:00:00.000Z',
+      email_normalized: email,
+      account_status: accountStatus,
+      employee_name: null,
+    }]);
+    sql.transaction = () => Promise.resolve([[{ id: 'invitation-1', organization_id: organizationId, user_id: userId }]]);
+    return sql;
+  }
+
+  it('does not create a session when the caller is authenticated as a different identity', async () => {
+    const { token } = createInvitationToken();
+    const sql = fakeAcceptSql({ email: 'employee@example.test' });
+    const createSessionFn = () => Promise.reject(new Error('a session must not be created on conflict'));
+    const result = await acceptAccessInvitation(sql, { token }, {
+      createSessionFn,
+      currentUserEmail: 'owner@example.test',
+    });
+    expect(result.requiresAccountSwitch).toBe(true);
+    expect(result.session).toBeUndefined();
+    expect(result.user_id).toBe('user-1');
+  });
+
+  it('still creates a session when the caller is already authenticated as the same identity', async () => {
+    const { token } = createInvitationToken();
+    const sql = fakeAcceptSql({ email: 'owner@example.test' });
+    const result = await acceptAccessInvitation(sql, { token }, {
+      createSessionFn: () => Promise.resolve({ token: 'new-session-token', expiresAt: new Date('2099-01-01') }),
+      currentUserEmail: 'Owner@Example.test',
+    });
+    expect(result.requiresAccountSwitch).toBe(false);
+    expect(result.session).toEqual({ token: 'new-session-token', expiresAt: new Date('2099-01-01') });
+  });
+
+  it('creates a session as before when there is no active caller session at all', async () => {
+    const { token } = createInvitationToken();
+    const sql = fakeAcceptSql({ email: 'new-recipient@example.test', accountStatus: null });
+    const result = await acceptAccessInvitation(sql, { token, password: 'a-strong-password' }, {
+      createSessionFn: () => Promise.resolve({ token: 'brand-new-session', expiresAt: new Date('2099-01-01') }),
+      currentUserEmail: null,
+    });
+    expect(result.requiresAccountSwitch).toBe(false);
+    expect(result.session).toEqual({ token: 'brand-new-session', expiresAt: new Date('2099-01-01') });
   });
 });
