@@ -11,8 +11,11 @@ function loadFixture() {
 
 async function openInvitation(page: Page, token: string) {
   const requestPromise = page.waitForRequest((request) => request.url().includes('/api/invitations/validate'));
+  const responsePromise = page.waitForResponse((response) => response.url().includes('/api/invitations/validate'));
   await page.goto(`/accept-invitation#token=${encodeURIComponent(token)}`);
   const request = await requestPromise;
+  const response = await responsePromise;
+  expect(response.status()).toBe(200);
   return request;
 }
 
