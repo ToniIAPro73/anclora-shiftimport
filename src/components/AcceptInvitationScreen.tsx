@@ -142,7 +142,9 @@ export function AcceptInvitationScreen() {
         <TerminalCard>
           <CheckCircle2 className="invite-terminal-icon invite-terminal-icon--success" size={28} aria-hidden="true" />
           <h1 className="invite-terminal-title">{t('acceptInvitation.successTitle')}</h1>
-          <p role="status" className="invite-terminal-text">{t('acceptInvitation.success')}</p>
+          <p role="status" className="invite-terminal-text">
+            {t('acceptInvitation.success', { organization: invitation?.organizationName ?? '' })}
+          </p>
           <div className="invite-terminal-cta">
             <button type="button" className="btn-gold invite-cta" onClick={() => navigate('/app')}>{t('acceptInvitation.goToApp')}</button>
           </div>
@@ -165,10 +167,7 @@ export function AcceptInvitationScreen() {
               <h1 className="invite-title">{t('acceptInvitation.title')}</h1>
             </div>
             <p className="invite-summary-org">{invitation.organizationName}</p>
-            <p className="invite-summary-line">{t('acceptInvitation.role', { role: t(`role.${invitation.role.toLowerCase()}`) })}</p>
-            {invitation.employeeName && (
-              <p className="invite-summary-line">{t('acceptInvitation.employee', { name: invitation.employeeName })}</p>
-            )}
+            <p className="invite-summary-line">{t('acceptInvitation.invitedToJoin')}</p>
           </section>
 
           <section className="invite-panel">

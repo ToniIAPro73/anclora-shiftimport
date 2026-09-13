@@ -40,7 +40,7 @@ async function expectGoldCta(page: Page, cta: ReturnType<Page['getByRole']>, lab
     expect(box.y, `${label}: CTA top inside viewport`).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, `${label}: CTA right inside viewport`).toBeLessThanOrEqual(viewport.width + 1);
     expect(box.y + box.height, `${label}: CTA bottom inside viewport`).toBeLessThanOrEqual(viewport.height + 1);
-    expect(box.height, `${label}: CTA min height 48px`).toBeGreaterThanOrEqual(47);
+    expect(box.height, `${label}: CTA min height 48px`).toBeGreaterThanOrEqual(51);
   }
   const styles = await cta.evaluate((el) => {
     const computed = getComputedStyle(el);
@@ -84,6 +84,7 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       expect(newCardBox, `new account @ ${theme}: card present`).not.toBeNull();
       if (newCardBox) expect(newCardBox.width, `new account @ ${theme}: max-width <= 900px`).toBeLessThanOrEqual(901);
       await expect(page.getByText('Aceptar invitación')).toBeVisible();
+      await expect(page.getByText(/Tipo de acceso|Perfil asociado|EMPLOYEE|Access type|Associated profile/i)).toHaveCount(0);
       await expectGoldCta(page, page.getByRole('button', { name: 'Crear cuenta y aceptar' }), `new account @ ${theme}`);
       await expectNoScroll(page, `new account @ ${theme}`);
 
@@ -104,6 +105,7 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
         }
       }
       await expect(page.getByText('Aceptar invitación')).toBeVisible();
+      await expect(page.getByText(/Tipo de acceso|Perfil asociado|EMPLOYEE|Access type|Associated profile/i)).toHaveCount(0);
       await expectGoldCta(page, page.getByRole('button', { name: 'Añadir acceso y aceptar' }), `existing account @ ${theme}`);
       await expectNoScroll(page, `existing account @ ${theme}`);
 
@@ -112,7 +114,7 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       await page.goto('/login');
       await page.goto(`/accept-invitation#token=${encodeURIComponent(bogusToken)}`);
       await expect(page.getByText('Esta invitación ya no está disponible')).toBeVisible();
-      await expect(page.getByText('El enlace puede haber caducado, haberse utilizado anteriormente o haber sido cancelado.')).toBeVisible();
+      await expect(page.getByText('Puede que ya la hayas aceptado o que el enlace haya caducado. Si necesitas acceso, solicita una nueva invitación a la persona que te invitó.')).toBeVisible();
       await expect(page.getByText('Aceptar invitación', { exact: true })).toHaveCount(0);
       const unavailableBox = await page.locator('.invite-card--terminal').boundingBox();
       expect(unavailableBox, `unavailable @ ${theme}: card present`).not.toBeNull();
@@ -137,7 +139,7 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       await page.locator('#invitation-passwordConfirmation').fill('E2e-visual-only-1234');
       await page.getByRole('button', { name: 'Crear cuenta y aceptar' }).click();
       await expect(page.getByText('Acceso activado')).toBeVisible();
-      await expect(page.getByText('Ya puedes entrar en Anclora ShiftImport y acceder a tus turnos.')).toBeVisible();
+      await expect(page.getByText('Ya puedes entrar en Anclora ShiftImport y empezar a trabajar con Estudio Horizonte.')).toBeVisible();
       await expect(page.getByText('Aceptar invitación', { exact: true })).toHaveCount(0);
       const successBox = await page.locator('.invite-card--terminal').boundingBox();
       expect(successBox, `success @ ${theme}: card present`).not.toBeNull();

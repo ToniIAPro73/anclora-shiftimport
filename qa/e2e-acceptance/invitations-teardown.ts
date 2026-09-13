@@ -49,6 +49,8 @@ export default async function globalTeardown() {
       sql`SELECT count(*)::int AS count FROM organization_people WHERE organization_id = ${groundforceId}`,
       sql`SELECT count(*)::int AS count FROM employees WHERE organization_id = ${groundforceId}`,
       sql`SELECT count(*)::int AS count FROM employee_profiles WHERE organization_id = ${groundforceId}`,
+      sql`SELECT count(*)::int AS count FROM person_role_periods WHERE organization_id = ${groundforceId}`,
+      sql`SELECT count(*)::int AS count FROM person_access_scope_periods WHERE organization_id = ${groundforceId}`,
       sql`SELECT count(*)::int AS count FROM user_access_invitations WHERE organization_id = ${groundforceId}`,
     ]);
     const actual = counts.map((row) => row[0].count);

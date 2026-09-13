@@ -45,7 +45,7 @@ describe('access invitation primitives', () => {
       status: 'PENDING',
       created_at: '2026-09-12T00:00:00.000Z',
       expires_at: '2026-09-19T00:00:00.000Z',
-      organization_name: 'Synthetic Org',
+      organization_name: 'Estudio Horizonte',
       employee_name: null,
       role: 'EMPLOYEE',
       account_status: 'ACTIVE',

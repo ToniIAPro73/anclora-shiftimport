@@ -5594,15 +5594,17 @@ button[aria-busy='true'] {
  * roomier) on top of `.btn-gold`'s real colors — it never redefines them.
  */
 .invite-cta {
-  min-height: 48px;
+  min-height: 52px;
   padding: 12px 28px;
   font-size: 15px;
   border-radius: 12px;
 }
 .invite-cta:focus-visible {
-  outline: 2px solid #1b1f2f;
-  outline-offset: 2px;
+  outline: 3px solid var(--text-primary);
+  outline-offset: 3px;
 }
+.invite-cta:hover:not(:disabled) { filter: brightness(1.06); }
+.invite-cta:active:not(:disabled) { filter: brightness(0.96); transform: scale(0.99); }
 .invite-terminal-cta .invite-cta { min-width: 230px; }
 .invite-footer .invite-cta { min-width: 200px; }
 

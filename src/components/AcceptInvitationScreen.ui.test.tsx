@@ -20,10 +20,10 @@ vi.mock('../lib/remote', async () => {
 const validInvitation = (acceptanceMode: 'CREATE_ACCOUNT' | 'LINK_EXISTING', employeeName: string | null = null) => ({
   status: 'VALID' as const,
   invitationId: 'invitation-id',
-  organizationName: 'Synthetic Org',
+  organizationName: 'Estudio Horizonte',
   role: 'EMPLOYEE' as const,
   employeeName,
-  email: 'person@example.test',
+  email: 'toni.garcia@e2e.test',
   expiresAt: '2026-09-19T00:00:00.000Z',
   acceptanceMode,
 });
@@ -57,24 +57,19 @@ describe('AcceptInvitationScreen account modes', () => {
     expect(document.getElementById('invitation-theme')).not.toBeInTheDocument();
   });
 
-  it('shows the organization, translated access type and, when present, the associated employee profile', async () => {
+  it('shows a human invitation summary without internal access or profile terminology', async () => {
     renderScreen('CREATE_ACCOUNT', 'Marta Ruiz');
-    expect(await screen.findByText('Synthetic Org')).toBeInTheDocument();
-    expect(screen.getByText('Tipo de acceso: Empleado')).toBeInTheDocument();
-    expect(screen.getByText('Perfil asociado: Marta Ruiz')).toBeInTheDocument();
-  });
-
-  it('hides the associated employee line when there is no employee profile', async () => {
-    renderScreen('CREATE_ACCOUNT', null);
-    await screen.findByText('Synthetic Org');
-    expect(screen.queryByText(/Perfil asociado/)).not.toBeInTheDocument();
+    expect(await screen.findByText('Estudio Horizonte')).toBeInTheDocument();
+    expect(screen.getByText('Activa tu acceso para continuar.')).toBeInTheDocument();
+    expect(screen.queryByText(/Tipo de acceso|Perfil asociado|Empleado|EMPLOYEE/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Marta Ruiz')).not.toBeInTheDocument();
   });
 
   it('presents the email as read-only information, never as an editable input', async () => {
     renderScreen('CREATE_ACCOUNT');
     const emailDisplay = await screen.findByTestId('invitation-email-display');
     expect(emailDisplay.tagName).not.toBe('INPUT');
-    expect(emailDisplay).toHaveTextContent('person@example.test');
+    expect(emailDisplay).toHaveTextContent('toni.garcia@e2e.test');
     expect(document.getElementById('invitation-email')).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: /correo/i })).not.toBeInTheDocument();
   });
@@ -167,7 +162,7 @@ describe('AcceptInvitationScreen terminal states', () => {
     fireEvent.click(screen.getByRole('button', { name: /añadir acceso y aceptar/i }));
 
     expect(await screen.findByText('Acceso activado')).toBeInTheDocument();
-    expect(screen.getByText('Ya puedes entrar en Anclora ShiftImport y acceder a tus turnos.')).toBeInTheDocument();
+    expect(screen.getByText('Ya puedes entrar en Anclora ShiftImport y empezar a trabajar con Estudio Horizonte.')).toBeInTheDocument();
     const cta = screen.getByRole('button', { name: 'Ir a la aplicación' });
     expect(cta.className).toContain('btn-gold');
     expect(screen.queryByText('Aceptar invitación')).not.toBeInTheDocument();
@@ -182,10 +177,24 @@ describe('AcceptInvitationScreen terminal states', () => {
     render(<ThemeProvider><I18nProvider><AcceptInvitationScreen /></I18nProvider></ThemeProvider>);
 
     expect(await screen.findByText('Esta invitación ya no está disponible')).toBeInTheDocument();
-    expect(screen.getByText('El enlace puede haber caducado, haberse utilizado anteriormente o haber sido cancelado.')).toBeInTheDocument();
+    expect(screen.getByText('Puede que ya la hayas aceptado o que el enlace haya caducado. Si necesitas acceso, solicita una nueva invitación a la persona que te invitó.')).toBeInTheDocument();
     const cta = screen.getByRole('button', { name: 'Volver a ShiftImport' });
     expect(cta.className).toContain('btn-gold');
     expect(screen.queryByText('Aceptar invitación')).not.toBeInTheDocument();
     expect(document.querySelector('.invite-card--terminal')).toBeInTheDocument();
+  });
+
+  it('recoverable validation error stays compact and offers a retry', async () => {
+    window.history.replaceState({}, '', '/accept-invitation#token=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO');
+    vi.mocked(validateRemoteAccessInvitation)
+      .mockRejectedValueOnce(new Error('temporary outage'))
+      .mockResolvedValueOnce(validInvitation('LINK_EXISTING'));
+    render(<ThemeProvider><I18nProvider><AcceptInvitationScreen /></I18nProvider></ThemeProvider>);
+
+    expect(await screen.findByText('No se pudo validar la invitación')).toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: 'Volver a validar' });
+    expect(retry).toHaveClass('btn-gold', 'invite-cta');
+    fireEvent.click(retry);
+    expect(await screen.findByText('Tu cuenta ya existe. Añade este acceso para continuar. Tu contraseña y tus preferencias no cambiarán.')).toBeInTheDocument();
   });
 });

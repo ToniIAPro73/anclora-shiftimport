@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const PRODUCTION_BASE_URL = 'https://shiftimport.anclora.com';
+if (process.env.INVITATIONS_BASE_URL && process.env.INVITATIONS_BASE_URL !== PRODUCTION_BASE_URL) {
+  throw new Error(`Invitation E2E is restricted to ${PRODUCTION_BASE_URL}`);
+}
+
 export default defineConfig({
   testDir: './specs-invitations',
   outputDir: './test-results-invitations',
@@ -12,8 +17,7 @@ export default defineConfig({
   globalSetup: './invitations-setup.ts',
   globalTeardown: './invitations-teardown.ts',
   use: {
-    baseURL: process.env.INVITATIONS_BASE_URL
-      ?? 'https://anclora-shiftimport-git-development-pmi140979-6354s-projects.vercel.app',
+    baseURL: PRODUCTION_BASE_URL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     locale: 'es-ES',

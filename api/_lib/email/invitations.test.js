@@ -4,30 +4,30 @@ import { buildInvitationEmail } from './invitations.js';
 const base = {
   appUrl: 'https://shiftimport.example.test',
   token: 'clear-token-only-in-memory',
-  recipientName: 'Ada Lovelace',
-  organizationName: 'Synthetic Org',
-  inviterName: 'Owner',
+  recipientName: 'Toni García',
+  organizationName: 'Estudio Horizonte',
+  inviterName: 'Laura Martín',
   expiresAt: '2026-09-19T00:00:00.000Z',
 };
 
 describe('invitation email rendering', () => {
   it('renders the exact Spanish copy, with only the first name in the greeting', () => {
     const message = buildInvitationEmail({ ...base, locale: 'es' });
-    expect(message.subject).toBe('Tienes una invitación para unirte a Synthetic Org');
-    expect(message.text).toContain('Hola Ada,');
-    expect(message.text).toContain('Owner te ha invitado a unirte a Synthetic Org en Anclora ShiftImport.');
-    expect(message.text).toContain('Acepta la invitación para acceder a tus turnos y empezar a utilizar la aplicación.');
-    expect(message.text).toContain('Este enlace es personal y estará disponible hasta el');
+    expect(message.subject).toBe('Tienes una invitación para unirte a Estudio Horizonte');
+    expect(message.text).toContain('Hola Toni,');
+    expect(message.text).toContain('Laura Martín te ha invitado a unirte a Estudio Horizonte en Anclora ShiftImport.');
+    expect(message.text).toContain('Accede a la invitación para activar tu cuenta y empezar a usar la aplicación.');
+    expect(message.text).toContain('Esta invitación estará disponible hasta el');
     expect(message.text).toContain('Si no esperabas este correo, puedes ignorarlo.');
   });
 
   it('renders a natural English adaptation, not a literal translation', () => {
     const message = buildInvitationEmail({ ...base, locale: 'en' });
-    expect(message.subject).toBe('You have an invitation to join Synthetic Org');
-    expect(message.text).toContain('Hi Ada,');
-    expect(message.text).toContain('Owner has invited you to join Synthetic Org on Anclora ShiftImport.');
-    expect(message.text).toContain('Accept the invitation to access your shifts and start using the app.');
-    expect(message.text).toContain('This link is personal and will be available until');
+    expect(message.subject).toBe('You have an invitation to join Estudio Horizonte');
+    expect(message.text).toContain('Hi Toni,');
+    expect(message.text).toContain('Laura Martín has invited you to join Estudio Horizonte on Anclora ShiftImport.');
+    expect(message.text).toContain('Open the invitation to activate your account and start using the app.');
+    expect(message.text).toContain('This invitation will be available until');
   });
 
   it('never exposes role, employee linkage, invitation status or any account-internal detail', () => {
@@ -74,5 +74,19 @@ describe('invitation email rendering', () => {
     expect(message.text).toContain(`/accept-invitation#token=${base.token}`);
     expect(message.text).not.toContain('/accept-invitation?token=');
     expect(message.html).toContain(`/accept-invitation#token=${base.token}`);
+  });
+
+  it('escapes human names and organization names in HTML while keeping the plain text readable', () => {
+    const message = buildInvitationEmail({
+      ...base,
+      recipientName: 'Toni <García>',
+      inviterName: 'Laura & Co.',
+      organizationName: 'Estudio <Horizonte>',
+    });
+    expect(message.html).not.toContain('<García>');
+    expect(message.html).toContain('Laura &amp; Co.');
+    expect(message.html).toContain('Estudio &lt;Horizonte&gt;');
+    expect(message.text).toContain('Laura & Co.');
+    expect(message.text).toContain('Estudio <Horizonte>');
   });
 });

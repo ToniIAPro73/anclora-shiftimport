@@ -56,6 +56,14 @@ test('cuenta nueva limpia el fragmento, no pide nombre/idioma/tema y envía payl
   expect(sentBody).not.toHaveProperty('email');
   expect(sentBody).not.toHaveProperty('passwordConfirmation');
   await expect(page.getByText(/Acceso activado$|Access activated$/i)).toBeVisible();
+
+  // Reopening the same consumed fixture token must resolve to the neutral
+  // unavailable state, never expose an internal status or reopen the form.
+  await page.goto('/login');
+  await page.goto(`/accept-invitation#token=${encodeURIComponent(tokens.createToken)}`);
+  await expect(page.getByRole('heading', { name: /Esta invitación ya no está disponible|This invitation is no longer available/i })).toBeVisible();
+  await expect(page.getByText(/Puede que ya la hayas aceptado|You may have already accepted/i)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Volver a ShiftImport|Back to ShiftImport/i })).toBeVisible();
 });
 
 test('cuenta existente se enlaza sin mostrar ni enviar contraseña, nombre, idioma o tema', async ({ page }, testInfo) => {

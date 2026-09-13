@@ -21,7 +21,8 @@ export function buildInvitationEmail({
   const recipientFirstName = String(recipientName ?? '').trim().split(/\s+/)[0] || '';
   const safeRecipientFirstName = escapeHtml(recipientFirstName);
   const safeOrganization = escapeHtml(organizationName);
-  const safeInviter = escapeHtml(inviterName || (language === 'en' ? 'Someone at your organization' : 'Alguien de tu organización'));
+  const inviter = String(inviterName ?? '').trim() || (language === 'en' ? 'Someone at your organization' : 'Alguien de tu organización');
+  const safeInviter = escapeHtml(inviter);
   // The token lives in the URL fragment so browsers, proxies, referrers and
   // analytics never receive it as an HTTP request target.
   const link = `${appUrl}/accept-invitation#token=${encodeURIComponent(token)}`;
@@ -36,54 +37,56 @@ export function buildInvitationEmail({
   const ctaButtonStyle = 'display:inline-block;padding:14px 32px;background-color:#f0ce62;color:#1b1f2f;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px';
 
   if (language === 'en') {
-    const greeting = safeRecipientFirstName ? `Hi ${safeRecipientFirstName},` : 'Hi,';
+    const greeting = recipientFirstName ? `Hi ${recipientFirstName},` : 'Hi,';
+    const safeGreeting = safeRecipientFirstName ? `Hi ${safeRecipientFirstName},` : 'Hi,';
     return {
       subject: `You have an invitation to join ${organizationName}`,
       text: [
         greeting,
         '',
-        `${safeInviter} has invited you to join ${organizationName} on Anclora ShiftImport.`,
+        `${inviter} has invited you to join ${organizationName} on Anclora ShiftImport.`,
         '',
-        'Accept the invitation to access your shifts and start using the app.',
+        'Open the invitation to activate your account and start using the app.',
         '',
         `Accept invitation: ${link}`,
         '',
-        `This link is personal and will be available until ${expiry}.`,
+        `This invitation will be available until ${expiry}.`,
         "If you weren't expecting this email, you can ignore it.",
       ].join('\n'),
       html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:520px;margin:auto">
 <h1 style="font-size:18px">Anclora ShiftImport</h1>
-<p>${greeting}</p>
+<p>${safeGreeting}</p>
 <p><strong>${safeInviter}</strong> has invited you to join <strong>${safeOrganization}</strong> on Anclora ShiftImport.</p>
-<p>Accept the invitation to access your shifts and start using the app.</p>
+<p>Open the invitation to activate your account and start using the app.</p>
 <p><a href="${safeLink}" style="${ctaButtonStyle}">Accept invitation</a></p>
-<p style="color:#5b6472;font-size:13px">This link is personal and will be available until ${safeExpiry}.</p>
+<p style="color:#5b6472;font-size:13px">This invitation will be available until ${safeExpiry}.</p>
 <p style="color:#5b6472;font-size:13px">If you weren't expecting this email, you can ignore it.</p>
 </div>`,
     };
   }
-  const greeting = safeRecipientFirstName ? `Hola ${safeRecipientFirstName},` : 'Hola,';
+  const greeting = recipientFirstName ? `Hola ${recipientFirstName},` : 'Hola,';
+  const safeGreeting = safeRecipientFirstName ? `Hola ${safeRecipientFirstName},` : 'Hola,';
   return {
     subject: `Tienes una invitación para unirte a ${organizationName}`,
     text: [
       greeting,
       '',
-      `${safeInviter} te ha invitado a unirte a ${organizationName} en Anclora ShiftImport.`,
+      `${inviter} te ha invitado a unirte a ${organizationName} en Anclora ShiftImport.`,
       '',
-      'Acepta la invitación para acceder a tus turnos y empezar a utilizar la aplicación.',
+      'Accede a la invitación para activar tu cuenta y empezar a usar la aplicación.',
       '',
       `Aceptar invitación: ${link}`,
       '',
-      `Este enlace es personal y estará disponible hasta el ${expiry}.`,
+      `Esta invitación estará disponible hasta el ${expiry}.`,
       'Si no esperabas este correo, puedes ignorarlo.',
     ].join('\n'),
     html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;max-width:520px;margin:auto">
 <h1 style="font-size:18px">Anclora ShiftImport</h1>
-<p>${greeting}</p>
+<p>${safeGreeting}</p>
 <p><strong>${safeInviter}</strong> te ha invitado a unirte a <strong>${safeOrganization}</strong> en Anclora ShiftImport.</p>
-<p>Acepta la invitación para acceder a tus turnos y empezar a utilizar la aplicación.</p>
+<p>Accede a la invitación para activar tu cuenta y empezar a usar la aplicación.</p>
 <p><a href="${safeLink}" style="${ctaButtonStyle}">Aceptar invitación</a></p>
-<p style="color:#5b6472;font-size:13px">Este enlace es personal y estará disponible hasta el ${safeExpiry}.</p>
+<p style="color:#5b6472;font-size:13px">Esta invitación estará disponible hasta el ${safeExpiry}.</p>
 <p style="color:#5b6472;font-size:13px">Si no esperabas este correo, puedes ignorarlo.</p>
 </div>`,
   };
