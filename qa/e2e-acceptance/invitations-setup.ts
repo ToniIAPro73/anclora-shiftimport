@@ -7,6 +7,12 @@ import { hashPassword } from '../../api/_lib/passwords.js';
 const fixturePath = join(__dirname, 'artifacts', 'invitations-fixture.json');
 const root = join(__dirname, '..');
 
+// Each viewport project runs the same specs sequentially against the shared
+// dev DB; invitation tokens are single-use, so every project needs its own
+// create/link pair or the 2nd and 3rd projects see a 404 on an already-
+// consumed token from the 1st.
+const PROJECT_LABELS = ['chromium-desktop', 'chromium-tablet', 'chromium-mobile'];
+
 function readEnvValue(name: string): string {
   const file = readFileSync(join(root, '..', '.env.local'), 'utf8');
   const line = file.split(/\r?\n/).find((item) => item.startsWith(`${name}=`));
@@ -55,8 +61,6 @@ async function seedInvitation(sql: ReturnType<typeof neon>, organizationId: stri
 export default async function globalSetup() {
   const sql = neon(readEnvValue('DATABASE_URL'));
   const runId = `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}_${randomUUID()}`;
-  const createName = `E2E_INVITATIONS_${runId}_CREATE`;
-  const linkName = `E2E_INVITATIONS_${runId}_LINK`;
   const priorName = `E2E_INVITATIONS_${runId}_PRIOR`;
   const protectedOrg = (await sql`SELECT id FROM organizations WHERE lower(name) = lower('Groundforce') LIMIT 1`)[0]?.id ?? null;
   const protectedCounts = protectedOrg ? await orgCounts(sql, protectedOrg) : null;
@@ -69,13 +73,10 @@ export default async function globalSetup() {
       createdOrganizations.push(row.id);
       return row.id;
     };
-    const createOrgId = await createOrg(createName);
-    const linkOrgId = await createOrg(linkName);
+
     const priorOrgId = await createOrg(priorName);
-    const createOwnerUser = await createOwner(sql, createOrgId, `owner-create-${runId}@e2e.test`);
-    const linkOwnerUser = await createOwner(sql, linkOrgId, `owner-link-${runId}@e2e.test`);
     const priorOwnerUser = await createOwner(sql, priorOrgId, `owner-prior-${runId}@e2e.test`);
-    createdUsers.push(createOwnerUser.userId, linkOwnerUser.userId, priorOwnerUser.userId);
+    createdUsers.push(priorOwnerUser.userId);
 
     const existingEmail = `existing-${runId}@e2e.test`;
     const existingPasswordHash = hashPassword('E2e-existing-only-1234');
@@ -85,16 +86,26 @@ export default async function globalSetup() {
     const existingPriorPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${priorOrgId}, ${existingUser.id}, 'ACTIVE') RETURNING id`)[0];
     await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${priorOrgId}, ${existingPriorPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${priorOwnerUser.userId}, 'USER')`;
 
-    const createEmail = `new-${runId}@e2e.test`;
-    const createInvite = await seedInvitation(sql, createOrgId, createOwnerUser.userId, createEmail);
-    const linkInvite = await seedInvitation(sql, linkOrgId, linkOwnerUser.userId, existingEmail);
+    const tokensByProject: Record<string, { createToken: string; linkToken: string }> = {};
+    for (const label of PROJECT_LABELS) {
+      const createOrgId = await createOrg(`E2E_INVITATIONS_${runId}_CREATE_${label}`);
+      const linkOrgId = await createOrg(`E2E_INVITATIONS_${runId}_LINK_${label}`);
+      const createOwnerUser = await createOwner(sql, createOrgId, `owner-create-${label}-${runId}@e2e.test`);
+      const linkOwnerUser = await createOwner(sql, linkOrgId, `owner-link-${label}-${runId}@e2e.test`);
+      createdUsers.push(createOwnerUser.userId, linkOwnerUser.userId);
+
+      const createEmail = `new-${label}-${runId}@e2e.test`;
+      const createInvite = await seedInvitation(sql, createOrgId, createOwnerUser.userId, createEmail);
+      const linkInvite = await seedInvitation(sql, linkOrgId, linkOwnerUser.userId, existingEmail);
+      tokensByProject[label] = { createToken: createInvite.token, linkToken: linkInvite.token };
+    }
+
     mkdirSync(dirname(fixturePath), { recursive: true });
     writeFileSync(fixturePath, JSON.stringify({
       runId,
       createdOrganizations,
       createdUsers,
-      createToken: createInvite.token,
-      linkToken: linkInvite.token,
+      tokensByProject,
       existingUserId: existingUser.id,
       existingPasswordHash,
       existingEmail,

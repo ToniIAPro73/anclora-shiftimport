@@ -4,8 +4,7 @@ import { join } from 'node:path';
 
 function loadFixture() {
   return JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'invitations-fixture.json'), 'utf8')) as {
-    createToken: string;
-    linkToken: string;
+    tokensByProject: Record<string, { createToken: string; linkToken: string }>;
   };
 }
 
@@ -23,9 +22,10 @@ async function openInvitation(page: Page, token: string) {
   return request;
 }
 
-test('cuenta nueva limpia el fragmento, usa POST y completa la aceptación', async ({ page }) => {
+test('cuenta nueva limpia el fragmento, usa POST y completa la aceptación', async ({ page }, testInfo) => {
   const fixture = loadFixture();
-  const request = await openInvitation(page, fixture.createToken);
+  const tokens = fixture.tokensByProject[testInfo.project.name];
+  const request = await openInvitation(page, tokens.createToken);
   expect(request.method()).toBe('POST');
   expect(request.url()).not.toContain('token=');
   await expect.poll(() => page.url()).toMatch(/\/accept-invitation$/);
@@ -35,16 +35,17 @@ test('cuenta nueva limpia el fragmento, usa POST y completa la aceptación', asy
   await page.locator('#invitation-password').fill('E2e-new-only-1234');
   await page.locator('#invitation-passwordConfirmation').fill('E2e-new-only-1234');
   await page.getByRole('button', { name: /crear cuenta y aceptar/i }).click();
-  await expect(page.getByText(/invitación aceptada|invitation accepted/i)).toBeVisible();
+  await expect(page.getByText(/Acceso activado correctamente|Access activated successfully/i)).toBeVisible();
 });
 
-test('cuenta existente se enlaza sin mostrar ni enviar contraseña', async ({ page }) => {
+test('cuenta existente se enlaza sin mostrar ni enviar contraseña', async ({ page }, testInfo) => {
   const fixture = loadFixture();
-  const request = await openInvitation(page, fixture.linkToken);
+  const tokens = fixture.tokensByProject[testInfo.project.name];
+  const request = await openInvitation(page, tokens.linkToken);
   expect(request.method()).toBe('POST');
   expect(request.url()).not.toContain('token=');
   await expect(page.locator('#invitation-password')).toHaveCount(0);
   await expect(page.getByText(/Tu cuenta ya existe|Your account already exists/i)).toBeVisible();
   await page.getByRole('button', { name: /añadir acceso y aceptar|add access and accept/i }).click();
-  await expect(page.getByText(/invitación aceptada|invitation accepted/i)).toBeVisible();
+  await expect(page.getByText(/Acceso activado correctamente|Access activated successfully/i)).toBeVisible();
 });

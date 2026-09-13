@@ -40,6 +40,8 @@ coverage/
 
 # Playwright runner output (regenerable: videos, traces, retries)
 qa/e2e-acceptance/test-results/
+qa/e2e-acceptance/test-results-invitations/
+qa/e2e-acceptance/test-results-csv-bulk/
 
 # Real schedules must never be committed (PII); test fixtures are synthetic
 src/ingestion/fixtures/real/
