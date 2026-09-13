@@ -30,6 +30,16 @@ test('la superficie de aceptación cabe sin scroll en los 5 viewports contractua
   const tokens = fixture.tokensByProject['chromium-desktop'];
 
   for (const mode of ['createToken', 'linkToken'] as const) {
+    // Two invitation links only ever differ in the URL fragment, and a
+    // fragment-only change is a same-document navigation the browser never
+    // reloads for (real users always arrive from a fresh browser instance,
+    // so this only matters for reusing one page here). Visiting an
+    // unrelated path first forces a real cross-document navigation, so the
+    // SPA actually re-mounts and consumes the new token instead of keeping
+    // the previous iteration's stale state — a bare reload would not help,
+    // since by the time it runs the token-consuming effect has already
+    // rewritten the address bar to drop the fragment it would reload.
+    await page.goto('/login');
     await page.goto(`/accept-invitation#token=${encodeURIComponent(tokens[mode])}`);
     await expect(page.locator('[data-testid="accept-invitation-screen"]')).toBeVisible();
     await expect.poll(() => page.url()).toMatch(/\/accept-invitation$/);
