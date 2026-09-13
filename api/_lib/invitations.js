@@ -222,10 +222,17 @@ export async function createAccessInvitation(sql, ctx, input, {
       VALUES (${personId}, ${ctx.organizationId}, NULL, 'PENDING_INVITATION', ${now.toISOString()}, ${now.toISOString()})
     `);
   } else {
+    // Not guarded by `user_id IS NULL`: a previously-revoked person keeps
+    // that historical link (see resolveEmployeePerson), and by this point
+    // resolveEmployeePerson/assertNoExistingAccess have already confirmed
+    // there is no CURRENT active membership — so this person is safe to
+    // move into PENDING_INVITATION regardless. A DEFERRED constraint
+    // requires exactly this: a PENDING invitation may only reference an
+    // organization_people row that is itself PENDING_INVITATION.
     queries.push((txn) => txn`
       UPDATE organization_people
       SET status = 'PENDING_INVITATION', updated_at = ${now.toISOString()}
-      WHERE id = ${personId} AND organization_id = ${ctx.organizationId} AND user_id IS NULL
+      WHERE id = ${personId} AND organization_id = ${ctx.organizationId}
     `);
   }
   if (person && !person.newEmployee) {
