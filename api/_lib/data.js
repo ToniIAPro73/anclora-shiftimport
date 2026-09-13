@@ -1571,6 +1571,21 @@ export async function removeMember(sql, ctx, input) {
     UPDATE employees SET user_id = NULL, updated_at = NOW()
     WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
   `;
+  // Close this person's open role period: person_role_periods forbids
+  // overlapping ranges for the same person, so leaving it open would block
+  // granting access again later (a fresh period would collide with this
+  // still-open one). organization_people.user_id is NOT cleared here —
+  // that link is what lets a later re-invite recover the same account.
+  await sql`
+    UPDATE person_role_periods
+    SET valid_to = CURRENT_DATE, updated_at = NOW()
+    WHERE organization_id = ${ctx.organizationId}
+      AND valid_to IS NULL
+      AND organization_person_id = (
+        SELECT id FROM organization_people
+        WHERE organization_id = ${ctx.organizationId} AND user_id = ${userId}
+      )
+  `;
   await recordAuditEvent(sql, ctx, {
     eventType: 'MEMBER_REMOVED',
     targetType: 'USER',

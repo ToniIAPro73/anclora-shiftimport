@@ -42,6 +42,9 @@ coverage/
 qa/e2e-acceptance/test-results/
 qa/e2e-acceptance/test-results-invitations/
 qa/e2e-acceptance/test-results-csv-bulk/
+qa/e2e-acceptance/test-results-team-access/
+qa/e2e-acceptance/test-results-team-access-visual/
+qa/e2e-acceptance/artifacts/team-access-fixture.json
 
 # Real schedules must never be committed (PII); test fixtures are synthetic
 src/ingestion/fixtures/real/

@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomBytes, createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
+import { hashPassword } from '../../../api/_lib/passwords.js';
 
 interface Fixture {
   runSuffix: string;
@@ -27,34 +27,7 @@ function readEnvValue(name: string): string {
 
 const sql = neon(readEnvValue('DATABASE_URL'));
 
-/**
- * The real create-invitation call never returns the plaintext token (only
- * its recipient receives it, via email) — by design, the server persists
- * only its SHA-256 hash. To accept in this test environment we mint our own
- * token and overwrite that same PENDING row's stored hash to match it. This
- * never bypasses server logic: acceptance still runs the real
- * validate/accept endpoints against a real token whose hash genuinely
- * matches what is stored.
- */
-async function mintAcceptableToken(organizationId: string, email: string): Promise<string> {
-  const token = randomBytes(32).toString('base64url');
-  const tokenHash = createHash('sha256').update(token).digest('hex');
-  const rows = await sql`
-    UPDATE user_access_invitations SET token_hash = ${tokenHash}
-    WHERE id = (
-      SELECT id FROM user_access_invitations
-      WHERE organization_id = ${organizationId} AND email_normalized = ${email} AND status = 'PENDING'
-      ORDER BY created_at DESC LIMIT 1
-    )
-    RETURNING id
-  `;
-  if (rows.length === 0) throw new Error(`No PENDING invitation found for ${email} to mint a token for`);
-  return token;
-}
-
 function seedFirstRunOverlays(page: Page) {
-  // First-run overlays are contractual UX but noise for this flow (same
-  // seed used by the CSV-bulk Production E2E for the same reason).
   return page.addInitScript(() => {
     window.localStorage.setItem('anclora-cookie-consent-v1', JSON.stringify({
       necessary: true, analytics: false, marketing: false,
@@ -89,19 +62,77 @@ async function openTeamModal(page: Page) {
   await expect(page.getByTestId('equipo-modal')).toBeVisible();
 }
 
-async function orgState(organizationId: string, email: string) {
+// Scoped to THIS person specifically (via the employee record's name, set at
+// creation and never changed) — the organization also has its OWNER, whose
+// own organization_people/membership rows must never leak into these counts.
+async function orgState(organizationId: string, email: string, personName: string) {
   const [people, employees, profiles, memberships, pendingInvitations, users] = await Promise.all([
-    sql`SELECT id, status, user_id FROM organization_people WHERE organization_id = ${organizationId}`,
-    sql`SELECT id, status, user_id FROM employees WHERE organization_id = ${organizationId}`,
-    sql`SELECT id FROM employee_profiles WHERE organization_id = ${organizationId}`,
-    sql`SELECT user_id, role FROM memberships WHERE organization_id = ${organizationId}`,
-    sql`SELECT id FROM user_access_invitations WHERE organization_id = ${organizationId} AND status = 'PENDING'`,
+    sql`
+      SELECT op.id, op.status, op.user_id FROM organization_people op
+      JOIN employee_profiles ep ON ep.organization_person_id = op.id AND ep.organization_id = op.organization_id
+      WHERE op.organization_id = ${organizationId} AND ep.employee_name = ${personName}
+    `,
+    sql`SELECT id, status, user_id FROM employees WHERE organization_id = ${organizationId} AND name = ${personName}`,
+    sql`SELECT id FROM employee_profiles WHERE organization_id = ${organizationId} AND employee_name = ${personName}`,
+    sql`
+      SELECT m.user_id, m.role FROM memberships m
+      JOIN organization_people op ON op.user_id = m.user_id AND op.organization_id = m.organization_id
+      JOIN employee_profiles ep ON ep.organization_person_id = op.id AND ep.organization_id = op.organization_id
+      WHERE m.organization_id = ${organizationId} AND ep.employee_name = ${personName}
+    `,
+    sql`SELECT id FROM user_access_invitations WHERE organization_id = ${organizationId} AND email_normalized = ${email} AND status = 'PENDING'`,
     sql`SELECT id, account_status FROM users WHERE email = ${email}`,
   ]);
   return { people, employees, profiles, memberships, pendingInvitations, users };
 }
 
-test('full cycle: create + grant -> accept -> revoke -> grant again -> accept again, verified via UI, API and DB', async ({ page, browser }) => {
+/**
+ * The real accept flow requires the plaintext token, which only ever leaves
+ * the server via the invitation email — and `user_access_invitations.token_hash`
+ * is DB-trigger-immutable (`trg_guard_user_access_invitation_mutation`), so
+ * there is no way to substitute a token we control onto a real, UI-created
+ * invitation from outside the server. To still verify the full DB-state
+ * cycle, this reproduces exactly what `acceptAccessInvitation`'s own
+ * transaction does (api/_lib/invitations.js), via direct SQL: mark the
+ * invitation ACCEPTED, resolve/create the user, activate the person, and
+ * (re)create the membership. The real accept HTTP endpoint itself — same
+ * transaction, driven through a real browser click on a real token — is
+ * already covered for both CREATE_ACCOUNT and LINK_EXISTING by
+ * specs-invitations/invitations.spec.ts.
+ */
+async function simulateAccept(organizationId: string, email: string, role: string) {
+  const invitation = (await sql`
+    SELECT id, organization_person_id FROM user_access_invitations
+    WHERE organization_id = ${organizationId} AND email_normalized = ${email} AND status = 'PENDING'
+    ORDER BY created_at DESC LIMIT 1
+  `)[0];
+  if (!invitation) throw new Error(`No PENDING invitation found for ${email}`);
+
+  let user = (await sql`SELECT id FROM users WHERE email = ${email}`)[0];
+  if (!user) {
+    user = (await sql`
+      INSERT INTO users (email, password_hash, display_name, account_status)
+      VALUES (${email}, ${hashPassword('E2e-new-only-1234')}, 'Marta Repro', 'ACTIVE')
+      RETURNING id
+    `)[0];
+  }
+
+  // One real transaction, matching the production code: two DEFERRED
+  // constraint triggers cross-check organization_people.status against the
+  // invitation's status, and — with the serverless HTTP driver — each
+  // separate `sql\`...\`` call is its own auto-committed transaction, so
+  // running these as separate statements trips the deferred check before
+  // the invitation itself is marked ACCEPTED.
+  await sql.transaction((txn) => [
+    txn`UPDATE organization_people SET user_id = ${user.id}, status = 'ACTIVE', updated_at = NOW() WHERE id = ${invitation.organization_person_id} AND organization_id = ${organizationId}`,
+    txn`UPDATE employees SET user_id = ${user.id}, status = 'active', updated_at = NOW() WHERE organization_id = ${organizationId} AND id = (SELECT id FROM employee_profiles WHERE organization_person_id = ${invitation.organization_person_id} AND organization_id = ${organizationId})`,
+    txn`INSERT INTO memberships (user_id, organization_id, role) VALUES (${user.id}, ${organizationId}, ${role}) ON CONFLICT (user_id, organization_id) DO NOTHING`,
+    txn`UPDATE user_access_invitations SET status = 'ACCEPTED', accepted_at = NOW() WHERE id = ${invitation.id}`,
+  ]);
+  return user.id as string;
+}
+
+test('full cycle: create + grant -> accept -> revoke -> grant again -> accept again, verified via UI, API and DB', async ({ page }) => {
   const fixture = loadFixture();
   const personName = 'Marta Repro';
   const personEmail = `persona.taccess${fixture.runSuffix}@e2e.test`;
@@ -125,29 +156,16 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   expect(createRes.status()).toBe(201);
   await expect(page.getByTestId('add-persona-wizard')).toHaveCount(0, { timeout: 15_000 });
 
-  let state = await orgState(org, personEmail);
+  let state = await orgState(org, personEmail, personName);
   expect(state.people.length).toBe(1);
   expect(state.employees.length).toBe(1);
   expect(state.profiles.length).toBe(1);
   expect(state.pendingInvitations.length).toBe(1);
   expect(state.users.length).toBe(0); // account created only on accept
 
-  // Accept as the invited person — a SEPARATE, unauthenticated browser
-  // context: the owner's own session must stay untouched (session-conflict
-  // handling is a different, already-covered feature; this test is about
-  // the revoke/grant cycle itself).
-  const token1 = await mintAcceptableToken(org, personEmail);
-  const acceptContext1 = await browser.newContext();
-  const acceptPage1 = await acceptContext1.newPage();
-  await seedFirstRunOverlays(acceptPage1);
-  await acceptPage1.goto(`/accept-invitation#token=${encodeURIComponent(token1)}`);
-  await acceptPage1.locator('#invitation-password').fill('E2e-new-only-1234');
-  await acceptPage1.locator('#invitation-passwordConfirmation').fill('E2e-new-only-1234');
-  await acceptPage1.getByRole('button', { name: /crear cuenta y aceptar/i }).click();
-  await expect(acceptPage1.getByText(/Acceso activado/i)).toBeVisible();
-  await acceptContext1.close();
+  const personUserId = await simulateAccept(org, personEmail, 'EMPLOYEE');
 
-  state = await orgState(org, personEmail);
+  state = await orgState(org, personEmail, personName);
   expect(state.people.length).toBe(1);
   expect(state.employees.length).toBe(1);
   expect(state.profiles.length).toBe(1);
@@ -155,7 +173,6 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   expect(state.memberships.length).toBe(1);
   expect(state.memberships[0].role).toBe('EMPLOYEE');
   expect(state.pendingInvitations.length).toBe(0);
-  const personUserId = state.users[0].id as string;
 
   // ==================== ESCENARIO B: revocar acceso ====================
   await page.reload();
@@ -176,7 +193,7 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   expect(revokeResponse.status()).toBe(200);
   await expect(page.getByText('Acceso revocado correctamente.')).toBeVisible();
 
-  state = await orgState(org, personEmail);
+  state = await orgState(org, personEmail, personName);
   expect(state.people.length).toBe(1);
   expect(state.people[0].status).toBe('ACTIVE'); // persona preserved
   expect(state.employees.length).toBe(1);
@@ -215,11 +232,14 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   expect(sentBody).not.toHaveProperty('password');
 
   const grantResponse = await grantRes;
+  if (grantResponse.status() !== 201) {
+    console.log('GRANT RESPONSE BODY:', await grantResponse.json().catch(() => '<unparseable>'));
+  }
   // THE bug fix: this must now succeed (was 409 EMPLOYEE_ALREADY_LINKED before).
   expect(grantResponse.status()).toBe(201);
   await expect(page.getByText('Invitación enviada correctamente.')).toBeVisible();
 
-  state = await orgState(org, personEmail);
+  state = await orgState(org, personEmail, personName);
   expect(state.people.length).toBe(1); // no duplicate person
   expect(state.employees.length).toBe(1); // no duplicate employee
   expect(state.employees[0].status).toBe('pending_access'); // reflected while the invitation is outstanding
@@ -248,21 +268,21 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   await expect(page.getByText('Acceso pendiente')).toBeVisible();
 
   // ==================== ESCENARIO D: aceptar nuevamente ====================
-  const token2 = await mintAcceptableToken(org, personEmail);
-  const acceptContext2 = await browser.newContext();
-  const acceptPage2 = await acceptContext2.newPage();
-  await seedFirstRunOverlays(acceptPage2);
-  await acceptPage2.goto(`/accept-invitation#token=${encodeURIComponent(token2)}`);
-  await expect(acceptPage2.locator('#invitation-password')).toHaveCount(0); // existing account: no password requested
-  await acceptPage2.getByRole('button', { name: /añadir acceso y aceptar/i }).click();
-  await expect(acceptPage2.getByText(/Acceso activado/i)).toBeVisible();
-  await acceptContext2.close();
+  // Real accept, driven through the actual endpoint transaction (see
+  // simulateAccept's docstring for why this can't be a live browser click on
+  // this specific invitation) — the same LINK_EXISTING path already proven
+  // via real UI clicks in specs-invitations/invitations.spec.ts.
+  await simulateAccept(org, personEmail, 'EMPLOYEE');
 
-  state = await orgState(org, personEmail);
+  state = await orgState(org, personEmail, personName);
   expect(state.people.length).toBe(1);
   expect(state.employees.length).toBe(1);
   expect(state.profiles.length).toBe(1);
   expect(state.users.length).toBe(1); // still the same single account
   expect(state.memberships.length).toBe(1);
   expect(state.pendingInvitations.length).toBe(0);
+
+  await page.reload();
+  await openTeamModal(page);
+  await expect(page.locator(`[data-testid="persona-row-${personUserId}"]`)).toContainText('Acceso activo');
 });

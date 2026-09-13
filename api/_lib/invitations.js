@@ -208,6 +208,26 @@ export async function createAccessInvitation(sql, ctx, input, {
     throw error;
   }
 
+  // person_role_periods forbids overlapping ranges for the same person. A
+  // revoke closes the prior period as of today (see removeMember), so a
+  // same-day re-invite would otherwise collide with it — start the new
+  // period the day after instead. Any other case (no prior period, or one
+  // closed before today) just starts today as usual.
+  const todayStr = now.toISOString().slice(0, 10);
+  const lastPeriod = personId
+    ? (await sql`
+        SELECT valid_to FROM person_role_periods
+        WHERE organization_id = ${ctx.organizationId} AND organization_person_id = ${personId}
+        ORDER BY valid_from DESC LIMIT 1
+      `)[0]
+    : null;
+  let roleValidFrom = todayStr;
+  if (lastPeriod?.valid_to && lastPeriod.valid_to >= todayStr) {
+    const next = new Date(`${lastPeriod.valid_to}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    roleValidFrom = next.toISOString().slice(0, 10);
+  }
+
   const expiresAt = new Date(now.getTime() + DEFAULT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   const invitationId = randomUUID();
   const queries = [];
@@ -255,7 +275,7 @@ export async function createAccessInvitation(sql, ctx, input, {
       organization_id, organization_person_id, role, valid_from, valid_to,
       created_by_user_id, source, created_at, updated_at
     ) VALUES (
-      ${ctx.organizationId}, ${personId}, ${role}, CURRENT_DATE, NULL,
+      ${ctx.organizationId}, ${personId}, ${role}, ${roleValidFrom}, NULL,
       ${ctx.user.id}, 'USER', ${now.toISOString()}, ${now.toISOString()}
     )
   `);

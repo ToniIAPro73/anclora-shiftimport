@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 interface Fixture {
-  ownerEmail: string;
-  ownerPassword: string;
+  visualOwnerEmail: string;
+  visualOwnerPassword: string;
   screenshotActive: { userId: string; name: string; email: string };
   screenshotRevoked: { employeeId: string; name: string; email: string };
 }
@@ -15,8 +15,8 @@ function loadFixture(): Fixture {
 
 async function loginAsOwner(page: Page, fixture: Fixture) {
   await page.goto('/login');
-  await page.locator('#auth-email').fill(fixture.ownerEmail);
-  await page.locator('#auth-password').fill(fixture.ownerPassword);
+  await page.locator('#auth-email').fill(fixture.visualOwnerEmail);
+  await page.locator('#auth-password').fill(fixture.visualOwnerPassword);
   const loginResponse = page.waitForResponse((r) => r.url().includes('/api/auth/login') && r.ok());
   await page.locator('form .auth-submit').click();
   await loginResponse;

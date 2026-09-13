@@ -61,29 +61,41 @@ export default async function globalSetup() {
 
     const area = (await sql`INSERT INTO areas (organization_id, name, code, active) VALUES (${org.id}, 'Operaciones', 'OPS', TRUE) RETURNING id`)[0];
 
-    // Two extra synthetic people, seeded directly via SQL (no API call, no
-    // email), purely for the visual-states screenshot spec — it must never
-    // submit a real invitation, so it needs an ALREADY active person (to
-    // screenshot the revoke dialog) and an ALREADY revoked one (to
-    // screenshot the grant-access modal with its email prefilled).
+    // A SEPARATE organization for the visual-states screenshot spec — kept
+    // apart from the cycle-test org so that org's row counts (asserted
+    // precisely, e.g. "exactly 1 person") are never polluted by these extra
+    // synthetic people. Seeded directly via SQL (no API call, no email): one
+    // already-active person (to screenshot the revoke dialog) and one
+    // already-revoked person (to screenshot the grant-access modal with its
+    // email prefilled) — the visual spec never submits either modal.
+    const visualOrg = (await sql`INSERT INTO organizations (name, type, plan) VALUES (${`Estudio Horizonte TA-Visual-${runSuffix}`}, 'company', 'team') RETURNING id`)[0];
+    createdOrganizations.push(visualOrg.id);
+    const visualOwnerEmail = `laura.martin+teamaccessvisual${runSuffix}@e2e.test`;
+    const visualOwnerHash = hashPassword(ownerPassword);
+    const visualOwner = (await sql`INSERT INTO users (email, password_hash, display_name) VALUES (${visualOwnerEmail}, ${visualOwnerHash}, 'Laura Martín') RETURNING id`)[0];
+    createdUsers.push(visualOwner.id);
+    await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${visualOwner.id}, ${visualOrg.id}, 'OWNER')`;
+    const visualOwnerPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${visualOrg.id}, ${visualOwner.id}, 'ACTIVE') RETURNING id`)[0];
+    await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${visualOrg.id}, ${visualOwnerPerson.id}, 'OWNER', CURRENT_DATE, ${visualOwner.id}, 'USER')`;
+
     const activeEmail = `persona.ta-active-${runSuffix}@e2e.test`;
     const activeHash = hashPassword('E2e-new-only-1234');
     const activeUser = (await sql`INSERT INTO users (email, password_hash, display_name, account_status) VALUES (${activeEmail}, ${activeHash}, 'Nora Activa', 'ACTIVE') RETURNING id`)[0];
     createdUsers.push(activeUser.id);
-    const activeEmployee = (await sql`INSERT INTO employees (organization_id, name, status, user_id) VALUES (${org.id}, 'Nora Activa', 'active', ${activeUser.id}) RETURNING id`)[0];
-    const activeOrgPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${org.id}, ${activeUser.id}, 'ACTIVE') RETURNING id`)[0];
-    await sql`INSERT INTO employee_profiles (id, organization_id, organization_person_id, employee_name, employment_status) VALUES (${activeEmployee.id}, ${org.id}, ${activeOrgPerson.id}, 'Nora Activa', 'ACTIVE')`;
-    await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${org.id}, ${activeOrgPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${owner.id}, 'USER')`;
-    await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${activeUser.id}, ${org.id}, 'EMPLOYEE')`;
+    const activeEmployee = (await sql`INSERT INTO employees (organization_id, name, status, user_id) VALUES (${visualOrg.id}, 'Nora Activa', 'active', ${activeUser.id}) RETURNING id`)[0];
+    const activeOrgPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${visualOrg.id}, ${activeUser.id}, 'ACTIVE') RETURNING id`)[0];
+    await sql`INSERT INTO employee_profiles (id, organization_id, organization_person_id, employee_name, employment_status) VALUES (${activeEmployee.id}, ${visualOrg.id}, ${activeOrgPerson.id}, 'Nora Activa', 'ACTIVE')`;
+    await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${visualOrg.id}, ${activeOrgPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${visualOwner.id}, 'USER')`;
+    await sql`INSERT INTO memberships (user_id, organization_id, role) VALUES (${activeUser.id}, ${visualOrg.id}, 'EMPLOYEE')`;
 
     const revokedEmail = `persona.ta-revoked-${runSuffix}@e2e.test`;
     const revokedHash = hashPassword('E2e-new-only-1234');
     const revokedUser = (await sql`INSERT INTO users (email, password_hash, display_name, account_status) VALUES (${revokedEmail}, ${revokedHash}, 'Marc Revocado', 'ACTIVE') RETURNING id`)[0];
     createdUsers.push(revokedUser.id);
-    const revokedEmployee = (await sql`INSERT INTO employees (organization_id, name, status, user_id) VALUES (${org.id}, 'Marc Revocado', 'active', NULL) RETURNING id`)[0];
-    const revokedOrgPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${org.id}, ${revokedUser.id}, 'ACTIVE') RETURNING id`)[0];
-    await sql`INSERT INTO employee_profiles (id, organization_id, organization_person_id, employee_name, employment_status) VALUES (${revokedEmployee.id}, ${org.id}, ${revokedOrgPerson.id}, 'Marc Revocado', 'ACTIVE')`;
-    await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${org.id}, ${revokedOrgPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${owner.id}, 'USER')`;
+    const revokedEmployee = (await sql`INSERT INTO employees (organization_id, name, status, user_id) VALUES (${visualOrg.id}, 'Marc Revocado', 'active', NULL) RETURNING id`)[0];
+    const revokedOrgPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${visualOrg.id}, ${revokedUser.id}, 'ACTIVE') RETURNING id`)[0];
+    await sql`INSERT INTO employee_profiles (id, organization_id, organization_person_id, employee_name, employment_status) VALUES (${revokedEmployee.id}, ${visualOrg.id}, ${revokedOrgPerson.id}, 'Marc Revocado', 'ACTIVE')`;
+    await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${visualOrg.id}, ${revokedOrgPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${visualOwner.id}, 'USER')`;
     // Deliberately no memberships row — this person's access is already revoked.
 
     mkdirSync(dirname(fixturePath), { recursive: true });
@@ -94,6 +106,8 @@ export default async function globalSetup() {
       ownerPassword,
       areaId: area.id,
       areaName: 'Operaciones',
+      visualOwnerEmail,
+      visualOwnerPassword: ownerPassword,
       screenshotActive: { userId: activeUser.id, name: 'Nora Activa', email: activeEmail },
       screenshotRevoked: { employeeId: revokedEmployee.id, name: 'Marc Revocado', email: revokedEmail },
       createdOrganizations,
