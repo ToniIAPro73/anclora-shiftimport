@@ -11,7 +11,7 @@ const root = join(__dirname, '..');
 // dev DB; invitation tokens are single-use, so every project needs its own
 // create/link pair or the 2nd and 3rd projects see a 404 on an already-
 // consumed token from the 1st.
-const PROJECT_LABELS = ['chromium-desktop', 'chromium-tablet', 'chromium-mobile'];
+const PROJECT_LABELS = ['desktop-1440x900', 'desktop-1366x768', 'tablet-1024x768', 'mobile-390x844', 'mobile-360x800'];
 
 function readEnvValue(name: string): string {
   const file = readFileSync(join(root, '..', '.env.local'), 'utf8');
@@ -86,18 +86,35 @@ export default async function globalSetup() {
     const existingPriorPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${priorOrgId}, ${existingUser.id}, 'ACTIVE') RETURNING id`)[0];
     await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${priorOrgId}, ${existingPriorPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${priorOwnerUser.userId}, 'USER')`;
 
-    const tokensByProject: Record<string, { createToken: string; linkToken: string }> = {};
+    const tokensByProject: Record<string, { createToken: string; linkToken: string; visualToken: string }> = {};
+    const invitedEmails: string[] = [existingEmail];
     for (const label of PROJECT_LABELS) {
       const createOrgId = await createOrg(`E2E_INVITATIONS_${runId}_CREATE_${label}`);
       const linkOrgId = await createOrg(`E2E_INVITATIONS_${runId}_LINK_${label}`);
+      // Dedicated org+token for the responsive/visual spec's success-state
+      // check: it completes a real accept flow to reach 'success', which
+      // consumes the token — it must never share one with the functional
+      // flow tests in invitations.spec.ts.
+      const visualOrgId = await createOrg(`E2E_INVITATIONS_${runId}_VISUAL_${label}`);
       const createOwnerUser = await createOwner(sql, createOrgId, `owner-create-${label}-${runId}@e2e.test`);
       const linkOwnerUser = await createOwner(sql, linkOrgId, `owner-link-${label}-${runId}@e2e.test`);
-      createdUsers.push(createOwnerUser.userId, linkOwnerUser.userId);
+      const visualOwnerUser = await createOwner(sql, visualOrgId, `owner-visual-${label}-${runId}@e2e.test`);
+      createdUsers.push(createOwnerUser.userId, linkOwnerUser.userId, visualOwnerUser.userId);
 
       const createEmail = `new-${label}-${runId}@e2e.test`;
+      const visualEmail = `visual-${label}-${runId}@e2e.test`;
+      invitedEmails.push(createEmail, existingEmail, visualEmail);
       const createInvite = await seedInvitation(sql, createOrgId, createOwnerUser.userId, createEmail);
       const linkInvite = await seedInvitation(sql, linkOrgId, linkOwnerUser.userId, existingEmail);
-      tokensByProject[label] = { createToken: createInvite.token, linkToken: linkInvite.token };
+      const visualInvite = await seedInvitation(sql, visualOrgId, visualOwnerUser.userId, visualEmail);
+      tokensByProject[label] = { createToken: createInvite.token, linkToken: linkInvite.token, visualToken: visualInvite.token };
+    }
+
+    // Guardrail (item 4): this suite must never create, seed or later
+    // consume an invitation for a real recipient — only synthetic
+    // @e2e.test addresses are ever used here.
+    if (invitedEmails.some((email) => !email.endsWith('@e2e.test'))) {
+      throw new Error('Refusing to seed an invitation for a non-synthetic recipient email');
     }
 
     mkdirSync(dirname(fixturePath), { recursive: true });

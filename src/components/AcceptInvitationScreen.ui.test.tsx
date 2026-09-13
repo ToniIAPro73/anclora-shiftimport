@@ -6,6 +6,7 @@ import { I18nProvider } from '../lib/i18n-react';
 import { ThemeProvider } from '../lib/theme-react';
 import { AcceptInvitationScreen } from './AcceptInvitationScreen';
 import { acceptRemoteAccessInvitation, validateRemoteAccessInvitation } from '../lib/remote';
+import { ApiError } from '../lib/session';
 
 vi.mock('../lib/remote', async () => {
   const actual = await vi.importActual<typeof import('../lib/remote')>('../lib/remote');
@@ -127,5 +128,64 @@ describe('AcceptInvitationScreen account modes', () => {
     await waitFor(() => expect(document.activeElement?.id).toBe('invitation-password'));
     expect(screen.getByText('Indica una contraseña.')).toBeInTheDocument();
     expect(acceptRemoteAccessInvitation).not.toHaveBeenCalled();
+  });
+
+  it('sizes the new-account and existing-account surfaces differently (no one-size-fits-all card)', async () => {
+    const { unmount } = renderScreen('CREATE_ACCOUNT');
+    await screen.findByLabelText('Crea tu contraseña');
+    expect(document.querySelector('.invite-card--new')).toBeInTheDocument();
+    expect(document.querySelector('.invite-card--existing')).not.toBeInTheDocument();
+    unmount();
+
+    renderScreen('LINK_EXISTING');
+    await screen.findByText(/Tu cuenta ya existe/i);
+    expect(document.querySelector('.invite-card--existing')).toBeInTheDocument();
+    expect(document.querySelector('.invite-card--new')).not.toBeInTheDocument();
+  });
+
+  it('uses the real landing-page brand button (.btn-gold) for every primary CTA, never the green .auth-submit', async () => {
+    renderScreen('CREATE_ACCOUNT');
+    const cta = await screen.findByRole('button', { name: /crear cuenta y aceptar/i });
+    expect(cta.className).toContain('btn-gold');
+    expect(cta.className).not.toContain('auth-submit');
+  });
+});
+
+describe('AcceptInvitationScreen terminal states', () => {
+  afterEach(() => cleanup());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.history.replaceState({}, '', '/accept-invitation');
+  });
+
+  it('success: shows the specified title, body and CTA, in the brand button, with no generic "Aceptar invitación" title', async () => {
+    window.history.replaceState({}, '', '/accept-invitation#token=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO');
+    vi.mocked(validateRemoteAccessInvitation).mockResolvedValue(validInvitation('LINK_EXISTING'));
+    vi.mocked(acceptRemoteAccessInvitation).mockResolvedValue({ status: 'ACCEPTED', organizationId: 'org-id', userId: 'user-id' });
+    render(<ThemeProvider><I18nProvider><AcceptInvitationScreen /></I18nProvider></ThemeProvider>);
+    await screen.findByText(/Tu cuenta ya existe/i);
+    fireEvent.click(screen.getByRole('button', { name: /añadir acceso y aceptar/i }));
+
+    expect(await screen.findByText('Acceso activado')).toBeInTheDocument();
+    expect(screen.getByText('Ya puedes entrar en Anclora ShiftImport y acceder a tus turnos.')).toBeInTheDocument();
+    const cta = screen.getByRole('button', { name: 'Ir a la aplicación' });
+    expect(cta.className).toContain('btn-gold');
+    expect(screen.queryByText('Aceptar invitación')).not.toBeInTheDocument();
+    expect(document.querySelector('.invite-card--terminal')).toBeInTheDocument();
+  });
+
+  it('unavailable invitation: shows the non-alarmist title/text and a "Volver a ShiftImport" CTA, no generic title', async () => {
+    window.history.replaceState({}, '', '/accept-invitation#token=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNO');
+    vi.mocked(validateRemoteAccessInvitation).mockRejectedValue(
+      new ApiError(409, 'gone', 'INVITATION_EXPIRED'),
+    );
+    render(<ThemeProvider><I18nProvider><AcceptInvitationScreen /></I18nProvider></ThemeProvider>);
+
+    expect(await screen.findByText('Esta invitación ya no está disponible')).toBeInTheDocument();
+    expect(screen.getByText('El enlace puede haber caducado, haberse utilizado anteriormente o haber sido cancelado.')).toBeInTheDocument();
+    const cta = screen.getByRole('button', { name: 'Volver a ShiftImport' });
+    expect(cta.className).toContain('btn-gold');
+    expect(screen.queryByText('Aceptar invitación')).not.toBeInTheDocument();
+    expect(document.querySelector('.invite-card--terminal')).toBeInTheDocument();
   });
 });

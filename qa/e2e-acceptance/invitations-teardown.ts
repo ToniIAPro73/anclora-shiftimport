@@ -22,6 +22,21 @@ export default async function globalTeardown() {
   const sql = neon(readEnvValue('DATABASE_URL'));
   const groundforceId = (await sql`SELECT id FROM organizations WHERE lower(name) = lower('Groundforce') LIMIT 1`)[0]?.id ?? null;
   if (groundforceId && fixture.createdOrganizations.includes(groundforceId)) throw new Error('Refusing to clean a protected tenant');
+
+  // Defense in depth: this suite only ever invites its own @e2e.test
+  // addresses, so no created org should ever hold an invitation for a real
+  // recipient — but refuse outright rather than assume, in case that ever
+  // stops being true.
+  if (fixture.createdOrganizations.length > 0) {
+    const realInvite = await sql`
+      SELECT id FROM user_access_invitations
+      WHERE organization_id = ANY(${fixture.createdOrganizations})
+        AND email_normalized = 'supertoniia@gmail.com'
+      LIMIT 1
+    `;
+    if (realInvite.length > 0) throw new Error('Refusing to touch an invitation for a real recipient email');
+  }
+
   for (const organizationId of fixture.createdOrganizations) {
     await sql`DELETE FROM organizations WHERE id = ${organizationId}`;
   }

@@ -4,59 +4,45 @@ import { buildInvitationEmail } from './invitations.js';
 const base = {
   appUrl: 'https://shiftimport.example.test',
   token: 'clear-token-only-in-memory',
-  recipientName: 'Ada <QA>',
+  recipientName: 'Ada Lovelace',
   organizationName: 'Synthetic Org',
   inviterName: 'Owner',
-  role: 'EMPLOYEE',
   expiresAt: '2026-09-19T00:00:00.000Z',
 };
 
 describe('invitation email rendering', () => {
-  it('renders warm, human Spanish copy — never the raw role enum', () => {
+  it('renders the exact Spanish copy, with only the first name in the greeting', () => {
     const message = buildInvitationEmail({ ...base, locale: 'es' });
-    expect(message.subject).toBe('Te han invitado a unirte a Synthetic Org en Anclora ShiftImport');
-    expect(message.text).toContain('Hola Ada &lt;QA&gt;,');
-    expect(message.text).toContain('Owner te ha invitado a formar parte de Synthetic Org en Anclora ShiftImport.');
-    expect(message.text).toContain('Al aceptar la invitación podrás acceder a tus turnos y a las funciones asignadas a tu perfil.');
-    expect(message.text).toContain('Tipo de acceso: Empleado');
-    expect(message.text).toContain('Esta invitación estará disponible hasta el');
-    expect(message.text).toContain('Si no esperabas esta invitación, puedes ignorar este mensaje. Tu cuenta no sufrirá ningún cambio.');
-    expect(message.text).not.toContain('EMPLOYEE');
-    expect(message.html).toContain('Ada &lt;QA&gt;');
-    expect(message.html).not.toContain('EMPLOYEE');
+    expect(message.subject).toBe('Tienes una invitación para unirte a Synthetic Org');
+    expect(message.text).toContain('Hola Ada,');
+    expect(message.text).toContain('Owner te ha invitado a unirte a Synthetic Org en Anclora ShiftImport.');
+    expect(message.text).toContain('Acepta la invitación para acceder a tus turnos y empezar a utilizar la aplicación.');
+    expect(message.text).toContain('Este enlace es personal y estará disponible hasta el');
+    expect(message.text).toContain('Si no esperabas este correo, puedes ignorarlo.');
   });
 
-  it('renders warm, human English copy — never the raw role enum', () => {
+  it('renders a natural English adaptation, not a literal translation', () => {
     const message = buildInvitationEmail({ ...base, locale: 'en' });
-    expect(message.subject).toBe("You've been invited to join Synthetic Org on Anclora ShiftImport");
-    expect(message.text).toContain('Hi Ada &lt;QA&gt;,');
-    expect(message.text).toContain('Owner has invited you to be part of Synthetic Org on Anclora ShiftImport.');
-    expect(message.text).toContain('Access type: Employee');
-    expect(message.text).toContain('This invitation will be available until');
-    expect(message.text).not.toContain('EMPLOYEE');
+    expect(message.subject).toBe('You have an invitation to join Synthetic Org');
+    expect(message.text).toContain('Hi Ada,');
+    expect(message.text).toContain('Owner has invited you to join Synthetic Org on Anclora ShiftImport.');
+    expect(message.text).toContain('Accept the invitation to access your shifts and start using the app.');
+    expect(message.text).toContain('This link is personal and will be available until');
   });
 
-  it('localizes every supported role, in both languages', () => {
-    const roles = [
-      ['OWNER', 'Propietario', 'Owner'],
-      ['ADMIN', 'Administrador', 'Admin'],
-      ['PLANNER', 'Planificador', 'Planner'],
-      ['EMPLOYEE', 'Empleado', 'Employee'],
-    ];
-    for (const [role, es, en] of roles) {
-      expect(buildInvitationEmail({ ...base, role, locale: 'es' }).text).toContain(`Tipo de acceso: ${es}`);
-      expect(buildInvitationEmail({ ...base, role, locale: 'en' }).text).toContain(`Access type: ${en}`);
+  it('never exposes role, employee linkage, invitation status or any account-internal detail', () => {
+    const es = buildInvitationEmail({ ...base, locale: 'es' });
+    const en = buildInvitationEmail({ ...base, locale: 'en' });
+    for (const message of [es, en]) {
+      expect(message.text).not.toMatch(/EMPLOYEE|ADMIN|OWNER|PLANNER/);
+      expect(message.text.toLowerCase()).not.toContain('tipo de acceso');
+      expect(message.text.toLowerCase()).not.toContain('access type');
+      expect(message.text.toLowerCase()).not.toContain('perfil');
+      expect(message.text.toLowerCase()).not.toContain('profile');
+      expect(message.text.toLowerCase()).not.toContain('pending');
+      expect(message.text.toLowerCase()).not.toContain('status');
+      expect(message.html).not.toMatch(/EMPLOYEE|ADMIN|OWNER|PLANNER/);
     }
-  });
-
-  it('mentions the associated employee profile only when one exists', () => {
-    const withProfile = buildInvitationEmail({ ...base, locale: 'es', employeeName: 'Marta Ruiz' });
-    expect(withProfile.text).toContain('Tu acceso quedará vinculado al perfil de Marta Ruiz.');
-    expect(withProfile.html).toContain('Tu acceso quedará vinculado al perfil de Marta Ruiz.');
-
-    const withoutProfile = buildInvitationEmail({ ...base, locale: 'es', employeeName: null });
-    expect(withoutProfile.text).not.toContain('vinculado al perfil');
-    expect(withoutProfile.html).not.toContain('vinculado al perfil');
   });
 
   it('falls back to a neutral greeting when no recipient name is available', () => {
@@ -64,6 +50,15 @@ describe('invitation email rendering', () => {
     expect(es.text.startsWith('Hola,')).toBe(true);
     const en = buildInvitationEmail({ ...base, locale: 'en', recipientName: '' });
     expect(en.text.startsWith('Hi,')).toBe(true);
+  });
+
+  it('uses the brand gold CTA button, inline and email-client-safe (solid color, no gradient)', () => {
+    const message = buildInvitationEmail({ ...base, locale: 'es' });
+    expect(message.html).toContain('background-color:#f0ce62');
+    expect(message.html).toContain('color:#1b1f2f');
+    expect(message.html).not.toContain('gradient');
+    expect(message.html).not.toContain('linear-gradient');
+    expect(message.html).toContain('>Aceptar invitación</a>');
   });
 
   it('never includes a password field, and the clear token appears only in the link', () => {

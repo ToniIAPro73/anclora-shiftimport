@@ -271,8 +271,6 @@ export async function createAccessInvitation(sql, ctx, input, {
       recipientName: displayName,
       organizationName: orgName,
       inviterName: ctx.user.displayName,
-      role,
-      employeeName: person?.name ?? null,
       locale,
       expiresAt,
     });
@@ -620,7 +618,7 @@ export async function resendAccessInvitation(sql, ctx, invitationId, options = {
     const email = buildInvitationEmail({
       appUrl: transport.config.appUrl, token, recipientName: row.employee_name,
       organizationName: row.organization_name, inviterName: ctx.user.displayName,
-      role: row.role, employeeName: row.employee_name, locale, expiresAt,
+      locale, expiresAt,
     });
     const delivery = await transport.send({ to: row.email_normalized, ...email });
     await sql`UPDATE user_access_invitations SET last_sent_at = NOW(), last_delivery_at = NOW(), delivery_status = 'SENT', send_attempts = 1, updated_at = NOW() WHERE id = ${replacementId}`;
