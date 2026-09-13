@@ -95,11 +95,20 @@ use the current application locale supplied by the Team UI at generation time.
 Available endpoints are `/api/invitations` (tenant directory and creation),
 `/api/invitations/:id` (revoke/resend), `/api/invitations/validate` and
 `/api/invitations/accept`. The public acceptance screen is
-`/accept-invitation?token=…`. Delivery failures leave a recoverable pending
-invitation and never expose provider details. A person-bound employee
+`/accept-invitation#token=…`. The browser consumes the fragment and immediately
+clears it from the address bar. Validation uses `POST /api/invitations/validate`
+with a JSON body, so the token is not sent in a request URL. Legacy query links
+are accepted once as a compatibility fallback and are cleared before validation.
+Delivery failures leave a recoverable pending invitation and never expose provider details. A person-bound employee
 invitation cannot be revoked without replacement because 0039 requires a
 pending employee person to retain exactly one pending invitation; the API
 returns an explicit error rather than violating that invariant.
+
+The acceptance E2E suite is isolated in `qa/e2e-acceptance/specs-invitations/`.
+Each run creates uniquely named synthetic organizations, records the exact IDs
+it owns, and removes only those IDs in teardown. It never uses the operational
+tenant. Run it from `qa/e2e-acceptance` with `npm run test:invitations` and set
+`INVITATIONS_BASE_URL` when targeting a deployed environment.
 
 Still pending: CSV workflows, delivery webhooks, password recovery and later
 password changes.

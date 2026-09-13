@@ -20,7 +20,9 @@ export function buildInvitationEmail({
   const safeOrganization = escapeHtml(organizationName);
   const safeInviter = escapeHtml(inviterName || (language === 'en' ? 'your organization' : 'tu organización'));
   const safeRole = escapeHtml(role);
-  const link = `${appUrl}/accept-invitation?token=${encodeURIComponent(token)}`;
+  // The token lives in the URL fragment so browsers, proxies, referrers and
+  // analytics never receive it as an HTTP request target.
+  const link = `${appUrl}/accept-invitation#token=${encodeURIComponent(token)}`;
   const expiry = new Date(expiresAt).toLocaleDateString(language === 'en' ? 'en-GB' : 'es-ES');
 
   if (language === 'en') {

@@ -9,6 +9,7 @@ import { buildInvitationEmail } from './email/invitations.js';
 const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 const TOKEN_BYTES = 32;
 const DEFAULT_EXPIRY_DAYS = 7;
+const INVITATION_TOKEN_RE = /^[A-Za-z0-9_-]{43}$/;
 export function requireInvitationLocale(value) {
   if (value !== 'es' && value !== 'en') {
     const error = new HttpError(400, 'The application locale is required to generate an invitation');
@@ -32,6 +33,10 @@ export function normalizeInvitationEmail(value) {
 export function createInvitationToken() {
   const token = randomBytes(TOKEN_BYTES).toString('base64url');
   return { token, tokenHash: createHash('sha256').update(token).digest('hex') };
+}
+
+export function isValidInvitationToken(token) {
+  return typeof token === 'string' && INVITATION_TOKEN_RE.test(token);
 }
 
 export function invitationPublicState(row, now = new Date()) {
@@ -340,16 +345,23 @@ export async function listAccessDirectory(sql, ctx) {
 }
 
 export async function validateAccessInvitation(sql, token) {
+  if (!isValidInvitationToken(token)) {
+    const error = new HttpError(404, 'This invitation is not available');
+    error.code = 'INVITATION_INVALID';
+    throw error;
+  }
   const tokenHash = createHash('sha256').update(String(token ?? '')).digest('hex');
   const rows = await sql`
     SELECT i.id, i.organization_id, i.organization_person_id, i.email_normalized, i.status,
            i.created_at, i.expires_at, o.name AS organization_name,
+           u.account_status,
            ep.employee_name,
            COALESCE((SELECT prp.role FROM person_role_periods prp
              WHERE prp.organization_person_id = i.organization_person_id AND prp.organization_id = i.organization_id
              ORDER BY prp.valid_from DESC LIMIT 1), 'EMPLOYEE') AS role
     FROM user_access_invitations i
     JOIN organizations o ON o.id = i.organization_id
+    LEFT JOIN users u ON lower(u.email) = i.email_normalized
     LEFT JOIN employee_profiles ep ON ep.organization_person_id = i.organization_person_id
       AND ep.organization_id = i.organization_id
     WHERE i.token_hash = ${tokenHash}
@@ -361,6 +373,13 @@ export async function validateAccessInvitation(sql, token) {
     error.code = state === 'EXPIRED' ? 'INVITATION_EXPIRED' : 'INVITATION_INVALID';
     throw error;
   }
+  // Do not reveal whether the recipient has an account that is globally
+  // suspended. A valid token still receives the same public invalid response.
+  if (row.account_status === 'SUSPENDED') {
+    const error = new HttpError(404, 'This invitation is not available');
+    error.code = 'INVITATION_INVALID';
+    throw error;
+  }
   return {
     status: 'VALID',
     invitationId: row.id,
@@ -369,12 +388,17 @@ export async function validateAccessInvitation(sql, token) {
     employeeName: row.employee_name ?? null,
     email: row.email_normalized,
     expiresAt: row.expires_at,
+    acceptanceMode: row.account_status === 'ACTIVE' ? 'LINK_EXISTING' : 'CREATE_ACCOUNT',
   };
 }
 
 export async function acceptAccessInvitation(sql, input, { createSessionFn = null } = {}) {
   const token = String(input?.token ?? '').trim();
-  if (!token || token.length > 256) throw new HttpError(400, 'Invitation token is required');
+  if (!isValidInvitationToken(token)) {
+    const error = new HttpError(400, 'Invitation token is invalid');
+    error.code = 'INVITATION_TOKEN_INVALID';
+    throw error;
+  }
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const email = normalizeInvitationEmail(input?.email);
   const password = String(input?.password ?? '');
@@ -382,7 +406,40 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
   const locale = input?.locale === 'en' ? 'en' : 'es';
   const theme = ['system', 'light', 'dark'].includes(input?.theme) ? input.theme : 'system';
   const displayName = String(input?.displayName ?? '').trim().slice(0, 160);
-  const passwordHash = password ? hashPassword(password) : null;
+
+  const invitationRows = await sql`
+    SELECT i.status, i.expires_at, i.email_normalized, u.account_status
+    FROM user_access_invitations i
+    LEFT JOIN users u ON lower(u.email) = i.email_normalized
+    WHERE i.token_hash = ${tokenHash}
+  `;
+  const invitation = invitationRows[0];
+  const invitationState = invitationPublicState(invitation);
+  if (!invitation || invitationState !== 'VALID' || invitation.email_normalized !== email) {
+    const error = new HttpError(409, 'This invitation cannot be accepted');
+    error.code = invitation?.status === 'ACCEPTED' ? 'INVITATION_ALREADY_ACCEPTED'
+      : invitation?.status === 'REVOKED' ? 'INVITATION_REVOKED'
+        : invitation?.status === 'EXPIRED' || (invitation && new Date(invitation.expires_at) <= new Date()) ? 'INVITATION_EXPIRED'
+          : 'INVITATION_INVALID';
+    throw error;
+  }
+  if (invitation.account_status === 'SUSPENDED') {
+    const error = new HttpError(409, 'This invitation cannot be accepted');
+    error.code = 'INVITATION_INVALID';
+    throw error;
+  }
+
+  const acceptanceMode = invitation.account_status === 'ACTIVE' ? 'LINK_EXISTING' : 'CREATE_ACCOUNT';
+  if (acceptanceMode === 'LINK_EXISTING' && (password || passwordConfirmation)) {
+    const error = new HttpError(400, 'This existing account does not accept a password here');
+    error.code = 'PASSWORD_NOT_ALLOWED';
+    throw error;
+  }
+  if (acceptanceMode === 'CREATE_ACCOUNT' && !displayName) {
+    const error = new HttpError(400, 'A display name is required to activate a new account');
+    error.code = 'DISPLAY_NAME_REQUIRED';
+    throw error;
+  }
   if (password && password.length < 8) {
     const error = new HttpError(400, 'Password must be at least 8 characters');
     error.code = 'PASSWORD_TOO_SHORT';
@@ -393,20 +450,9 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
     error.code = 'PASSWORD_MISMATCH';
     throw error;
   }
-  const existingRows = await sql`SELECT account_status FROM users WHERE lower(email) = ${email}`;
-  const existingUser = existingRows[0];
-  if (!existingUser && !passwordHash) {
+  const passwordHash = acceptanceMode === 'CREATE_ACCOUNT' && password ? hashPassword(password) : null;
+  if (acceptanceMode === 'CREATE_ACCOUNT' && !passwordHash) {
     const error = new HttpError(400, 'A password is required to activate a new account');
-    error.code = 'PASSWORD_REQUIRED';
-    throw error;
-  }
-  if (existingUser?.account_status === 'SUSPENDED') {
-    const error = new HttpError(409, 'This account cannot accept an invitation');
-    error.code = 'ACCOUNT_SUSPENDED';
-    throw error;
-  }
-  if (existingUser?.account_status === 'PENDING_INVITATION' && !passwordHash) {
-    const error = new HttpError(400, 'A password is required to activate this account');
     error.code = 'PASSWORD_REQUIRED';
     throw error;
   }
@@ -422,7 +468,9 @@ export async function acceptAccessInvitation(sql, input, { createSessionFn = nul
     ), new_user AS (
       INSERT INTO users (email, password_hash, display_name, account_status)
       SELECT i.email_normalized, ${passwordHash}, ${displayName}, 'ACTIVE'
-      FROM invitation i WHERE NOT EXISTS (SELECT 1 FROM existing_user)
+      FROM invitation i
+      WHERE ${acceptanceMode === 'CREATE_ACCOUNT'}
+        AND NOT EXISTS (SELECT 1 FROM existing_user)
       RETURNING *
     ), resolved_user AS (
       SELECT * FROM existing_user UNION ALL SELECT * FROM new_user

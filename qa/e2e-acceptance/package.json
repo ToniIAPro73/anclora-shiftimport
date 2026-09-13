@@ -16,7 +16,8 @@
     "test:scheduling:desktop": "playwright test --config playwright.r3-gate.config.ts --grep \"happy path ES desktop\"",
     "test:scheduling:mobile": "playwright test --config playwright.r3-gate.config.ts --grep \"mobile planner smoke\"",
     "test:tenant": "playwright test --config playwright.r3-gate.config.ts --grep \"API isolation\"",
-    "test:future": "playwright test --config playwright.p0-gate.config.ts --grep \"future, idempotency\""
+    "test:future": "playwright test --config playwright.p0-gate.config.ts --grep \"future, idempotency\"",
+    "test:invitations": "playwright test --config playwright.invitations.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

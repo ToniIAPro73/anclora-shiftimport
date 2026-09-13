@@ -3,6 +3,12 @@ export function sendJson(res, statusCode, payload) {
   res.send(JSON.stringify(payload));
 }
 
+export function setNoStoreSecurityHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+}
+
 export function handleError(res, error) {
   const status = error?.status ?? 500;
   if (status >= 500) {

@@ -1,8 +1,9 @@
 import { createSession, getSql, sessionCookieHeader } from '../_lib/auth.js';
-import { handleError, sendJson } from '../_lib/http.js';
+import { handleError, sendJson, setNoStoreSecurityHeaders } from '../_lib/http.js';
 import { acceptAccessInvitation } from '../_lib/invitations.js';
 
 export default async function handler(req, res) {
+  setNoStoreSecurityHeaders(res);
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return sendJson(res, 405, { error: 'Method not allowed' });

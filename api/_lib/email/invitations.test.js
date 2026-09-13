@@ -30,4 +30,11 @@ describe('invitation email rendering', () => {
     expect(message).not.toHaveProperty('password');
     expect(message.text).toContain(base.token);
   });
+
+  it('places the clear token only in the fragment of the generated link', () => {
+    const message = buildInvitationEmail({ ...base, locale: 'es' });
+    expect(message.text).toContain(`/accept-invitation#token=${base.token}`);
+    expect(message.text).not.toContain('/accept-invitation?token=');
+    expect(message.html).toContain(`/accept-invitation#token=${base.token}`);
+  });
 });

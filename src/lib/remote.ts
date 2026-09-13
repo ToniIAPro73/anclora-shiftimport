@@ -951,10 +951,14 @@ export interface InvitationValidation {
   employeeName: string | null;
   email: string;
   expiresAt: string;
+  acceptanceMode: 'CREATE_ACCOUNT' | 'LINK_EXISTING';
 }
 
 export async function validateRemoteAccessInvitation(token: string): Promise<InvitationValidation> {
-  return apiFetch(`/api/invitations/validate?token=${encodeURIComponent(token)}`);
+  return apiFetch('/api/invitations/validate', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
 }
 
 export async function acceptRemoteAccessInvitation(input: {
