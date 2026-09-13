@@ -28,7 +28,9 @@ const NEW_ACCOUNT_PASSWORD = 'E2e-new-only-1234';
 async function loginAs(page: Page, email: string, password: string) {
   await page.goto('/login');
   await page.getByLabel('Correo electrónico').fill(email);
-  await page.getByLabel('Contraseña').fill(password);
+  // Not getByLabel('Contraseña'): the label wraps both the password input
+  // and its show/hide toggle button, so that locator resolves to 2 elements.
+  await page.locator('#auth-password').fill(password);
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect.poll(() => page.url()).toMatch(/\/app/);
 }
@@ -109,12 +111,12 @@ test.describe('invitation acceptance never silently replaces another identity\'s
     await page2.getByRole('button', { name: 'Cerrar sesión e iniciar con la nueva cuenta' }).click();
     await expect.poll(() => page2.url()).toMatch(/\/login/);
     await expect(page2.getByLabel('Correo electrónico')).toHaveValue(tokens.conflictSwitchEmail);
-    await expect(page2.getByLabel('Contraseña')).toHaveValue('');
+    await expect(page2.locator('#auth-password')).toHaveValue('');
 
     // The old session is gone (real logout) — not merely a UI state change.
     expect(await currentSessionEmail(page2)).toBeNull();
 
-    await page2.getByLabel('Contraseña').fill(NEW_ACCOUNT_PASSWORD);
+    await page2.locator('#auth-password').fill(NEW_ACCOUNT_PASSWORD);
     await page2.getByRole('button', { name: 'Iniciar sesión' }).click();
     await expect.poll(() => page2.url()).toMatch(/\/app/);
 
