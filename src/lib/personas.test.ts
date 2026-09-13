@@ -122,6 +122,21 @@ describe('Personas domain logic (buildPersonas & filterPersonas)', () => {
     expect(filterPersonas(personas, { role: 'EMPLOYEE' })).toHaveLength(0);
   });
 
+  it('recovers the last-known email for a person whose access was revoked, without granting access', () => {
+    const knownEmailByEmployeeId = new Map([['emp-dave', 'dave@example.com']]);
+    const personas = buildPersonas(members, employees, 'usr-owner', areas, knownEmailByEmployeeId);
+
+    const dave = personas.find((p) => p.name === 'Dave Worker')!;
+    expect(dave.email).toBe('dave@example.com');
+    expect(dave.hasAccess).toBe(false);
+  });
+
+  it('leaves email null when there is no known previous account for the employee', () => {
+    const personas = buildPersonas(members, employees, 'usr-owner', areas, new Map());
+    const dave = personas.find((p) => p.name === 'Dave Worker')!;
+    expect(dave.email).toBeNull();
+  });
+
   it('filters personas by area', () => {
     const personas = buildPersonas(members, employees, 'usr-owner', areas);
 

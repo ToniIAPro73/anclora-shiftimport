@@ -11,13 +11,17 @@ interface ConfirmDialogProps {
   cancelLabel: string;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
+  /** Shown inline, above the footer, when the confirmed action failed — this
+   * dialog covers the rest of the page, so an error surfaced only behind it
+   * would never be seen. Stays visible until the next confirm attempt. */
+  error?: string | null;
 }
 
 /** Contract-compliant destructive confirmation. Escape, outside click and
  * the safe action always cancel; the destructive action is disabled while its
  * callback is running so a double click cannot duplicate a mutation. */
 export const ConfirmDialog = ({
-  isOpen, title, description, confirmLabel, cancelLabel, onConfirm, onCancel,
+  isOpen, title, description, confirmLabel, cancelLabel, onConfirm, onCancel, error,
 }: ConfirmDialogProps) => {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -52,6 +56,9 @@ export const ConfirmDialog = ({
       )}
     >
       <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.5 }}>{description}</p>
+      {error && (
+        <p role="alert" style={{ margin: '10px 0 0', color: 'var(--danger, #ef4444)', lineHeight: 1.5 }}>{error}</p>
+      )}
     </ModalShell>
   );
 };

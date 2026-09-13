@@ -98,14 +98,16 @@ async function assertCurrentInvitationActor(sql, ctx, organizationId) {
   }
 }
 
-async function resolveEmployeePerson(sql, organizationId, employeeId) {
+export async function resolveEmployeePerson(sql, organizationId, employeeId) {
   const employeeRows = await sql`
     SELECT e.id, e.organization_id, e.user_id, e.status, e.name, e.external_employee_id,
            op.id AS organization_person_id, op.status AS person_status, op.user_id AS person_user_id,
-           ep.id AS employee_profile_id
+           ep.id AS employee_profile_id,
+           m.user_id AS active_membership_user_id
     FROM employees e
     LEFT JOIN employee_profiles ep ON ep.id = e.id AND ep.organization_id = e.organization_id
     LEFT JOIN organization_people op ON op.id = ep.organization_person_id AND op.organization_id = ep.organization_id
+    LEFT JOIN memberships m ON m.organization_id = e.organization_id AND m.user_id = COALESCE(op.user_id, e.user_id)
     WHERE e.id = ${employeeId} AND e.organization_id = ${organizationId}
   `;
   if (employeeRows.length === 0) {
@@ -114,7 +116,12 @@ async function resolveEmployeePerson(sql, organizationId, employeeId) {
     throw error;
   }
   const row = employeeRows[0];
-  if (row.user_id || row.person_user_id) {
+  // "Already linked" means this person currently holds an ACTIVE membership
+  // in this organization — not merely that a user account was linked at some
+  // point. A revoked person keeps that historical user_id link (so their
+  // email can be recovered when access is granted again); only a live
+  // membership row means access is actually still active.
+  if (row.active_membership_user_id) {
     const error = new HttpError(409, 'This employee already has active access');
     error.code = 'EMPLOYEE_ALREADY_LINKED';
     throw error;
@@ -132,14 +139,17 @@ async function resolveEmployeePerson(sql, organizationId, employeeId) {
   };
 }
 
-async function assertNoExistingAccess(sql, organizationId, personId, email) {
+export async function assertNoExistingAccess(sql, organizationId, personId, email) {
+  // Same principle as resolveEmployeePerson: a linked user_id survives a
+  // revoke on purpose (email recovery), so the only authoritative signal for
+  // "already has access" is a live membership row in this organization.
   const rows = await sql`
     SELECT 1
     FROM organization_people op
     JOIN users u ON u.id = op.user_id
+    JOIN memberships m ON m.organization_id = op.organization_id AND m.user_id = op.user_id
     WHERE op.organization_id = ${organizationId}
       AND (op.id = ${personId} OR lower(u.email) = ${email})
-      AND op.status = 'ACTIVE'
   `;
   if (rows.length > 0) {
     const error = new HttpError(409, 'This person already has active access');
@@ -216,6 +226,17 @@ export async function createAccessInvitation(sql, ctx, input, {
       UPDATE organization_people
       SET status = 'PENDING_INVITATION', updated_at = ${now.toISOString()}
       WHERE id = ${personId} AND organization_id = ${ctx.organizationId} AND user_id IS NULL
+    `);
+  }
+  if (person && !person.newEmployee) {
+    // An existing employee record (first-ever invite, or a re-invite after a
+    // prior access revoke) is not yet linked to any login while this
+    // invitation is outstanding — reflect that in the roster status the same
+    // way a brand-new employee already does, so "Acceso pendiente" is
+    // visible immediately, not only once the invitation is accepted.
+    queries.push((txn) => txn`
+      UPDATE employees SET status = 'pending_access', updated_at = NOW()
+      WHERE id = ${person.employeeId} AND organization_id = ${ctx.organizationId} AND status = 'active'
     `);
   }
   if (person && !person.profileExists) {

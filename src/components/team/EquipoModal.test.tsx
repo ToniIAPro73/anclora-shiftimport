@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from '../../lib/i18n-react';
 import * as remote from '../../lib/remote';
@@ -37,6 +37,7 @@ beforeEach(() => {
 });
 
 const mockedListRemoteMembers = vi.mocked(remote.listRemoteMembers);
+const mockedListRemoteAccessDirectory = vi.mocked(remote.listRemoteAccessDirectory);
 const mockedCreateRemoteAccessInvitation = vi.mocked(remote.createRemoteAccessInvitation);
 const mockedUpdateRemoteMemberRole = vi.mocked(remote.updateRemoteMemberRole);
 const mockedRemoveRemoteMember = vi.mocked(remote.removeRemoteMember);
@@ -321,6 +322,118 @@ describe('EquipoModal — Tab 1: PERSONAS', () => {
     await waitFor(() => {
       expect(mockedRemoveRemoteMember).toHaveBeenCalledWith('usr-admin');
     });
+  });
+
+  it('revoke dialog shows the exact human copy (no literal i18n keys) and a success confirmation', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedRemoveRemoteMember.mockResolvedValue(undefined);
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('revoke-access-usr-admin'));
+
+    expect(screen.getByRole('heading', { name: 'Revocar acceso' })).toBeInTheDocument();
+    expect(screen.getByText('Bob Admin dejará de poder entrar en esta organización. Su ficha de empleado y sus datos de trabajo se conservarán.')).toBeInTheDocument();
+    expect(screen.queryByText(/teamWorkspace\./)).not.toBeInTheDocument();
+
+    const confirmButtons = screen.getAllByRole('button', { name: 'Revocar acceso' });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() => expect(screen.getByText('Acceso revocado correctamente.')).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { name: 'Revocar acceso' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the revoke dialog open and shows the error inline when the server call fails', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedRemoveRemoteMember.mockRejectedValue(new Error('The organization must keep at least one ADMIN'));
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('revoke-access-usr-admin'));
+    const confirmButtons = screen.getAllByRole('button', { name: 'Revocar acceso' });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() => expect(screen.getByText('The organization must keep at least one ADMIN')).toBeInTheDocument());
+    // Dialog is still open — the failed action must not be silently swallowed.
+    expect(screen.getByRole('heading', { name: 'Revocar acceso' })).toBeInTheDocument();
+  });
+
+  it('"Conceder acceso" on an existing person opens a dedicated modal — never the "Añadir nueva persona" wizard', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedListRemoteAccessDirectory.mockResolvedValue({ people: [], invitations: [] });
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('grant-access-emp-emp-dave'));
+
+    expect(screen.getByRole('heading', { name: 'Conceder acceso a Dave Worker' })).toBeInTheDocument();
+    expect(screen.queryByText('Añadir nueva persona')).not.toBeInTheDocument();
+    expect(screen.queryByText('Confirmar y crear persona')).not.toBeInTheDocument();
+    // Only the fields this flow actually needs — no identity/employment steps.
+    expect(screen.getByTestId('grant-access-email-input')).toBeInTheDocument();
+    expect(screen.getByTestId('grant-access-role-select')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Nombre completo/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/teamWorkspace\./)).not.toBeInTheDocument();
+  });
+
+  it('grants access again with a review step, sending only the existing employeeId (no new person/employee)', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedListRemoteAccessDirectory.mockResolvedValue({ people: [], invitations: [] });
+    mockedCreateRemoteAccessInvitation.mockResolvedValue({
+      invitation: {
+        id: 'inv-1', organizationId: 'org-1', organizationPersonId: 'person-1', email: 'dave@example.com',
+        status: 'PENDING', createdAt: '2026-01-01', expiresAt: '2026-01-08', acceptedAt: null, revokedAt: null,
+        lastSentAt: '2026-01-01', lastDeliveryAt: '2026-01-01', deliveryStatus: 'SENT', sendAttempts: 1,
+      },
+      delivery: { status: 'SENT' },
+    });
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('grant-access-emp-emp-dave'));
+    fireEvent.change(screen.getByTestId('grant-access-email-input'), { target: { value: 'dave@example.com' } });
+    fireEvent.click(screen.getByTestId('grant-access-next'));
+
+    expect(screen.getByRole('heading', { name: 'Revisar acceso' })).toBeInTheDocument();
+    const review = within(screen.getByTestId('grant-access-review'));
+    expect(review.getByText('Dave Worker')).toBeInTheDocument();
+    expect(review.getByText('dave@example.com')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('grant-access-submit'));
+
+    await waitFor(() => expect(mockedCreateRemoteAccessInvitation).toHaveBeenCalledWith({
+      email: 'dave@example.com',
+      displayName: 'Dave Worker',
+      role: 'EMPLOYEE',
+      employeeId: 'emp-dave',
+      locale: 'es',
+    }));
+    await waitFor(() => expect(screen.getByText('Invitación enviada correctamente.')).toBeInTheDocument());
+    expect(mockedListRemoteMembers).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects an invalid email before submitting, and keeps the form open with a translated server error otherwise', async () => {
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedListRemoteAccessDirectory.mockResolvedValue({ people: [], invitations: [] });
+    renderModal('OWNER');
+    await waitFor(() => expect(mockedListRemoteMembers).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('grant-access-emp-emp-dave'));
+    fireEvent.change(screen.getByTestId('grant-access-email-input'), { target: { value: 'not-an-email' } });
+    fireEvent.click(screen.getByTestId('grant-access-next'));
+    expect(screen.getByText('Introduce un email válido.')).toBeInTheDocument();
+    expect(mockedCreateRemoteAccessInvitation).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('grant-access-email-input'), { target: { value: 'dave@example.com' } });
+    const { ApiError } = await import('../../lib/session');
+    mockedCreateRemoteAccessInvitation.mockRejectedValue(new ApiError(409, 'already linked', 'EMPLOYEE_ALREADY_LINKED'));
+    fireEvent.click(screen.getByTestId('grant-access-next'));
+    fireEvent.click(screen.getByTestId('grant-access-submit'));
+
+    await waitFor(() => expect(screen.getByText('Esta ficha de empleado ya está vinculada a otra cuenta activa.')).toBeInTheDocument());
+    // The form stays open with the entered data preserved, ready to retry.
+    expect(screen.getByRole('heading', { name: 'Revisar acceso' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('grant-access-review')).getByText('dave@example.com')).toBeInTheDocument();
   });
 });
 

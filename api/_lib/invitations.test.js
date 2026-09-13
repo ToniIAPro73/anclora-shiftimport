@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { acceptAccessInvitation, createInvitationToken, invitationCausesSessionConflict, invitationPublicState, isValidInvitationToken, normalizeInvitationEmail, requireInvitationLocale, resolveAcceptLanguageLocale, resolveInvitationDisplayName, validateAccessInvitation } from './invitations.js';
+import { acceptAccessInvitation, assertNoExistingAccess, createInvitationToken, invitationCausesSessionConflict, invitationPublicState, isValidInvitationToken, normalizeInvitationEmail, requireInvitationLocale, resolveAcceptLanguageLocale, resolveEmployeePerson, resolveInvitationDisplayName, validateAccessInvitation } from './invitations.js';
 
 describe('access invitation primitives', () => {
   it('normalizes valid email addresses and rejects malformed input', () => {
@@ -184,5 +184,63 @@ describe('invitation acceptance never silently replaces another identity\'s sess
     });
     expect(result.requiresAccountSwitch).toBe(false);
     expect(result.session).toEqual({ token: 'brand-new-session', expiresAt: new Date('2099-01-01') });
+  });
+});
+
+describe('granting access again after a revoke never gets blocked by a stale user link', () => {
+  it('resolveEmployeePerson allows a never-invited employee (no org_people row at all)', async () => {
+    const sql = () => Promise.resolve([{
+      id: 'emp-1', organization_id: 'org-1', user_id: null, status: 'active', name: 'Ada Lovelace', external_employee_id: null,
+      organization_person_id: null, person_status: null, person_user_id: null, employee_profile_id: null,
+      active_membership_user_id: null,
+    }]);
+    const person = await resolveEmployeePerson(sql, 'org-1', 'emp-1');
+    expect(person).toMatchObject({ employeeId: 'emp-1', personExists: false, profileExists: false });
+  });
+
+  it('resolveEmployeePerson allows re-granting access to a person whose membership was revoked (org_people.user_id still set, no active membership)', async () => {
+    const sql = () => Promise.resolve([{
+      id: 'emp-1', organization_id: 'org-1', user_id: null, status: 'active', name: 'Ada Lovelace', external_employee_id: 'EMP-1',
+      organization_person_id: 'person-1', person_status: 'ACTIVE', person_user_id: 'user-1', employee_profile_id: 'profile-1',
+      // The historical link survives the revoke, but no row in `memberships`
+      // exists for that user in this org anymore.
+      active_membership_user_id: null,
+    }]);
+    const person = await resolveEmployeePerson(sql, 'org-1', 'emp-1');
+    expect(person).toMatchObject({ employeeId: 'emp-1', personId: 'person-1', personExists: true, profileExists: true });
+  });
+
+  it('resolveEmployeePerson still blocks a person who currently holds an active membership', async () => {
+    const sql = () => Promise.resolve([{
+      id: 'emp-1', organization_id: 'org-1', user_id: 'user-1', status: 'active', name: 'Ada Lovelace', external_employee_id: null,
+      organization_person_id: 'person-1', person_status: 'ACTIVE', person_user_id: 'user-1', employee_profile_id: 'profile-1',
+      active_membership_user_id: 'user-1',
+    }]);
+    await expect(resolveEmployeePerson(sql, 'org-1', 'emp-1')).rejects.toMatchObject({ code: 'EMPLOYEE_ALREADY_LINKED', status: 409 });
+  });
+
+  it('resolveEmployeePerson still rejects an inactive employee record', async () => {
+    const sql = () => Promise.resolve([{
+      id: 'emp-1', organization_id: 'org-1', user_id: null, status: 'inactive', name: 'Ada Lovelace', external_employee_id: null,
+      organization_person_id: null, person_status: null, person_user_id: null, employee_profile_id: null,
+      active_membership_user_id: null,
+    }]);
+    await expect(resolveEmployeePerson(sql, 'org-1', 'emp-1')).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('resolveEmployeePerson reports a missing employee', async () => {
+    const sql = () => Promise.resolve([]);
+    await expect(resolveEmployeePerson(sql, 'org-1', 'missing')).rejects.toMatchObject({ code: 'EMPLOYEE_NOT_FOUND', status: 404 });
+  });
+
+  it('assertNoExistingAccess allows re-inviting a person with no current membership', async () => {
+    const sql = () => Promise.resolve([]);
+    await expect(assertNoExistingAccess(sql, 'org-1', 'person-1', 'ada@example.test')).resolves.toBeUndefined();
+  });
+
+  it('assertNoExistingAccess blocks a person or email that currently holds an active membership', async () => {
+    const sql = () => Promise.resolve([{ '?column?': 1 }]);
+    await expect(assertNoExistingAccess(sql, 'org-1', 'person-1', 'ada@example.test'))
+      .rejects.toMatchObject({ code: 'ACCESS_ALREADY_ACTIVE', status: 409 });
   });
 });

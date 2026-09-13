@@ -24,6 +24,10 @@ export function buildPersonas(
   employees: RemoteEmployee[],
   currentUserId?: string,
   areas: RemoteArea[] = [],
+  /** employeeId -> last-known email, for a person whose access was revoked:
+   * the account still exists (safely recoverable from the access directory)
+   * even though no active membership remains. */
+  knownEmailByEmployeeId?: Map<string, string>,
 ): Persona[] {
   const areaMap = new Map<string, string>();
   for (const a of areas) {
@@ -81,7 +85,7 @@ export function buildPersonas(
     personas.push({
       id: `emp-${emp.id}`,
       name: emp.name,
-      email: null,
+      email: knownEmailByEmployeeId?.get(emp.id) ?? null,
       hasAccess: false,
       role: null,
       plannerScopeType: null,

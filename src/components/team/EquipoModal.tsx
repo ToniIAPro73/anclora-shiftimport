@@ -12,6 +12,7 @@ import {
   resendRemoteAccessInvitation,
   revokeRemoteAccessInvitation,
   RemoteAccessInvitation,
+  RemoteDirectoryPerson,
   bulkMoveRemoteEmployeesArea,
   createRemoteArea,
   createRemoteEmployee,
@@ -31,6 +32,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ModalShell } from '../ui/ModalShell';
 import { BulkCsvImportModal } from './BulkCsvImportModal';
+import { GrantAccessModal } from './GrantAccessModal';
 
 import './EquipoModal.css';
 
@@ -61,8 +63,15 @@ export function EquipoModal({
   const [activeTab, setActiveTab] = useState<'personas' | 'roles' | 'areas' | 'assignments'>(initialTab);
   const [members, setMembers] = useState<RemoteMember[]>([]);
   const [invitations, setInvitations] = useState<RemoteAccessInvitation[]>([]);
+  const [directoryPeople, setDirectoryPeople] = useState<RemoteDirectoryPerson[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Grant-access flow (existing person, no active access): a dedicated modal
+  // that only ever creates an invitation for the person's existing
+  // employeeId — never the "Añadir nueva persona" wizard.
+  const [grantAccessPersona, setGrantAccessPersona] = useState<Persona | null>(null);
 
   // Filters for Personas tab
   const [search, setSearch] = useState('');
@@ -211,9 +220,11 @@ export function EquipoModal({
       try {
         const directory = await listRemoteAccessDirectory();
         setInvitations(directory.invitations);
+        setDirectoryPeople(directory.people);
       } catch {
         // Older fixtures/backends can still serve the legacy member list.
         setInvitations([]);
+        setDirectoryPeople([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t('members.loadFailed'));
@@ -236,6 +247,14 @@ export function EquipoModal({
   useEffect(() => {
     void fetchMembers();
   }, [fetchMembers]);
+
+  // Transient success confirmation (revoke, grant access): auto-dismisses so
+  // it never lingers as stale state after the user moves on.
+  useEffect(() => {
+    if (!successMessage) return;
+    const timeout = setTimeout(() => setSuccessMessage(null), 4000);
+    return () => clearTimeout(timeout);
+  }, [successMessage]);
 
   // Area handlers
   const handleOpenCreateArea = () => {
@@ -285,10 +304,24 @@ export function EquipoModal({
     }
   };
 
+  // Last-known email per employeeId for a person with no current access —
+  // recovered from the access directory (organization_people -> users),
+  // which keeps that link even after access is revoked. Used to prefill the
+  // "Conceder acceso" modal and to show the row's previous email.
+  const knownEmailByEmployeeId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const person of directoryPeople) {
+      if (person.employeeId && person.email) {
+        map.set(person.employeeId, person.email);
+      }
+    }
+    return map;
+  }, [directoryPeople]);
+
   // Derived personas
   const personas = useMemo(() => {
-    return buildPersonas(members, employees, currentUserId, effectiveAreas);
-  }, [members, employees, currentUserId, effectiveAreas]);
+    return buildPersonas(members, employees, currentUserId, effectiveAreas, knownEmailByEmployeeId);
+  }, [members, employees, currentUserId, effectiveAreas, knownEmailByEmployeeId]);
 
   const filteredPersonas = useMemo(() => {
     return filterPersonas(personas, {
@@ -471,6 +504,7 @@ export function EquipoModal({
 
   // Revoke access confirmation dialog state
   const [confirmRevokePersona, setConfirmRevokePersona] = useState<Persona | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   // Handle Role Change
   const handleRoleChangeSubmit = async () => {
@@ -500,6 +534,7 @@ export function EquipoModal({
 
   // Handle Revoke Access
   const handleRevokeAccess = (persona: Persona) => {
+    setRevokeError(null);
     setConfirmRevokePersona(persona);
   };
 
@@ -520,13 +555,17 @@ export function EquipoModal({
 
   const executeRevokeAccess = async () => {
     if (!confirmRevokePersona?.userId) return;
+    setRevokeError(null);
     try {
       await removeRemoteMember(confirmRevokePersona.userId);
       setConfirmRevokePersona(null);
+      setSuccessMessage(t('teamWorkspace.revokeAccessSuccess'));
       onChanged();
       await fetchMembers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
+      // Stays open on failure — the dialog itself shows this, since it
+      // covers the rest of the modal (see ConfirmDialog's `error` prop).
+      setRevokeError(err instanceof Error ? err.message : t('teamWorkspace.actionFailed'));
     }
   };
 
@@ -614,6 +653,11 @@ export function EquipoModal({
         {error && (
           <div className="card card--error" role="alert" style={{ marginBottom: '12px', padding: '8px 12px' }}>
             <span style={{ color: 'var(--danger, #ef4444)' }}>{error}</span>
+          </div>
+        )}
+        {successMessage && (
+          <div className="card" role="status" style={{ marginBottom: '12px', padding: '8px 12px', borderColor: 'var(--success, #22c55e)' }}>
+            <span style={{ color: 'var(--success, #22c55e)' }}>{successMessage}</span>
           </div>
         )}
 
@@ -857,15 +901,7 @@ export function EquipoModal({
                                 <button
                                   type="button"
                                   className="equipo-btn equipo-btn--secondary"
-                                  onClick={() => {
-                                    resetWizard();
-                                    setWizardName(p.name);
-                                    setWizardCreateEmployee(false);
-                                    setWizardExistingEmployeeId(p.employeeId);
-                                    setWizardExternalId(p.employeeExternalId || '');
-                                    setWizardStep(2);
-                                    setIsWizardOpen(true);
-                                  }}
+                                  onClick={() => { setError(null); setGrantAccessPersona(p); }}
                                   data-testid={`grant-access-${p.id}`}
                                 >
                                   {t('teamWorkspace.grantAccess')}
@@ -2246,19 +2282,29 @@ export function EquipoModal({
 
         <ConfirmDialog
           isOpen={Boolean(confirmRevokePersona)}
-          title={t('teamWorkspace.revokeAccessTitle') || 'Revocar acceso'}
-          description={
-            confirmRevokePersona
-              ? `¿Estás seguro de que deseas revocar el acceso de usuario de ${confirmRevokePersona.name}? El empleo se conservará.`
-              : ''
-          }
-          confirmLabel={t('teamWorkspace.revokeAccess') || 'Revocar acceso'}
-          cancelLabel={t('teamWorkspace.cancel') || 'Cancelar'}
+          title={t('teamWorkspace.revokeAccessTitle')}
+          description={confirmRevokePersona ? t('teamWorkspace.revokeAccessText', { name: confirmRevokePersona.name }) : ''}
+          confirmLabel={t('teamWorkspace.revokeAccess')}
+          cancelLabel={t('teamWorkspace.cancel')}
           onConfirm={() => void executeRevokeAccess()}
-          onCancel={() => setConfirmRevokePersona(null)}
+          onCancel={() => { setConfirmRevokePersona(null); setRevokeError(null); }}
+          error={revokeError}
         />
       </div>
     </ModalShell>
+    {grantAccessPersona && (
+      <GrantAccessModal
+        persona={grantAccessPersona}
+        locale={locale}
+        onClose={() => setGrantAccessPersona(null)}
+        onGranted={() => {
+          setGrantAccessPersona(null);
+          setSuccessMessage(t('teamWorkspace.invitationSentSuccess'));
+          onChanged();
+          void fetchMembers();
+        }}
+      />
+    )}
     <BulkCsvImportModal
       isOpen={Boolean(bulkImportKind)}
       kind={bulkImportKind ?? 'employees'}
