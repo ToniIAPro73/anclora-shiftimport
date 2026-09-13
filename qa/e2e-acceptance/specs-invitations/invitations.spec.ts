@@ -19,6 +19,7 @@ async function openInvitation(page: Page, token: string) {
   expect(response.headers()['cache-control']).toBe('no-store');
   expect(response.headers().pragma).toBe('no-cache');
   expect(response.headers()['referrer-policy']).toBe('no-referrer');
+  expect(await response.text()).not.toContain(token);
   return request;
 }
 
