@@ -86,28 +86,39 @@ export default async function globalSetup() {
     const existingPriorPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${priorOrgId}, ${existingUser.id}, 'ACTIVE') RETURNING id`)[0];
     await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${priorOrgId}, ${existingPriorPerson.id}, 'EMPLOYEE', CURRENT_DATE, ${priorOwnerUser.userId}, 'USER')`;
 
-    const tokensByProject: Record<string, { createToken: string; linkToken: string; visualToken: string }> = {};
+    const tokensByProject: Record<string, { createToken: string; linkToken: string; visualTokens: Record<string, string> }> = {};
     const invitedEmails: string[] = [existingEmail];
+    // The responsive/visual spec runs once per (project, theme) and each run
+    // completes a real accept flow to reach 'success' — every theme needs
+    // its own token, or the 2nd theme finds the invitation already ACCEPTED.
+    const VISUAL_THEMES = ['dark', 'light'];
     for (const label of PROJECT_LABELS) {
       const createOrgId = await createOrg(`E2E_INVITATIONS_${runId}_CREATE_${label}`);
       const linkOrgId = await createOrg(`E2E_INVITATIONS_${runId}_LINK_${label}`);
-      // Dedicated org+token for the responsive/visual spec's success-state
-      // check: it completes a real accept flow to reach 'success', which
-      // consumes the token — it must never share one with the functional
-      // flow tests in invitations.spec.ts.
-      const visualOrgId = await createOrg(`E2E_INVITATIONS_${runId}_VISUAL_${label}`);
       const createOwnerUser = await createOwner(sql, createOrgId, `owner-create-${label}-${runId}@e2e.test`);
       const linkOwnerUser = await createOwner(sql, linkOrgId, `owner-link-${label}-${runId}@e2e.test`);
-      const visualOwnerUser = await createOwner(sql, visualOrgId, `owner-visual-${label}-${runId}@e2e.test`);
-      createdUsers.push(createOwnerUser.userId, linkOwnerUser.userId, visualOwnerUser.userId);
+      createdUsers.push(createOwnerUser.userId, linkOwnerUser.userId);
 
       const createEmail = `new-${label}-${runId}@e2e.test`;
-      const visualEmail = `visual-${label}-${runId}@e2e.test`;
-      invitedEmails.push(createEmail, existingEmail, visualEmail);
+      invitedEmails.push(createEmail, existingEmail);
       const createInvite = await seedInvitation(sql, createOrgId, createOwnerUser.userId, createEmail);
       const linkInvite = await seedInvitation(sql, linkOrgId, linkOwnerUser.userId, existingEmail);
-      const visualInvite = await seedInvitation(sql, visualOrgId, visualOwnerUser.userId, visualEmail);
-      tokensByProject[label] = { createToken: createInvite.token, linkToken: linkInvite.token, visualToken: visualInvite.token };
+
+      const visualTokens: Record<string, string> = {};
+      for (const themeLabel of VISUAL_THEMES) {
+        // Dedicated org+token per (project, theme) for the responsive spec's
+        // success-state check — it must never share one with the functional
+        // flow tests in invitations.spec.ts, nor across themes.
+        const visualOrgId = await createOrg(`E2E_INVITATIONS_${runId}_VISUAL_${label}_${themeLabel}`);
+        const visualOwnerUser = await createOwner(sql, visualOrgId, `owner-visual-${label}-${themeLabel}-${runId}@e2e.test`);
+        createdUsers.push(visualOwnerUser.userId);
+        const visualEmail = `visual-${label}-${themeLabel}-${runId}@e2e.test`;
+        invitedEmails.push(visualEmail);
+        const visualInvite = await seedInvitation(sql, visualOrgId, visualOwnerUser.userId, visualEmail);
+        visualTokens[themeLabel] = visualInvite.token;
+      }
+
+      tokensByProject[label] = { createToken: createInvite.token, linkToken: linkInvite.token, visualTokens };
     }
 
     // Guardrail (item 4): this suite must never create, seed or later

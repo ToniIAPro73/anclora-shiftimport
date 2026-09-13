@@ -4,18 +4,16 @@ import { join } from 'node:path';
 
 function loadFixture() {
   return JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'invitations-fixture.json'), 'utf8')) as {
-    tokensByProject: Record<string, { createToken: string; linkToken: string; visualToken: string }>;
+    tokensByProject: Record<string, { createToken: string; linkToken: string; visualTokens: Record<string, string> }>;
   };
 }
 
-const GOLD_HEX = ['#f0ce62', '#c79b16', '#f1d269', '#c58f00'];
+// getComputedStyle always normalizes colors to rgb(...), never hex — these
+// are the rgb() forms of the brand gold gradient stops (light + dark theme)
+// and the near-black brand text color, #1b1f2f.
+const GOLD_RGB = ['rgb(240, 206, 98)', 'rgb(199, 155, 22)', 'rgb(241, 210, 105)', 'rgb(197, 143, 0)'];
 const DARK_TEXT_RGB = 'rgb(27, 31, 47)'; // #1b1f2f
-const GREEN_ACCENT_HEX = '6aad49';
-
-async function setTheme(page: Page, mode: 'light' | 'dark') {
-  await page.evaluate((m) => window.localStorage.setItem('anclora_theme_mode', m), mode);
-  await page.reload();
-}
+const GREEN_ACCENT_RGB = 'rgb(106, 173, 73)'; // #6AAD49 — the .auth-submit green this flow must never use
 
 async function measure(page: Page) {
   return page.evaluate(() => ({
@@ -54,8 +52,8 @@ async function expectGoldCta(page: Page, cta: ReturnType<Page['getByRole']>, lab
     };
   });
   expect(styles.color, `${label}: CTA text is the brand dark color, not white`).toBe(DARK_TEXT_RGB);
-  expect(styles.backgroundImage.toLowerCase(), `${label}: CTA background is not the green accent`).not.toContain(GREEN_ACCENT_HEX);
-  expect(GOLD_HEX.some((hex) => styles.backgroundImage.toLowerCase().includes(hex)), `${label}: CTA uses a real brand gold stop`).toBe(true);
+  expect(styles.backgroundImage, `${label}: CTA background is not the green accent`).not.toContain(GREEN_ACCENT_RGB);
+  expect(GOLD_RGB.some((rgb) => styles.backgroundImage.includes(rgb)), `${label}: CTA uses a real brand gold stop (got ${styles.backgroundImage})`).toBe(true);
   expect(styles.paddingLeft, `${label}: CTA horizontal padding (left)`).toBeGreaterThanOrEqual(20);
   expect(styles.paddingRight, `${label}: CTA horizontal padding (right)`).toBeGreaterThanOrEqual(20);
   const scrollCheck = await cta.evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
@@ -69,9 +67,17 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       const tokens = fixture.tokensByProject[testInfo.project.name];
       const viewport = testInfo.project.use.viewport as { width: number; height: number };
 
+      // Set once, before any navigation: a mid-flow reload to switch theme
+      // would hit the same same-document-navigation trap as re-goto()ing
+      // between two fragment-only URLs (see invitations.spec.ts) — reload
+      // reloads whatever the address bar shows *right now*, which by then
+      // is already the token-stripped URL, losing the token entirely.
+      if (theme === 'light') {
+        await page.addInitScript(() => window.localStorage.setItem('anclora_theme_mode', 'light'));
+      }
+
       // --- cuenta nueva: superficie horizontal proporcionada, <=900px ---
       await page.goto(`/accept-invitation#token=${encodeURIComponent(tokens.createToken)}`);
-      if (theme === 'light') await setTheme(page, 'light');
       await expect(page.getByTestId('accept-invitation-screen')).toBeVisible();
       await expect.poll(() => page.url()).toMatch(/\/accept-invitation$/);
       const newCardBox = await page.locator('.invite-card--new').boundingBox();
@@ -84,14 +90,18 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       // --- cuenta existente: superficie más compacta, sin columnas artificiales ---
       await page.goto('/login');
       await page.goto(`/accept-invitation#token=${encodeURIComponent(tokens.linkToken)}`);
-      if (theme === 'light') await setTheme(page, 'light');
       await expect(page.getByTestId('accept-invitation-screen')).toBeVisible();
       await expect.poll(() => page.url()).toMatch(/\/accept-invitation$/);
       const existingCardBox = await page.locator('.invite-card--existing').boundingBox();
       expect(existingCardBox, `existing account @ ${theme}: card present`).not.toBeNull();
       if (existingCardBox) {
         expect(existingCardBox.width, `existing account @ ${theme}: max-width <= 760px`).toBeLessThanOrEqual(761);
-        if (newCardBox) expect(existingCardBox.width, `existing account @ ${theme}: narrower than new-account card`).toBeLessThan(newCardBox.width);
+        // Below the 900px collapse breakpoint both cards clamp to the same
+        // mobile width — the "existing is narrower" contract only applies
+        // where there's room for the two shapes to actually differ.
+        if (newCardBox && viewport.width > 900) {
+          expect(existingCardBox.width, `existing account @ ${theme}: narrower than new-account card`).toBeLessThan(newCardBox.width);
+        }
       }
       await expect(page.getByText('Aceptar invitación')).toBeVisible();
       await expectGoldCta(page, page.getByRole('button', { name: 'Añadir acceso y aceptar' }), `existing account @ ${theme}`);
@@ -101,7 +111,6 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       const bogusToken = 'ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ';
       await page.goto('/login');
       await page.goto(`/accept-invitation#token=${encodeURIComponent(bogusToken)}`);
-      if (theme === 'light') await setTheme(page, 'light');
       await expect(page.getByText('Esta invitación ya no está disponible')).toBeVisible();
       await expect(page.getByText('El enlace puede haber caducado, haberse utilizado anteriormente o haber sido cancelado.')).toBeVisible();
       await expect(page.getByText('Aceptar invitación', { exact: true })).toHaveCount(0);
@@ -123,8 +132,7 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
 
       // --- estado terminal: éxito (completa un accept real y sintético) ---
       await page.goto('/login');
-      await page.goto(`/accept-invitation#token=${encodeURIComponent(tokens.visualToken)}`);
-      if (theme === 'light') await setTheme(page, 'light');
+      await page.goto(`/accept-invitation#token=${encodeURIComponent(tokens.visualTokens[theme])}`);
       await page.locator('#invitation-password').fill('E2e-visual-only-1234');
       await page.locator('#invitation-passwordConfirmation').fill('E2e-visual-only-1234');
       await page.getByRole('button', { name: 'Crear cuenta y aceptar' }).click();
@@ -146,8 +154,6 @@ test.describe('superficie de aceptación — por estado, viewport y tema', () =>
       });
       expect(successGap, `success @ ${theme}: gap between text and CTA >= 20px`).toBeGreaterThanOrEqual(20);
       await expectNoScroll(page, `success @ ${theme}`);
-
-      void viewport; // documents intent: viewport comes from the project config, not set here.
     });
   }
 });

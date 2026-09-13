@@ -55,7 +55,7 @@ test('cuenta nueva limpia el fragmento, no pide nombre/idioma/tema y envía payl
   expect(sentBody).not.toHaveProperty('theme');
   expect(sentBody).not.toHaveProperty('email');
   expect(sentBody).not.toHaveProperty('passwordConfirmation');
-  await expect(page.getByText(/Acceso activado correctamente|Access activated successfully/i)).toBeVisible();
+  await expect(page.getByText(/Acceso activado$|Access activated$/i)).toBeVisible();
 });
 
 test('cuenta existente se enlaza sin mostrar ni enviar contraseña, nombre, idioma o tema', async ({ page }, testInfo) => {
@@ -74,5 +74,5 @@ test('cuenta existente se enlaza sin mostrar ni enviar contraseña, nombre, idio
   const sent = await acceptRequest;
   const sentBody = JSON.parse(sent.postData() ?? '{}');
   expect(Object.keys(sentBody)).toEqual(['token']);
-  await expect(page.getByText(/Acceso activado correctamente|Access activated successfully/i)).toBeVisible();
+  await expect(page.getByText(/Acceso activado$|Access activated$/i)).toBeVisible();
 });
