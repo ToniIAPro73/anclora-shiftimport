@@ -247,9 +247,9 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   expect(state.users.length).toBe(1); // no duplicate user
   expect(state.pendingInvitations.length).toBe(1); // exactly one pending invitation
 
-  await expect(page.getByText('Acceso pendiente')).toBeVisible();
+  await expect(page.locator(`[data-testid="persona-row-emp-${employeeId}"]`)).toContainText('Acceso pendiente');
   await expect(page.getByText('Invitaciones pendientes')).toBeVisible();
-  await expect(page.getByText(personEmail)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Invitaciones pendientes' }).getByText(personEmail)).toBeVisible();
 
   // Escenario E (regression): a second re-grant attempt while one is already
   // pending must fail, translated, with the form kept open.
@@ -261,11 +261,15 @@ test('full cycle: create + grant -> accept -> revoke -> grant again -> accept ag
   expect(dupResponse.status()).toBe(409);
   await expect(page.getByText('Ya existe una invitación pendiente para este email.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Revisar acceso' })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancelar' }).click();
+  // The review step's footer is "Atrás" + the submit button — no "Cancelar"
+  // there (that only exists on the form step) — dismiss via this modal's own
+  // close control instead. Scoped to this modal specifically: the Team
+  // Management modal underneath has its own "Cerrar" close button too.
+  await page.locator('.modal-content', { hasText: 'Revisar acceso' }).getByRole('button', { name: 'Cerrar' }).click();
 
   await page.reload();
   await openTeamModal(page);
-  await expect(page.getByText('Acceso pendiente')).toBeVisible();
+  await expect(page.locator(`[data-testid="persona-row-emp-${employeeId}"]`)).toContainText('Acceso pendiente');
 
   // ==================== ESCENARIO D: aceptar nuevamente ====================
   // Real accept, driven through the actual endpoint transaction (see
