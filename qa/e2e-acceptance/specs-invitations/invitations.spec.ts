@@ -16,6 +16,9 @@ async function openInvitation(page: Page, token: string) {
   const request = await requestPromise;
   const response = await responsePromise;
   expect(response.status()).toBe(200);
+  expect(response.headers()['cache-control']).toBe('no-store');
+  expect(response.headers().pragma).toBe('no-cache');
+  expect(response.headers()['referrer-policy']).toBe('no-referrer');
   return request;
 }
 
