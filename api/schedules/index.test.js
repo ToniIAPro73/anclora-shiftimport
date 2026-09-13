@@ -107,10 +107,10 @@ describe('POST /api/schedules', () => {
   });
 
   it('allows a Sunday period for Sunday-first planning', async () => {
-    const res = await call('POST', { body: { periodStart: '2026-09-06' } });
+    const res = await call('POST', { body: { periodStart: '2099-01-04' } });
     expect(res.statusCode).toBe(201);
     expect(state.sql.state.schedules[0]).toMatchObject({
-      period_start: '2026-09-06', period_end: '2026-09-12',
+      period_start: '2099-01-04', period_end: '2099-01-10',
     });
   });
 
