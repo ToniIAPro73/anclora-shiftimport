@@ -748,45 +748,43 @@ El alta de empleados **no crea cuentas**, aunque el archivo incluya un correo. U
 
 ### Después: importar accesos de usuarios
 
-Prepara un CSV con **email** y **role**. Puedes añadir **name** y **external_employee_id** para vincular cada cuenta a un empleado que ya existe. Para roles habituales utiliza **ADMIN**, **PLANNER** o **EMPLOYEE**. La propiedad se gestiona mediante el recorrido específico del capítulo 23.
+Prepara un CSV con **email**, **displayName**, **role**, **externalEmployeeId** y **locale**. También se aceptan aliases como **name**, **nombre**, **external_employee_id** o **idEmpleado**. El idioma puede ser **es** o **en** y, si se omite, se usa el idioma activo de la aplicación. Para roles habituales utiliza **ADMIN**, **PLANNER** o **EMPLOYEE**. La propiedad se gestiona mediante el recorrido específico del capítulo 23.
 
-| email | name | role | external_employee_id |
+| email | displayName | role | externalEmployeeId | locale |
 | --- | --- | --- | --- |
-| ana@example.test | Ana Demo | EMPLOYEE | ANA01 |
-| carlos@example.test | Carlos Demo | PLANNER | CAR02 |
+| ana@example.invalid | Ana Demo | EMPLOYEE | ANA01 | es |
+| carlos@example.invalid | Carlos Demo | PLANNER |  | en |
 
 1. En **Equipo → Personas**, pulsa **Importar CSV**.
 2. Selecciona tu archivo CSV de usuarios.
 3. Comprueba correo, nombre, rol y el vínculo con el empleado en la tabla de vista previa.
 4. Revisa los totales: cuentas nuevas, ya miembros y errores.
 5. Pulsa **Confirmar importación**.
-6. En la pantalla de confirmación, pulsa **Descargar credenciales (.txt)** para guardar las contraseñas temporales generadas antes de cerrar la ventana.
+6. Revisa el resultado y, si lo necesitas, descarga el informe CSV seguro. Las cuentas nuevas reciben una invitación y establecen su propia contraseña; nunca se generan ni se exportan contraseñas temporales.
 
 ![Alta masiva de usuarios: el correo da acceso y el identificador enlaza con la ficha existente](screenshots/bulk-users-dark.png)
 
 ![Vista previa con errores: una fila errónea necesita corrección antes de considerarla dada de alta](screenshots/bulk-errors-dark.png)
 
-La importación de usuarios **no crea empleados nuevos**. Si necesitas ambos, crea las fichas primero. Un usuario ya existente no recibe necesariamente una contraseña nueva. Revisa el resultado fila a fila y no entregues credenciales atribuidas a otra persona.
+La importación de usuarios **no crea empleados nuevos**. Si necesitas ambos, crea las fichas primero. Un usuario global activo conserva su contraseña, OAuth y accesos anteriores; solo se añade la pertenencia nueva. Las invitaciones pendientes no se duplican al repetir el mismo CSV. Revisa el resultado fila a fila.
 
-## 25. Guardar y entregar las credenciales iniciales
+## 25. Seguridad de las invitaciones CSV
 
-Las credenciales aparecen cuando se crea una cuenta nueva con contraseña generada. Se muestran en ese momento para que puedas entregarlas. No son una lista que puedas recuperar después desde el historial.
+La importación CSV no crea credenciales iniciales para entregar. Cada cuenta nueva recibe un enlace de invitación seguro y establece su contraseña en la pantalla de aceptación. El informe descargable contiene solo el resultado de cada fila.
 
-1. Al terminar el alta, revisa para qué usuarios se generaron credenciales.
-2. Pulsa **Descargar credenciales (.txt)** si aparece en el resultado masivo.
-3. Comprueba que el navegador descargó el archivo.
-4. Entrega a cada persona únicamente su correo y su contraseña.
-5. Guarda o elimina la copia de forma acorde con las normas de tu organización.
+1. Revisa las filas con invitación creada y el estado de entrega.
+2. Si necesitas compartir el resultado operativo, descarga el informe CSV seguro.
+3. Para una entrega fallida, usa el reenvío desde el listado de invitaciones; se genera un token nuevo.
 
 ![Resultado del alta: descarga antes de cerrar; los valores de contraseña están ocultos en esta captura](screenshots/credentials-dark.png)
 
-> **SEGURIDAD:** el TXT contiene contraseñas legibles; no es un archivo cifrado. No lo envíes a todo el equipo ni lo adjuntes a un cuadrante compartido. Utiliza un canal privado y comprueba el destinatario.
+> **SEGURIDAD:** no se guardan ni exportan contraseñas temporales. El token solo existe durante la generación y el envío; la base de datos conserva exclusivamente su hash.
 
 **«Se muestra una vez» no significa «solo permite un inicio de sesión».** Tampoco debes suponer que se exige automáticamente cambiarla en el primer acceso.
 
-### Si pierdes una contraseña
+### Si pierdes una contraseña de un alta legacy
 
-Primero comprueba si la descargaste durante el alta. No puedes recuperar el valor anterior volviendo a abrir la ventana. No revoques y concedas acceso esperando que cambie la contraseña de una cuenta ya existente.
+Esta sección solo aplica al onboarding legacy que aún conserva compatibilidad histórica. El importador CSV no genera contraseñas temporales: para una cuenta nueva, utiliza el enlace de invitación y establece la contraseña en la pantalla de aceptación. No revoques y concedas acceso esperando que cambie la contraseña de una cuenta ya existente.
 
 En el acceso, **¿Olvidaste tu contraseña?** abre el formulario de recuperación. Introduce tu correo y sigue el aviso. El mensaje de solicitud no confirma por sí mismo que se haya entregado un correo. Si no recibes el enlace, utiliza el contacto de soporte mostrado en la aplicación; la entrega automática no está verificada en esta edición. Si recibes un enlace válido, úsalo para establecer una contraseña nueva y vuelve a iniciar sesión.
 

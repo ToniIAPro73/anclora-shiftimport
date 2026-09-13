@@ -22,7 +22,15 @@ export default async function handler(req, res) {
       return sendJson(res, 405, { error: 'Method not allowed' });
     }
 
-    const result = await bulkCreateEmployees(sql, ctx, req.body?.employees ?? []);
+    const bodySize = JSON.stringify(req.body ?? {}).length;
+    const employees = req.body?.employees;
+    if (bodySize > 1_000_000 || !Array.isArray(employees) || employees.length === 0 || employees.length > 1000) {
+      return sendJson(res, 400, { error: 'A valid employee row set is required', code: 'INVALID_ROW_COUNT' });
+    }
+
+    const result = await bulkCreateEmployees(sql, ctx, employees, {
+      sync: req.body?.sync === true,
+    });
     return sendJson(res, 200, result);
   } catch (error) {
     return handleError(res, error);

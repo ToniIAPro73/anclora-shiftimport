@@ -71,7 +71,7 @@ ShiftImport no pretende ser, en su MVP actual, un ERP, un HRIS completo, una sui
 - **Áreas opcionales**: una organización puede subdividirse en áreas, sin ser obligatorio.
 - **Ciclo de vida de empleado**: estados `pending_access` / `active` / `inactive`, con vinculación opcional a un usuario con acceso.
 - **Roles y scopes**: `OWNER` / `ADMIN` / `PLANNER` / `EMPLOYEE`, con scopes `ORGANIZATION` / `AREA` / `SELF` según el rol y la configuración de la membership.
-- **Invitaciones de acceso**: alta individual mediante enlace seguro; la persona invitada establece su propia contraseña. La importación masiva CSV queda diferida.
+- **Invitaciones de acceso**: alta individual y masiva mediante enlace seguro; la persona invitada establece su propia contraseña. El CSV de usuarios nunca genera contraseñas temporales y el CSV de empleados reutiliza el bulk tenant-scoped existente.
 - **Interfaz en español e inglés**, con tema claro y oscuro.
 
 Ver [`docs/roadmap/shiftimport-mvp-v2/00-BASELINE.md`](./docs/roadmap/shiftimport-mvp-v2/00-BASELINE.md) para el inventario completo de capacidades (DONE / PARTIAL / MISSING) con evidencia en código.

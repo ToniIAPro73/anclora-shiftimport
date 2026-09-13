@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { parseEmployeesCsv, parseUsersCsv } from './bulk-import-csv';
+import { parseEmployeesCsv, parseEmployeesCsvDetailed, parseUsersCsv, parseUsersCsvDetailed } from './bulk-import-csv';
 
 describe('parseEmployeesCsv', () => {
   it('parses the minimal canonical format', () => {
@@ -172,5 +172,25 @@ describe('parseUsersCsv', () => {
       { email: 'owner@example.com', name: '', role: 'OWNER', externalEmployeeId: '', rowError: undefined },
       { email: 'planner@example.com', name: '', role: 'PLANNER', externalEmployeeId: '', rowError: undefined },
     ]);
+  });
+
+  it('accepts canonical aliases, locale, tabs and multiline quoted values', () => {
+    const csv = '\uFEFFcodigoEmpleado\tnombre\tarea\r\nE-1\t"García, Ana"\tOperaciones';
+    expect(parseEmployeesCsv(csv)).toEqual([{ externalEmployeeId: 'E-1', name: 'García, Ana', areaName: 'Operaciones' }]);
+  });
+
+  it('accepts user aliases and locale without creating a password field', () => {
+    const rows = parseUsersCsv('correo,displayName,rol,idEmpleado,idioma\na@example.invalid,Ana,employee,E-1,en');
+    expect(rows).toEqual([{ email: 'a@example.invalid', name: 'Ana', role: 'EMPLOYEE', externalEmployeeId: 'E-1', locale: 'en', rowError: undefined }]);
+    expect(JSON.stringify(rows)).not.toContain('password');
+  });
+
+  it('flags an explicit unsupported locale instead of silently defaulting it', () => {
+    expect(parseUsersCsv('email,role,locale\na@example.invalid,EMPLOYEE,fr')?.[0].rowError).toBe('invalidLocale');
+  });
+
+  it('rejects duplicate headers and malformed quoted records', () => {
+    expect(parseUsersCsvDetailed('email,email,role\na@example.invalid,A,EMPLOYEE').error).toBe('duplicate_header');
+    expect(parseEmployeesCsvDetailed('externalEmployeeId,name\nE-1,"Unclosed').error).toBe('invalid_file');
   });
 });

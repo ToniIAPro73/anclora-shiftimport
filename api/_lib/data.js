@@ -551,7 +551,7 @@ export async function createEmployee(sql, ctx, input) {
  * is simply omitted from the INSERT, staying NULL per the schema default.
  * Partial failure is the point: one bad row never aborts the rest.
  */
-export async function bulkCreateEmployees(sql, ctx, items) {
+export async function bulkCreateEmployees(sql, ctx, items, { sync = false } = {}) {
   requireRole(ctx, 'ADMIN');
 
   // The roster index covers employees of ANY status so an inactive employee
@@ -616,10 +616,33 @@ export async function bulkCreateEmployees(sql, ctx, items) {
       continue;
     }
 
+    const area = resolveRosterArea(raw);
+    if (area.unknown) {
+      results.push({ key, status: 'failed', reason: 'unknown_area', areaError: `Unknown area: ${area.label}` });
+      continue;
+    }
+
     const matched = (externalId && byExternalId.get(externalId))
       || (!externalId && byName.get(name.toLowerCase()));
     if (matched) {
-      results.push({ key, status: matched.status === 'inactive' ? 'existing_inactive' : 'existing', employee: matched });
+      const changed = matched.name !== name || (matched.areaId ?? null) !== (area.areaId ?? null);
+      if (sync && changed) {
+        try {
+          const updatedRows = await sql`
+            UPDATE employees
+            SET name = ${name}, area_id = ${area.areaId}, updated_at = NOW()
+            WHERE id = ${matched.id} AND organization_id = ${ctx.organizationId}
+            RETURNING *
+          `;
+          const employee = updatedRows[0] ? mapEmployeeRow(updatedRows[0]) : matched;
+          if (employee.externalEmployeeId) byExternalId.set(employee.externalEmployeeId, employee);
+          results.push({ key, status: 'updated', employee });
+        } catch {
+          results.push({ key, status: 'failed', reason: 'error' });
+        }
+      } else {
+        results.push({ key, status: matched.status === 'inactive' ? 'existing_inactive' : 'existing', employee: matched });
+      }
       continue;
     }
 
@@ -631,12 +654,6 @@ export async function bulkCreateEmployees(sql, ctx, items) {
         metadata: { limitKey: 'maxEmployees' },
       });
       results.push({ key, status: 'failed', reason: 'plan_limit' });
-      continue;
-    }
-
-    const area = resolveRosterArea(raw);
-    if (area.unknown) {
-      results.push({ key, status: 'failed', reason: 'unknown_area', areaError: `Unknown area: ${area.label}` });
       continue;
     }
 
@@ -988,13 +1005,9 @@ async function countOrgManagers(sql, organizationId) {
  * - Existing registered user (by email): password not required.
  * - New user, password supplied: ADMIN sets an initial password (min 8) and
  *   hands it over out-of-band.
- * - New user, password omitted (bulk CSV import path): a random password is
- *   generated server-side (never client-supplied, never predictable, never
- *   logged) and returned ONCE in the response as `temporaryPassword` — the
- *   caller must show it to the ADMIN immediately and never persist it in
- *   plaintext. No email infrastructure exists yet — documented limitation,
- *   this is the explicit out-of-band handoff for both the single and bulk
- *   add-member flows.
+ * - New user, password omitted: this legacy compatibility primitive may still
+ *   generate an out-of-band credential for the separate onboarding path. It
+ *   is deliberately not called by CSV imports; CSV uses invitations instead.
  * Role escalation is impossible: only ADMIN/OWNER reaches this function and the
  * role whitelist is enforced here.
  */
@@ -1148,7 +1161,9 @@ export async function addMember(sql, ctx, input, hashPasswordFn) {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * ADMIN/OWNER only: bulk user provisioning + automatic User<->Employee linking
+ * ADMIN/OWNER only: legacy bulk user provisioning + automatic User<->Employee linking.
+ * This compatibility primitive is not used by the secure CSV import path;
+ * CSV access rows use `api/invitations/bulk.js` and never return passwords.
  * (multi-row CSV import, "Usuarios" tab). Each row is independent —
  * one bad row never aborts the rest (same partial-success shape as
  * bulkCreateEmployees). Never creates an Employee: `externalEmployeeId`

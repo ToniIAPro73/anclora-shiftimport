@@ -665,7 +665,7 @@ export async function deleteRemoteEmployee(id: string): Promise<void> {
   });
 }
 
-export type BulkCreateStatus = 'created' | 'existing' | 'existing_inactive' | 'failed';
+export type BulkCreateStatus = 'created' | 'updated' | 'existing' | 'existing_inactive' | 'failed';
 export type BulkCreateFailReason = 'invalid' | 'plan_limit' | 'unknown_area' | 'error';
 
 export interface BulkCreateResult {
@@ -689,9 +689,37 @@ export async function bulkCreateRemoteEmployees(items: {
 }[]): Promise<BulkCreateResult[]> {
   const payload = await apiFetch<{ results: BulkCreateResult[] }>('/api/employees/bulk', {
     method: 'POST',
-    body: JSON.stringify({ employees: items }),
+    body: JSON.stringify({ employees: items, sync: true }),
   });
   return payload.results;
+}
+
+export type BulkInvitationStatus = 'INVITED' | 'UPDATE_ROLE' | 'UNCHANGED' | 'UNCHANGED_PENDING' | 'ERROR';
+export interface BulkInvitationResult {
+  row: number;
+  key: string;
+  email: string | null;
+  status: BulkInvitationStatus;
+  invitationStatus?: string | null;
+  deliveryStatus?: string | null;
+  code?: string | null;
+}
+
+export async function bulkCreateRemoteInvitations(items: {
+  key: string;
+  email: string;
+  displayName?: string;
+  role: Exclude<RemoteMember['role'], 'OWNER'>;
+  externalEmployeeId?: string;
+  locale?: 'es' | 'en';
+}[], locale: 'es' | 'en'): Promise<{
+  results: BulkInvitationResult[];
+  summary: { invited: number; updated: number; unchanged: number; failed: number };
+}> {
+  return apiFetch('/api/invitations/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ users: items, locale }),
+  });
 }
 
 export async function createRemoteImport(input: {
@@ -1027,9 +1055,8 @@ export interface BulkMemberResult {
   temporaryPassword?: string;
 }
 
-/** Bulk user provisioning + automatic User<->Employee linking (Usuarios CSV
- * import). `key` is a caller-supplied correlation id echoed back per result.
- * Never creates an Employee — `externalEmployeeId` only resolves one. */
+/** Legacy bulk user provisioning kept for non-CSV compatibility callers.
+ * The secure CSV import uses bulkCreateRemoteInvitations instead. */
 export async function bulkAddRemoteMembers(items: {
   key: string;
   email: string;

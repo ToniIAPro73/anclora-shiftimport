@@ -109,6 +109,75 @@ export function parseCsvLine(line: string, delimiter = ','): { cells: string[]; 
   return { cells, malformed };
 }
 
+/**
+ * Parses a complete CSV document using the same quote-aware primitive as the
+ * roster importer. Unlike the historical line helper, this also preserves
+ * newlines inside quoted cells. It is intentionally small and shared by the
+ * organization bulk importers; it is not a second CSV implementation.
+ */
+export function parseCsvRecords(text: string, options: { maxRows?: number; maxBytes?: number } = {}): string[][] | null {
+  // Roster documents can legitimately exceed the organization bulk limit;
+  // callers that need a stricter product limit pass it explicitly.
+  const maxRows = options.maxRows ?? 10000;
+  const maxBytes = options.maxBytes ?? 2_000_000;
+  const source = stripBom(text);
+  if (source.length > maxBytes || source.includes(String.fromCharCode(0))) return null;
+
+  const firstBreak = source.search(/[\r\n]/);
+  const headerLine = firstBreak >= 0 ? source.slice(0, firstBreak) : source;
+  const delimiter = detectCsvDelimiter(headerLine);
+  const records: string[][] = [];
+  let cells: string[] = [];
+  let field = '';
+  let inQuotes = false;
+  let fieldAtStart = true;
+  let malformed = false;
+
+  const pushField = () => {
+    cells.push(field.trim());
+    field = '';
+    fieldAtStart = true;
+  };
+  const pushRecord = () => {
+    pushField();
+    if (cells.some((cell) => cell !== '')) records.push(cells);
+    cells = [];
+  };
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (inQuotes) {
+      if (char === '"') {
+        if (source[index + 1] === '"') {
+          field += '"';
+          index += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += char;
+      }
+      continue;
+    }
+    if (char === '"') {
+      if (fieldAtStart && field.trim() === '') inQuotes = true;
+      else malformed = true;
+    } else if (char === delimiter) {
+      pushField();
+    } else if (char === '\n' || char === '\r') {
+      if (char === '\r' && source[index + 1] === '\n') index += 1;
+      pushRecord();
+      if (records.length > maxRows + 1) return null;
+    } else {
+      field += char;
+      fieldAtStart = false;
+    }
+  }
+  if (inQuotes || malformed) return null;
+  if (field !== '' || cells.length > 0) pushRecord();
+  return records.length >= 2 && records.length <= maxRows + 1 ? records : null;
+}
+
 /** Strips a leading UTF-8 BOM (U+FEFF), if present — a CSV saved as
  * "UTF-8 with BOM" must parse identically to plain UTF-8. */
 export function stripBom(text: string): string {
@@ -226,28 +295,13 @@ export function dayNumberFromHeader(header: string): number | null {
  * "UTF-8 with BOM" and plain UTF-8 parse identically.
  */
 export function parseRosterTable(text: string): RosterTable | null {
-  const lines = stripBom(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length < 2) {
-    return null;
-  }
-  const delimiter = detectCsvDelimiter(lines[0]);
-  const headerParsed = parseCsvLine(lines[0], delimiter);
-  if (headerParsed.malformed) {
-    return null;
-  }
-  const headers = headerParsed.cells;
+  const records = parseCsvRecords(text);
+  if (!records) return null;
+  const headers = records[0];
   if (headers.filter(Boolean).length < 2) {
     return null;
   }
-  const rows: string[][] = [];
-  for (const line of lines.slice(1)) {
-    const parsed = parseCsvLine(line, delimiter);
-    if (parsed.malformed) {
-      return null;
-    }
-    rows.push(parsed.cells);
-  }
-  return { headers, rows };
+  return { headers, rows: records.slice(1) };
 }
 
 export interface RosterTableAnalysis {

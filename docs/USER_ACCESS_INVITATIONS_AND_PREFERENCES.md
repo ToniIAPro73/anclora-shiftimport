@@ -3,8 +3,8 @@
 Migration `0039_user_access_invitations_and_preferences.sql` prepares the
 persistent domain for secure account invitations and later account activation.
 It is forward-only. The server domain, Resend adapter seam, acceptance route
-and Team UI are implemented; CSV workflows, delivery webhooks and later
-password changes remain deferred.
+and Team UI are implemented; secure CSV workflows are included. Delivery
+webhooks and later password changes remain deferred.
 
 ## Entities and compatibility
 
@@ -93,7 +93,7 @@ credential. Resend configuration is server-only and validated by
 use the current application locale supplied by the Team UI at generation time.
 
 Available endpoints are `/api/invitations` (tenant directory and creation),
-`/api/invitations/:id` (revoke/resend), `/api/invitations/validate` and
+`/api/invitations/bulk` (CSV access invitations), `/api/invitations/:id` (revoke/resend), `/api/invitations/validate` and
 `/api/invitations/accept`. The public acceptance screen is
 `/accept-invitation#token=…`. The browser consumes the fragment and immediately
 clears it from the address bar. Validation uses `POST /api/invitations/validate`
@@ -110,5 +110,13 @@ it owns, and removes only those IDs in teardown. It never uses the operational
 tenant. Run it from `qa/e2e-acceptance` with `npm run test:invitations` and set
 `INVITATIONS_BASE_URL` when targeting a deployed environment.
 
-Still pending: CSV workflows, delivery webhooks, password recovery and later
-password changes.
+CSV imports use `externalEmployeeId,name,area` for employees and
+`email,displayName,role,externalEmployeeId,locale` for users. They reuse the
+shared parser and employee bulk endpoint, classify rows before confirmation,
+and return a safe CSV report. User rows create secure invitations with a
+bounded email concurrency of three; they never generate or export temporary
+passwords. Import employees before users when an access row needs a link.
+
+Still pending: delivery webhooks, password recovery and later password
+changes. Legacy onboarding retains a separate compatibility path for its
+historical credential handoff; it is not used by CSV imports.

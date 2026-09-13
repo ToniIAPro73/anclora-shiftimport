@@ -30,6 +30,7 @@ import type { Role } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ModalShell } from '../ui/ModalShell';
+import { BulkCsvImportModal } from './BulkCsvImportModal';
 
 import './EquipoModal.css';
 
@@ -188,6 +189,7 @@ export function EquipoModal({
   const [bulkFilterCurrentArea, setBulkFilterCurrentArea] = useState<string>('all');
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkSuccessMessage, setBulkSuccessMessage] = useState<string | null>(null);
+  const [bulkImportKind, setBulkImportKind] = useState<'employees' | 'users' | null>(null);
 
   // Tab 4: Planner scope assignment state
   const [selectedPlannerUserId, setSelectedPlannerUserId] = useState<string>('');
@@ -552,7 +554,10 @@ export function EquipoModal({
     }
   };
 
+  const canBulkImport = effectiveRole === 'OWNER' || effectiveRole === 'ADMIN';
+
   return (
+    <>
     <ModalShell
       isOpen={isOpen}
       onClose={onClose}
@@ -681,6 +686,16 @@ export function EquipoModal({
               </div>
 
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                {canBulkImport && (
+                  <>
+                    <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => setBulkImportKind('employees')} data-testid="bulk-import-employees-button">
+                      {t('teamWorkspace.importEmployeesCsv')}
+                    </button>
+                    <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => setBulkImportKind('users')} data-testid="bulk-import-users-button">
+                      {t('teamWorkspace.importUsersCsv')}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   className="equipo-btn equipo-btn--primary"
@@ -2244,5 +2259,17 @@ export function EquipoModal({
         />
       </div>
     </ModalShell>
+    <BulkCsvImportModal
+      isOpen={Boolean(bulkImportKind)}
+      kind={bulkImportKind ?? 'employees'}
+      onClose={() => setBulkImportKind(null)}
+      employees={employees}
+      members={members}
+      invitations={invitations}
+      areas={effectiveAreas}
+      locale={locale}
+      onChanged={() => { onChanged(); void fetchMembers(); }}
+    />
+    </>
   );
 }

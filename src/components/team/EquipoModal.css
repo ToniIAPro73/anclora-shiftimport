@@ -121,6 +121,62 @@
   cursor: not-allowed;
 }
 
+.bulk-csv-modal {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: 10px;
+}
+
+.bulk-csv-modal__table {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-color, var(--glass-border));
+  border-radius: 8px;
+}
+
+.bulk-csv-modal__table:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.bulk-csv-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .bulk-csv-modal__table table,
+  .bulk-csv-modal__table thead {
+    display: block;
+  }
+
+  .bulk-csv-modal__table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .bulk-csv-modal__table tr {
+    display: block;
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color, var(--glass-border));
+  }
+
+  .bulk-csv-modal__table td {
+    display: block;
+    border: 0;
+    padding: 3px 0;
+  }
+}
+
 /* Date input theme adaptivity */
 :root:not([data-theme='light']) .equipo-modal__input[type='date'] {
   color-scheme: dark;

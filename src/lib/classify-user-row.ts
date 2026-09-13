@@ -3,7 +3,7 @@ import { UserCsvRow } from './bulk-import-csv';
 
 /**
  * Preview-only classification (Fase 4): informational, mirrors the backend's
- * own validation/guards (bulkAddMembers in api/_lib/data.js) so the ADMIN
+ * own validation/guards (the secure invitation bulk endpoint) so the ADMIN
  * sees an accurate picture before confirming — the server independently
  * re-validates every row, this is never trusted as authorization.
  *
