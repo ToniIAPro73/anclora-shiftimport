@@ -143,6 +143,7 @@ export default async function globalSetup() {
       runId,
       createdOrganizations,
       createdUsers,
+      createdRecipientEmails: [...new Set(invitedEmails)],
       tokensByProject,
       existingUserId: existingUser.id,
       existingPasswordHash,

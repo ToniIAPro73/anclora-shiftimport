@@ -13,7 +13,7 @@ function readEnvValue(name: string): string {
 }
 
 export default async function globalTeardown() {
-  let fixture: { createdOrganizations: string[]; createdUsers: string[]; protectedOrg: string | null; protectedCounts: Record<string, number> | null };
+  let fixture: { createdOrganizations: string[]; createdUsers: string[]; createdRecipientEmails?: string[]; protectedOrg: string | null; protectedCounts: Record<string, number> | null };
   try {
     fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
   } catch {
@@ -42,6 +42,9 @@ export default async function globalTeardown() {
   }
   for (const userId of fixture.createdUsers) {
     await sql`DELETE FROM users WHERE id = ${userId}`;
+  }
+  if (fixture.createdRecipientEmails?.length) {
+    await sql`DELETE FROM users WHERE email = ANY(${fixture.createdRecipientEmails})`;
   }
   if (groundforceId && fixture.protectedCounts) {
     const counts = await Promise.all([
