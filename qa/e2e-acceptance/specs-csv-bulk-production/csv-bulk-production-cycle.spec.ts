@@ -322,16 +322,17 @@ test('users CSV: real template, mixed import (invite/existing-account/rejections
   const membership = (await sql`SELECT role FROM memberships WHERE organization_id = ${org} AND user_id = ${acceptedUserId}`)[0];
   expect(membership.role).toBe('EMPLOYEE');
 
-  // A third import of the now-ACTIVE member with the same role must report
-  // "access already exists" (unchanged) — not a second invitation.
+  // A third import of the now-ACTIVE member with the same role must be
+  // recognized client-side as already-current — "Sin cambios" in the
+  // preview, with the confirm CTA correctly disabled (nothing importable),
+  // never a pointless resubmission or a second invitation.
   await page.reload();
   await openTeamModal(page);
   await openBulkModal(page, 'users');
   await uploadCsv(page, 'users', `email,displayName,role,externalEmployeeId,locale\n${newRecipient},Nueva Persona,EMPLOYEE,,es`);
   await expect(page.getByRole('heading', { name: 'Vista previa' })).toBeVisible();
-  await page.getByRole('button', { name: 'Confirmar importación' }).click();
-  await expect(page.getByRole('heading', { name: 'Resultado' })).toBeVisible();
-  await expect(page.getByText(/1 sin cambios/)).toBeVisible();
+  await expect(page.locator('.bulk-csv-modal__table')).toContainText('Sin cambios');
+  await expect(page.getByRole('button', { name: 'Confirmar importación' })).toBeDisabled();
   const afterActiveReimport = await sql`SELECT count(*)::int AS count FROM memberships WHERE organization_id = ${org} AND user_id = ${acceptedUserId}`;
   expect(afterActiveReimport[0].count).toBe(1); // no duplicate membership
   await page.getByRole('button', { name: 'Cancelar' }).click();
