@@ -2855,7 +2855,7 @@ const translations: Record<Locale, TranslationTree> = {
       activeAccess: 'Active access',
       noAccess: 'No access',
       linked: 'Linked record',
-      noEmployeeRecord: 'No employee record',
+      noEmployeeRecord: 'No employee profile',
       noArea: 'No area',
       active: 'Active',
       inactive: 'Inactive',

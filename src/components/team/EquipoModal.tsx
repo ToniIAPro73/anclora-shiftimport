@@ -8,7 +8,7 @@ import {
   UserPlus,
   Users,
 } from 'lucide-react';
-import { buildPersonas, filterPersonas, Persona } from '../../lib/personas';
+import { buildPersonas, filterPersonas, formatEmployeeProfileLabel, Persona } from '../../lib/personas';
 import {
   createRemoteAccessInvitation,
   listRemoteAccessDirectory,
@@ -926,7 +926,7 @@ export function EquipoModal({
                           </td>
                           <td data-label={t('teamWorkspace.employeeRecord')}>
                             {p.employeeId ? (
-                              <span>{p.employeeExternalId ? `ID: ${p.employeeExternalId}` : t('teamWorkspace.linked')}</span>
+                              <span>{p.employeeExternalId?.trim() ? `ID: ${p.employeeExternalId.trim()}` : t('teamWorkspace.linked')}</span>
                             ) : (
                               <span style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.noEmployeeRecord')}</span>
                             )}
@@ -1107,7 +1107,7 @@ export function EquipoModal({
                         <td>{m.email}</td>
                         <td>
                           {m.employeeId ? (
-                            <span>{m.employeeName || m.employeeExternalId ? `${m.employeeName ?? ''} (${m.employeeExternalId ?? ''})` : t('teamWorkspace.linked')}</span>
+                            <span>{formatEmployeeProfileLabel(m.employeeName, m.employeeExternalId, t('teamWorkspace.linked'))}</span>
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.noEmployeeRecord')}</span>
                           )}
@@ -1619,7 +1619,7 @@ export function EquipoModal({
                                     }}
                                     data-testid={`tab4-scope-employee-${emp.id}`}
                                   />
-                                  <span>{emp.name} {emp.externalEmployeeId ? `(${emp.externalEmployeeId})` : ''}</span>
+                                  <span>{formatEmployeeProfileLabel(emp.name, emp.externalEmployeeId, emp.name)}</span>
                                 </label>
                               ))}
                           </div>
@@ -2046,7 +2046,7 @@ export function EquipoModal({
                                 }}
                                 data-testid={`scope-employee-${emp.id}`}
                               />
-                              <span>{emp.name} {emp.externalEmployeeId ? `(${emp.externalEmployeeId})` : ''}</span>
+                              <span>{formatEmployeeProfileLabel(emp.name, emp.externalEmployeeId, emp.name)}</span>
                             </label>
                           ))}
                       </div>

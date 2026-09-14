@@ -367,4 +367,58 @@ describe('EquipoModal — Client Pagination on Personas Table', () => {
     expect(prevBtn).toBeDisabled();
     expect(screen.getByText('Empleado 002')).toBeInTheDocument();
   });
+
+  it('formats Ficha Empleado in Roles y acceso tab omitting empty parentheses', async () => {
+    const customMembers: RemoteMember[] = [
+      {
+        userId: 'usr-owner',
+        email: 'owner@example.com',
+        displayName: 'Alice Owner',
+        role: 'OWNER',
+      },
+      {
+        userId: 'usr-sebas',
+        email: 'sebas@example.com',
+        displayName: 'Sebas',
+        role: 'ADMIN',
+        employeeId: 'emp-sebas',
+        employeeName: 'Sebas',
+        employeeExternalId: null,
+      },
+      {
+        userId: 'usr-dave',
+        email: 'dave@example.com',
+        displayName: 'Dave Worker',
+        role: 'EMPLOYEE',
+        employeeId: 'emp-dave',
+        employeeName: 'Dave Worker',
+        employeeExternalId: '84881',
+      },
+    ];
+
+    mockedListRemoteMembers.mockResolvedValue(customMembers);
+    mockedListRemoteAccessDirectory.mockResolvedValue({ people: [], invitations: [] });
+    mockedListRemoteAreas.mockResolvedValue([]);
+
+    renderModal({ members: customMembers });
+
+    const rolesTab = screen.getByTestId('tab-roles');
+    fireEvent.click(rolesTab);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('roles-table')).toBeInTheDocument();
+    });
+
+    const sebasRow = screen.getByTestId('role-row-usr-sebas');
+    expect(sebasRow).toHaveTextContent('Sebas');
+    expect(sebasRow).not.toHaveTextContent('Sebas ()');
+    expect(sebasRow).not.toHaveTextContent('()');
+
+    const daveRow = screen.getByTestId('role-row-usr-dave');
+    expect(daveRow).toHaveTextContent('Dave Worker (84881)');
+
+    const aliceRow = screen.getByTestId('role-row-usr-owner');
+    expect(aliceRow).toHaveTextContent('Sin ficha de empleado');
+  });
 });
+

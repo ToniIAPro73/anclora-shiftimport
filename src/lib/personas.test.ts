@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPersonas, filterPersonas } from './personas';
+import { buildPersonas, filterPersonas, formatEmployeeProfileLabel } from './personas';
 import type { RemoteArea, RemoteEmployee, RemoteMember } from './remote';
 
 describe('Personas domain logic (buildPersonas & filterPersonas)', () => {
@@ -144,5 +144,54 @@ describe('Personas domain logic (buildPersonas & filterPersonas)', () => {
     expect(filterPersonas(personas, { areaId: 'area-ops' })).toHaveLength(1);
     expect(filterPersonas(personas, { areaId: 'area-sec' })).toHaveLength(1);
     expect(filterPersonas(personas, { areaId: 'none' })).toHaveLength(2); // Alice and Charlie
+  });
+});
+
+describe('formatEmployeeProfileLabel', () => {
+  it('formats nombre + identificador correctly', () => {
+    expect(formatEmployeeProfileLabel('Sebas', '84881')).toBe('Sebas (84881)');
+  });
+
+  it('formats nombre + identificador numérico correctly', () => {
+    expect(formatEmployeeProfileLabel('Sebas', 84881)).toBe('Sebas (84881)');
+  });
+
+  it('formats nombre + null without empty parentheses', () => {
+    expect(formatEmployeeProfileLabel('Sebas', null)).toBe('Sebas');
+  });
+
+  it('formats nombre + undefined without empty parentheses', () => {
+    expect(formatEmployeeProfileLabel('Sebas', undefined)).toBe('Sebas');
+  });
+
+  it('formats nombre + cadena vacía without empty parentheses', () => {
+    expect(formatEmployeeProfileLabel('Sebas', '')).toBe('Sebas');
+  });
+
+  it('formats nombre + espacios without empty parentheses', () => {
+    expect(formatEmployeeProfileLabel('Sebas', '   ')).toBe('Sebas');
+  });
+
+  it('handles ausencia completa de ficha with default and localized fallback', () => {
+    expect(formatEmployeeProfileLabel(null, null)).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel(undefined, undefined)).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel('', '')).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel('   ', '   ')).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel(null, null, 'No employee profile')).toBe('No employee profile');
+  });
+
+  it('handles nombres con tildes y caracteres internacionales', () => {
+    expect(formatEmployeeProfileLabel('María José Peña-Gómez', 'EMP-Ñ-01')).toBe('María José Peña-Gómez (EMP-Ñ-01)');
+    expect(formatEmployeeProfileLabel('Björn Müller', 'ID-99')).toBe('Björn Müller (ID-99)');
+    expect(formatEmployeeProfileLabel('François Çelik', 'FR-42')).toBe('François Çelik (FR-42)');
+  });
+
+  it('never outputs "(null)", "(undefined)" or excess whitespace', () => {
+    expect(formatEmployeeProfileLabel('Sebas', 'null')).toBe('Sebas');
+    expect(formatEmployeeProfileLabel('Sebas', 'undefined')).toBe('Sebas');
+    expect(formatEmployeeProfileLabel('null', '84881')).toBe('84881');
+    expect(formatEmployeeProfileLabel('undefined', '84881')).toBe('84881');
+    expect(formatEmployeeProfileLabel('  Sebas  ', '  84881  ')).toBe('Sebas (84881)');
+    expect(formatEmployeeProfileLabel('Usuario Groundforce restaurado', null)).toBe('Usuario Groundforce restaurado');
   });
 });

@@ -151,3 +151,45 @@ export function filterPersonas(personas: Persona[], filters: PersonaFilterOption
     return true;
   });
 }
+
+/**
+ * Pure and robust formatter for employee profiles / records.
+ *
+ * Rules:
+ * - name + identifier: "Sebas (84881)"
+ * - name without identifier: "Sebas"
+ * - name with empty/whitespace identifier: "Sebas"
+ * - complete absence of record: localized fallback (e.g. "Sin ficha de empleado")
+ * - identifier only (no name): "84881" (or fallback if empty)
+ * - never outputs empty parentheses `()`, `(null)`, `(undefined)`, or excess whitespace.
+ */
+export function formatEmployeeProfileLabel(
+  name?: string | null,
+  externalId?: string | null | number,
+  fallback: string = 'Sin ficha de empleado',
+): string {
+  const cleanName = typeof name === 'string'
+    ? (['null', 'undefined'].includes(name.trim().toLowerCase()) ? '' : name.trim())
+    : '';
+
+  let cleanId = '';
+  if (typeof externalId === 'number' && Number.isFinite(externalId)) {
+    cleanId = String(externalId).trim();
+  } else if (typeof externalId === 'string') {
+    const trimmed = externalId.trim();
+    if (!['null', 'undefined'].includes(trimmed.toLowerCase())) {
+      cleanId = trimmed;
+    }
+  }
+
+  if (cleanName && cleanId) {
+    return `${cleanName} (${cleanId})`;
+  }
+  if (cleanName) {
+    return cleanName;
+  }
+  if (cleanId) {
+    return cleanId;
+  }
+  return fallback;
+}
