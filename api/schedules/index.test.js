@@ -3,6 +3,22 @@ import {
   beforeEach, describe, expect, it, vi,
 } from 'vitest';
 
+// A Monday relative to the real clock, not a hardcoded literal — a fixed
+// past date eventually fails PAST_PLANNING_FORBIDDEN once "today" catches
+// up to it. Any on/after-today Monday keeps periodEnd (start + 6 days)
+// safely non-past regardless of when this suite runs.
+function addDays(dateStr, days) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+function nextMonday() {
+  const now = new Date();
+  const diff = (8 - now.getUTCDay()) % 7;
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diff)).toISOString().slice(0, 10);
+}
+const MONDAY = nextMonday();
+const TUESDAY = addDays(MONDAY, 1);
+
 const ORG_A = '11111111-1111-4111-8111-111111111111';
 const AREA_A = '22222222-2222-4222-8222-222222222222';
 const USER_PLANNER = '33333333-3333-4333-8333-333333333333';
@@ -84,7 +100,7 @@ beforeEach(() => { state = { sql: makeFakeSql() }; });
 
 describe('POST /api/schedules', () => {
   it('creates the schedule and first DRAFT for a Monday period', async () => {
-    const res = await call('POST', { body: { periodStart: '2026-09-07' } });
+    const res = await call('POST', { body: { periodStart: MONDAY } });
     expect(res.statusCode).toBe(201);
     expect(res.body).toMatchObject({ versionNumber: 1, status: 'DRAFT' });
     expect(state.sql.state.schedules).toHaveLength(1);
@@ -92,8 +108,8 @@ describe('POST /api/schedules', () => {
   });
 
   it('reuses the schedule and returns 409 when a DRAFT already exists', async () => {
-    expect((await call('POST', { body: { periodStart: '2026-09-07' } })).statusCode).toBe(201);
-    const res = await call('POST', { body: { periodStart: '2026-09-07' } });
+    expect((await call('POST', { body: { periodStart: MONDAY } })).statusCode).toBe(201);
+    const res = await call('POST', { body: { periodStart: MONDAY } });
     expect(res.statusCode).toBe(409);
     expect(res.body.error).toContain('draft');
     expect(state.sql.state.schedules).toHaveLength(1);
@@ -101,7 +117,7 @@ describe('POST /api/schedules', () => {
   });
 
   it('allows an area schedule for an organization-scoped planner', async () => {
-    const res = await call('POST', { body: { areaId: AREA_A, periodStart: '2026-09-07' } });
+    const res = await call('POST', { body: { areaId: AREA_A, periodStart: MONDAY } });
     expect(res.statusCode).toBe(201);
     expect(state.sql.state.schedules[0].area_id).toBe(AREA_A);
   });
@@ -115,12 +131,12 @@ describe('POST /api/schedules', () => {
   });
 
   it('rejects a period that is neither Monday nor Sunday', async () => {
-    const res = await call('POST', { body: { periodStart: '2026-09-08' } });
+    const res = await call('POST', { body: { periodStart: TUESDAY } });
     expect(res.statusCode).toBe(400);
   });
 
   it('rejects EMPLOYEE before any schedule mutation', async () => {
-    const res = await call('POST', { token: TOKEN_EMPLOYEE, body: { periodStart: '2026-09-07' } });
+    const res = await call('POST', { token: TOKEN_EMPLOYEE, body: { periodStart: MONDAY } });
     expect(res.statusCode).toBe(403);
     expect(state.sql.state.schedules).toHaveLength(0);
   });
