@@ -1,0 +1,196 @@
+.day-detail-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: var(--text-primary);
+}
+
+.day-detail-header-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.day-detail-count-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.08));
+  color: var(--text-muted);
+}
+
+.day-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-detail-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.day-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-detail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--border-color, var(--glass-border));
+  transition: all 0.15s ease;
+}
+
+:root[data-theme='light'] .day-detail-item {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.day-detail-item:hover {
+  border-color: var(--border-hover, rgba(255, 255, 255, 0.2));
+}
+
+.day-detail-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.day-detail-item-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.day-detail-type-badge {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.day-detail-origin-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-badge-neutral, rgba(255, 255, 255, 0.08));
+  color: var(--text-muted);
+}
+
+:root[data-theme='light'] .day-detail-origin-badge {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.day-detail-item-secondary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.day-detail-item-duration {
+  font-size: 0.76rem;
+  color: var(--text-subtle, var(--text-muted));
+  opacity: 0.85;
+}
+
+.day-detail-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.day-detail-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, var(--glass-border));
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.day-detail-action-btn:hover {
+  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary);
+}
+
+.day-detail-action-btn--delete:hover {
+  background: var(--danger-bg, rgba(239, 68, 68, 0.12));
+  border-color: var(--danger-border, rgba(239, 68, 68, 0.3));
+  color: var(--danger, #ef4444);
+}
+
+.day-detail-confirm-delete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--danger-bg, rgba(239, 68, 68, 0.1));
+  border: 1px solid var(--danger-border, rgba(239, 68, 68, 0.3));
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.day-detail-confirm-delete-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* More button on MonthGrid cell */
+.month-day-more-button {
+  width: 100%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid var(--border-color, var(--glass-border));
+  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.05));
+  color: var(--color-gold);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+:root[data-theme='light'] .month-day-more-button {
+  background: rgba(49, 82, 165, 0.05);
+  border-color: rgba(49, 82, 165, 0.15);
+  color: var(--color-accent);
+}
+
+.month-day-more-button:hover {
+  background: var(--gold-tint-bg, rgba(212, 175, 55, 0.15));
+  border-color: var(--color-gold);
+}
+
+:root[data-theme='light'] .month-day-more-button:hover {
+  background: rgba(49, 82, 165, 0.12);
+  border-color: var(--color-accent);
+}

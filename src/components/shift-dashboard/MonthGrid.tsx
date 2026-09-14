@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Shift } from '../../lib/types';
 import { getDaysInMonth, getFirstWeekdayOfMonth, orderWeekdayLabels } from '../../lib/week';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
@@ -9,23 +9,39 @@ import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date
 import { Plus } from 'lucide-react';
 import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
+import { sortDayShifts } from '../../lib/shifts';
+import { DayDetailModal } from './DayDetailModal';
+
+export const MAX_VISIBLE_DAY_ITEMS = 2;
 
 interface MonthGridProps {
   year: number;
   month: number;
   shifts: Shift[];
   onEditShift: (id: string) => void;
+  onDeleteShift?: (id: string) => void | Promise<void>;
   onCreateShift: (date: string) => void;
   role?: Role | null;
   editableScheduleDates?: ReadonlySet<string>;
 }
 
-export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, role = null, editableScheduleDates = new Set<string>() }: MonthGridProps) => {
+export const MonthGrid = ({
+  year,
+  month,
+  shifts,
+  onEditShift,
+  onDeleteShift,
+  onCreateShift,
+  role = null,
+  editableScheduleDates = new Set<string>(),
+}: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
   const weekStartsOn = getWeekStartsOn(locale);
   const weekdayLabels = orderWeekdayLabels(tl('calendar.weekdays'), weekStartsOn);
   const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
   const [isTouchUi, setIsTouchUi] = useState(false);
+  const [selectedDayDetailDate, setSelectedDayDetailDate] = useState<string | null>(null);
+  const dayDetailTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -118,6 +134,11 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, rol
     </div>
   );
 
+  const currentDayDetailShifts = useMemo(() => {
+    if (!selectedDayDetailDate) return [];
+    return shifts.filter((s) => s.date === selectedDayDetailDate);
+  }, [shifts, selectedDayDetailDate]);
+
   return (
     <div className="month-grid-shell">
       <div className="month-grid-root">
@@ -141,12 +162,12 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, rol
 
             const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const dayShifts = getShiftsForDay(day);
-            const ownShifts = dayShifts.filter((shift) => getShiftOrigin(shift) === 'MAN');
-            const companyShifts = dayShifts.filter((shift) => getShiftOrigin(shift) === 'IMP');
-            const visibleShifts = [...ownShifts, ...companyShifts];
+            const sortedDayShifts = sortDayShifts(dayShifts);
+            const visibleShifts = sortedDayShifts.slice(0, MAX_VISIBLE_DAY_ITEMS);
+            const hiddenCount = sortedDayShifts.length - MAX_VISIBLE_DAY_ITEMS;
             const isToday = iso === todayISO;
             const isWeekend = index % 7 >= 5;
-            const hasVacationShift = visibleShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
+            const hasVacationShift = dayShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const isHistorical = isHistoricalDate(iso, todayISO);
             const actionInput = { date: iso, today: todayISO, role, hasEditableSchedule: editableScheduleDates.has(iso), hasVacation: hasVacationShift };
             const action = getCalendarAction(actionInput);
@@ -203,12 +224,39 @@ export const MonthGrid = ({ year, month, shifts, onEditShift, onCreateShift, rol
 
                 <div className="month-day-sections">
                   {renderShiftStack(visibleShifts)}
+                  {hiddenCount > 0 && (
+                    <button
+                      type="button"
+                      className="month-day-more-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        dayDetailTriggerRef.current = event.currentTarget;
+                        setSelectedDayDetailDate(iso);
+                      }}
+                      aria-label={t('calendar.showMoreShiftsAria', { count: hiddenCount, date: iso })}
+                      data-testid={`day-more-btn-${iso}`}
+                    >
+                      {t('calendar.showMoreShifts', { count: hiddenCount })}
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {selectedDayDetailDate && (
+        <DayDetailModal
+          isOpen={Boolean(selectedDayDetailDate)}
+          onClose={() => setSelectedDayDetailDate(null)}
+          date={selectedDayDetailDate}
+          shifts={currentDayDetailShifts}
+          onEditShift={onEditShift}
+          onDeleteShift={onDeleteShift}
+          triggerRef={dayDetailTriggerRef}
+        />
+      )}
     </div>
   );
 };

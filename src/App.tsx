@@ -2092,6 +2092,7 @@ function App() {
             month={currentMonth}
             shifts={currentMonthShifts}
             onEditShift={handleEditShift}
+            onDeleteShift={handleDeleteShift}
             onCreateShift={handleCreateShiftForDate}
             role={session?.role ?? null}
             editableScheduleDates={editableScheduleDates}

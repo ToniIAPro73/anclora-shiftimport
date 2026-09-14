@@ -2,7 +2,7 @@ import { Shift, ShiftCategory, ShiftOrigin, ShiftWithDerived, WeeklyStats } from
 import { durationMinutes, parseHHMM } from './time';
 import { getShiftTypeDefinition, getShiftTypes, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
 
-const isEmptyTime = (value: string): boolean => value.trim() === '';
+const isEmptyTime = (value?: string | null): boolean => !value || value.trim() === '';
 
 export const normalizeShiftTypeLabel = (value: string): string => {
   const normalized = value.trim().toLowerCase();
@@ -231,3 +231,36 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
 
 export const filterShiftsByOrigin = (shifts: Shift[], origin: ShiftOrigin): Shift[] =>
   shifts.filter((shift) => getShiftOrigin(shift) === origin);
+
+export const sortDayShifts = (shifts: Shift[]): Shift[] => {
+  return [...shifts].sort((a, b) => {
+    const aTimed = hasShiftTimes(a);
+    const bTimed = hasShiftTimes(b);
+
+    // Full-day events (Vacaciones, Libre, no times) come first
+    if (!aTimed && bTimed) return -1;
+    if (aTimed && !bTimed) return 1;
+
+    if (!aTimed && !bTimed) {
+      const typeA = getShiftType(a) || '';
+      const typeB = getShiftType(b) || '';
+      const cmpType = typeA.localeCompare(typeB);
+      if (cmpType !== 0) return cmpType;
+      return a.id.localeCompare(b.id);
+    }
+
+    // Both are timed: compare startTime, then endTime, then id
+    const startA = a.startTime || '';
+    const startB = b.startTime || '';
+    const cmpStart = startA.localeCompare(startB);
+    if (cmpStart !== 0) return cmpStart;
+
+    const endA = a.endTime || '';
+    const endB = b.endTime || '';
+    const cmpEnd = endA.localeCompare(endB);
+    if (cmpEnd !== 0) return cmpEnd;
+
+    return a.id.localeCompare(b.id);
+  });
+};
+
