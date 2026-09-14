@@ -52,6 +52,22 @@ const EMPLOYEES_SEED = [
   { externalId: 'GFCSV-E010', name: 'Joan Oliver Bauzà' },
   { externalId: 'GFCSV-E011', name: 'Laura Ramis Coll' },
   { externalId: 'GFCSV-E012', name: 'Marc Ferragut Bosch' },
+  { externalId: 'GFCSV-E013', name: 'Nuria Alomar Coll' },
+  { externalId: 'GFCSV-E014', name: 'Oscar Ripoll Sureda' },
+  { externalId: 'GFCSV-E015', name: 'Patricia Mas Gayà' },
+  { externalId: 'GFCSV-E016', name: 'Quim Barceló Rosselló' },
+  { externalId: 'GFCSV-E017', name: 'Rocío Vives Pastor' },
+  { externalId: 'GFCSV-E018', name: 'Sergi Moyà Palmer' },
+  { externalId: 'GFCSV-E019', name: 'Teresa Salom Oliver' },
+  { externalId: 'GFCSV-E020', name: 'Unai Crespi Vicens' },
+  { externalId: 'GFCSV-E021', name: 'Valeria Pou Servera' },
+  { externalId: 'GFCSV-E022', name: 'Xavier Bosch Bestard' },
+  { externalId: 'GFCSV-E023', name: 'Yolanda Mora Gelabert' },
+  { externalId: 'GFCSV-E024', name: 'Zoe Juan Fiol' },
+  { externalId: 'GFCSV-E025', name: 'Albert Noguera Pons' },
+  { externalId: 'GFCSV-E026', name: 'Clara Martorell Munar' },
+  { externalId: 'GFCSV-E027', name: 'Daniel Llinàs Cardell' },
+  { externalId: 'GFCSV-E028', name: 'Eva Rosselló Calafat' },
 ];
 
 const INVITATIONS_SEED = [
@@ -93,7 +109,7 @@ export default async function globalSetup() {
     const ownerPerson = (await sql`INSERT INTO organization_people (organization_id, user_id, status) VALUES (${org.id}, ${owner.id}, 'ACTIVE') RETURNING id`)[0];
     await sql`INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source) VALUES (${org.id}, ${ownerPerson.id}, 'OWNER', CURRENT_DATE, ${owner.id}, 'USER')`;
 
-    // 12 employees
+    // 28 employees
     const createdEmployees: { id: string; externalId: string; name: string }[] = [];
     for (const item of EMPLOYEES_SEED) {
       const emp = (await sql`
@@ -103,6 +119,22 @@ export default async function globalSetup() {
       `)[0];
       createdEmployees.push({ id: emp.id, externalId: item.externalId, name: item.name });
     }
+
+    // Owner employee with 4 shifts on 2026-09-14
+    const ownerEmp = (await sql`
+      INSERT INTO employees (organization_id, name, status, user_id, external_employee_id)
+      VALUES (${org.id}, 'Owner Layout', 'active', ${owner.id}, 'EMP-OWNER')
+      RETURNING id
+    `)[0];
+
+    await sql`
+      INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, location, origin)
+      VALUES
+        (${org.id}, ${ownerEmp.id}, '2026-09-14', '08:00', '11:00', 'Regular', 'MAN'),
+        (${org.id}, ${ownerEmp.id}, '2026-09-14', '11:00', '13:00', 'Regular', 'MAN'),
+        (${org.id}, ${ownerEmp.id}, '2026-09-14', '14:00', '16:00', 'Regular', 'MAN'),
+        (${org.id}, ${ownerEmp.id}, '2026-09-14', '16:00', '18:00', 'Regular', 'MAN')
+    `;
 
     // 6 pending invitations for first 6 employees
     const createdInvitationIds: string[] = [];

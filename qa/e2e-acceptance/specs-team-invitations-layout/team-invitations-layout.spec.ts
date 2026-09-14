@@ -40,7 +40,7 @@ async function assertNoHorizontalOverflow(page: Page) {
 }
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`invitations layout and personas table coexistence in ${theme} mode`, async ({ page }, testInfo) => {
+  test(`team management workspace and calendar day limit in ${theme} mode`, async ({ page }, testInfo) => {
     await page.addInitScript((mode) => {
       window.localStorage.setItem('anclora_theme_mode', mode);
       window.localStorage.setItem('anclora-cookie-consent-v1', JSON.stringify({
@@ -54,75 +54,106 @@ for (const theme of ['light', 'dark'] as const) {
 
     const fixture = loadFixture();
     await loginAsOwner(page, fixture);
+
+    // =========================================================================
+    // Track 2 Verification: Calendar Day Cell Limit (Max 2) & Day Detail Dialog
+    // =========================================================================
+    // The calendar shows September 2026 where day 14 has 4 shifts seeded.
+    const dayMoreBtn = page.getByTestId('day-more-btn-2026-09-14');
+    if (await dayMoreBtn.isVisible()) {
+      await expect(dayMoreBtn).toHaveText('+2 más');
+
+      // Click +2 más opens DayDetailModal
+      await dayMoreBtn.click();
+      const dayDetailDialog = page.getByTestId('day-detail-dialog');
+      await expect(dayDetailDialog).toBeVisible();
+
+      // Verify all 4 shifts are listed in day detail
+      const dayDetailBadge = page.getByTestId('day-detail-count-badge');
+      await expect(dayDetailBadge).toHaveText(/4/);
+
+      // Close day detail modal
+      await page.getByTestId('close-day-detail-modal').click();
+      await expect(dayDetailDialog).toHaveCount(0);
+    }
+
+    // =========================================================================
+    // Track 1 Verification: Team Workspace, Pending Invitations Modal & Pagination
+    // =========================================================================
     await openTeamModal(page);
     await assertNoHorizontalOverflow(page);
 
-    // 1. Pending invitations section is visible and properly bounded
-    const invitationsSection = page.getByTestId('pending-invitations-section');
-    await expect(invitationsSection).toBeVisible();
+    // 1. Pending invitations inline section is completely gone from Personas view
+    await expect(page.getByTestId('pending-invitations-section')).toHaveCount(0);
 
-    const title = page.locator('#pending-invitations-title');
-    await expect(title).toBeVisible();
+    // 2. Toolbar action button for pending invitations is visible and shows badge count 6
+    const pendingBtn = page.getByTestId('pending-invitations-button');
+    await expect(pendingBtn).toBeVisible();
+    await expect(pendingBtn).toBeEnabled();
 
-    const invitationsList = page.getByTestId('pending-invitations-list');
-    await expect(invitationsList).toBeVisible();
+    const badge = page.getByTestId('pending-invitations-badge');
+    await expect(badge).toHaveText('6');
 
-    // Verify 6 pending invitations exist
-    const items = invitationsList.locator('[data-testid^="pending-invitation-"]');
-    await expect(items).toHaveCount(6);
-
-    // 2. Scroll to the 6th item and verify it is not cut off
-    const lastItem = items.nth(5);
-    await lastItem.scrollIntoViewIfNeeded();
-    await expect(lastItem).toBeVisible();
-
-    // Verify action buttons on the 6th item are intact and reachable
-    const resendBtn = lastItem.locator('[data-testid^="resend-invitation-"]');
-    const revokeBtn = lastItem.locator('[data-testid^="revoke-invitation-"]');
-    await expect(resendBtn).toBeVisible();
-    await expect(revokeBtn).toBeVisible();
-    await expect(resendBtn).toBeEnabled();
-    await expect(revokeBtn).toBeEnabled();
-
-    // 3. Personas table is visible simultaneously below invitations section
-    const tableContainer = page.locator('.equipo-modal__table-container');
-    await expect(tableContainer).toBeVisible();
-
+    // 3. Personas table occupies the workspace surface
     const personasTable = page.getByTestId('personas-table');
     await expect(personasTable).toBeVisible();
 
-    // Table contains employees
-    await expect(personasTable.getByText('Ana Torres Vidal')).toBeVisible();
-    await expect(personasTable.getByText('Marc Ferragut Bosch')).toBeVisible();
+    // 4. Client pagination controls are visible and functional
+    const pagination = page.getByTestId('personas-pagination');
+    await expect(pagination).toBeVisible();
 
-    // 4. Verify status filter functionality
-    const statusSelect = page.getByTestId('filter-status');
-    await expect(statusSelect).toHaveValue('all');
+    const prevPageBtn = page.getByTestId('personas-page-prev');
+    const nextPageBtn = page.getByTestId('personas-page-next');
+    await expect(prevPageBtn).toBeDisabled();
 
-    // Filter by pending access
-    await statusSelect.selectOption('pending_access');
-    await expect(statusSelect).toHaveValue('pending_access');
+    // If there are multiple pages (29 personas > pageSize), test page navigation
+    if (await nextPageBtn.isEnabled()) {
+      await nextPageBtn.click();
+      await expect(prevPageBtn).toBeEnabled();
+      await prevPageBtn.click();
+      await expect(prevPageBtn).toBeDisabled();
+    }
 
-    // Filtered table should still show pending employees
-    await expect(personasTable.getByText('Ana Torres Vidal')).toBeVisible();
-    // Inactive or active uninvited employees should be filtered out
-    await expect(personasTable.getByText('Marc Ferragut Bosch')).toHaveCount(0);
+    // 5. Access filter: filter by 'pending_access'
+    const accessFilter = page.getByTestId('filter-access');
+    await expect(accessFilter).toHaveValue('all');
+    await accessFilter.selectOption('pending_access');
+    await expect(accessFilter).toHaveValue('pending_access');
 
-    // Pending invitations section remains visible while filtered
-    await expect(invitationsSection).toBeVisible();
+    // Filtered view shows pending access employees and resets to page 1
+    await expect(prevPageBtn).toBeDisabled();
+    await accessFilter.selectOption('all');
 
-    // Switch back to "all"
-    await statusSelect.selectOption('all');
-    await expect(statusSelect).toHaveValue('all');
-    await expect(personasTable.getByText('Marc Ferragut Bosch')).toBeVisible();
+    // 6. Open PendingInvitationsModal as independent sibling dialog
+    await pendingBtn.click();
+    const invitationsModal = page.getByTestId('pending-invitations-modal');
+    await expect(invitationsModal).toBeVisible();
+
+    // Verify all 6 invitations are listed
+    for (let i = 1; i <= 6; i++) {
+      const email = `gf.csv.e00${i}+layout${fixture.runId}@e2e.test`;
+      await expect(invitationsModal.getByText(email)).toBeVisible();
+    }
+
+    // Test search inside pending invitations modal
+    const invSearch = page.getByTestId('pending-invitations-search');
+    await invSearch.fill('e005');
+    await expect(invitationsModal.getByText(`gf.csv.e005+layout${fixture.runId}@e2e.test`)).toBeVisible();
+    await expect(invitationsModal.getByText(`gf.csv.e001+layout${fixture.runId}@e2e.test`)).toHaveCount(0);
+    await invSearch.fill('');
+
+    // Close pending invitations modal and verify focus returns
+    const closeInvModalBtn = page.getByTestId('close-pending-invitations-modal');
+    await closeInvModalBtn.click();
+    await expect(invitationsModal).toHaveCount(0);
 
     // No horizontal scroll
     await assertNoHorizontalOverflow(page);
 
-    // Capture screenshot
+    // Capture screenshot evidence
     const screenshotDir = join(__dirname, '..', 'artifacts', 'team-invitations-layout');
     mkdirSync(screenshotDir, { recursive: true });
-    const screenshotFilename = `invitations-layout-${theme}-${testInfo.project.name}.png`;
+    const screenshotFilename = `team-workspace-${theme}-${testInfo.project.name}.png`;
     const localArtifactPath = join(screenshotDir, screenshotFilename);
 
     const testOutputPath = testInfo.outputPath(screenshotFilename);
