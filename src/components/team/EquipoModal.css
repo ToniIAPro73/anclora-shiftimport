@@ -171,9 +171,22 @@
   }
 
   .bulk-csv-modal__table td {
-    display: block;
+    display: flex;
+    gap: 6px;
     border: 0;
     padding: 3px 0;
+  }
+
+  /* The header row is hidden (screen-reader only) at this width, but a
+     sighted user still needs to know which value is which in the
+     resulting stacked "card" — a bare, unlabeled list of values read as
+     ambiguous (e.g. a row number next to an email with no indication
+     either is what it is). */
+  .bulk-csv-modal__table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    flex-shrink: 0;
   }
 }
 

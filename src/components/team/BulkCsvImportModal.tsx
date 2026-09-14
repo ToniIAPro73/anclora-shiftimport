@@ -258,20 +258,35 @@ export function BulkCsvImportModal({ isOpen, kind, onClose, employees, members, 
                 in for a real outcome once one exists (contract: distinguish
                 predicted from confirmed). */}
             <h4 style={{ margin: '8px 0 0' }}>{resultRows ? t('teamWorkspace.bulkResultTitle') : t('teamWorkspace.bulkPreviewTitle')}</h4>
-            <div className="bulk-csv-modal__table" tabIndex={0}>
-              <table className="equipo-table"><thead><tr><th>{t('teamWorkspace.bulkRow')}</th><th>{kind === 'employees' ? t('teamWorkspace.employeeRecord') : t('teamWorkspace.accessEmail')}</th><th>{t('teamWorkspace.bulkAction')}</th><th>{t('teamWorkspace.bulkMessage')}</th></tr></thead><tbody>
-                {resultRows
-                  ? resultRows.map((resultRow) => (
-                    <tr key={String(resultRow.row)}>
-                      <td>{String(resultRow.row)}</td>
-                      <td>{String(kind === 'employees' ? resultRow.name : resultRow.email)}</td>
-                      <td>{actionLabel(String(resultRow.status))}</td>
-                      <td>{String(resultRow.message ?? '')}</td>
-                    </tr>
-                  ))
-                  : rows.map((row) => <tr key={row.row}><td>{row.row}</td><td>{kind === 'employees' ? (row as EmployeeCsvRow).name : (row as UserCsvRow).email}</td><td>{actionLabel(row.action)}</td><td>{row.message ?? ''}</td></tr>)}
-              </tbody></table>
-            </div>
+            {(() => {
+              const rowLabel = t('teamWorkspace.bulkRow');
+              const subjectLabel = kind === 'employees' ? t('teamWorkspace.employeeRecord') : t('teamWorkspace.accessEmail');
+              const actionColumnLabel = t('teamWorkspace.bulkAction');
+              const messageLabel = t('teamWorkspace.bulkMessage');
+              return (
+                <div className="bulk-csv-modal__table" tabIndex={0}>
+                  <table className="equipo-table"><thead><tr><th>{rowLabel}</th><th>{subjectLabel}</th><th>{actionColumnLabel}</th><th>{messageLabel}</th></tr></thead><tbody>
+                    {resultRows
+                      ? resultRows.map((resultRow) => (
+                        <tr key={String(resultRow.row)}>
+                          <td data-label={rowLabel}>{String(resultRow.row)}</td>
+                          <td data-label={subjectLabel}>{String(kind === 'employees' ? resultRow.name : resultRow.email)}</td>
+                          <td data-label={actionColumnLabel}>{actionLabel(String(resultRow.status))}</td>
+                          <td data-label={messageLabel}>{String(resultRow.message ?? '')}</td>
+                        </tr>
+                      ))
+                      : rows.map((row) => (
+                        <tr key={row.row}>
+                          <td data-label={rowLabel}>{row.row}</td>
+                          <td data-label={subjectLabel}>{kind === 'employees' ? (row as EmployeeCsvRow).name : (row as UserCsvRow).email}</td>
+                          <td data-label={actionColumnLabel}>{actionLabel(row.action)}</td>
+                          <td data-label={messageLabel}>{row.message ?? ''}</td>
+                        </tr>
+                      ))}
+                  </tbody></table>
+                </div>
+              );
+            })()}
           </>
         )}
         {!resultRows && rows.length > 0 && <p aria-live="polite">{t('teamWorkspace.bulkRowsSummary', { total: rows.length, processable: processable.length })}</p>}
