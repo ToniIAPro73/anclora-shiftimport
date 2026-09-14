@@ -639,6 +639,10 @@ describe('EquipoModal — Tab 2: PLANNER Scopes', () => {
 describe('EquipoModal — Tab 3: ÁREAS', () => {
   it('displays empty state when organization has 0 areas and allows creating first area', async () => {
     mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    // The modal refreshes areas on open (real usage: a stale/in-flight
+    // App-level area fetch must never leak into this feature) — override the
+    // suite's default non-empty fixture to actually simulate zero areas.
+    mockedListRemoteAreas.mockResolvedValue([]);
     mockedCreateRemoteArea.mockResolvedValue({
       id: 'area-new',
       name: 'Mantenimiento',
@@ -670,6 +674,24 @@ describe('EquipoModal — Tab 3: ÁREAS', () => {
         code: 'MNT',
       });
     });
+  });
+
+  it('refreshes areas on open instead of trusting a stale/empty parent prop', async () => {
+    // Reproduces a real Production bug: App-level hydration sets `areas`
+    // asynchronously, after the dashboard (and this modal's own trigger)
+    // is already clickable — opening Team Management (and, from there, the
+    // CSV importers) in that window used to carry a stale, empty area list
+    // into every area-dependent feature, rejecting every valid area
+    // reference as "unknown". The modal must fetch its own fresh copy.
+    mockedListRemoteMembers.mockResolvedValue(membersFixture);
+    mockedListRemoteAreas.mockResolvedValue(areasFixture);
+
+    renderModal('OWNER', 'usr-owner', []); // stale/in-flight parent state: no areas yet
+    await waitFor(() => expect(mockedListRemoteAreas).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId('tab-areas'));
+    await waitFor(() => expect(screen.getByTestId('areas-table')).toBeInTheDocument());
+    expect(screen.getByTestId('area-row-area-ops')).toHaveTextContent('Operaciones');
   });
 
   it('displays areas table with active status, employee count, and planner count', async () => {

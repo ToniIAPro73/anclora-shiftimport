@@ -246,7 +246,15 @@ export function EquipoModal({
 
   useEffect(() => {
     void fetchMembers();
-  }, [fetchMembers]);
+    // The `areas` prop is only as fresh as the last App-level hydration,
+    // which resolves asynchronously *after* the dashboard (and this modal's
+    // own trigger) becomes clickable — opening Team Management shortly after
+    // login could otherwise carry a stale/empty area list into the CSV
+    // importers, rejecting every valid area reference as "unknown". Refresh
+    // on every open so the importers always resolve areas against this
+    // modal's own current data, not a possibly-in-flight parent fetch.
+    if (isOpen) void refreshAreas();
+  }, [fetchMembers, isOpen, refreshAreas]);
 
   // Transient success confirmation (revoke, grant access): auto-dismisses so
   // it never lingers as stale state after the user moves on.
