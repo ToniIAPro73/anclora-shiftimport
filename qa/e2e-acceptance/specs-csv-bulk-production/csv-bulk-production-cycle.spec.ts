@@ -257,15 +257,19 @@ test('users CSV: real template, mixed import (invite/existing-account/rejections
   // Client-side rejections visible with concrete reasons, not generic text.
   await expect(page.getByText('Rol no permitido; OWNER no se puede importar')).toBeVisible();
   await expect(page.getByText('El empleado ya está vinculado a otro usuario')).toBeVisible();
+  await expect(page.getByText('Empleado no encontrado en esta organización')).toBeVisible();
 
   const postReq = page.waitForRequest((r) => r.url().includes('/api/invitations/bulk') && r.method() === 'POST');
   const postRes = page.waitForResponse((r) => r.url().includes('/api/invitations/bulk') && r.request().method() === 'POST');
   await page.getByRole('button', { name: 'Confirmar importación' }).click();
   const sentBody = JSON.parse((await postReq).postData() ?? '{}');
   expect(JSON.stringify(sentBody)).not.toContain('password');
-  // Client-rejected rows (invalid email, duplicate, OWNER, already-linked)
-  // never reach the server payload.
-  expect(JSON.stringify(sentBody)).not.toContain('not-an-email');
+  // Client-rejected rows (duplicate email, OWNER role, already-linked
+  // employee) never reach the server payload. Email FORMAT is not
+  // client-validated by contract — only presence is — so "not-an-email"
+  // reaches the server, which is the authoritative validator (verified
+  // below via its translated per-row rejection).
+  expect(sentBody.users).toHaveLength(3);
   expect(JSON.stringify(sentBody)).not.toContain('Duplicado En Archivo');
   expect(JSON.stringify(sentBody)).not.toContain('rol.invalido');
   expect(JSON.stringify(sentBody)).not.toContain('ya.vinculado');
@@ -273,10 +277,14 @@ test('users CSV: real template, mixed import (invite/existing-account/rejections
   expect(response.status()).toBe(200);
 
   await expect(page.getByRole('heading', { name: 'Resultado' })).toBeVisible();
+  // The server-authoritative email-format rejection is surfaced translated,
+  // never as the raw INVALID_EMAIL code.
+  await expect(page.getByText('Introduce un email válido.')).toBeVisible();
 
   const after = await orgCounts(org);
   // Exactly the two importable rows (new invite + existing-account invite)
-  // produced pending invitations; no duplicate people/employees/memberships.
+  // produced pending invitations; the malformed-email and nonexistent-
+  // employee rows are server-rejected with no side effects.
   expect(after.pendingInvitations).toBe(before.pendingInvitations + 2);
   expect(after.people).toBe(before.people + 2);
   expect(after.employees).toBe(before.employees + 2);
