@@ -114,31 +114,33 @@ export default async function globalSetup() {
       const tokenHash = createHash('sha256').update(rawToken).digest('hex');
       const email = `${inv.email}+layout${runId}@e2e.test`;
 
-      await sql`
-        INSERT INTO organization_people (id, organization_id, user_id, status)
-        VALUES (${personId}, ${org.id}, NULL, 'PENDING_INVITATION')
-      `;
-      await sql`
-        INSERT INTO employee_profiles (id, organization_id, organization_person_id, external_employee_id, employee_name, employment_status)
-        VALUES (${emp.id}, ${org.id}, ${personId}, ${emp.externalId}, ${emp.name}, 'ACTIVE')
-      `;
-      await sql`
-        INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source)
-        VALUES (${org.id}, ${personId}, ${inv.role}, CURRENT_DATE, ${owner.id}, 'USER')
-      `;
-      await sql`
-        INSERT INTO user_access_invitations (
-          id, organization_id, organization_person_id, email_normalized, invited_by_user_id,
-          token_hash, status, created_at, expires_at, last_sent_at, delivery_status, send_attempts
-        ) VALUES (
-          ${invitationId}, ${org.id}, ${personId}, ${email}, ${owner.id},
-          ${tokenHash}, 'PENDING', NOW(), NOW() + interval '7 days', NOW(), 'SENT', 1
-        )
-      `;
-      await sql`
-        UPDATE employees SET status = 'pending_access'
-        WHERE id = ${emp.id}
-      `;
+      await sql.transaction((txn) => [
+        txn`
+          INSERT INTO organization_people (id, organization_id, user_id, status)
+          VALUES (${personId}, ${org.id}, NULL, 'PENDING_INVITATION')
+        `,
+        txn`
+          INSERT INTO employee_profiles (id, organization_id, organization_person_id, external_employee_id, employee_name, employment_status)
+          VALUES (${emp.id}, ${org.id}, ${personId}, ${emp.externalId}, ${emp.name}, 'ACTIVE')
+        `,
+        txn`
+          INSERT INTO person_role_periods (organization_id, organization_person_id, role, valid_from, created_by_user_id, source)
+          VALUES (${org.id}, ${personId}, ${inv.role}, CURRENT_DATE, ${owner.id}, 'USER')
+        `,
+        txn`
+          INSERT INTO user_access_invitations (
+            id, organization_id, organization_person_id, email_normalized, invited_by_user_id,
+            token_hash, status, created_at, expires_at, last_sent_at, delivery_status, send_attempts
+          ) VALUES (
+            ${invitationId}, ${org.id}, ${personId}, ${email}, ${owner.id},
+            ${tokenHash}, 'PENDING', NOW(), NOW() + interval '7 days', NOW(), 'SENT', 1
+          )
+        `,
+        txn`
+          UPDATE employees SET status = 'pending_access'
+          WHERE id = ${emp.id}
+        `,
+      ]);
       createdInvitationIds.push(invitationId);
     }
 

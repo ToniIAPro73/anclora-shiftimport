@@ -48,6 +48,7 @@ qa/e2e-acceptance/test-results-csv-bulk-production/
 qa/e2e-acceptance/test-results-csv-bulk-production-visual/
 qa/e2e-acceptance/artifacts/team-access-fixture.json
 qa/e2e-acceptance/artifacts/csv-bulk-production-fixture.json
+qa/e2e-acceptance/artifacts/team-invitations-layout-fixture.json
 
 # Real schedules must never be committed (PII); test fixtures are synthetic
 src/ingestion/fixtures/real/
