@@ -1,4 +1,4 @@
-import { ChangeEvent, useMemo, useState } from 'react';
+import { ChangeEvent, useMemo, useRef, useState } from 'react';
 import { Download, Upload } from 'lucide-react';
 import {
   EmployeeCsvRow,
@@ -16,6 +16,7 @@ import {
   RemoteMember,
 } from '../../lib/remote';
 import { Locale } from '../../lib/i18n';
+import { ApiError } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 
@@ -43,6 +44,7 @@ export function BulkCsvImportModal({ isOpen, kind, onClose, employees, members, 
   const [parseError, setParseError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [resultRows, setResultRows] = useState<Array<Record<string, unknown>> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const areaByKey = useMemo(() => {
     const map = new Map<string, RemoteArea>();
@@ -117,9 +119,27 @@ export function BulkCsvImportModal({ isOpen, kind, onClose, employees, members, 
   };
 
   const processable = rows.filter((row) => !['ERROR', 'SKIP_DUPLICATE', 'UNCHANGED', 'UNCHANGED_PENDING'].includes(row.action));
+
+  /** Every reason/code a confirmed server result can carry is a machine
+   * value, never presentation text — translate it here so a raw backend
+   * code can never reach the screen or the downloadable report. */
+  const translateEmployeeReason = (reason: string | undefined, areaLabel: string | undefined): string => {
+    switch (reason) {
+      case 'invalid': return t('teamWorkspace.bulkMissingName');
+      case 'unknown_area': return areaLabel ? t('teamWorkspace.bulkUnknownArea') + ` (${areaLabel})` : t('teamWorkspace.bulkUnknownArea');
+      case 'plan_limit': return t('teamWorkspace.bulkPlanLimit');
+      default: return t('teamWorkspace.errors.IMPORT_ROW_FAILED');
+    }
+  };
+  const translateUserCode = (code: string | null | undefined): string => {
+    if (!code) return '';
+    return t(`teamWorkspace.errors.${code}`);
+  };
+
   const handleImport = async () => {
     if (busy || processable.length === 0) return;
     setBusy(true);
+    setParseError(null);
     try {
       if (kind === 'employees') {
         const results = await bulkCreateRemoteEmployees(processable.map((row) => {
@@ -134,7 +154,7 @@ export function BulkCsvImportModal({ isOpen, kind, onClose, employees, members, 
           return {
             row: row.row, status: result?.status ?? row.action, externalEmployeeId: employee.externalEmployeeId,
             name: employee.name, area: employee.areaName ?? '', action: result?.status ?? row.action,
-            message: row.message ?? result?.areaError ?? result?.reason ?? '',
+            message: row.message ?? (result?.status === 'failed' ? translateEmployeeReason(result.reason, result.areaLabel) : ''),
           };
         }));
       } else {
@@ -150,27 +170,61 @@ export function BulkCsvImportModal({ isOpen, kind, onClose, employees, members, 
             row: row.row, status: result?.status ?? row.action, email: user.email, displayName: user.name,
             role: user.role, externalEmployeeId: user.externalEmployeeId,
             invitationStatus: result?.invitationStatus ?? '', deliveryStatus: result?.deliveryStatus ?? '',
-            message: row.message ?? result?.code ?? '',
+            message: row.message ?? translateUserCode(result?.code),
           };
         }));
       }
       onChanged();
-    } catch {
-      setParseError(t('teamWorkspace.bulkImportFailed'));
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      setParseError(code ? t(`teamWorkspace.errors.${code}`) : t('teamWorkspace.bulkImportFailed'));
     } finally {
       setBusy(false);
     }
   };
 
+  const resultSummary = useMemo(() => {
+    if (!resultRows) return null;
+    const counts = { created: 0, updated: 0, unchanged: 0, rejected: 0, invited: 0, emailFailed: 0 };
+    for (const resultRow of resultRows) {
+      const status = String(resultRow.status ?? '');
+      if (kind === 'employees') {
+        if (status === 'created') counts.created += 1;
+        else if (status === 'updated') counts.updated += 1;
+        else if (status === 'existing' || status === 'existing_inactive' || status === 'UNCHANGED') counts.unchanged += 1;
+        else counts.rejected += 1;
+      } else {
+        if (status === 'INVITED') {
+          counts.invited += 1;
+          if (resultRow.deliveryStatus === 'FAILED') counts.emailFailed += 1;
+        } else if (status === 'UPDATE_ROLE') counts.updated += 1;
+        else if (status === 'UNCHANGED' || status === 'UNCHANGED_PENDING') counts.unchanged += 1;
+        else counts.rejected += 1;
+      }
+    }
+    return counts;
+  }, [resultRows, kind]);
+
   const downloadTemplate = () => {
-    if (kind === 'employees') downloadCsv('shiftimport-empleados-plantilla.csv', EMPLOYEE_TEMPLATE_HEADERS, EMPLOYEE_TEMPLATE_ROWS);
-    else downloadCsv('shiftimport-usuarios-plantilla.csv', USER_TEMPLATE_HEADERS, USER_TEMPLATE_ROWS);
+    if (kind === 'employees') downloadCsv(t('teamWorkspace.bulkTemplateFileNameEmployees'), EMPLOYEE_TEMPLATE_HEADERS, EMPLOYEE_TEMPLATE_ROWS);
+    else downloadCsv(t('teamWorkspace.bulkTemplateFileNameUsers'), USER_TEMPLATE_HEADERS, USER_TEMPLATE_ROWS);
   };
 
   const downloadResult = () => {
     if (!resultRows) return;
-    const headers = kind === 'employees' ? ['row', 'status', 'externalEmployeeId', 'name', 'area', 'action', 'message'] : ['row', 'status', 'email', 'displayName', 'role', 'externalEmployeeId', 'invitationStatus', 'deliveryStatus', 'message'];
-    downloadCsv(`shiftimport-${kind === 'employees' ? 'empleados' : 'usuarios'}-resultado-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}.csv`, headers, resultRows);
+    // Headers are localized labels — the report is a human deliverable, not
+    // a machine payload, so it must never surface raw technical field names.
+    const headers = kind === 'employees'
+      ? [t('teamWorkspace.bulkReportHeaderRow'), t('teamWorkspace.bulkReportHeaderStatus'), t('teamWorkspace.bulkReportHeaderExternalId'), t('teamWorkspace.bulkReportHeaderName'), t('teamWorkspace.bulkReportHeaderArea'), t('teamWorkspace.bulkReportHeaderAction'), t('teamWorkspace.bulkReportHeaderMessage')]
+      : [t('teamWorkspace.bulkReportHeaderRow'), t('teamWorkspace.bulkReportHeaderStatus'), t('teamWorkspace.bulkReportHeaderEmail'), t('teamWorkspace.bulkReportHeaderDisplayName'), t('teamWorkspace.bulkReportHeaderRole'), t('teamWorkspace.bulkReportHeaderExternalId'), t('teamWorkspace.bulkReportHeaderInvitationStatus'), t('teamWorkspace.bulkReportHeaderDeliveryStatus'), t('teamWorkspace.bulkReportHeaderMessage')];
+    const localizedRows = resultRows.map((resultRow) => {
+      const values = kind === 'employees'
+        ? [resultRow.row, actionLabel(String(resultRow.status)), resultRow.externalEmployeeId, resultRow.name, resultRow.area, actionLabel(String(resultRow.action)), resultRow.message]
+        : [resultRow.row, actionLabel(String(resultRow.status)), resultRow.email, resultRow.displayName, resultRow.role, resultRow.externalEmployeeId, resultRow.invitationStatus, resultRow.deliveryStatus, resultRow.message];
+      return Object.fromEntries(headers.map((header, index) => [header, values[index] ?? '']));
+    });
+    const fileNameBase = t(kind === 'employees' ? 'teamWorkspace.bulkResultFileNameEmployees' : 'teamWorkspace.bulkResultFileNameUsers');
+    downloadCsv(`${fileNameBase}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')}.csv`, headers, localizedRows);
   };
 
   const actionLabel = (action: string) => {
@@ -189,19 +243,55 @@ export function BulkCsvImportModal({ isOpen, kind, onClose, employees, members, 
       <div className="bulk-csv-modal" data-testid={`bulk-csv-${kind}`}>
         <p>{t('teamWorkspace.bulkImportDescription')}</p>
         <div className="equipo-modal__toolbar">
-          <label className="equipo-btn equipo-btn--secondary" htmlFor={`bulk-file-${kind}`}><Upload size={16} /> {t('teamWorkspace.bulkSelectFile')}</label>
-          <input id={`bulk-file-${kind}`} type="file" accept=".csv,text/csv" onChange={(event) => void handleFile(event)} disabled={busy} hidden />
+          <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+            <Upload size={16} /> {t('teamWorkspace.bulkSelectFile')}
+          </button>
+          <input ref={fileInputRef} id={`bulk-file-${kind}`} type="file" accept=".csv,text/csv" onChange={(event) => void handleFile(event)} disabled={busy} style={{ display: 'none' }} />
           <button type="button" className="equipo-btn equipo-btn--secondary" onClick={downloadTemplate} disabled={busy}><Download size={16} /> {t('teamWorkspace.bulkTemplate')}</button>
         </div>
         {fileName && <p aria-live="polite">{fileName}</p>}
         {parseError && <div role="alert" className="card card--error">{parseError}</div>}
-        {rows.length > 0 && <div className="bulk-csv-modal__table" tabIndex={0}>
-          <table className="equipo-table"><thead><tr><th>{t('teamWorkspace.bulkRow')}</th><th>{kind === 'employees' ? t('teamWorkspace.employeeRecord') : t('teamWorkspace.accessEmail')}</th><th>{t('teamWorkspace.bulkAction')}</th><th>{t('teamWorkspace.bulkMessage')}</th></tr></thead><tbody>
-            {rows.map((row) => <tr key={row.row}><td>{row.row}</td><td>{kind === 'employees' ? (row as EmployeeCsvRow).name : (row as UserCsvRow).email}</td><td>{actionLabel(row.action)}</td><td>{row.message ?? ''}</td></tr>)}
-          </tbody></table>
-        </div>}
-        {rows.length > 0 && <p aria-live="polite">{t('teamWorkspace.bulkRowsSummary', { total: rows.length, processable: processable.length })}</p>}
-        {resultRows && <div role="status"><p>{t('teamWorkspace.bulkSuccess')}</p><button type="button" className="equipo-btn equipo-btn--secondary" onClick={downloadResult}><Download size={16} /> {t('teamWorkspace.bulkDownloadResult')}</button></div>}
+        {rows.length > 0 && (
+          <>
+            {/* The table always shows either the client-side preview or the
+                server-CONFIRMED result — never lets the stale preview stand
+                in for a real outcome once one exists (contract: distinguish
+                predicted from confirmed). */}
+            <h4 style={{ margin: '8px 0 0' }}>{resultRows ? t('teamWorkspace.bulkResultTitle') : t('teamWorkspace.bulkPreviewTitle')}</h4>
+            <div className="bulk-csv-modal__table" tabIndex={0}>
+              <table className="equipo-table"><thead><tr><th>{t('teamWorkspace.bulkRow')}</th><th>{kind === 'employees' ? t('teamWorkspace.employeeRecord') : t('teamWorkspace.accessEmail')}</th><th>{t('teamWorkspace.bulkAction')}</th><th>{t('teamWorkspace.bulkMessage')}</th></tr></thead><tbody>
+                {resultRows
+                  ? resultRows.map((resultRow) => (
+                    <tr key={String(resultRow.row)}>
+                      <td>{String(resultRow.row)}</td>
+                      <td>{String(kind === 'employees' ? resultRow.name : resultRow.email)}</td>
+                      <td>{actionLabel(String(resultRow.status))}</td>
+                      <td>{String(resultRow.message ?? '')}</td>
+                    </tr>
+                  ))
+                  : rows.map((row) => <tr key={row.row}><td>{row.row}</td><td>{kind === 'employees' ? (row as EmployeeCsvRow).name : (row as UserCsvRow).email}</td><td>{actionLabel(row.action)}</td><td>{row.message ?? ''}</td></tr>)}
+              </tbody></table>
+            </div>
+          </>
+        )}
+        {!resultRows && rows.length > 0 && <p aria-live="polite">{t('teamWorkspace.bulkRowsSummary', { total: rows.length, processable: processable.length })}</p>}
+        {resultRows && resultSummary && (
+          <div role="status" aria-live="polite">
+            <p>
+              {t('teamWorkspace.bulkSuccess')}
+              {' — '}
+              {[
+                kind === 'employees' && resultSummary.created > 0 && t('teamWorkspace.bulkCountCreated', { count: resultSummary.created }),
+                resultSummary.updated > 0 && t('teamWorkspace.bulkCountUpdated', { count: resultSummary.updated }),
+                kind === 'users' && resultSummary.invited > 0 && t('teamWorkspace.bulkCountInvited', { count: resultSummary.invited }),
+                kind === 'users' && resultSummary.emailFailed > 0 && t('teamWorkspace.bulkCountEmailFailed', { count: resultSummary.emailFailed }),
+                resultSummary.unchanged > 0 && t('teamWorkspace.bulkCountUnchanged', { count: resultSummary.unchanged }),
+                resultSummary.rejected > 0 && t('teamWorkspace.bulkCountRejected', { count: resultSummary.rejected }),
+              ].filter(Boolean).join(' · ')}
+            </p>
+            <button type="button" className="equipo-btn equipo-btn--secondary" onClick={downloadResult}><Download size={16} /> {t('teamWorkspace.bulkDownloadResult')}</button>
+          </div>
+        )}
         <div className="bulk-csv-modal__footer">
           <button type="button" className="equipo-btn equipo-btn--secondary" onClick={onClose} disabled={busy}>{t('common.cancel')}</button>
           <button type="button" className="equipo-btn equipo-btn--primary" onClick={() => void handleImport()} disabled={busy || processable.length === 0} aria-busy={busy}>{busy ? t('teamWorkspace.bulkImporting') : t('teamWorkspace.bulkConfirm')}</button>
