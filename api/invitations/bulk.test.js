@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as invitationsLib from '../_lib/invitations.js';
+
+vi.mock('../_lib/invitations.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, createAccessInvitation: vi.fn() };
+});
+
 import handler, { mapWithConcurrency, processRow, resolveEmployee } from './bulk.js';
 
 function responseDouble() {
@@ -124,5 +131,48 @@ describe('processRow — server-side re-validation of every CSV row', () => {
     const row = { row: 1, email: 'a@e2e.test', role: 'EMPLOYEE' };
     const result = await processRow(sql, ctx, row, { defaultLocale: 'es' });
     expect(result).toMatchObject({ status: 'UNCHANGED_PENDING', invitationStatus: 'PENDING' });
+  });
+
+  it('passes employeeName (not just displayName) to createAccessInvitation for a brand-new person, so the CSV row actually creates an employee record', async () => {
+    // Regression: createAccessInvitation only creates employees/organization_people
+    // rows for a new person when `employeeName` is set — a distinct field
+    // from `displayName` (used solely for the invitation email's greeting).
+    // The single-invite wizard (EquipoModal's handleCreatePersona) always
+    // sends both; the bulk CSV path used to send only displayName, silently
+    // dropping the employee record for every CSV-invited new person.
+    vi.mocked(invitationsLib.createAccessInvitation).mockResolvedValue({
+      invitation: { status: 'PENDING' },
+      delivery: { status: 'SENT' },
+    });
+    const sql = queueSql(
+      [], // users: no existing account
+      [], // no pending invitation
+    );
+    const row = { row: 1, email: 'nueva@e2e.test', role: 'EMPLOYEE', displayName: 'Nueva Persona' };
+    await processRow(sql, ctx, row, { defaultLocale: 'es' });
+    expect(invitationsLib.createAccessInvitation).toHaveBeenCalledWith(
+      sql, ctx,
+      expect.objectContaining({ displayName: 'Nueva Persona', employeeName: 'Nueva Persona', employeeId: null }),
+      expect.anything(),
+    );
+  });
+
+  it('omits employeeName when the row resolves to an existing employee (never overwrites their name)', async () => {
+    vi.mocked(invitationsLib.createAccessInvitation).mockResolvedValue({
+      invitation: { status: 'PENDING' },
+      delivery: { status: 'SENT' },
+    });
+    const sql = queueSql(
+      [{ id: 'emp-1', user_id: null, status: 'active' }], // resolveEmployee
+      [], // users: no existing account
+      [], // no pending invitation
+    );
+    const row = { row: 1, email: 'nueva@e2e.test', role: 'EMPLOYEE', displayName: 'Nueva Persona', externalEmployeeId: 'EMP-1' };
+    await processRow(sql, ctx, row, { defaultLocale: 'es' });
+    expect(invitationsLib.createAccessInvitation).toHaveBeenCalledWith(
+      sql, ctx,
+      expect.objectContaining({ employeeId: 'emp-1', employeeName: undefined }),
+      expect.anything(),
+    );
   });
 });

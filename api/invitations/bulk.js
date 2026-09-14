@@ -110,11 +110,21 @@ export async function processRow(sql, ctx, row, { environment, send, defaultLoca
     return rowResult({ ...row, email }, { status: 'UNCHANGED_PENDING', invitationStatus: 'PENDING' });
   }
 
+  const displayName = String(row.displayName ?? '').trim();
   const created = await createAccessInvitation(sql, ctx, {
     email,
-    displayName: String(row.displayName ?? '').trim(),
+    displayName,
     role,
     employeeId: employee?.id ?? null,
+    // Mirrors the single-invite wizard (EquipoModal's handleCreatePersona):
+    // without an externalEmployeeId match, this row names a brand-new
+    // person — createAccessInvitation only creates the employee/profile
+    // record (and later resolves the accepted user's real display name)
+    // when `employeeName` is set, which is a distinct field from
+    // `displayName` (used solely for the invitation email's greeting).
+    // Passing only `displayName` here silently dropped every CSV-invited
+    // new person's employee record.
+    employeeName: employee ? undefined : displayName,
     externalEmployeeId: row.externalEmployeeId,
     locale,
   }, { environment, send });
