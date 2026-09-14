@@ -16,7 +16,11 @@ interface ModalShellProps {
   /** Footer actions (secondary left, primary right per contract). */
   footer?: ReactNode;
   maxWidth?: string;
+  width?: string;
+  height?: string;
+  className?: string;
   closeAriaLabel?: string;
+  closeTestId?: string;
   /** Blocking dialogs (e.g. mandatory organization choice): hides the X and
    * disables ESC/click-outside. Only use when closing makes no sense. */
   blocking?: boolean;
@@ -45,8 +49,12 @@ export const ModalShell = ({
   title,
   children,
   footer,
-  maxWidth = '480px',
-  closeAriaLabel = 'Close',
+  maxWidth = '540px',
+  width,
+  height,
+  className,
+  closeAriaLabel = 'Cerrar',
+  closeTestId,
   blocking = false,
   suppressEscape = false,
   workspace = false,
@@ -139,7 +147,7 @@ export const ModalShell = ({
     >
       <div
         ref={contentRef}
-        className={`modal-content${workspace ? ' modal-content--workspace' : ''}${fullscreen ? ' modal-content--fullscreen' : ''}`}
+        className={`modal-content${workspace ? ' modal-content--workspace' : ''}${fullscreen ? ' modal-content--fullscreen' : ''}${className ? ` ${className}` : ''}`}
         role={dialogRole}
         aria-modal="true"
         aria-label={title}
@@ -149,12 +157,20 @@ export const ModalShell = ({
           : workspace
           // Fixed-height shell: the card itself never scrolls, so open/load/
           // reopen all produce the same geometry regardless of async content.
-          ? { maxWidth, height: 'min(86vh, 920px)', maxHeight: 'calc(100dvh - 24px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }
-          : { maxWidth, maxHeight: '90vh', overflowY: 'auto' }}
+          ? {
+              maxWidth,
+              width: width ?? '100%',
+              height: height ?? 'min(86vh, 920px)',
+              maxHeight: 'calc(100dvh - 24px)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }
+          : { maxWidth, width, maxHeight: '90vh', overflowY: 'auto' }}
       >
         {!hideHeader && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{title}</h2>
-          {!blocking && <button type="button" className="theme-toggle" onClick={onClose} aria-label={closeAriaLabel}><X size={18} aria-hidden="true" /></button>}
+          {!blocking && <button type="button" className="theme-toggle" onClick={onClose} aria-label={closeAriaLabel} data-testid={closeTestId}><X size={18} aria-hidden="true" /></button>}
         </div>}
         <div style={workspace ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : undefined}>{children}</div>
         {footer && (

@@ -108,7 +108,7 @@ export function buildPersonas(
 
 export interface PersonaFilterOptions {
   search?: string;
-  access?: 'all' | 'with_access' | 'without_access';
+  access?: 'all' | 'with_access' | 'pending_access' | 'without_access';
   role?: 'all' | 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE';
   areaId?: string; // 'all', 'none', or specific areaId
   status?: 'all' | 'active' | 'inactive' | 'pending_access';
@@ -128,7 +128,8 @@ export function filterPersonas(personas: Persona[], filters: PersonaFilterOption
 
     if (filters.access && filters.access !== 'all') {
       if (filters.access === 'with_access' && !p.hasAccess) return false;
-      if (filters.access === 'without_access' && p.hasAccess) return false;
+      if (filters.access === 'pending_access' && p.status !== 'pending_access') return false;
+      if (filters.access === 'without_access' && (p.hasAccess || p.status === 'pending_access')) return false;
     }
 
     if (filters.role && filters.role !== 'all') {

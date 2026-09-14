@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Mail,
   Shield,
   UserPlus,
   Users,
@@ -33,6 +36,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ModalShell } from '../ui/ModalShell';
 import { BulkCsvImportModal } from './BulkCsvImportModal';
 import { GrantAccessModal } from './GrantAccessModal';
+import { PendingInvitationsModal } from './PendingInvitationsModal';
 
 import './EquipoModal.css';
 
@@ -75,10 +79,19 @@ export function EquipoModal({
 
   // Filters for Personas tab
   const [search, setSearch] = useState('');
-  const [filterAccess, setFilterAccess] = useState<'all' | 'with_access' | 'without_access'>('all');
+  const [filterAccess, setFilterAccess] = useState<'all' | 'with_access' | 'pending_access' | 'without_access'>('all');
   const [filterRole, setFilterRole] = useState<'all' | 'OWNER' | 'ADMIN' | 'PLANNER' | 'EMPLOYEE'>('all');
   const [filterArea, setFilterArea] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive' | 'pending_access'>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // Pagination for Personas tab
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Independent Pending Invitations modal state
+  const [isPendingInvitationsOpen, setIsPendingInvitationsOpen] = useState(false);
+  const pendingInvitationsButtonRef = useRef<HTMLButtonElement>(null);
 
   // Wizard state (Añadir persona)
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -340,6 +353,44 @@ export function EquipoModal({
       status: filterStatus,
     });
   }, [personas, search, filterAccess, filterRole, filterArea, filterStatus]);
+
+  // Reset pagination to page 1 on search or filter change
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterAccess, filterRole, filterArea, filterStatus]);
+
+  // Dynamic pagination based on container height
+  useEffect(() => {
+    const el = tableContainerRef.current;
+    if (!el) return;
+    const calculateSize = () => {
+      const h = el.clientHeight;
+      const isMobile = window.innerWidth <= 768;
+      const rowH = isMobile ? 110 : 48;
+      const headerH = isMobile ? 0 : 44;
+      const usableH = Math.max(100, h - headerH - 50);
+      const calculated = Math.max(5, Math.floor(usableH / rowH));
+      setPageSize(calculated);
+    };
+    calculateSize();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(calculateSize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const totalPersonas = filteredPersonas.length;
+  const totalPages = Math.max(1, Math.ceil(totalPersonas / pageSize));
+  const currentPage = Math.min(page, totalPages);
+
+  const paginatedPersonas = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredPersonas.slice(start, start + pageSize);
+  }, [filteredPersonas, currentPage, pageSize]);
+
+  const pendingInvitationsCount = useMemo(() => {
+    return invitations.filter((inv) => inv.status === 'PENDING').length;
+  }, [invitations]);
 
   // Candidate members for ownership transfer (active members excluding current user and existing owners)
   const transferCandidates = useMemo(() => {
@@ -611,7 +662,10 @@ export function EquipoModal({
       title={t('teamWorkspace.title')}
       closeAriaLabel={t('teamWorkspace.close')}
       workspace
-      maxWidth="1140px"
+      width="min(95vw, 1560px)"
+      maxWidth="1560px"
+      height="min(92dvh, 980px)"
+      className="equipo-modal-shell"
     >
       <div className="equipo-modal" data-testid="equipo-modal">
         {/* Workspace Tabs */}
@@ -690,9 +744,10 @@ export function EquipoModal({
                   aria-label={t('teamWorkspace.filterAccess')}
                   data-testid="filter-access"
                 >
-                  <option value="all">{t('teamWorkspace.filterAccess')}: {t('teamWorkspace.all')}</option>
-                  <option value="with_access">{t('teamWorkspace.activeAccess')}</option>
-                  <option value="without_access">{t('teamWorkspace.noAccess')}</option>
+                  <option value="all">{t('teamWorkspace.filterAccessAll')}</option>
+                  <option value="with_access">{t('teamWorkspace.filterAccessActive')}</option>
+                  <option value="pending_access">{t('teamWorkspace.filterAccessPending')}</option>
+                  <option value="without_access">{t('teamWorkspace.filterAccessNone')}</option>
                 </select>
 
                 <select
@@ -727,17 +782,38 @@ export function EquipoModal({
                   className="equipo-modal__select"
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)}
-                  aria-label={t('teamWorkspace.filterStatus')}
+                  aria-label={t('teamWorkspace.filterStatusPerson')}
                   data-testid="filter-status"
                 >
-                  <option value="all">{t('teamWorkspace.filterStatus')}: {t('teamWorkspace.all')}</option>
-                  <option value="active">{t('teamWorkspace.active')}</option>
-                  <option value="inactive">{t('teamWorkspace.inactive')}</option>
-                  <option value="pending_access">{t('teamWorkspace.pendingAccess')}</option>
+                  <option value="all">{t('teamWorkspace.filterStatusAll')}</option>
+                  <option value="active">{t('teamWorkspace.statusActive')}</option>
+                  <option value="inactive">{t('teamWorkspace.statusInactive')}</option>
                 </select>
               </div>
 
               <div className="equipo-modal__actions">
+                <button
+                  type="button"
+                  ref={pendingInvitationsButtonRef}
+                  className="equipo-btn equipo-btn--secondary equipo-btn--pending-invitations"
+                  onClick={() => setIsPendingInvitationsOpen(true)}
+                  disabled={loading || pendingInvitationsCount === 0}
+                  data-testid="pending-invitations-button"
+                  aria-label={`${t('teamWorkspace.pendingInvitations')} (${pendingInvitationsCount})`}
+                  aria-disabled={pendingInvitationsCount === 0}
+                  title={pendingInvitationsCount === 0 ? t('teamWorkspace.noPendingInvitations') : undefined}
+                >
+                  <Mail size={16} aria-hidden="true" />
+                  <span>{t('teamWorkspace.pendingInvitationsButton')}</span>
+                  <span
+                    className={`equipo-badge equipo-badge--counter${pendingInvitationsCount > 0 ? ' is-active' : ''}`}
+                    aria-live="polite"
+                    data-testid="pending-invitations-badge"
+                  >
+                    {loading && pendingInvitationsCount === 0 ? '…' : pendingInvitationsCount}
+                  </span>
+                </button>
+
                 {canBulkImport && (
                   <>
                     <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => setBulkImportKind('employees')} data-testid="bulk-import-employees-button">
@@ -760,53 +836,7 @@ export function EquipoModal({
               </div>
             </div>
 
-            {invitations.some((invitation) => invitation.status === 'PENDING') && (
-              <section
-                className="equipo-panel equipo-pending-invitations"
-                aria-labelledby="pending-invitations-title"
-                data-testid="pending-invitations-section"
-              >
-                <h3 id="pending-invitations-title" className="equipo-pending-invitations__title">
-                  {t('teamWorkspace.pendingInvitations')}
-                </h3>
-                <div className="equipo-pending-invitations__list" data-testid="pending-invitations-list">
-                  {invitations.filter((invitation) => invitation.status === 'PENDING').map((invitation) => (
-                    <div
-                      key={invitation.id}
-                      className="equipo-pending-invitations__item"
-                      data-testid={`pending-invitation-${invitation.id}`}
-                    >
-                      <div className="equipo-pending-invitations__info">
-                        <strong className="equipo-pending-invitations__email">{invitation.email}</strong>
-                        <span className="equipo-pending-invitations__expiry">
-                          {t('teamWorkspace.invitationExpires', { date: new Date(invitation.expiresAt).toLocaleDateString(locale === 'en' ? 'en-GB' : 'es-ES') })}
-                        </span>
-                      </div>
-                      <div className="equipo-actions-cell equipo-pending-invitations__actions">
-                        <button
-                          type="button"
-                          className="equipo-btn equipo-btn--secondary"
-                          onClick={() => void handleInvitationAction(invitation, 'resend')}
-                          data-testid={`resend-invitation-${invitation.id}`}
-                        >
-                          {t('teamWorkspace.resendInvitation')}
-                        </button>
-                        <button
-                          type="button"
-                          className="equipo-btn equipo-btn--danger"
-                          onClick={() => void handleInvitationAction(invitation, 'revoke')}
-                          data-testid={`revoke-invitation-${invitation.id}`}
-                        >
-                          {t('teamWorkspace.revokeInvitation')}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            <div className="equipo-modal__table-container">
+            <div className="equipo-modal__table-container" ref={tableContainerRef}>
               {loading ? (
                 <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   {t('teamWorkspace.loadingPeople')}
@@ -816,21 +846,22 @@ export function EquipoModal({
                   {t('teamWorkspace.emptyPersonas')}
                 </div>
               ) : (
-                <table className="equipo-table" data-testid="personas-table">
-                  <thead>
-                    <tr>
-                      <th>{t('teamWorkspace.person')}</th>
-                      <th>{t('teamWorkspace.accessEmail')}</th>
-                      <th>{t('teamWorkspace.filterAccess')}</th>
-                      <th>{t('teamWorkspace.filterRole')}</th>
-                      <th>{t('teamWorkspace.employeeRecord')}</th>
-                      <th>{t('teamWorkspace.currentArea')}</th>
-                      <th>{t('teamWorkspace.filterStatus')}</th>
-                      <th>{t('teamWorkspace.actions')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPersonas.map((p) => {
+                <div className="equipo-modal__table-scroll">
+                  <table className="equipo-table" data-testid="personas-table">
+                    <thead>
+                      <tr>
+                        <th>{t('teamWorkspace.person')}</th>
+                        <th>{t('teamWorkspace.accessEmail')}</th>
+                        <th>{t('teamWorkspace.filterAccess')}</th>
+                        <th>{t('teamWorkspace.filterRole')}</th>
+                        <th>{t('teamWorkspace.employeeRecord')}</th>
+                        <th>{t('teamWorkspace.currentArea')}</th>
+                        <th>{t('teamWorkspace.filterStatus')}</th>
+                        <th>{t('teamWorkspace.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedPersonas.map((p) => {
                       const initials = (p.name || 'U').slice(0, 2).toUpperCase();
                       const matchingEmp = p.employeeId ? employees.find((e) => e.id === p.employeeId) : null;
                       const isTargetEmployee = Boolean(initialEmployeeId && p.employeeId === initialEmployeeId);
@@ -841,7 +872,7 @@ export function EquipoModal({
                           data-focused={isTargetEmployee ? 'true' : undefined}
                           style={isTargetEmployee ? { background: 'rgba(234, 179, 8, 0.12)', outline: '2px solid var(--accent, #eab308)' } : undefined}
                         >
-                          <td>
+                          <td data-label={t('teamWorkspace.person')}>
                             <div className="equipo-persona-cell">
                               <span className="equipo-avatar">{initials}</span>
                               <div>
@@ -863,14 +894,14 @@ export function EquipoModal({
                               </div>
                             </div>
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.accessEmail')}>
                             {p.email ? (
                               <span>{p.email}</span>
                             ) : (
                               <span style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.noAccess')}</span>
                             )}
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.filterAccess')}>
                             {p.hasAccess ? (
                               <span className="equipo-badge equipo-badge--success">
                                 {t('teamWorkspace.activeAccess')}
@@ -881,7 +912,7 @@ export function EquipoModal({
                               </span>
                             )}
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.filterRole')}>
                             {p.role ? (
                               <span className={`equipo-badge equipo-badge--${p.role.toLowerCase()}`}>
                                 {p.role === 'OWNER' && t('teamWorkspace.roleOwner')}
@@ -893,24 +924,24 @@ export function EquipoModal({
                               <span style={{ color: 'var(--text-muted)' }}>—</span>
                             )}
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.employeeRecord')}>
                             {p.employeeId ? (
                               <span>{p.employeeExternalId ? `ID: ${p.employeeExternalId}` : t('teamWorkspace.linked')}</span>
                             ) : (
                               <span style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.noEmployeeRecord')}</span>
                             )}
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.currentArea')}>
                             {p.areaName || <span style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.noArea')}</span>}
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.filterStatus')}>
                             <span className={`equipo-badge equipo-badge--${p.status === 'active' ? 'success' : 'warning'}`}>
                               {p.status === 'active' && t('teamWorkspace.active')}
                               {p.status === 'inactive' && t('teamWorkspace.inactive')}
                               {p.status === 'pending_access' && t('teamWorkspace.pendingAccess')}
                             </span>
                           </td>
-                          <td>
+                          <td data-label={t('teamWorkspace.actions')}>
                             <div className="equipo-actions-cell">
                               {matchingEmp && (
                                 <button
@@ -950,6 +981,42 @@ export function EquipoModal({
                     })}
                   </tbody>
                 </table>
+                </div>
+              )}
+
+              {totalPersonas > 0 && (
+                <div className="equipo-modal__pagination" data-testid="personas-pagination">
+                  <button
+                    type="button"
+                    className="month-nav-button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    aria-label={t('teamWorkspace.pagePrev')}
+                    data-testid="personas-page-prev"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="equipo-modal__pagination-range">
+                    {t('teamWorkspace.paginationRange', {
+                      start: totalPersonas === 0 ? 0 : (currentPage - 1) * pageSize + 1,
+                      end: Math.min(currentPage * pageSize, totalPersonas),
+                      total: totalPersonas,
+                    })}
+                  </span>
+                  <span className="equipo-modal__pagination-page">
+                    · {t('teamWorkspace.paginationPage', { current: currentPage, total: totalPages })}
+                  </span>
+                  <button
+                    type="button"
+                    className="month-nav-button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    aria-label={t('teamWorkspace.pageNext')}
+                    data-testid="personas-page-next"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
               )}
             </div>
           </>
@@ -2341,6 +2408,20 @@ export function EquipoModal({
       areas={effectiveAreas}
       locale={locale}
       onChanged={() => { onChanged(); void fetchMembers(); }}
+    />
+    <PendingInvitationsModal
+      isOpen={isPendingInvitationsOpen}
+      onClose={() => setIsPendingInvitationsOpen(false)}
+      invitations={invitations}
+      personas={personas}
+      employees={employees}
+      onResend={async (inv) => {
+        await handleInvitationAction(inv, 'resend');
+      }}
+      onRevoke={async (inv) => {
+        await handleInvitationAction(inv, 'revoke');
+      }}
+      triggerRef={pendingInvitationsButtonRef}
     />
     </>
   );

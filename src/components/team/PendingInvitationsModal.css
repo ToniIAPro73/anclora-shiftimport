@@ -1,0 +1,208 @@
+.pending-invitations-modal {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+}
+
+.pending-invitations-modal__toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pending-invitations-modal__search-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.pending-invitations-modal__search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.pending-invitations-modal__search {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, var(--glass-border));
+  background: var(--input-bg, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary);
+  font-size: 0.86rem;
+  outline: none;
+}
+
+.pending-invitations-modal__search:focus {
+  border-color: var(--color-gold);
+}
+
+.pending-invitations-modal__sort {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, var(--glass-border));
+  background: var(--input-bg, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.pending-invitations-modal__list-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.pending-invitations-modal__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.pending-invitations-modal__cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pending-invitations-modal__card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  transition: border-color 0.15s ease;
+}
+
+:root[data-theme='light'] .pending-invitations-modal__card {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.pending-invitations-modal__card:hover {
+  border-color: var(--border-hover, rgba(255, 255, 255, 0.2));
+}
+
+.pending-invitations-modal__card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pending-invitations-modal__card-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.pending-invitations-modal__email {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pending-invitations-modal__delivery-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--success, #22c55e);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.pending-invitations-modal__delivery-badge.is-failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger, #ef4444);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.pending-invitations-modal__card-secondary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.pending-invitations-modal__meta-item {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pending-invitations-modal__card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pending-invitations-modal__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color, var(--glass-border));
+  flex-shrink: 0;
+}
+
+.pending-invitations-modal__page-indicator {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-width: 120px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .pending-invitations-modal__card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .pending-invitations-modal__email {
+    max-width: 100%;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .pending-invitations-modal__card-actions {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .pending-invitations-modal__card-actions .equipo-btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

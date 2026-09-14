@@ -84,6 +84,18 @@ const employeesFixture: RemoteEmployee[] = [
   },
 ];
 
+function generateManyEmployees(count: number): RemoteEmployee[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `emp-gen-${i + 1}`,
+    organizationId: 'org-1',
+    name: `Empleado ${String(i + 1).padStart(3, '0')}`,
+    userId: i === 0 ? 'usr-admin' : null,
+    externalEmployeeId: `EMP-${String(i + 1).padStart(3, '0')}`,
+    areaId: i % 2 === 0 ? 'area-ops' : 'area-sec',
+    status: i % 5 === 0 ? 'inactive' : 'active',
+  }));
+}
+
 function generateInvitations(count: number): RemoteAccessInvitation[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `inv-${i + 1}`,
@@ -102,9 +114,17 @@ function generateInvitations(count: number): RemoteAccessInvitation[] {
   }));
 }
 
-function renderModal(invitationsCount = 0) {
+function renderModal({
+  invitationsCount = 0,
+  employees = employeesFixture,
+  members = membersFixture,
+}: {
+  invitationsCount?: number;
+  employees?: RemoteEmployee[];
+  members?: RemoteMember[];
+} = {}) {
   const invitations = generateInvitations(invitationsCount);
-  mockedListRemoteMembers.mockResolvedValue(membersFixture);
+  mockedListRemoteMembers.mockResolvedValue(members);
   mockedListRemoteAccessDirectory.mockResolvedValue({
     people: [],
     invitations,
@@ -119,7 +139,7 @@ function renderModal(invitationsCount = 0) {
       <EquipoModal
         isOpen
         onClose={onClose}
-        employees={employeesFixture}
+        employees={employees}
         areas={areasFixture}
         currentUserId="usr-admin"
         currentUserRole="ADMIN"
@@ -136,141 +156,128 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('EquipoModal — Pending Invitations Layout & Scrollability', () => {
-  it('renders correctly with 0 invitations: no pending section, table accessible', async () => {
-    renderModal(0);
+describe('EquipoModal — Pending Invitations Toolbar Button & Dialog', () => {
+  it('renders correctly with 0 invitations: button disabled, badge shows 0, table accessible', async () => {
+    renderModal({ invitationsCount: 0 });
 
     await waitFor(() => {
       expect(screen.getByTestId('personas-table')).toBeInTheDocument();
     });
 
+    const btn = screen.getByTestId('pending-invitations-button');
+    expect(btn).toBeInTheDocument();
+    expect(btn).toBeDisabled();
+
+    const badge = screen.getByTestId('pending-invitations-badge');
+    expect(badge).toHaveTextContent('0');
+    expect(badge.className).not.toContain('is-active');
+
+    // No pending invitations modal or inline list
+    expect(screen.queryByTestId('pending-invitations-modal')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-invitations-section')).not.toBeInTheDocument();
-    expect(screen.getByTestId('tab-personas')).toBeInTheDocument();
-    expect(screen.getByTestId('filter-status')).toBeInTheDocument();
-    expect(screen.getByTestId('add-persona-button')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-import-employees-button')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-import-users-button')).toBeInTheDocument();
 
     // Table rows are rendered
     expect(screen.getByText('Bob Admin')).toBeInTheDocument();
     expect(screen.getByText('Dave Worker')).toBeInTheDocument();
   });
 
-  it('renders correctly with 1 invitation: section visible, table accessible', async () => {
-    renderModal(1);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pending-invitations-section')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('gf.csv.e001@e2e.test')).toBeInTheDocument();
-    expect(screen.getByTestId('personas-table')).toBeInTheDocument();
-    expect(screen.getByText('Bob Admin')).toBeInTheDocument();
-  });
-
-  it('renders correctly with 6 invitations: internal scroll container present, table rendered and accessible, controls visible', async () => {
-    renderModal(6);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pending-invitations-section')).toBeInTheDocument();
-    });
-
-    const list = screen.getByTestId('pending-invitations-list');
-    expect(list).toBeInTheDocument();
-    expect(list.className).toContain('equipo-pending-invitations__list');
-
-    // Title is rendered
-    expect(screen.getByText(/invitaciones pendientes/i)).toBeInTheDocument();
-
-    // All 6 invitations are rendered in the DOM
-    for (let i = 1; i <= 6; i++) {
-      expect(screen.getByTestId(`pending-invitation-inv-${i}`)).toBeInTheDocument();
-    }
-
-    // Both first and last invitation reachable
-    expect(screen.getByText('gf.csv.e001@e2e.test')).toBeInTheDocument();
-    expect(screen.getByText('gf.csv.e006@e2e.test')).toBeInTheDocument();
-
-    // Personas table is rendered and accessible
-    expect(screen.getByTestId('personas-table')).toBeInTheDocument();
-    expect(screen.getByText('Bob Admin')).toBeInTheDocument();
-    expect(screen.getByText('Dave Worker')).toBeInTheDocument();
-
-    // Toolbar, tabs, filters remain in document
-    expect(screen.getByTestId('tab-personas')).toBeInTheDocument();
-    expect(screen.getByTestId('personas-search')).toBeInTheDocument();
-    expect(screen.getByTestId('filter-access')).toBeInTheDocument();
-    expect(screen.getByTestId('filter-role')).toBeInTheDocument();
-    expect(screen.getByTestId('filter-area')).toBeInTheDocument();
-    expect(screen.getByTestId('filter-status')).toBeInTheDocument();
-    expect(screen.getByTestId('add-persona-button')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-import-employees-button')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-import-users-button')).toBeInTheDocument();
-  });
-
-  it('renders correctly with 20 invitations: all 20 rendered, last reachable, resend and revoke work, table accessible', async () => {
+  it('renders correctly with 6 invitations: button enabled with counter, opens sibling dialog', async () => {
     mockedResendRemoteAccessInvitation.mockResolvedValue({
-      invitationId: 'inv-20',
+      invitationId: 'inv-1',
       status: 'SENT',
     });
     mockedRevokeRemoteAccessInvitation.mockResolvedValue(undefined);
 
-    renderModal(20);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('pending-invitations-section')).toBeInTheDocument();
-    });
-
-    // Exactly 20 invitation rows in the list
-    for (let i = 1; i <= 20; i++) {
-      expect(screen.getByTestId(`pending-invitation-inv-${i}`)).toBeInTheDocument();
-    }
-
-    // Reach 20th invitation and trigger Resend
-    const resend20 = screen.getByTestId('resend-invitation-inv-20');
-    expect(resend20).toBeInTheDocument();
-    fireEvent.click(resend20);
-
-    await waitFor(() => {
-      expect(mockedResendRemoteAccessInvitation).toHaveBeenCalledWith('inv-20', 'es');
-    });
-
-    // Trigger Revoke on 20th invitation
-    const revoke20 = screen.getByTestId('revoke-invitation-inv-20');
-    expect(revoke20).toBeInTheDocument();
-    fireEvent.click(revoke20);
-
-    await waitFor(() => {
-      expect(mockedRevokeRemoteAccessInvitation).toHaveBeenCalledWith('inv-20');
-    });
-
-    // Personas table is simultaneously accessible
-    expect(screen.getByTestId('personas-table')).toBeInTheDocument();
-    expect(screen.getByText('Bob Admin')).toBeInTheDocument();
-    expect(screen.getByText('Dave Worker')).toBeInTheDocument();
-    expect(screen.getByText('Carmen Inactiva')).toBeInTheDocument();
-  });
-});
-
-describe('EquipoModal — Filter Behavior & Integrity', () => {
-  it('neutral "all" shows all people; "pending_access" filters correctly; switching back restores all', async () => {
-    renderModal(6);
+    renderModal({ invitationsCount: 6 });
 
     await waitFor(() => {
       expect(screen.getByTestId('personas-table')).toBeInTheDocument();
     });
 
-    const filterStatus = screen.getByTestId('filter-status') as HTMLSelectElement;
+    const btn = screen.getByTestId('pending-invitations-button');
+    expect(btn).toBeInTheDocument();
+    expect(btn).not.toBeDisabled();
+
+    const badge = screen.getByTestId('pending-invitations-badge');
+    expect(badge).toHaveTextContent('6');
+    expect(badge.className).toContain('is-active');
+
+    // Click to open sibling modal
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pending-invitations-modal')).toBeInTheDocument();
+    });
+
+    // All 6 invitations are rendered
+    for (let i = 1; i <= 6; i++) {
+      expect(screen.getByTestId(`pending-invitation-inv-${i}`)).toBeInTheDocument();
+    }
+
+    // Reach 1st invitation and trigger Resend
+    const resend1 = screen.getByTestId('resend-invitation-inv-1');
+    fireEvent.click(resend1);
+    await waitFor(() => {
+      expect(mockedResendRemoteAccessInvitation).toHaveBeenCalledWith('inv-1', 'es');
+    });
+
+    // Reach 6th invitation and trigger Revoke
+    const revoke6 = screen.getByTestId('revoke-invitation-inv-6');
+    fireEvent.click(revoke6);
+    await waitFor(() => {
+      expect(mockedRevokeRemoteAccessInvitation).toHaveBeenCalledWith('inv-6');
+    });
+
+    // Close button dismisses modal
+    const closeBtn = screen.getByTestId('close-pending-invitations-modal');
+    fireEvent.click(closeBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('pending-invitations-modal')).not.toBeInTheDocument();
+    });
+  });
+
+  it('allows searching within pending invitations modal', async () => {
+    renderModal({ invitationsCount: 10 });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personas-table')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('pending-invitations-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pending-invitations-modal')).toBeInTheDocument();
+    });
+
+    const searchInput = screen.getByTestId('pending-invitations-search');
+    fireEvent.change(searchInput, { target: { value: 'e005' } });
+
+    expect(screen.getByText('gf.csv.e005@e2e.test')).toBeInTheDocument();
+    expect(screen.queryByText('gf.csv.e001@e2e.test')).not.toBeInTheDocument();
+    expect(screen.queryByText('gf.csv.e002@e2e.test')).not.toBeInTheDocument();
+  });
+});
+
+describe('EquipoModal — Filter Behavior & Integrity', () => {
+  it('filter-access with "pending_access" filters correctly; switching back restores all', async () => {
+    renderModal({ invitationsCount: 6 });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personas-table')).toBeInTheDocument();
+    });
+
+    const filterAccess = screen.getByTestId('filter-access') as HTMLSelectElement;
 
     // 1. Initial state is 'all'
-    expect(filterStatus.value).toBe('all');
+    expect(filterAccess.value).toBe('all');
     expect(screen.getByText('Bob Admin')).toBeInTheDocument();
     expect(screen.getByText('Dave Worker')).toBeInTheDocument();
     expect(screen.getByText('Carmen Inactiva')).toBeInTheDocument();
 
     // 2. Filter by 'pending_access'
-    fireEvent.change(filterStatus, { target: { value: 'pending_access' } });
-    expect(filterStatus.value).toBe('pending_access');
+    fireEvent.change(filterAccess, { target: { value: 'pending_access' } });
+    expect(filterAccess.value).toBe('pending_access');
 
     // Dave Worker has status pending_access -> shown
     expect(screen.getByText('Dave Worker')).toBeInTheDocument();
@@ -278,32 +285,86 @@ describe('EquipoModal — Filter Behavior & Integrity', () => {
     expect(screen.queryByText('Bob Admin')).not.toBeInTheDocument();
     expect(screen.queryByText('Carmen Inactiva')).not.toBeInTheDocument();
 
-    // Pending invitations section remains intact and does NOT disappear
-    expect(screen.getByTestId('pending-invitations-section')).toBeInTheDocument();
-
     // 3. Switch back to 'all' -> all persons restored
-    fireEvent.change(filterStatus, { target: { value: 'all' } });
-    expect(filterStatus.value).toBe('all');
+    fireEvent.change(filterAccess, { target: { value: 'all' } });
+    expect(filterAccess.value).toBe('all');
     expect(screen.getByText('Bob Admin')).toBeInTheDocument();
     expect(screen.getByText('Dave Worker')).toBeInTheDocument();
     expect(screen.getByText('Carmen Inactiva')).toBeInTheDocument();
   });
 
-  it('pending invitations do not replace or block the personas table', async () => {
-    renderModal(10);
+  it('filter-status filters by active vs inactive', async () => {
+    renderModal({ invitationsCount: 0 });
 
     await waitFor(() => {
-      expect(screen.getByTestId('pending-invitations-section')).toBeInTheDocument();
+      expect(screen.getByTestId('personas-table')).toBeInTheDocument();
     });
 
-    // Both sections coexist
-    expect(screen.getByTestId('pending-invitations-section')).toBeInTheDocument();
-    expect(screen.getByTestId('personas-table')).toBeInTheDocument();
+    const filterStatus = screen.getByTestId('filter-status') as HTMLSelectElement;
+    expect(filterStatus.value).toBe('all');
 
-    // Table rows are directly queryable
-    const table = screen.getByTestId('personas-table');
-    expect(table).toBeVisible();
-    expect(screen.getByTestId('persona-row-usr-admin')).toBeInTheDocument();
-    expect(screen.getByTestId('persona-row-emp-emp-dave')).toBeInTheDocument();
+    // Filter inactive
+    fireEvent.change(filterStatus, { target: { value: 'inactive' } });
+    expect(screen.getByText('Carmen Inactiva')).toBeInTheDocument();
+    expect(screen.queryByText('Bob Admin')).not.toBeInTheDocument();
+
+    // Filter active
+    fireEvent.change(filterStatus, { target: { value: 'active' } });
+    expect(screen.getByText('Bob Admin')).toBeInTheDocument();
+    expect(screen.queryByText('Carmen Inactiva')).not.toBeInTheDocument();
+  });
+});
+
+describe('EquipoModal — Client Pagination on Personas Table', () => {
+  it('paginates personas correctly and handles prev/next navigation', async () => {
+    const manyEmployees = generateManyEmployees(27);
+    renderModal({ invitationsCount: 0, employees: manyEmployees });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personas-table')).toBeInTheDocument();
+    });
+
+    // Pagination controls should be rendered
+    const pagination = screen.getByTestId('personas-pagination');
+    expect(pagination).toBeInTheDocument();
+
+    const prevBtn = screen.getByTestId('personas-page-prev');
+    const nextBtn = screen.getByTestId('personas-page-next');
+
+    // On first page: prev is disabled
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).not.toBeDisabled();
+
+    // Advance to next page
+    fireEvent.click(nextBtn);
+    expect(prevBtn).not.toBeDisabled();
+
+    // Go back to first page
+    fireEvent.click(prevBtn);
+    expect(prevBtn).toBeDisabled();
+  });
+
+  it('resets page to 1 when search query changes', async () => {
+    const manyEmployees = generateManyEmployees(27);
+    renderModal({ invitationsCount: 0, employees: manyEmployees });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('personas-table')).toBeInTheDocument();
+    });
+
+    const nextBtn = screen.getByTestId('personas-page-next');
+    const prevBtn = screen.getByTestId('personas-page-prev');
+
+    // Go to page 2
+    fireEvent.click(nextBtn);
+    expect(prevBtn).not.toBeDisabled();
+
+    // Type into search
+    const searchInput = screen.getByTestId('personas-search');
+    fireEvent.change(searchInput, { target: { value: '002' } });
+
+    // Page should be reset to 1 -> prev is disabled
+    expect(prevBtn).toBeDisabled();
+    expect(screen.getByText('Empleado 002')).toBeInTheDocument();
   });
 });

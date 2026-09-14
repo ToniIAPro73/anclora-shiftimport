@@ -110,7 +110,8 @@ describe('Personas domain logic (buildPersonas & filterPersonas)', () => {
     const personas = buildPersonas(members, employees, 'usr-owner', areas);
 
     expect(filterPersonas(personas, { access: 'with_access' })).toHaveLength(3);
-    expect(filterPersonas(personas, { access: 'without_access' })).toHaveLength(1);
+    expect(filterPersonas(personas, { access: 'pending_access' })).toHaveLength(1);
+    expect(filterPersonas(personas, { access: 'without_access' })).toHaveLength(0);
   });
 
   it('filters personas by role', () => {
