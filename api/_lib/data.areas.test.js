@@ -305,8 +305,7 @@ describe('areas: roster area resolution (bulkCreateEmployees)', () => {
       { key: 'k1', name: 'Ana Soler', areaName: 'Logística' },
       { key: 'k2', name: 'Bruno Martí', areaName: 'Operaciones' },
     ]);
-    expect(results[0]).toMatchObject({ status: 'failed', reason: 'unknown_area' });
-    expect(results[0].areaError).toContain('Logística');
+    expect(results[0]).toMatchObject({ status: 'failed', reason: 'unknown_area', areaLabel: 'Logística' });
     expect(results[1].status).toBe('created');
     expect(after).toHaveLength(2);
   });

@@ -618,7 +618,10 @@ export async function bulkCreateEmployees(sql, ctx, items, { sync = false } = {}
 
     const area = resolveRosterArea(raw);
     if (area.unknown) {
-      results.push({ key, status: 'failed', reason: 'unknown_area', areaError: `Unknown area: ${area.label}` });
+      // `areaLabel` is raw data (the value the row referenced), never a
+      // message: the client renders it through its own localized copy for
+      // reason 'unknown_area', so no hardcoded English string reaches the UI.
+      results.push({ key, status: 'failed', reason: 'unknown_area', areaLabel: area.label });
       continue;
     }
 

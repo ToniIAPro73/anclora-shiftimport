@@ -673,8 +673,10 @@ export interface BulkCreateResult {
   status: BulkCreateStatus;
   employee?: RemoteEmployee;
   reason?: BulkCreateFailReason;
-  /** Present when areaName was provided but could not be resolved */
-  areaError?: string;
+  /** Present when an area reference could not be resolved — raw data (the
+   * value the row referenced), never a message: the caller renders it
+   * through its own localized copy for reason 'unknown_area'. */
+  areaLabel?: string;
 }
 
 /** "Create all new employees" — one request, many rows. `key` is a

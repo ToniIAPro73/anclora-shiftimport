@@ -1,4 +1,4 @@
-import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
+import { getSql, requireOrgContext, requireRole, resolveContext } from '../_lib/auth.js';
 import { updateMemberRole } from '../_lib/data.js';
 import {
   createAccessInvitation,
@@ -28,7 +28,7 @@ function errorResult(row, error) {
   return rowResult(row, { status: 'ERROR', code });
 }
 
-async function resolveEmployee(sql, organizationId, externalEmployeeId) {
+export async function resolveEmployee(sql, organizationId, externalEmployeeId) {
   const externalId = String(externalEmployeeId ?? '').trim();
   if (!externalId) return null;
   const rows = await sql`
@@ -57,7 +57,7 @@ async function resolveEmployee(sql, organizationId, externalEmployeeId) {
   return rows[0];
 }
 
-async function processRow(sql, ctx, row, { environment, send, defaultLocale }) {
+export async function processRow(sql, ctx, row, { environment, send, defaultLocale }) {
   const email = normalizeInvitationEmail(row.email);
   const role = String(row.role ?? '').trim().toUpperCase();
   if (!ROLES.has(role)) {
@@ -156,6 +156,12 @@ export default async function handler(req, res) {
     if (bodySize > MAX_BODY_BYTES) return sendJson(res, 413, { error: 'Request body is too large' });
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
+    // Gate the whole request up front — createAccessInvitation/updateMemberRole
+    // each enforce ADMIN internally, but only the rows that actually reach
+    // them (INVITE / UPDATE_ROLE). Rows that resolve to UNCHANGED or
+    // UNCHANGED_PENDING never call either, so without this an unauthorized
+    // PLANNER/EMPLOYEE could probe membership/invitation existence via CSV.
+    requireRole(ctx, 'ADMIN');
     const rows = Array.isArray(req.body?.users) ? req.body.users : [];
     if (rows.length === 0 || rows.length > MAX_ROWS) {
       return sendJson(res, 400, { error: 'A valid CSV row set is required', code: 'INVALID_ROW_COUNT' });
