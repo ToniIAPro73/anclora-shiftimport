@@ -141,6 +141,58 @@ describe('WeeklyPlanner', () => {
     ));
   });
 
+  it('preserves start and end times and keeps inputs enabled when selecting Ausencia type', async () => {
+    upsertShiftType({
+      id: 'ausencia',
+      label: 'Ausencia',
+      shortLabel: 'AUS',
+      color: '#f59e0b',
+      countsAsWork: false,
+    });
+
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [assignment({ startTime: '13:00', endTime: '14:30', shiftType: 'Regular' })],
+    }));
+    vi.mocked(remote.updateRemoteAssignment).mockResolvedValue(assignment());
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /13:00/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /13:00/ }));
+
+    // Editor is open. Verify initial inputs
+    const startInput = screen.getByLabelText('Inicio') as HTMLInputElement;
+    const endInput = screen.getByLabelText('Fin') as HTMLInputElement;
+    expect(startInput.value).toBe('13:00');
+    expect(endInput.value).toBe('14:30');
+
+    // Switch shift type to Ausencia
+    const typeSelect = screen.getByLabelText('Tipo de turno (opcional)');
+    fireEvent.click(typeSelect);
+    fireEvent.click(screen.getByRole('option', { name: 'Ausencia' }));
+
+    // Times must NOT be wiped!
+    expect(startInput.value).toBe('13:00');
+    expect(endInput.value).toBe('14:30');
+
+    // Inputs must remain enabled for absence!
+    expect(startInput).not.toBeDisabled();
+    expect(endInput).not.toBeDisabled();
+
+    // Save and verify payload
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar' }));
+    await waitFor(() => expect(remote.updateRemoteAssignment).toHaveBeenCalledWith(
+      'schedule-1',
+      'version-1',
+      'assignment-1',
+      expect.objectContaining({
+        startTime: '13:00',
+        endTime: '14:30',
+        shiftType: 'ausencia',
+      }),
+    ));
+  });
+
   it('switches to the semantic table and persists that presentation choice', async () => {
     mockedList.mockResolvedValue([version()]);
     mockedLoad.mockResolvedValue(snapshot());

@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { Shift } from '../../lib/types';
+import { upsertShiftType } from '../../lib/shift-types';
 import * as remote from '../../lib/remote';
 import { ShiftModal } from './ShiftModal';
 
@@ -239,4 +240,60 @@ describe('ShiftModal failure and retry without duplicate action (UXR-F3-M04 / CX
 
     expect(mockedAcknowledge).toHaveBeenCalledTimes(2);
   });
+
+  it('preserves dates and hours when selecting Ausencia type in add shift form', () => {
+    upsertShiftType({ id: 'Ausencias', label: 'Ausencias', shortLabel: 'AUS', color: '#f59e0b', countsAsWork: false });
+    const onSave = vi.fn();
+
+    const { container } = render(
+      <I18nProvider>
+        <ShiftModal
+          isOpen
+          editingShift={null}
+          defaultDate="2026-09-14"
+          onClose={() => {}}
+          onSave={onSave}
+        />
+      </I18nProvider>,
+    );
+
+    const dateInput = container.querySelector('input[type="date"]') as HTMLInputElement;
+    const timeInputs = container.querySelectorAll('input[type="time"]');
+    const startInput = timeInputs[0] as HTMLInputElement;
+    const endInput = timeInputs[1] as HTMLInputElement;
+
+    // Change inputs
+    fireEvent.change(dateInput, { target: { value: '2026-09-14' } });
+    fireEvent.change(startInput, { target: { value: '13:00' } });
+    fireEvent.change(endInput, { target: { value: '14:30' } });
+
+    expect(startInput.value).toBe('13:00');
+    expect(endInput.value).toBe('14:30');
+
+    // Select "Ausencias" type from dropdown
+    const typeSelect = screen.getByLabelText('Tipo');
+    fireEvent.click(typeSelect);
+
+    const ausenciasOption = screen.getByText('Ausencias');
+    fireEvent.click(ausenciasOption);
+
+    // Inputs must NOT be wiped!
+    expect(startInput.value).toBe('13:00');
+    expect(endInput.value).toBe('14:30');
+    expect(dateInput.value).toBe('2026-09-14');
+
+    // Click confirm / save button
+    const saveBtn = screen.getByRole('button', { name: /Confirmar/i });
+    fireEvent.click(saveBtn);
+
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        date: '2026-09-14',
+        startTime: '13:00',
+        endTime: '14:30',
+        location: 'Ausencias',
+      }),
+    );
+  });
 });
+

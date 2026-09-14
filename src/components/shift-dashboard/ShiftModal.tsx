@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Shift } from '../../lib/types';
-import { getShiftType, normalizeShiftTypeLabel } from '../../lib/shifts';
-import { getShiftTypes, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getShiftType, normalizeShiftTypeLabel, preserveShiftTimesOnTypeChange } from '../../lib/shifts';
+import { getShiftTypes } from '../../lib/shift-types';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { Trash2, Save, CheckCircle2 } from 'lucide-react';
@@ -259,13 +259,12 @@ export const ShiftModal = ({
               label=""
               value={formData.location}
               onChange={(typeId) => {
-                const nextType = normalizeShiftTypeLabel(typeId) || 'Regular';
-                const isZeroDurationType = !shiftTypeCountsAsWork(nextType);
+                const nextType = normalizeShiftTypeLabel(typeId) || typeId.trim() || 'Regular';
+                const updated = preserveShiftTimesOnTypeChange(formData, nextType);
                 setFormData({
                   ...formData,
+                  ...updated,
                   location: nextType,
-                  startTime: isZeroDurationType ? '' : (formData.startTime || '08:00'),
-                  endTime: isZeroDurationType ? '' : (formData.endTime || '15:00'),
                 });
               }}
               searchPlaceholder={t('shiftModal.searchPlaceholder')}

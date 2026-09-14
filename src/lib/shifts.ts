@@ -16,6 +16,34 @@ export const normalizeShiftTypeLabel = (value: string): string => {
   return resolveShiftTypeId(normalized) ?? 'Regular';
 };
 
+export interface ShiftTimeInterval {
+  startTime?: string | null;
+  endTime?: string | null;
+}
+
+/**
+ * Pure rule: changing a shift type modifies the type and its work accounting,
+ * but strictly preserves all temporal fields (date, startTime, endTime).
+ *
+ * An absence represents a condition that can occupy a partial time slot;
+ * choosing "Ausencias" or any other shift type must never wipe dates or hours.
+ */
+export function preserveShiftTimesOnTypeChange<T extends ShiftTimeInterval>(
+  current: T,
+  newType: string,
+): T & { shiftType: string; countsAsWork: boolean } {
+  const resolved = resolveShiftTypeId(newType);
+  const normalizedType = resolved || newType.trim() || 'Regular';
+  const countsAsWork = shiftTypeCountsAsWork(normalizedType);
+  return {
+    ...current,
+    shiftType: normalizedType,
+    countsAsWork,
+    startTime: current.startTime ?? '',
+    endTime: current.endTime ?? '',
+  };
+}
+
 export const getShiftType = (shift: Shift): string => {
   const explicitType = shift.shiftType?.trim();
   if (explicitType) {
