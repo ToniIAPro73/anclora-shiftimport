@@ -737,7 +737,7 @@ export function EquipoModal({
                 </select>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div className="equipo-modal__actions">
                 {canBulkImport && (
                   <>
                     <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => setBulkImportKind('employees')} data-testid="bulk-import-employees-button">
@@ -761,24 +761,42 @@ export function EquipoModal({
             </div>
 
             {invitations.some((invitation) => invitation.status === 'PENDING') && (
-              <section className="equipo-panel" aria-labelledby="pending-invitations-title" style={{ marginBottom: '12px' }}>
-                <h3 id="pending-invitations-title" style={{ margin: '0 0 8px 0', fontSize: '0.95rem' }}>
+              <section
+                className="equipo-panel equipo-pending-invitations"
+                aria-labelledby="pending-invitations-title"
+                data-testid="pending-invitations-section"
+              >
+                <h3 id="pending-invitations-title" className="equipo-pending-invitations__title">
                   {t('teamWorkspace.pendingInvitations')}
                 </h3>
-                <div style={{ display: 'grid', gap: '8px' }}>
+                <div className="equipo-pending-invitations__list" data-testid="pending-invitations-list">
                   {invitations.filter((invitation) => invitation.status === 'PENDING').map((invitation) => (
-                    <div key={invitation.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-                      <div>
-                        <strong>{invitation.email}</strong>
-                        <span style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                    <div
+                      key={invitation.id}
+                      className="equipo-pending-invitations__item"
+                      data-testid={`pending-invitation-${invitation.id}`}
+                    >
+                      <div className="equipo-pending-invitations__info">
+                        <strong className="equipo-pending-invitations__email">{invitation.email}</strong>
+                        <span className="equipo-pending-invitations__expiry">
                           {t('teamWorkspace.invitationExpires', { date: new Date(invitation.expiresAt).toLocaleDateString(locale === 'en' ? 'en-GB' : 'es-ES') })}
                         </span>
                       </div>
-                      <div className="equipo-actions-cell">
-                        <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => void handleInvitationAction(invitation, 'resend')}>
+                      <div className="equipo-actions-cell equipo-pending-invitations__actions">
+                        <button
+                          type="button"
+                          className="equipo-btn equipo-btn--secondary"
+                          onClick={() => void handleInvitationAction(invitation, 'resend')}
+                          data-testid={`resend-invitation-${invitation.id}`}
+                        >
                           {t('teamWorkspace.resendInvitation')}
                         </button>
-                        <button type="button" className="equipo-btn equipo-btn--danger" onClick={() => void handleInvitationAction(invitation, 'revoke')}>
+                        <button
+                          type="button"
+                          className="equipo-btn equipo-btn--danger"
+                          onClick={() => void handleInvitationAction(invitation, 'revoke')}
+                          data-testid={`revoke-invitation-${invitation.id}`}
+                        >
                           {t('teamWorkspace.revokeInvitation')}
                         </button>
                       </div>
