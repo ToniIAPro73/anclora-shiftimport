@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Shift, ShiftOrigin, WeeklyStats } from '../../lib/types';
 import { aggregateWeeklyStats, filterShiftsByOrigin } from '../../lib/shifts';
-import { getShiftTypes } from '../../lib/shift-types';
+import { getShiftTypes, getShiftTypeSemantics } from '../../lib/shift-types';
 import { Locale, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 
@@ -47,12 +47,19 @@ function formatTokenValue(hours: number, days: number): string {
 type StatsTokenCell = { kind: 'token'; label: string; value: string; className?: string };
 
 function buildTypeCells(stats: WeeklyStats, locale: Locale): StatsTokenCell[] {
-  return getShiftTypes().map((type) => ({
-    kind: 'token' as const,
-    label: translateShiftTypeLabel(type.id, locale, type.shortLabel),
-    value: formatTokenValue(stats.hoursByType[type.id] ?? 0, stats.daysByType[type.id] ?? 0),
-    className: `type-${type.id.toLowerCase()}`,
-  }));
+  return getShiftTypes().map((type) => {
+    const semantics = getShiftTypeSemantics(type.id);
+    const absence = semantics.contributesAbsenceTime;
+    const hours = stats.hoursByType[type.id] ?? 0;
+    return {
+      kind: 'token' as const,
+      label: absence ? (locale === 'es' ? 'AUS.' : 'ABS.') : translateShiftTypeLabel(type.id, locale, type.shortLabel),
+      value: absence
+        ? `${hours.toLocaleString(locale === 'es' ? 'es-ES' : 'en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} h`
+        : formatTokenValue(hours, stats.daysByType[type.id] ?? 0),
+      className: `type-${type.id.toLowerCase()}`,
+    };
+  });
 }
 
 function buildSummaryCells(monthStats: WeeklyStats, yearStats: WeeklyStats, locale: Locale, t: (key: string) => string): StatsCell[] {

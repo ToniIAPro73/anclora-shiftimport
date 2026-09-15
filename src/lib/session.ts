@@ -180,8 +180,11 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     if (response.status === 401 && !path.startsWith('/api/auth/') && !path.startsWith('/api/session/')) {
       unauthorizedHandler?.();
     }
-    const body = payload as { error?: string; code?: string; decision?: Record<string, unknown> };
-    throw new ApiError(response.status, String(body.error ?? `HTTP ${response.status}`), body.code, body.decision);
+    const body = payload as { error?: string; code?: string; decision?: Record<string, unknown>; fullDayType?: string };
+    throw new ApiError(response.status, String(body.error ?? `HTTP ${response.status}`), body.code, {
+      ...(body.decision ?? {}),
+      ...(body.fullDayType ? { fullDayType: body.fullDayType } : {}),
+    });
   }
   return payload as T;
 }

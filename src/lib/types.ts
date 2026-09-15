@@ -33,6 +33,7 @@ export interface ShiftWithDerived extends Shift {
 
 export interface WeeklyStats {
   totalWorkedHours: number;
+  totalAbsenceHours: number;
   totalWorkedDays: number;
   freeDays: number;
   // Keyed by shift type id from the registry in shift-types.ts

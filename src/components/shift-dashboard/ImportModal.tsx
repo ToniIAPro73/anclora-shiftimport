@@ -24,7 +24,7 @@ import { ImportResult, ImportWarningCode } from '../../lib/import-quality';
 import { trackTtfvEvent } from '../../lib/ttfv';
 import { Shift } from '../../lib/types';
 import { normalizeShiftTypeLabel } from '../../lib/shifts';
-import { getShiftTypes, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getShiftTypes, getShiftTypeSemantics, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { parseXlsxTeamWorkbook } from '../../ingestion/adapters/xlsx-workbook';
 import type { ShiftCodeMapping } from '../../ingestion/core/shift-code-profile';
@@ -126,8 +126,9 @@ function isNonWorkingShift(shift: Pick<ParsedCalendarShift, 'shiftType'>): boole
 const isMissingTime = (value: string): boolean => value.trim() === '' || value === '??:??';
 
 /**
- * A row is importable when it carries complete data: absence rows (typed,
- * no times — Libre/Vacaciones/…) import as-is; work rows need BOTH times
+ * A row is importable when it carries complete data: full-day rows (typed,
+ * no times — Libre/Vacaciones/…) import as-is; timed rows (including
+ * temporal Ausencia) need BOTH times
  * resolved. A `??:??` start/end is never imported as a complete shift —
  * the row stays out of the ready set until the user edits or deletes it.
  */
@@ -135,6 +136,9 @@ function hasImportableShiftData(shift: ParsedCalendarShift): boolean {
   const startMissing = isMissingTime(shift.startTime);
   const endMissing = isMissingTime(shift.endTime);
   const typeId = normalizeShiftTypeLabel(shift.shiftType ?? '');
+  if (typeId && getShiftTypeSemantics(typeId).timed) {
+    return !startMissing && !endMissing;
+  }
   if (typeId && !shiftTypeCountsAsWork(typeId)) {
     return startMissing === endMissing;
   }

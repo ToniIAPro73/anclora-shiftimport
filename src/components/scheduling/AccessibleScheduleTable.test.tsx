@@ -103,8 +103,7 @@ describe('AccessibleScheduleTable (UXR-F3-M02 / CX-F02)', () => {
     expect(screen.getByRole('columnheader', { name: 'Ubicación' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Acciones' })).toBeInTheDocument();
 
-    expect(screen.getAllByText('Ana Lopez').length).toBe(7);
-    expect(screen.getAllByText('EMP-001').length).toBe(7);
+    expect(screen.getAllByText('Ana Lopez · ID EMP-001').length).toBe(7);
     expect(screen.getByText('Edificio Central')).toBeInTheDocument();
   });
 

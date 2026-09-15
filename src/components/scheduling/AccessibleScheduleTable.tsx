@@ -1,6 +1,7 @@
 import { FormEvent } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Locale, translateShiftTypeLabel } from '../../lib/i18n';
+import { formatEmployeeProfileLabel } from '../../lib/personas';
 import { ScheduleSnapshot, ShiftAssignment } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { getAssignmentShiftType } from '../../lib/shifts';
@@ -84,8 +85,7 @@ export function AccessibleScheduleTable({
               return rows.map((assignment) => (
                 <tr key={rowKey(employee.id, day, assignment)}>
                   <th scope="row">
-                    <span>{employee.name}</span>
-                    {employee.externalEmployeeId && <small>{employee.externalEmployeeId}</small>}
+                    <span>{formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId)}</span>
                   </th>
                   <td data-today={day === today || undefined}><time dateTime={day}>{formatDay(day, locale)}</time></td>
                   <td>

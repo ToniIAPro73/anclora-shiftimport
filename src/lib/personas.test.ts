@@ -149,11 +149,11 @@ describe('Personas domain logic (buildPersonas & filterPersonas)', () => {
 
 describe('formatEmployeeProfileLabel', () => {
   it('formats nombre + identificador correctly', () => {
-    expect(formatEmployeeProfileLabel('Sebas', '84881')).toBe('Sebas (84881)');
+    expect(formatEmployeeProfileLabel('Sebas', '84881')).toBe('Sebas · ID 84881');
   });
 
   it('formats nombre + identificador numérico correctly', () => {
-    expect(formatEmployeeProfileLabel('Sebas', 84881)).toBe('Sebas (84881)');
+    expect(formatEmployeeProfileLabel('Sebas', 84881)).toBe('Sebas · ID 84881');
   });
 
   it('formats nombre + null without empty parentheses', () => {
@@ -181,17 +181,18 @@ describe('formatEmployeeProfileLabel', () => {
   });
 
   it('handles nombres con tildes y caracteres internacionales', () => {
-    expect(formatEmployeeProfileLabel('María José Peña-Gómez', 'EMP-Ñ-01')).toBe('María José Peña-Gómez (EMP-Ñ-01)');
-    expect(formatEmployeeProfileLabel('Björn Müller', 'ID-99')).toBe('Björn Müller (ID-99)');
-    expect(formatEmployeeProfileLabel('François Çelik', 'FR-42')).toBe('François Çelik (FR-42)');
+    expect(formatEmployeeProfileLabel('María José Peña-Gómez', 'EMP-Ñ-01')).toBe('María José Peña-Gómez · ID EMP-Ñ-01');
+    expect(formatEmployeeProfileLabel('Björn Müller', 'ID-99')).toBe('Björn Müller · ID ID-99');
+    expect(formatEmployeeProfileLabel('François Çelik', 'FR-42')).toBe('François Çelik · ID FR-42');
   });
 
   it('never outputs "(null)", "(undefined)" or excess whitespace', () => {
     expect(formatEmployeeProfileLabel('Sebas', 'null')).toBe('Sebas');
     expect(formatEmployeeProfileLabel('Sebas', 'undefined')).toBe('Sebas');
-    expect(formatEmployeeProfileLabel('null', '84881')).toBe('84881');
-    expect(formatEmployeeProfileLabel('undefined', '84881')).toBe('84881');
-    expect(formatEmployeeProfileLabel('  Sebas  ', '  84881  ')).toBe('Sebas (84881)');
+    expect(formatEmployeeProfileLabel(null, '84881')).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel('null', '84881')).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel('undefined', '84881')).toBe('Sin ficha de empleado');
+    expect(formatEmployeeProfileLabel('  Sebas  ', '  84881  ')).toBe('Sebas · ID 84881');
     expect(formatEmployeeProfileLabel('Usuario Groundforce restaurado', null)).toBe('Usuario Groundforce restaurado');
   });
 });

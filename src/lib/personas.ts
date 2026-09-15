@@ -52,7 +52,10 @@ export function buildPersonas(
 
     personas.push({
       id: m.userId,
-      name: m.displayName || emp?.name || m.email,
+      // Once a user is linked to an employee, the organization employee name
+      // is authoritative for operational selectors and access management.
+      // Account display names remain the fallback for users without a card.
+      name: emp?.name || m.displayName || m.email,
       email: m.email,
       hasAccess: true,
       role: m.role,
@@ -156,11 +159,11 @@ export function filterPersonas(personas: Persona[], filters: PersonaFilterOption
  * Pure and robust formatter for employee profiles / records.
  *
  * Rules:
- * - name + identifier: "Sebas (84881)"
+ * - name + identifier: "Sebas · ID 84881"
  * - name without identifier: "Sebas"
  * - name with empty/whitespace identifier: "Sebas"
  * - complete absence of record: localized fallback (e.g. "Sin ficha de empleado")
- * - identifier only (no name): "84881" (or fallback if empty)
+ * - identifier without a name: localized fallback (the identifier is not a name)
  * - never outputs empty parentheses `()`, `(null)`, `(undefined)`, or excess whitespace.
  */
 export function formatEmployeeProfileLabel(
@@ -183,13 +186,10 @@ export function formatEmployeeProfileLabel(
   }
 
   if (cleanName && cleanId) {
-    return `${cleanName} (${cleanId})`;
+    return `${cleanName} · ID ${cleanId}`;
   }
   if (cleanName) {
     return cleanName;
-  }
-  if (cleanId) {
-    return cleanId;
   }
   return fallback;
 }

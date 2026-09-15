@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Shift } from '../../lib/types';
 import { getDaysInMonth, getFirstWeekdayOfMonth, orderWeekdayLabels } from '../../lib/week';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
-import { getShiftTypeColor } from '../../lib/shift-types';
 import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
@@ -11,6 +10,7 @@ import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 import { sortDayShifts } from '../../lib/shifts';
 import { DayDetailModal } from './DayDetailModal';
+import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
 
 export const MAX_VISIBLE_DAY_ITEMS = 2;
 
@@ -98,7 +98,6 @@ export const MonthGrid = ({
     const shiftTypeId = getShiftType(shift);
     const shiftType = translateShiftTypeLabel(shiftTypeId, locale, shiftTypeId);
     const shiftOrigin = getShiftOrigin(shift);
-    const accentColor = getShiftTypeColor(shiftTypeId);
     const hasTimes = hasShiftTimes(shift);
     const originPrefix = shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
     const isExpanded = expandedShiftId === shift.id;
@@ -107,6 +106,8 @@ export const MonthGrid = ({
       <button
         type="button"
         key={shift.id}
+        data-shift-type={shiftTypeId}
+        data-shift-visual={getShiftVisualTokenKey(shiftTypeId)}
         className={isExpanded ? 'month-shift-badge is-expanded' : 'month-shift-badge'}
         onClick={(event) => {
           event.stopPropagation();
@@ -117,7 +118,6 @@ export const MonthGrid = ({
             setExpandedShiftId(null);
           }
         }}
-        style={{ borderLeft: `3px solid ${accentColor}`, color: accentColor }}
         title={`${originPrefix} ${shiftType}${hasTimes ? ` ${shift.startTime}-${shift.endTime}` : ''}`}
       >
         {originPrefix} {shiftType}{hasTimes ? ` ${shift.startTime}–${shift.endTime}` : ''}

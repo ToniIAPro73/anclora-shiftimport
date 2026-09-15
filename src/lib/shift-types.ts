@@ -19,6 +19,15 @@ export interface ShiftTypeDefinition {
   color: string;
   countsAsWork: boolean;
   category?: string;
+  /** Whether the event occupies a concrete half-open time interval. */
+  timed?: boolean;
+  /** Whether the event represents the whole calendar day. */
+  allDay?: boolean;
+  /** Whole-day events cannot coexist with timed events on the same date. */
+  exclusive?: boolean;
+  /** Domain accounting flags; countsAsWork remains as a legacy alias. */
+  contributesWorkedTime?: boolean;
+  contributesAbsenceTime?: boolean;
   /** Archived types are hidden from AddShiftModal/StatsBar but kept for
    * existing shifts and can be restored; they are never hard-deleted. */
   archived?: boolean;
@@ -32,10 +41,26 @@ export interface ShiftTypeOverrides {
 const SHIFT_TYPES_STORAGE_KEY = 'anclora_shiftimport_shift_types_v1';
 
 export const DEFAULT_SHIFT_TYPES: ShiftTypeDefinition[] = [
-  { id: 'Regular', label: 'Regular', shortLabel: 'Regular', color: '#3b82f6', countsAsWork: true, category: 'work' },
-  { id: 'Libre', label: 'Libre', shortLabel: 'Libres', color: '#ef4444', countsAsWork: false, category: 'absence' },
-  { id: 'Vacaciones', label: 'Vacaciones', shortLabel: 'VAC.', color: '#16a34a', countsAsWork: false, category: 'absence' },
-  { id: 'Extras', label: 'Extras', shortLabel: 'Extras', color: '#D4AF37', countsAsWork: true, category: 'work' },
+  {
+    id: 'Regular', label: 'Regular', shortLabel: 'Regular', color: '#3b82f6', countsAsWork: true,
+    category: 'work', timed: true, allDay: false, exclusive: false, contributesWorkedTime: true, contributesAbsenceTime: false,
+  },
+  {
+    id: 'Libre', label: 'Libre', shortLabel: 'Libres', color: '#ef4444', countsAsWork: false,
+    category: 'absence', timed: false, allDay: true, exclusive: true, contributesWorkedTime: false, contributesAbsenceTime: false,
+  },
+  {
+    id: 'Vacaciones', label: 'Vacaciones', shortLabel: 'VAC.', color: '#16a34a', countsAsWork: false,
+    category: 'absence', timed: false, allDay: true, exclusive: true, contributesWorkedTime: false, contributesAbsenceTime: false,
+  },
+  {
+    id: 'Ausencia', label: 'Ausencia', shortLabel: 'AUS.', color: '#a855f7', countsAsWork: false,
+    category: 'absence', timed: true, allDay: false, exclusive: false, contributesWorkedTime: false, contributesAbsenceTime: true,
+  },
+  {
+    id: 'Extras', label: 'Extras', shortLabel: 'Extras', color: '#D4AF37', countsAsWork: true,
+    category: 'work', timed: true, allDay: false, exclusive: false, contributesWorkedTime: true, contributesAbsenceTime: false,
+  },
 ];
 
 export const FALLBACK_SHIFT_TYPE_COLOR = '#3b82f6';
@@ -51,6 +76,10 @@ const DEFAULT_SHIFT_TYPE_ALIASES: Record<string, string> = {
   vacaciones: 'Vacaciones',
   'vac.': 'Vacaciones',
   vac: 'Vacaciones',
+  ausencia: 'Ausencia',
+  ausencias: 'Ausencia',
+  absence: 'Ausencia',
+  absences: 'Ausencia',
   extras: 'Extras',
 };
 
@@ -104,6 +133,11 @@ const normalizeTypeDefinition = (raw: Partial<ShiftTypeDefinition> | null | unde
     color: typeof raw?.color === 'string' && raw.color.trim() ? raw.color.trim() : FALLBACK_SHIFT_TYPE_COLOR,
     countsAsWork: typeof raw?.countsAsWork === 'boolean' ? raw.countsAsWork : true,
     category: typeof raw?.category === 'string' && raw.category.trim() ? raw.category.trim() : undefined,
+    timed: typeof raw?.timed === 'boolean' ? raw.timed : undefined,
+    allDay: typeof raw?.allDay === 'boolean' ? raw.allDay : undefined,
+    exclusive: typeof raw?.exclusive === 'boolean' ? raw.exclusive : undefined,
+    contributesWorkedTime: typeof raw?.contributesWorkedTime === 'boolean' ? raw.contributesWorkedTime : undefined,
+    contributesAbsenceTime: typeof raw?.contributesAbsenceTime === 'boolean' ? raw.contributesAbsenceTime : undefined,
     archived: raw?.archived === true,
   };
 };
@@ -167,8 +201,13 @@ export const mergeShiftTypeOverrides = (addition: ShiftTypeOverrides): ShiftType
   return next;
 };
 
-export const upsertShiftType = (definition: ShiftTypeDefinition): ShiftTypeOverrides =>
-  mergeShiftTypeOverrides({ types: [definition], aliases: {} });
+export const upsertShiftType = (definition: ShiftTypeDefinition): ShiftTypeOverrides => {
+  const canonicalDefault = DEFAULT_SHIFT_TYPES.find((type) => type.id.toLowerCase() === definition.id.trim().toLowerCase());
+  return mergeShiftTypeOverrides({
+    types: [{ ...definition, id: canonicalDefault?.id ?? definition.id }],
+    aliases: {},
+  });
+};
 
 export const setShiftTypeAlias = (token: string, typeId: string): ShiftTypeOverrides =>
   mergeShiftTypeOverrides({ types: [], aliases: { [token]: typeId } });
@@ -264,6 +303,34 @@ export const isValidColor = (color: unknown): color is string => {
 // still render with their correct color/countsAsWork.
 export const getShiftTypeDefinition = (typeId: string): ShiftTypeDefinition | undefined =>
   getAllShiftTypesForManagement().find((type) => type.id === typeId);
+
+export interface ShiftTypeSemantics {
+  timed: boolean;
+  allDay: boolean;
+  exclusive: boolean;
+  contributesWorkedTime: boolean;
+  contributesAbsenceTime: boolean;
+}
+
+/**
+ * Resolves compatibility/accounting semantics independently of visible labels.
+ * Older custom definitions are upgraded in memory: non-working types without
+ * explicit timing metadata remain whole-day, while typed intervals stay timed.
+ */
+export const getShiftTypeSemantics = (typeId: string): ShiftTypeSemantics => {
+  const definition = getShiftTypeDefinition(typeId);
+  const normalized = typeId.trim().toLowerCase();
+  const timed = definition?.timed ?? (normalized === 'ausencia' || normalized === 'ausencias' || definition?.countsAsWork === true);
+  const allDay = definition?.allDay ?? !timed;
+  const exclusive = definition?.exclusive ?? allDay;
+  return {
+    timed,
+    allDay,
+    exclusive,
+    contributesWorkedTime: definition?.contributesWorkedTime ?? definition?.countsAsWork !== false,
+    contributesAbsenceTime: definition?.contributesAbsenceTime ?? (normalized === 'ausencia' || normalized === 'ausencias'),
+  };
+};
 
 export const getShiftTypeColor = (typeId: string): string => {
   const normalized = typeof typeId === 'string' ? typeId.trim() : '';

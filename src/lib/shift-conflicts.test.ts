@@ -20,25 +20,41 @@ describe('findShiftConflict', () => {
     expect(findShiftConflict([], baseShift())).toBeNull();
   });
 
-  it('blocks adding a work shift over existing Vacaciones', () => {
+  it('rejects a full-day vacation combined with a timed shift', () => {
     const existing = [baseShift({ id: 'vac', date: '2026-08-01', location: 'Vacaciones', startTime: '', endTime: '' })];
-    expect(findShiftConflict(existing, baseShift({ id: 'incoming', startTime: '08:00', endTime: '14:00' }))).toContain('Vacaciones');
+    expect(findShiftConflict(existing, baseShift({ id: 'incoming', startTime: '08:00', endTime: '14:00' }))).toContain('vacaciones');
   });
 
-  it('blocks a duplicate of the same type on the same day', () => {
+  it('allows multiple non-overlapping timed records of the same type', () => {
     const existing = [baseShift({ id: 'a', startTime: '08:00', endTime: '14:00' })];
-    expect(findShiftConflict(existing, baseShift({ id: 'b', startTime: '16:00', endTime: '22:00' }))).toContain('Ya existe');
+    expect(findShiftConflict(existing, baseShift({ id: 'b', startTime: '14:00', endTime: '22:00' }))).toBeNull();
   });
 
-  it('blocks Libre combined with a Regular shift', () => {
-    const existing = [baseShift({ id: 'a', startTime: '08:00', endTime: '14:00' })];
-    const libre = baseShift({ id: 'b', startTime: '', endTime: '', location: 'Libre' });
-    expect(findShiftConflict(existing, libre)).toContain('Libre');
+  it('allows a temporal absence next to a regular interval', () => {
+    const absence = baseShift({ id: 'absence', shiftType: 'Ausencia', location: 'Ausencia', startTime: '08:00', endTime: '09:00' });
+    expect(findShiftConflict([absence], baseShift({ id: 'regular', startTime: '09:00', endTime: '16:00' }))).toBeNull();
+    expect(findShiftConflict([baseShift({ id: 'regular', startTime: '08:00', endTime: '11:00' })], {
+      ...absence, id: 'absence-2', startTime: '11:00', endTime: '12:00',
+    })).toBeNull();
   });
 
-  it('blocks Regular combined with Libre', () => {
-    const existing = [baseShift({ id: 'a', startTime: '', endTime: '', location: 'Libre' })];
-    expect(findShiftConflict(existing, baseShift({ id: 'b', startTime: '08:00', endTime: '14:00' }))).toContain('Libre');
+  it('rejects a real overlap without translating the existing type to Libre', () => {
+    const absence = baseShift({ id: 'absence', shiftType: 'Ausencia', location: 'Ausencia', startTime: '08:00', endTime: '10:00' });
+    const conflict = findShiftConflict([absence], baseShift({ id: 'regular', startTime: '09:00', endTime: '16:00' }));
+    expect(conflict).toBe('Este horario se solapa con otro registro del mismo día.');
+    expect(conflict).not.toContain('Libre');
+  });
+
+  it('allows two non-overlapping temporal absences', () => {
+    const first = baseShift({ id: 'a', shiftType: 'Ausencia', location: 'Ausencia', startTime: '08:00', endTime: '09:00' });
+    const second = baseShift({ id: 'b', shiftType: 'Ausencia', location: 'Ausencia', startTime: '10:00', endTime: '11:00' });
+    expect(findShiftConflict([first], second)).toBeNull();
+  });
+
+  it('rejects two overlapping temporal absences', () => {
+    const first = baseShift({ id: 'a', shiftType: 'Ausencia', location: 'Ausencia', startTime: '08:00', endTime: '10:00' });
+    const second = baseShift({ id: 'b', shiftType: 'Ausencia', location: 'Ausencia', startTime: '09:00', endTime: '11:00' });
+    expect(findShiftConflict([first], second)).toContain('solapa');
   });
 
   it('blocks overlapping Extras on the same day', () => {

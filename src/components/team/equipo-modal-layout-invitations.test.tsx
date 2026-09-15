@@ -415,10 +415,9 @@ describe('EquipoModal — Client Pagination on Personas Table', () => {
     expect(sebasRow).not.toHaveTextContent('()');
 
     const daveRow = screen.getByTestId('role-row-usr-dave');
-    expect(daveRow).toHaveTextContent('Dave Worker (84881)');
+    expect(daveRow).toHaveTextContent('Dave Worker · ID 84881');
 
     const aliceRow = screen.getByTestId('role-row-usr-owner');
     expect(aliceRow).toHaveTextContent('Sin ficha de empleado');
   });
 });
-

@@ -3,12 +3,11 @@
  * A conflict check compares an incoming shift against the existing shifts of
  * the same date and origin, honoring the configurable shift-type registry.
  */
-import { Locale, translate } from './i18n';
-import { getShiftOrigin, getShiftType, hasShiftTimes } from './shifts';
-import { shiftTypeCountsAsWork } from './shift-types';
-import { normalizeShift } from './storage';
+import { Locale } from './i18n';
+import { hasShiftTimes } from './shifts';
 import { parseHHMM } from './time';
 import { Shift } from './types';
+import { findDomainShiftConflict } from './shift-compatibility';
 
 export function timeRangesOverlap(left: Shift, right: Shift): boolean {
   if (!hasShiftTimes(left) || !hasShiftTimes(right)) {
@@ -43,61 +42,5 @@ export function timeRangesOverlap(left: Shift, right: Shift): boolean {
  * centralized i18n layer (default 'es' keeps existing callers/tests intact).
  */
 export function findShiftConflict(current: Shift[], incoming: Shift, locale: Locale = 'es'): string | null {
-  const normalizedIncoming = normalizeShift(incoming);
-  const incomingType = getShiftType(normalizedIncoming);
-  const incomingOrigin = getShiftOrigin(normalizedIncoming);
-  const comparable = current.filter(
-    (shift) =>
-      shift.id !== normalizedIncoming.id &&
-      shift.date === normalizedIncoming.date &&
-      getShiftOrigin(shift) === incomingOrigin,
-  );
-
-  const existingVacation = comparable.find((shift) => getShiftType(shift) === 'Vacaciones');
-  if (existingVacation && incomingType !== 'Vacaciones') {
-    return translate(locale, 'conflicts.vacationExists', { type: incomingType, date: normalizedIncoming.date });
-  }
-
-  const sameType = comparable.find(
-    (shift) => getShiftType(shift) === incomingType && incomingType !== 'Extras',
-  );
-  if (sameType) {
-    return translate(locale, 'conflicts.duplicateType', { type: incomingType, date: normalizedIncoming.date });
-  }
-
-  if (!shiftTypeCountsAsWork(incomingType)) {
-    const incompatible = comparable.find((shift) => {
-      const existingType = getShiftType(shift);
-      return shiftTypeCountsAsWork(existingType);
-    });
-
-    if (incompatible) {
-      return translate(locale, 'conflicts.libreConflict', { type: getShiftType(incompatible), date: normalizedIncoming.date });
-    }
-  }
-
-  if (shiftTypeCountsAsWork(incomingType) && incomingType !== 'Extras') {
-    const incompatible = comparable.find((shift) => !shiftTypeCountsAsWork(getShiftType(shift)));
-
-    if (incompatible) {
-      return translate(locale, 'conflicts.workConflictsWithLibre', { type: incomingType, date: normalizedIncoming.date });
-    }
-  }
-
-  if (incomingType === 'Extras' && hasShiftTimes(normalizedIncoming)) {
-    const overlapping = comparable.find((shift) => {
-      const existingType = getShiftType(shift);
-      if (existingType !== 'Regular' && existingType !== 'Extras') {
-        return false;
-      }
-
-      return hasShiftTimes(shift) && timeRangesOverlap(shift, normalizedIncoming);
-    });
-
-    if (overlapping) {
-      return translate(locale, 'conflicts.extrasOverlap', { type: getShiftType(overlapping), date: normalizedIncoming.date });
-    }
-  }
-
-  return null;
+  return findDomainShiftConflict(current, incoming, locale)?.message ?? null;
 }

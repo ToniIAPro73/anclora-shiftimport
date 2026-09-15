@@ -159,6 +159,36 @@
   --preview-bg: #0a0f1e;
   --table-head-bg: #192350;
 
+  /* Calendar shift semantic tokens: opaque pairs keep text and indicators
+     measurable against their immediate surface in dark mode. */
+  --shift-regular-background: #16345a;
+  --shift-regular-foreground: #b9ddff;
+  --shift-regular-border: #66b8ff;
+  --shift-leadership-background: #3b2b64;
+  --shift-leadership-foreground: #eadcff;
+  --shift-leadership-border: #c6a8ff;
+  --shift-absence-background: #3c2455;
+  --shift-absence-foreground: #f0d6ff;
+  --shift-absence-border: #d49aff;
+  --shift-day-off-background: #4c232b;
+  --shift-day-off-foreground: #ffd0d5;
+  --shift-day-off-border: #ff8b98;
+  --shift-vacation-background: #184c3b;
+  --shift-vacation-foreground: #c8f6d9;
+  --shift-vacation-border: #60d69c;
+  --shift-overtime-background: #4d3b12;
+  --shift-overtime-foreground: #ffe8a3;
+  --shift-overtime-border: #f3c95c;
+  --shift-leave-background: #4a2e48;
+  --shift-leave-foreground: #f8d0f1;
+  --shift-leave-border: #ed9cdc;
+  --shift-custom-background: #26344a;
+  --shift-custom-foreground: #d7e7fa;
+  --shift-custom-border: #83a9d2;
+  --shift-more-background: #27365b;
+  --shift-more-foreground: #ffe38a;
+  --shift-more-border: #d4af37;
+
   --gradient-primary: linear-gradient(135deg, #18224d 0%, #101733 55%, #0b1126 100%);
   --gradient-accent: linear-gradient(135deg, #e6f6de 0%, #bae7a4 100%);
   --gradient-gold: linear-gradient(135deg, #f0ce62 0%, #c79b16 100%);
@@ -221,6 +251,34 @@
   --gold-tint-bg: rgba(212, 175, 55, 0.12);
   --preview-bg: #edf4ff;
   --table-head-bg: #eaf1ff;
+
+  --shift-regular-background: #e3f1ff;
+  --shift-regular-foreground: #0e3d6e;
+  --shift-regular-border: #2374b8;
+  --shift-leadership-background: #eee7ff;
+  --shift-leadership-foreground: #4b2b86;
+  --shift-leadership-border: #7045b7;
+  --shift-absence-background: #f2e5fb;
+  --shift-absence-foreground: #54216f;
+  --shift-absence-border: #7a32aa;
+  --shift-day-off-background: #ffe7ea;
+  --shift-day-off-foreground: #8f1f2c;
+  --shift-day-off-border: #cf2436;
+  --shift-vacation-background: #e2f6e9;
+  --shift-vacation-foreground: #145a37;
+  --shift-vacation-border: #188a50;
+  --shift-overtime-background: #fff4cc;
+  --shift-overtime-foreground: #6b4c00;
+  --shift-overtime-border: #a47a00;
+  --shift-leave-background: #fbe7f5;
+  --shift-leave-foreground: #76235f;
+  --shift-leave-border: #ad4a95;
+  --shift-custom-background: #eef2f7;
+  --shift-custom-foreground: #24344d;
+  --shift-custom-border: #526a8b;
+  --shift-more-background: #edf2ff;
+  --shift-more-foreground: #3152a5;
+  --shift-more-border: #3152a5;
 
   --gradient-primary: linear-gradient(145deg, rgba(255,255,255,0.96) 0%, rgba(238,244,255,0.96) 100%);
   --gradient-accent: linear-gradient(135deg, #3e7722 0%, #68c639 100%);
@@ -4371,6 +4429,142 @@ button[aria-busy='true'] {
 .weekly-planner__assignment.has-warning {
   border-color: var(--color-gold) !important;
   border-left-color: var(--color-gold) !important;
+}
+
+/* Semantic shift surfaces. Components expose the domain type through
+   data-shift-type; these tokens are intentionally shared by calendar,
+   planning and detail views so theme changes cannot leave one surface behind. */
+.month-shift-badge[data-shift-type],
+.shift-card[data-shift-type],
+.weekly-planner__assignment[data-shift-type],
+.day-detail-item[data-shift-type] {
+  background: var(--shift-event-background, var(--shift-custom-background));
+  color: var(--shift-event-foreground, var(--shift-custom-foreground));
+  border-color: var(--shift-event-border, var(--shift-custom-border));
+}
+
+.month-shift-badge[data-shift-type],
+.weekly-planner__assignment[data-shift-type] {
+  border-left-color: var(--shift-event-border, var(--shift-custom-border));
+}
+
+.shift-card[data-shift-type] {
+  border-left-color: var(--shift-event-border, var(--shift-custom-border));
+}
+
+.month-shift-badge[data-shift-type='Regular'],
+.shift-card[data-shift-type='Regular'],
+.weekly-planner__assignment[data-shift-type='Regular'],
+.day-detail-item[data-shift-type='Regular'] {
+  --shift-event-background: var(--shift-regular-background);
+  --shift-event-foreground: var(--shift-regular-foreground);
+  --shift-event-border: var(--shift-regular-border);
+}
+
+.month-shift-badge[data-shift-type='JT'],
+.month-shift-badge[data-shift-type='Jefe de turno'],
+.shift-card[data-shift-type='JT'],
+.shift-card[data-shift-type='Jefe de turno'],
+.weekly-planner__assignment[data-shift-type='JT'],
+.weekly-planner__assignment[data-shift-type='Jefe de turno'],
+.day-detail-item[data-shift-type='JT'],
+.day-detail-item[data-shift-type='Jefe de turno'] {
+  --shift-event-background: var(--shift-leadership-background);
+  --shift-event-foreground: var(--shift-leadership-foreground);
+  --shift-event-border: var(--shift-leadership-border);
+}
+
+.month-shift-badge[data-shift-type='Ausencia'],
+.month-shift-badge[data-shift-type='Ausencias'],
+.shift-card[data-shift-type='Ausencia'],
+.shift-card[data-shift-type='Ausencias'],
+.weekly-planner__assignment[data-shift-type='Ausencia'],
+.weekly-planner__assignment[data-shift-type='Ausencias'],
+.day-detail-item[data-shift-type='Ausencia'],
+.day-detail-item[data-shift-type='Ausencias'] {
+  --shift-event-background: var(--shift-absence-background);
+  --shift-event-foreground: var(--shift-absence-foreground);
+  --shift-event-border: var(--shift-absence-border);
+}
+
+.month-shift-badge[data-shift-type='Libre'],
+.shift-card[data-shift-type='Libre'],
+.weekly-planner__assignment[data-shift-type='Libre'],
+.day-detail-item[data-shift-type='Libre'] {
+  --shift-event-background: var(--shift-day-off-background);
+  --shift-event-foreground: var(--shift-day-off-foreground);
+  --shift-event-border: var(--shift-day-off-border);
+}
+
+.month-shift-badge[data-shift-type='Vacaciones'],
+.shift-card[data-shift-type='Vacaciones'],
+.weekly-planner__assignment[data-shift-type='Vacaciones'],
+.day-detail-item[data-shift-type='Vacaciones'] {
+  --shift-event-background: var(--shift-vacation-background);
+  --shift-event-foreground: var(--shift-vacation-foreground);
+  --shift-event-border: var(--shift-vacation-border);
+}
+
+.month-shift-badge[data-shift-type='Extras'],
+.shift-card[data-shift-type='Extras'],
+.weekly-planner__assignment[data-shift-type='Extras'],
+.day-detail-item[data-shift-type='Extras'] {
+  --shift-event-background: var(--shift-overtime-background);
+  --shift-event-foreground: var(--shift-overtime-foreground);
+  --shift-event-border: var(--shift-overtime-border);
+}
+
+.month-shift-badge[data-shift-type='Baja'],
+.shift-card[data-shift-type='Baja'],
+.weekly-planner__assignment[data-shift-type='Baja'],
+.day-detail-item[data-shift-type='Baja'] {
+  --shift-event-background: var(--shift-leave-background);
+  --shift-event-foreground: var(--shift-leave-foreground);
+  --shift-event-border: var(--shift-leave-border);
+}
+
+.month-shift-badge[data-shift-type]:hover,
+.month-shift-badge[data-shift-type]:focus-visible,
+.weekly-planner__assignment[data-shift-type]:hover:not(:disabled),
+.weekly-planner__assignment[data-shift-type]:focus-visible,
+.shift-card[data-shift-type]:hover {
+  background: var(--shift-event-background, var(--shift-custom-background));
+  color: var(--shift-event-foreground, var(--shift-custom-foreground));
+  border-color: var(--shift-event-border, var(--shift-custom-border));
+  border-left-color: var(--shift-event-border, var(--shift-custom-border));
+}
+
+.weekly-planner__assignment[data-shift-type] strong,
+.weekly-planner__assignment[data-shift-type] span:not(.weekly-planner__assignment-type),
+.day-detail-item[data-shift-type] .day-detail-item-secondary,
+.day-detail-item[data-shift-type] .day-detail-item-duration {
+  color: var(--shift-event-foreground, var(--shift-custom-foreground));
+}
+
+.weekly-planner__assignment[data-shift-type] .weekly-planner__assignment-type,
+.day-detail-item[data-shift-type] .day-detail-type-badge {
+  color: var(--shift-event-foreground, var(--shift-custom-foreground));
+}
+
+.totals-token.type-regular,
+.totals-token.type-regular strong { color: var(--shift-regular-foreground); }
+.totals-token.type-jt,
+.totals-token.type-jt strong { color: var(--shift-leadership-foreground); }
+.totals-token.type-ausencia,
+.totals-token.type-ausencias,
+.totals-token.type-ausencia strong,
+.totals-token.type-ausencias strong { color: var(--shift-absence-foreground); }
+.totals-token.type-libre,
+.totals-token.type-libre strong { color: var(--shift-day-off-foreground); }
+.totals-token.type-extras,
+.totals-token.type-extras strong { color: var(--shift-overtime-foreground); }
+.totals-token.type-vacaciones,
+.totals-token.type-vacaciones strong { color: var(--shift-vacation-foreground); }
+
+.month-day-more-button {
+  background: var(--shift-more-background);
+  color: var(--shift-more-foreground);
+  border-color: var(--shift-more-border);
 }
 
 .weekly-planner__add-cell {

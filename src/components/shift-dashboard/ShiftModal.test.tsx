@@ -5,7 +5,6 @@ import '@testing-library/jest-dom/vitest';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { I18nProvider } from '../../lib/i18n-react';
 import { Shift } from '../../lib/types';
-import { upsertShiftType } from '../../lib/shift-types';
 import * as remote from '../../lib/remote';
 import { ShiftModal } from './ShiftModal';
 
@@ -242,7 +241,6 @@ describe('ShiftModal failure and retry without duplicate action (UXR-F3-M04 / CX
   });
 
   it('preserves dates and hours when selecting Ausencia type in add shift form', () => {
-    upsertShiftType({ id: 'Ausencias', label: 'Ausencias', shortLabel: 'AUS', color: '#f59e0b', countsAsWork: false });
     const onSave = vi.fn();
 
     const { container } = render(
@@ -270,12 +268,11 @@ describe('ShiftModal failure and retry without duplicate action (UXR-F3-M04 / CX
     expect(startInput.value).toBe('13:00');
     expect(endInput.value).toBe('14:30');
 
-    // Select "Ausencias" type from dropdown
+    // Select the canonical timed absence type from the dropdown
     const typeSelect = screen.getByLabelText('Tipo');
     fireEvent.click(typeSelect);
 
-    const ausenciasOption = screen.getByText('Ausencias');
-    fireEvent.click(ausenciasOption);
+    fireEvent.click(screen.getByText('Ausencia'));
 
     // Inputs must NOT be wiped!
     expect(startInput.value).toBe('13:00');
@@ -291,9 +288,8 @@ describe('ShiftModal failure and retry without duplicate action (UXR-F3-M04 / CX
         date: '2026-09-14',
         startTime: '13:00',
         endTime: '14:30',
-        location: 'Ausencias',
+        location: 'Ausencia',
       }),
     );
   });
 });
-

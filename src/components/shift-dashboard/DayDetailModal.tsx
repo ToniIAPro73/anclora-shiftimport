@@ -2,11 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Edit3, Trash2 } from 'lucide-react';
 import { Shift } from '../../lib/types';
 import { getShiftOrigin, getShiftType, hasShiftTimes, sortDayShifts } from '../../lib/shifts';
-import { getShiftTypeColor } from '../../lib/shift-types';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 import './DayDetailModal.css';
+import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
 
 export interface DayDetailModalProps {
   isOpen: boolean;
@@ -100,7 +100,6 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
     const shiftTypeId = getShiftType(shift);
     const shiftType = translateShiftTypeLabel(shiftTypeId, locale, shiftTypeId);
     const shiftOrigin = getShiftOrigin(shift);
-    const accentColor = getShiftTypeColor(shiftTypeId);
     const hasTimes = hasShiftTimes(shift);
     const duration = formatDuration(shift.startTime, shift.endTime);
     const originLabel = shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
@@ -110,13 +109,14 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
       <div
         key={shift.id}
         className="day-detail-item"
+        data-shift-type={shiftTypeId}
+        data-shift-visual={getShiftVisualTokenKey(shiftTypeId)}
         data-testid={`day-detail-item-${shift.id}`}
       >
         <div className="day-detail-item-info">
           <div className="day-detail-item-primary">
             <span
               className="day-detail-type-badge"
-              style={{ color: accentColor }}
             >
               {shiftType}
             </span>

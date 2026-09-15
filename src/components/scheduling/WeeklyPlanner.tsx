@@ -18,7 +18,7 @@ import {
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference, PLANNER_WEEK_START_PREFERENCE_KEY } from '../../lib/week';
-import { getShiftTypeColor, getShiftTypeDefinition, shiftTypeCountsAsWork } from '../../lib/shift-types';
+import { getShiftTypeDefinition, getShiftTypeSemantics, shiftTypeCountsAsWork } from '../../lib/shift-types';
 import { getAssignmentShiftType } from '../../lib/shifts';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { SearchableSelect, SearchableSelectOption } from '../ui/SearchableSelect';
@@ -27,6 +27,8 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { AccessibleScheduleTable } from './AccessibleScheduleTable';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
 import { ScheduleVersionHistory } from './ScheduleVersionHistory';
+import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
+import { formatEmployeeProfileLabel } from '../../lib/personas';
 
 interface WeeklyPlannerProps {
   areaId?: string | null;
@@ -85,6 +87,13 @@ function initialEditor(employeeId: string, date: string, assignment?: ShiftAssig
 function errorCopy(error: unknown, t: (key: string) => string): string {
   if (error instanceof ApiError) {
     if (error.code === 'OVERLAP') return t('planner.errorOverlap');
+    if (error.code === 'FULL_DAY_CONFLICT') {
+      const fullDayType = String(error.details?.fullDayType ?? '').toLowerCase();
+      if (fullDayType === 'vacaciones') return t('conflicts.vacationFullDay');
+      if (fullDayType === 'baja') return t('conflicts.leaveFullDay');
+      return t('conflicts.dayOffFullDay');
+    }
+    if (error.code === 'SHIFT_TIMES_REQUIRED') return t('planner.errorTimedTimes');
     if (error.code === 'REST_RULE_VIOLATION') return t('planner.errorRest');
     if (error.code === 'VERSION_NOT_EDITABLE') return t('planner.errorVersion');
     if (error.code === 'SCOPE_FORBIDDEN') return t('planner.errorScope');
@@ -170,7 +179,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     { value: 'all', label: t('planner.allEmployees') },
     ...(snapshot?.employees ?? []).map((employee) => ({
       value: employee.id,
-      label: employee.name,
+      label: formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId),
       searchText: [employee.name, employee.externalEmployeeId ?? ''].filter(Boolean).join(' '),
     })),
   ], [snapshot, t]);
@@ -395,6 +404,11 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     if (!editor || !snapshot || !editable) return;
     if (editor.date < today) {
       setOperationError(t('planner.pastDay'));
+      return;
+    }
+    const editorSemantics = getShiftTypeSemantics(editor.shiftType);
+    if (editorSemantics.timed && (!editor.startTime || !editor.endTime)) {
+      setOperationError(t('planner.errorTimedTimes'));
       return;
     }
     setIsSaving(true);
@@ -662,8 +676,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                       {visibleEmployees.map((employee) => (
                         <tr key={employee.id}>
                           <th scope="row">
-                            <span>{employee.name}</span>
-                            {employee.externalEmployeeId && <small>{employee.externalEmployeeId}</small>}
+                            <span>{formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId)}</span>
                           </th>
                           {days.map((day) => {
                             const cellAssignments = assignmentsByCell.get(`${employee.id}:${day}`) ?? [];
@@ -673,7 +686,6 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                 <div className="weekly-planner__cell" data-empty={cellAssignments.length === 0}>
                                   {cellAssignments.map((assignment) => {
                                     const shiftTypeId = getAssignmentShiftType(assignment);
-                                    const accentColor = getShiftTypeColor(shiftTypeId);
                                     const displayType = translateShiftTypeLabel(
                                       shiftTypeId,
                                       locale,
@@ -687,8 +699,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                         type="button"
                                         className="weekly-planner__assignment"
                                         key={assignment.id}
-                                        style={{ '--assignment-color': accentColor } as React.CSSProperties}
                                         data-shift-type={shiftTypeId}
+                                        data-shift-visual={getShiftVisualTokenKey(shiftTypeId)}
                                         data-selected={isAssignmentSelected || undefined}
                                         onClick={() => { if (editable && day >= today) handleEdit(employee.id, day, assignment); }}
                                         disabled={!editable || day < today}

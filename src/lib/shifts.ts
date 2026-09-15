@@ -1,6 +1,6 @@
 import { Shift, ShiftCategory, ShiftOrigin, ShiftWithDerived, WeeklyStats } from './types';
 import { durationMinutes, parseHHMM } from './time';
-import { getShiftTypeDefinition, getShiftTypes, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
+import { getShiftTypeDefinition, getShiftTypes, getShiftTypeSemantics, resolveShiftTypeId, shiftTypeCountsAsWork } from './shift-types';
 
 const isEmptyTime = (value?: string | null): boolean => !value || value.trim() === '';
 
@@ -90,8 +90,8 @@ export const getAssignmentShiftType = (assignment: {
 export const hasShiftTimes = (shift: Shift): boolean =>
   !isEmptyTime(shift.startTime) && !isEmptyTime(shift.endTime);
 
-export const isFreeShift = (shift: Shift): boolean => !shiftTypeCountsAsWork(getShiftType(shift));
-export const isZeroDurationShift = (shift: Shift): boolean => !shiftTypeCountsAsWork(getShiftType(shift));
+export const isFreeShift = (shift: Shift): boolean => getShiftTypeSemantics(getShiftType(shift)).exclusive;
+export const isZeroDurationShift = (shift: Shift): boolean => !getShiftTypeSemantics(getShiftType(shift)).timed;
 export const getShiftOrigin = (shift: Shift): ShiftOrigin => shift.origin === 'MAN' ? 'MAN' : 'IMP';
 
 /**
@@ -205,7 +205,7 @@ function sumIntervalsMinutes(intervals: Array<[number, number]>): number {
  */
 export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): WeeklyStats => {
   const explicitFreeDaySet = new Set(shifts.filter(isFreeShift).map((shift) => shift.date));
-  const workedDaySet = new Set(shifts.filter((shift) => !isZeroDurationShift(shift)).map((shift) => shift.date));
+  const workedDaySet = new Set(shifts.filter((shift) => getShiftTypeSemantics(getShiftType(shift)).contributesWorkedTime).map((shift) => shift.date));
   const freeDays = explicitFreeDaySet.size + Math.max(0, totalDays - explicitFreeDaySet.size - workedDaySet.size);
   const hoursByType: Record<string, number> = {};
   const daysByTypeSets: Record<string, Set<string>> = {};
@@ -219,6 +219,7 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
   }
 
   const intervalsByDate = new Map<string, Array<[number, number]>>();
+  const absenceIntervalsByDate = new Map<string, Array<[number, number]>>();
 
   for (const shift of shifts) {
     const type = getShiftType(shift);
@@ -229,14 +230,24 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
       daysByTypeSets[type].add(shift.date);
     }
 
-    if (!isZeroDurationShift(shift)) {
+    const semantics = getShiftTypeSemantics(type);
+    if (semantics.timed && semantics.contributesWorkedTime) {
       const currentIntervals = intervalsByDate.get(shift.date) ?? [];
       currentIntervals.push(...getShiftIntervals(shift));
       intervalsByDate.set(shift.date, currentIntervals);
     }
+    if (semantics.timed && semantics.contributesAbsenceTime) {
+      const currentIntervals = absenceIntervalsByDate.get(shift.date) ?? [];
+      currentIntervals.push(...getShiftIntervals(shift));
+      absenceIntervalsByDate.set(shift.date, currentIntervals);
+    }
   }
 
   const totalWorkedMinutes = Array.from(intervalsByDate.values()).reduce(
+    (total, intervals) => total + sumIntervalsMinutes(intervals),
+    0,
+  );
+  const totalAbsenceMinutes = Array.from(absenceIntervalsByDate.values()).reduce(
     (total, intervals) => total + sumIntervalsMinutes(intervals),
     0,
   );
@@ -250,6 +261,7 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
 
   return {
     totalWorkedHours: totalWorkedMinutes / 60,
+    totalAbsenceHours: totalAbsenceMinutes / 60,
     totalWorkedDays,
     freeDays,
     hoursByType,
@@ -291,4 +303,3 @@ export const sortDayShifts = (shifts: Shift[]): Shift[] => {
     return a.id.localeCompare(b.id);
   });
 };
-

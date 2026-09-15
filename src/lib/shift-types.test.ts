@@ -7,6 +7,7 @@ import {
   getShiftTypeDefinition,
   getShiftTypes,
   isDayOffCode,
+  getShiftTypeSemantics,
   mergeShiftTypeOverrides,
   resolveShiftTypeId,
   setShiftTypeAlias,
@@ -19,7 +20,7 @@ setupLocalStorageMock();
 describe('configurable shift type registry', () => {
   it('defaults are neutral and company-agnostic', () => {
     const ids = getShiftTypes().map((type) => type.id);
-    expect(ids).toEqual(['Regular', 'Libre', 'Vacaciones', 'Extras']);
+    expect(ids).toEqual(['Regular', 'Libre', 'Vacaciones', 'Ausencia', 'Extras']);
     expect(ids).not.toContain('JT');
   });
 
@@ -86,7 +87,7 @@ describe('configurable shift type registry', () => {
   });
 
   describe('getShiftTypeColor canonical color resolution and fallbacks', () => {
-    it('resolves REGULAR_COLOR, LIBRE_COLOR, VACACIONES_COLOR from default registry', () => {
+  it('resolves REGULAR_COLOR, LIBRE_COLOR, VACACIONES_COLOR from default registry', () => {
       expect(getShiftTypeColor('Regular')).toBe('#3b82f6');
       expect(getShiftTypeColor('Libre')).toBe('#ef4444');
       expect(getShiftTypeColor('Vacaciones')).toBe('#16a34a');
@@ -137,5 +138,17 @@ describe('configurable shift type registry', () => {
       expect(getShiftTypeColor('libre')).toBe('#ef4444');
       expect(getShiftTypeColor('regular')).toBe('#3b82f6');
     });
+  });
+
+  it('keeps Ausencia as a timed non-working event with absence accounting', () => {
+    expect(resolveShiftTypeId('ABSENCE')).toBe('Ausencia');
+    expect(getShiftTypeSemantics('Ausencia')).toEqual({
+      timed: true,
+      allDay: false,
+      exclusive: false,
+      contributesWorkedTime: false,
+      contributesAbsenceTime: true,
+    });
+    expect(getShiftTypeSemantics('Libre').exclusive).toBe(true);
   });
 });

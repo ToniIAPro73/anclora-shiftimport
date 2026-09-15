@@ -188,7 +188,7 @@ describe('WeeklyPlanner', () => {
       expect.objectContaining({
         startTime: '13:00',
         endTime: '14:30',
-        shiftType: 'ausencia',
+        shiftType: 'Ausencia',
       }),
     ));
   });
@@ -298,7 +298,7 @@ describe('WeeklyPlanner', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'mar, 29 sept' })).toBeInTheDocument());
     const filter = screen.getByRole('button', { name: 'Empleado' });
     fireEvent.click(filter);
-    fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner' }).find((option) => option.tagName === 'BUTTON')!);
+    fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner · ID E002' }).find((option) => option.tagName === 'BUTTON')!);
     fireEvent.click(screen.getAllByRole('button', { name: /Añadir turno para Luis Planner/ })[0]);
     const editorForm = screen.getByRole('form', { name: 'Añadir turno' });
     const editorEmployee = within(editorForm).getByLabelText('Empleado');
@@ -327,7 +327,7 @@ describe('WeeklyPlanner', () => {
     await waitFor(() => expect(screen.getByRole('row', { name: /Luis Planner/ })).toBeInTheDocument());
     const filter = screen.getByRole('button', { name: 'Empleado' });
     fireEvent.click(filter);
-    fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner' }).find((option) => option.tagName === 'BUTTON')!);
+    fireEvent.click(screen.getAllByRole('option', { name: 'Luis Planner · ID E002' }).find((option) => option.tagName === 'BUTTON')!);
 
     expect(screen.queryByRole('row', { name: /Ana Planner/ })).toBeNull();
     expect(screen.getByRole('row', { name: /Luis Planner/ })).toBeInTheDocument();
@@ -514,39 +514,39 @@ describe('WeeklyPlanner', () => {
       // 1. REGULAR_COLOR (#3b82f6)
       const regBtn = screen.getByRole('button', { name: /Regular/ });
       expect(regBtn).toHaveAttribute('data-shift-type', 'Regular');
-      expect(regBtn.style.getPropertyValue('--assignment-color')).toBe('#3b82f6');
+      expect(regBtn).toHaveAttribute('data-shift-visual', 'regular');
       expect(within(regBtn).getByText('Regular')).toBeInTheDocument();
       expect(within(regBtn).getByText('08:00–16:00')).toBeInTheDocument();
 
       // 2. LIBRE_COLOR (#ef4444)
       const libreBtn = screen.getByRole('button', { name: /Día libre/ });
       expect(libreBtn).toHaveAttribute('data-shift-type', 'Libre');
-      expect(libreBtn.style.getPropertyValue('--assignment-color')).toBe('#ef4444');
+      expect(libreBtn).toHaveAttribute('data-shift-visual', 'day-off');
       expect(within(libreBtn).getByText('Día libre')).toBeInTheDocument();
 
       // 3. VACACIONES_COLOR (#16a34a)
       const vacBtn = screen.getByRole('button', { name: /Vacaciones/ });
       expect(vacBtn).toHaveAttribute('data-shift-type', 'Vacaciones');
-      expect(vacBtn.style.getPropertyValue('--assignment-color')).toBe('#16a34a');
+      expect(vacBtn).toHaveAttribute('data-shift-visual', 'vacation');
       expect(within(vacBtn).getByText('Vacaciones')).toBeInTheDocument();
 
       // 4. BAJA_COLOR (#8b5cf6) with countsAsWork: false
       const bajaBtn = screen.getByRole('button', { name: /Baja/ });
       expect(bajaBtn).toHaveAttribute('data-shift-type', 'baja');
-      expect(bajaBtn.style.getPropertyValue('--assignment-color')).toBe('#8b5cf6');
+      expect(bajaBtn).toHaveAttribute('data-shift-visual', 'leave');
       expect(within(bajaBtn).getByText('Baja')).toBeInTheDocument();
 
       // 5. CUSTOM_SHIFT_TYPE_COLOR (#ec4899)
       const customBtn = screen.getByRole('button', { name: /Guardia/ });
       expect(customBtn).toHaveAttribute('data-shift-type', 'guardia');
-      expect(customBtn.style.getPropertyValue('--assignment-color')).toBe('#ec4899');
+      expect(customBtn).toHaveAttribute('data-shift-visual', 'custom');
       expect(within(customBtn).getByText('Guardia')).toBeInTheDocument();
       expect(within(customBtn).getByText('16:00–00:00')).toBeInTheDocument();
 
       // 6. INVALID_COLOR_FALLBACK (#3b82f6)
       const brokenBtn = screen.getByRole('button', { name: /Broken/ });
       expect(brokenBtn).toHaveAttribute('data-shift-type', 'broken');
-      expect(brokenBtn.style.getPropertyValue('--assignment-color')).toBe('#3b82f6');
+      expect(brokenBtn).toHaveAttribute('data-shift-visual', 'custom');
       expect(within(brokenBtn).getByText('Broken')).toBeInTheDocument();
     });
 

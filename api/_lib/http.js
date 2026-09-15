@@ -22,6 +22,8 @@ export function handleError(res, error) {
     ...(status < 500 && error?.code ? { code: error.code } : {}),
     ...(status < 500 && error?.conflictingAssignmentId
       ? { conflictingAssignmentId: error.conflictingAssignmentId } : {}),
+    ...(status < 500 && error?.fullDayType
+      ? { fullDayType: error.fullDayType } : {}),
     ...(status < 500 && Number.isFinite(error?.minimumRestHours)
       ? { minimumRestHours: error.minimumRestHours } : {}),
     ...(status < 500 && error?.draftVersionId

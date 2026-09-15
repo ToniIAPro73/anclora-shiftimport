@@ -113,6 +113,20 @@ describe('aggregateWeeklyStats', () => {
     expect(stats.hoursByType.Regular).toBe(14);
     expect(stats.freeDays).toBe(6);
   });
+
+  it('counts a temporal absence as absence hours, never as worked hours or a free day', () => {
+    const stats = aggregateWeeklyStats([
+      shift({ id: 'regular-a', date: '2026-09-01', startTime: '08:00', endTime: '11:00', shiftType: 'Regular' }),
+      shift({ id: 'absence', date: '2026-09-01', startTime: '11:00', endTime: '12:00', shiftType: 'Ausencia', countsAsWork: false, location: 'Ausencia' }),
+      shift({ id: 'regular-b', date: '2026-09-01', startTime: '12:00', endTime: '16:00', shiftType: 'Regular' }),
+    ], 1);
+
+    expect(stats.totalWorkedHours).toBe(7);
+    expect(stats.totalAbsenceHours).toBe(1);
+    expect(stats.hoursByType.Regular).toBe(7);
+    expect(stats.hoursByType.Ausencia).toBe(1);
+    expect(stats.freeDays).toBe(0);
+  });
 });
 
 describe('getAssignmentShiftType', () => {
@@ -243,4 +257,3 @@ describe('preserveShiftTimesOnTypeChange', () => {
     }
   });
 });
-

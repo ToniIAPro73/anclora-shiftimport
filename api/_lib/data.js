@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 import { getOperationalDate, isHistoricalDate } from './operational-date.js';
+import { assertTimedTypeHasTimes, findAssignmentConflict } from './shift-compatibility.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -89,7 +90,7 @@ async function enforcePlanLimit(sql, ctx, limitKey, currentCount, message) {
   }
 }
 
-const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
+const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones', 'ausencia', 'ausencias', 'absence', 'absences', 'baja', 'leave']);
 
 export function normalizeShiftInput(raw) {
   const location = String(raw?.location ?? '').trim();
@@ -121,12 +122,6 @@ export function normalizeShiftInput(raw) {
 
 const HHMM_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
-function shiftRequiresTimes(shift) {
-  if (typeof shift.countsAsWork === 'boolean') return shift.countsAsWork;
-  const type = String(shift.shiftType ?? shift.location ?? '').trim().toLowerCase();
-  return !LEGACY_NON_WORKING_TYPES.has(type);
-}
-
 export function assertShiftTimeSemantics(shift) {
   const hasStart = Boolean(shift.startTime);
   const hasEnd = Boolean(shift.endTime);
@@ -135,11 +130,7 @@ export function assertShiftTimeSemantics(shift) {
     error.code = 'SHIFT_TIMES_INCOMPLETE';
     throw error;
   }
-  if (shiftRequiresTimes(shift) && (!hasStart || !hasEnd)) {
-    const error = new HttpError(400, 'Working shift types require startTime and endTime');
-    error.code = 'SHIFT_TIMES_REQUIRED';
-    throw error;
-  }
+  assertTimedTypeHasTimes(shift);
   if (hasStart && !HHMM_RE.test(shift.startTime)) {
     throw new HttpError(400, 'startTime must use HH:mm format');
   }
@@ -2816,6 +2807,79 @@ export async function upsertShifts(sql, ctx, rawShifts) {
 
   if (prepared.length === 0) {
     return [];
+  }
+
+  // The server is authoritative for compatibility. Read existing rows once
+  // per employee/date and validate the complete batch before opening writes;
+  // exact imported retries are idempotent through semantic_fingerprint.
+  const grouped = new Map();
+  for (const item of prepared) {
+    const key = `${item.employeeId}:${item.shift.date}`;
+    const group = grouped.get(key) ?? [];
+    group.push(item);
+    grouped.set(key, group);
+  }
+  for (const items of grouped.values()) {
+    const first = items[0];
+    const existingRows = await sql`
+      SELECT id, date, start_time, end_time, location, origin, shift_type,
+             counts_as_work, semantic_fingerprint
+      FROM shifts
+      WHERE organization_id = ${ctx.organizationId}
+        AND employee_id = ${first.employeeId}
+        AND date = ${first.shift.date}
+    `;
+    for (const item of items) {
+      const candidate = {
+        id: item.id,
+        date: item.shift.date,
+        startTime: item.shift.startTime,
+        endTime: item.shift.endTime,
+        shiftType: item.shift.shiftType,
+        countsAsWork: item.shift.countsAsWork,
+      };
+      const relevantExisting = existingRows.filter((row) => (
+        !(item.semanticFingerprint && row.semantic_fingerprint === item.semanticFingerprint)
+      ));
+      const conflict = findAssignmentConflict(relevantExisting, candidate, item.id);
+      if (conflict) {
+        const error = new HttpError(422, conflict.code === 'OVERLAP'
+          ? 'This time overlaps another record on the same day'
+          : 'A whole-day record cannot be combined with timed records on the same date');
+        error.code = conflict.code;
+        error.conflictingShiftId = conflict.existing.id;
+        error.fullDayType = conflict.fullDayType;
+        throw error;
+      }
+    }
+    for (let index = 0; index < items.length; index += 1) {
+      for (let otherIndex = index + 1; otherIndex < items.length; otherIndex += 1) {
+        const conflict = findAssignmentConflict([{
+          id: items[index].id,
+          date: items[index].shift.date,
+          start_time: items[index].shift.startTime,
+          end_time: items[index].shift.endTime,
+          shift_type: items[index].shift.shiftType,
+          counts_as_work: items[index].shift.countsAsWork,
+        }], {
+          id: items[otherIndex].id,
+          date: items[otherIndex].shift.date,
+          startTime: items[otherIndex].shift.startTime,
+          endTime: items[otherIndex].shift.endTime,
+          shiftType: items[otherIndex].shift.shiftType,
+          countsAsWork: items[otherIndex].shift.countsAsWork,
+        });
+        if (conflict) {
+          const error = new HttpError(422, conflict.code === 'OVERLAP'
+            ? 'This time overlaps another record on the same day'
+            : 'A whole-day record cannot be combined with timed records on the same date');
+          error.code = conflict.code;
+          error.conflictingShiftId = conflict.existing.id;
+          error.fullDayType = conflict.fullDayType;
+          throw error;
+        }
+      }
+    }
   }
 
   const rowsPerShift = await sql.transaction((txn) => prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint }) => (

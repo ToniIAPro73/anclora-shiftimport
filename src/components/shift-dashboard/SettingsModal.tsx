@@ -10,6 +10,7 @@ import {
   upsertShiftType,
 } from '../../lib/shift-types';
 import { translateShiftTypeLabel } from '../../lib/i18n';
+import { formatEmployeeProfileLabel } from '../../lib/personas';
 import { useI18n } from '../../lib/use-i18n';
 import { TIMEZONE_OPTIONS, getTimezoneLabel } from '../../lib/timezones';
 import { useEscapeClose } from '../../lib/use-escape-close';
@@ -551,9 +552,7 @@ function TeamSection({
                 .filter((employee) => employee.status === 'active')
                 .map((employee) => ({
                   value: employee.id,
-                  label: employee.externalEmployeeId
-                    ? `${employee.name} · ID ${employee.externalEmployeeId}`
-                    : employee.name,
+                  label: formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId),
                   searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
                 }))}
               style={{ width: '100%', maxWidth: '320px' }}

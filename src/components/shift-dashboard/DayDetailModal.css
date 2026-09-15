@@ -49,14 +49,14 @@
   gap: 12px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border-color, var(--glass-border));
+  background: var(--shift-event-background, var(--panel-muted-bg, rgba(255, 255, 255, 0.03)));
+  border: 1px solid var(--shift-event-border, var(--border-color, var(--glass-border)));
   transition: all 0.15s ease;
 }
 
 :root[data-theme='light'] .day-detail-item {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.08);
+  background: var(--shift-event-background, #ffffff);
+  border-color: var(--shift-event-border, rgba(0, 0, 0, 0.08));
 }
 
 .day-detail-item:hover {
@@ -169,9 +169,9 @@
   border-radius: 4px;
   font-size: 0.72rem;
   font-weight: 700;
-  border: 1px solid var(--border-color, var(--glass-border));
-  background: var(--panel-muted-bg, rgba(255, 255, 255, 0.05));
-  color: var(--color-gold);
+  border: 1px solid var(--shift-more-border, var(--border-color, var(--glass-border)));
+  background: var(--shift-more-background, var(--panel-muted-bg, rgba(255, 255, 255, 0.05)));
+  color: var(--shift-more-foreground, var(--color-gold));
   cursor: pointer;
   text-align: center;
   transition: all 0.15s ease;
@@ -180,9 +180,9 @@
 }
 
 :root[data-theme='light'] .month-day-more-button {
-  background: rgba(49, 82, 165, 0.05);
-  border-color: rgba(49, 82, 165, 0.15);
-  color: var(--color-accent);
+  background: var(--shift-more-background);
+  border-color: var(--shift-more-border);
+  color: var(--shift-more-foreground);
 }
 
 .month-day-more-button:hover {

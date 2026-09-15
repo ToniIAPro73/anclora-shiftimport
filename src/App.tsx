@@ -8,6 +8,8 @@ import { findShiftConflict } from './lib/shift-conflicts';
 import { fingerprintShift } from './lib/import-dedup';
 import { reconcileImport, ReconciliationReport } from './lib/import-reconciliation';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
+import { getShiftTypeSemantics } from './lib/shift-types';
+import { formatEmployeeProfileLabel } from './lib/personas';
 import { loadOnboarding, resetOnboarding, shouldShowOnboarding, completeOnboarding as completeOnboardingGuide } from './lib/onboarding';
 import { trackTtfvEvent } from './lib/ttfv';
 import {
@@ -808,6 +810,11 @@ function App() {
       return;
     }
     const conflict = findShiftConflict(shifts, shift, locale);
+    const incomingType = getShiftType(shift);
+    if (getShiftTypeSemantics(incomingType).timed && !hasShiftTimes(shift)) {
+      setAppFeedback({ kind: 'alert', message: t('conflicts.timedRequiresTimes') });
+      return;
+    }
     if (conflict) {
       setAppFeedback({ kind: 'alert', message: conflict });
       return;
@@ -826,7 +833,19 @@ function App() {
       void refreshCalendarData();
     } catch (error) {
       console.error('Failed to persist shift', error);
-      setAppFeedback({ kind: 'alert', message: t('importConflict.saveShiftFailed') });
+      const fullDayType = error instanceof ApiError ? String(error.details?.fullDayType ?? '') : '';
+      const message = error instanceof ApiError && error.code === 'OVERLAP'
+        ? t('conflicts.overlap')
+        : error instanceof ApiError && error.code === 'FULL_DAY_CONFLICT' && fullDayType === 'Vacaciones'
+          ? t('conflicts.vacationFullDay')
+          : error instanceof ApiError && error.code === 'FULL_DAY_CONFLICT' && fullDayType.toLowerCase() === 'baja'
+            ? t('conflicts.leaveFullDay')
+            : error instanceof ApiError && error.code === 'FULL_DAY_CONFLICT'
+              ? t('conflicts.dayOffFullDay')
+          : error instanceof ApiError && error.code === 'SHIFT_TIMES_REQUIRED'
+            ? t('conflicts.timedRequiresTimes')
+            : t('importConflict.saveShiftFailed');
+      setAppFeedback({ kind: 'alert', message });
     } finally {
       setAppOperation('idle');
     }
@@ -1758,7 +1777,7 @@ function App() {
           ariaLabel={t('team.employeeLabel')}
           options={activeVisibleEmployees.map((employee) => ({
             value: employee.id,
-            label: employee.externalEmployeeId ? `${employee.name} · ID ${employee.externalEmployeeId}` : employee.name,
+            label: formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId),
             searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
           }))}
           style={{ width: '100%', minWidth: 0 }}
@@ -1893,7 +1912,7 @@ function App() {
               .filter((employee) => employee.status === 'active')
               .map((employee) => ({
                 value: employee.id,
-                label: employee.externalEmployeeId ? `${employee.name} · ID ${employee.externalEmployeeId}` : employee.name,
+                label: formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId),
                 searchText: `${employee.name} ${employee.externalEmployeeId ?? ''}`.toLowerCase(),
               }))}
             style={{ width: '100%' }}

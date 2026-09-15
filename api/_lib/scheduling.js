@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { createShiftPublishedNotifications } from './data.js';
 import { getOperationalDate } from './operational-date.js';
+import { assertTimedTypeHasTimes, findAssignmentConflict, getShiftSemantics } from './shift-compatibility.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -88,8 +89,6 @@ function normalizeOptionalTime(value, field) {
   return normalizeTime(value, field);
 }
 
-const LEGACY_NON_WORKING_TYPES = new Set(['libre', 'vacaciones']);
-
 function resolveAssignmentSemantics(input = {}, existing = null) {
   const shiftType = input.shiftType === undefined
     ? (existing?.shift_type ?? 'Regular')
@@ -98,7 +97,7 @@ function resolveAssignmentSemantics(input = {}, existing = null) {
     ? input.countsAsWork
     : typeof existing?.counts_as_work === 'boolean'
       ? existing.counts_as_work
-      : !LEGACY_NON_WORKING_TYPES.has(shiftType.toLowerCase());
+      : getShiftSemantics({ shiftType, startTime: input.startTime, endTime: input.endTime }).contributesWorkedTime;
   const startTime = input.startTime === undefined
     ? normalizeOptionalTime(existing?.start_time, 'startTime')
     : normalizeOptionalTime(input.startTime, 'startTime');
@@ -111,11 +110,7 @@ function resolveAssignmentSemantics(input = {}, existing = null) {
     error.code = 'SHIFT_TIMES_INCOMPLETE';
     throw error;
   }
-  if (countsAsWork && (startTime === null || endTime === null)) {
-    const error = new HttpError(400, 'Working shift types require startTime and endTime');
-    error.code = 'SHIFT_TIMES_REQUIRED';
-    throw error;
-  }
+  assertTimedTypeHasTimes({ shiftType, countsAsWork, startTime, endTime });
   return { shiftType, countsAsWork, startTime, endTime };
 }
 
@@ -215,37 +210,38 @@ async function assertNoAssignmentOverlap(sql, { scheduleVersionId, employeeId, d
   if (startTime === null || endTime === null) return;
   const rows = excludeId
     ? await sql`
-      SELECT id, start_time, end_time
+      SELECT id, start_time, end_time, shift_type, counts_as_work
       FROM shift_assignments
       WHERE schedule_version_id = ${scheduleVersionId}
         AND employee_id = ${employeeId}
         AND date = ${date}
         AND id <> ${excludeId}
-        AND start_time < ${endTime}::time
-        AND end_time > ${startTime}::time
       ORDER BY start_time, id
     `
     : await sql`
-      SELECT id, start_time, end_time
+      SELECT id, start_time, end_time, shift_type, counts_as_work
       FROM shift_assignments
       WHERE schedule_version_id = ${scheduleVersionId}
         AND employee_id = ${employeeId}
         AND date = ${date}
-        AND start_time < ${endTime}::time
-        AND end_time > ${startTime}::time
       ORDER BY start_time, id
     `;
-  const conflict = rows.find((row) => rangesOverlap(startTime, endTime, row.start_time, row.end_time));
+  const conflict = findAssignmentConflict(rows, {
+    id: null, date, startTime, endTime, shiftType: 'Regular', countsAsWork: true,
+  }, excludeId);
   if (conflict) {
-    const error = new HttpError(422, 'Assignment overlaps an existing assignment');
-    error.code = 'OVERLAP';
-    error.conflictingAssignmentId = conflict.id;
+    const error = new HttpError(422, conflict.code === 'OVERLAP'
+      ? 'This time overlaps another record on the same day'
+      : 'A whole-day record cannot be combined with timed records on the same date');
+    error.code = conflict.code;
+    error.conflictingAssignmentId = conflict.existing.id;
+    error.fullDayType = conflict.fullDayType;
     throw error;
   }
 }
 
 async function assertMinimumRest(sql, {
-  scheduleVersionId, employeeId, date, startTime, endTime, excludeId = null,
+  scheduleVersionId, employeeId, date, startTime, endTime, shiftType = 'Regular', countsAsWork = true, excludeId = null,
 }) {
   const rows = excludeId
     ? await sql`
@@ -263,8 +259,14 @@ async function assertMinimumRest(sql, {
         AND employee_id = ${employeeId}
         AND date BETWEEN (${date}::date - 2) AND (${date}::date + 2)
     `;
-  const candidate = { date, start_time: startTime, end_time: endTime };
+  const candidate = { date, start_time: startTime, end_time: endTime, counts_as_work: countsAsWork, shift_type: shiftType };
+  const candidateSemantics = getShiftSemantics(candidate);
+  // A temporal absence is not worked time and must not create a rest-period
+  // conflict. Same-day contiguous segments are explicitly valid in the
+  // segment model, so rest is only evaluated between different dates.
+  if (!candidateSemantics.contributesWorkedTime) return;
   const conflict = rows
+    .filter((row) => databaseDateToIso(row.date) !== date && getShiftSemantics(row).contributesWorkedTime)
     .map((row) => ({ row, gap: calculateRestGapMinutes(candidate, row) }))
     .filter(({ gap }) => gap !== null && gap < MINIMUM_REST_MINUTES)
     .sort((a, b) => a.gap - b.gap)[0];
@@ -484,7 +486,7 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
     scheduleVersionId: versionId, employeeId, date, startTime, endTime,
   });
   await assertMinimumRest(sql, {
-    scheduleVersionId: versionId, employeeId, date, startTime, endTime,
+    scheduleVersionId: versionId, employeeId, date, startTime, endTime, shiftType, countsAsWork,
   });
   const location = input.location === undefined || input.location === null ? null : String(input.location).trim() || null;
   const rows = await sql`
@@ -524,7 +526,7 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, excludeId: assignmentId,
   });
   await assertMinimumRest(sql, {
-    scheduleVersionId: versionId, employeeId, date, startTime, endTime, excludeId: assignmentId,
+    scheduleVersionId: versionId, employeeId, date, startTime, endTime, shiftType, countsAsWork, excludeId: assignmentId,
   });
   const location = input.location === undefined ? assignment.location : (input.location === null ? null : String(input.location).trim() || null);
   const rows = await sql`
