@@ -165,22 +165,27 @@
 /* More button on MonthGrid cell */
 .month-day-more-button {
   box-sizing: border-box;
-  width: calc(100% - 16px);
-  min-height: 40px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  min-width: 42px;
+  height: 26px;
+  min-height: 24px;
   flex: 0 0 auto;
   align-self: center;
-  padding: 8px 6px;
-  border-radius: 4px;
-  font-size: 0.72rem;
+  margin: 2px auto 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
   font-weight: 700;
   border: 1px solid var(--shift-more-border, var(--border-color, var(--glass-border)));
   background: var(--shift-more-background, var(--panel-muted-bg, rgba(255, 255, 255, 0.05)));
   color: var(--shift-more-foreground, var(--color-gold));
   cursor: pointer;
   text-align: center;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-  margin: 2px 8px 8px;
-  line-height: 1.2;
   transform: none;
 }
 
@@ -202,8 +207,8 @@
 }
 
 .month-day-more-button:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-accent);
   transform: none;
 }
 
@@ -211,6 +216,13 @@
   background: var(--gold-tint-bg, rgba(212, 175, 55, 0.2));
   border-color: var(--color-gold);
   transform: none;
+}
+
+@media (max-width: 980px) {
+  .month-day-more-button {
+    height: 28px;
+    padding-inline: 10px;
+  }
 }
 
 .day-detail-empty-state {

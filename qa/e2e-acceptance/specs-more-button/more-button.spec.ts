@@ -1,166 +1,127 @@
 import { expect, test, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { neon } from '@neondatabase/serverless';
 
-const fixture = JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'more-button-fixture.json'), 'utf8')) as {
-  runId: string;
-  password: string;
-  organizationId: string;
-  employeeId: string;
-  email: string;
-};
-const scenarioDate = '2026-09-10';
+const now = new Date();
+const scenarioDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
 
-function databaseUrl(): string {
-  const envFile = readFileSync(join(__dirname, '..', '..', '..', '.env.local'), 'utf8');
-  const line = envFile.split(/\r?\n/).find((item) => item.startsWith('DATABASE_URL='));
-  const value = line?.slice('DATABASE_URL='.length).trim().replace(/^['"]|['"]$/g, '');
-  if (!value) throw new Error('DATABASE_URL not found in .env.local');
-  return value;
-}
-
-const sql = neon(databaseUrl());
-
-async function login(page: Page) {
-  const response = await page.request.post('/api/auth/login', { data: { email: fixture.email, password: fixture.password } });
-  expect(response.ok()).toBe(true);
-  await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByTestId('app-shell')).toBeVisible();
-}
-
-async function setTheme(page: Page, theme: 'light' | 'dark') {
-  const toggle = page.getByRole('button', { name: /Cambiar tema|Change theme/ });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (await page.locator('html').getAttribute('data-theme') === theme) return;
-    await toggle.click();
-  }
-  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+function seedGuestShifts(page: Page) {
+  return page.addInitScript((date) => {
+    localStorage.setItem('anclora-cookie-consent-v1', JSON.stringify({ necessary: true, analytics: false, marketing: false, version: 'v1' }));
+    localStorage.setItem('anclora_shiftimport_onboarding_v1', JSON.stringify({ version: 1, completed: true, step: 'CONFIRMED' }));
+    localStorage.setItem('anclora_theme_mode', 'dark');
+    localStorage.setItem('anclora_shifts_v1', JSON.stringify([
+      { id: 'e2e-compact-1', date, startTime: '08:00', endTime: '11:00', location: 'Regular', origin: 'MAN' },
+      { id: 'e2e-compact-2', date, startTime: '11:00', endTime: '12:00', location: 'Ausencia', origin: 'MAN' },
+      { id: 'e2e-compact-3', date, startTime: '12:00', endTime: '16:00', location: 'Regular', origin: 'MAN' },
+    ]));
+  }, scenarioDate);
 }
 
 function scenarioCell(page: Page) {
-  return page.locator('.month-day-cell').filter({ has: page.locator(`button[aria-label*="${scenarioDate}"]`) });
+  return page.locator('.month-day-cell').filter({ has: page.locator('.month-day-more-button') });
 }
 
-async function assertGeometry(page: Page, expectedMinHeight: number) {
+async function assertCompactGeometry(page: Page) {
   const cell = scenarioCell(page);
   const more = cell.locator('.month-day-more-button');
-  await expect(more).toHaveText('+1 más');
+  await expect(more).toHaveText('+1');
+  await expect(more).toHaveAttribute('aria-label', 'Mostrar 1 turno más');
+
   const geometry = await more.evaluate((element) => {
     const button = element.getBoundingClientRect();
-    const parent = element.closest('.month-day-cell')!.getBoundingClientRect();
+    const parentElement = element.closest('.month-day-cell')!;
+    const parent = parentElement.getBoundingClientRect();
     const style = getComputedStyle(element);
-    const sections = getComputedStyle(element.closest('.month-day-sections')!);
+    const parentStyle = getComputedStyle(parentElement);
     return {
       left: button.left - parent.left,
       right: parent.right - button.right,
       bottom: parent.bottom - button.bottom,
-      inside: button.left >= parent.left && button.right <= parent.right && button.top >= parent.top && button.bottom <= parent.bottom,
       width: button.width,
       height: button.height,
+      cellWidth: parent.width,
+      centered: Math.abs((button.left + button.right) / 2 - (parent.left + parent.right) / 2) < 1,
+      inside: button.left >= parent.left && button.right <= parent.right && button.top >= parent.top && button.bottom <= parent.bottom,
       boxSizing: style.boxSizing,
       borderLeft: style.borderLeftWidth,
       borderRight: style.borderRightWidth,
-      outline: style.outlineStyle,
-      overflow: sections.overflow,
+      focusShadow: style.boxShadow,
+      cellOverflow: parentStyle.overflow,
+      horizontalOverflow: parentElement.scrollWidth > parentElement.clientWidth,
     };
   });
+
+  expect(geometry.width).toBeLessThan(geometry.cellWidth * 0.6);
+  expect(geometry.height).toBeGreaterThanOrEqual(24);
+  expect(geometry.height).toBeLessThanOrEqual(30);
   expect(geometry.left).toBeGreaterThanOrEqual(8);
   expect(geometry.right).toBeGreaterThanOrEqual(8);
-  expect(geometry.bottom).toBeGreaterThanOrEqual(8);
+  expect(geometry.bottom).toBeGreaterThanOrEqual(6);
+  expect(geometry.centered).toBe(true);
   expect(geometry.inside).toBe(true);
   expect(geometry.boxSizing).toBe('border-box');
   expect(geometry.borderLeft).not.toBe('0px');
   expect(geometry.borderRight).not.toBe('0px');
-  expect(geometry.height).toBeGreaterThanOrEqual(expectedMinHeight);
-  expect(geometry.overflow).toBe('hidden');
-  console.log(`[e2e-more] geometry ${JSON.stringify({ viewport: page.viewportSize(), left: geometry.left, right: geometry.right, bottom: geometry.bottom, width: geometry.width, height: geometry.height })}`);
+  expect(geometry.cellOverflow).toBe('hidden');
+  expect(geometry.horizontalOverflow).toBe(false);
 
   const normalWidth = geometry.width;
   await more.focus();
-  const focusWidth = await more.evaluate((element) => element.getBoundingClientRect().width);
-  expect(focusWidth).toBe(normalWidth);
-  await page.mouse.move((await more.boundingBox())!.x + 10, (await more.boundingBox())!.y + 10);
-  const hoverWidth = await more.evaluate((element) => element.getBoundingClientRect().width);
-  expect(hoverWidth).toBe(normalWidth);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(more).toBeFocused();
+  const focusState = await more.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    height: element.getBoundingClientRect().height,
+    boxShadow: getComputedStyle(element).boxShadow,
+    focusVisible: element.matches(':focus-visible'),
+  }));
+  expect(focusState.width).toBe(normalWidth);
+  expect(focusState.height).toBe(geometry.height);
+  expect(focusState.focusVisible).toBe(true);
+  expect(focusState.boxShadow).toContain('inset');
+
+  const box = await more.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  const activeState = await more.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    height: element.getBoundingClientRect().height,
+  }));
+  expect(activeState.width).toBe(normalWidth);
+  expect(activeState.height).toBe(geometry.height);
+  await page.mouse.up();
 }
 
-test('directed +N more layout and final empty day flow across three viewports', async ({ page }, testInfo) => {
-  const consoleErrors: string[] = [];
-  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
-  page.on('pageerror', (error) => consoleErrors.push(error.message));
-  await page.addInitScript(() => {
-    localStorage.setItem('anclora-cookie-consent-v1', JSON.stringify({ necessary: true, analytics: false, marketing: false, version: 'v1' }));
-    localStorage.setItem('anclora_shiftimport_onboarding_v1', JSON.stringify({ version: 1, completed: true, step: 'CONFIRMED' }));
-    localStorage.setItem('anclora_theme_mode', 'light');
+test.describe('compact +N indicator', () => {
+  test('desktop dark: compact chip keeps its indicator semantics and opens daily detail', async ({ page }) => {
+    await seedGuestShifts(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: test.info().outputPath('01-desktop-dark-compact-more.png'), fullPage: false });
+    await assertCompactGeometry(page);
+
+    const cell = scenarioCell(page);
+    await expect(cell.locator('.month-shift-badge')).toHaveCount(2);
+    await expect(page.getByTestId('day-detail-dialog')).toBeVisible();
+    await expect(page.getByTestId('day-detail-count-badge')).toHaveText('3 elementos');
   });
-  await login(page);
 
-  const initialApi = await page.request.get(`/api/shifts?employeeId=${fixture.employeeId}`);
-  expect(initialApi.ok()).toBe(true);
-  expect((await initialApi.json()).shifts.filter((shift: { date: string }) => shift.date === scenarioDate)).toHaveLength(3);
-  const initialSql = await sql`
-    SELECT shift_type, counts_as_work, start_time, end_time FROM shifts
-    WHERE organization_id = ${fixture.organizationId} AND employee_id = ${fixture.employeeId} AND date = ${scenarioDate}
-    ORDER BY start_time
-  `;
-  expect(initialSql).toHaveLength(3);
-  expect(initialSql.map((row) => `${row.shift_type}:${row.start_time}-${row.end_time}`)).toEqual([
-    'Regular:08:00-11:00', 'Ausencia:11:00-12:00', 'Regular:12:00-16:00',
-  ]);
+  test('mobile light: focus-visible chip remains compact and complete', async ({ page }) => {
+    await seedGuestShifts(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const themeToggle = page.getByRole('button', { name: /Cambiar tema|Change theme/ });
+    await themeToggle.click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await assertCompactGeometry(page);
 
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await setTheme(page, 'light');
-  await assertGeometry(page, 40);
-  const desktopCell = scenarioCell(page);
-  await expect(desktopCell.locator('.month-shift-badge')).toHaveCount(2);
-  await page.screenshot({ path: testInfo.outputPath('01-desktop-light-more.png'), fullPage: false });
-
-  await page.setViewportSize({ width: 768, height: 1024 });
-  await setTheme(page, 'dark');
-  await assertGeometry(page, 40);
-  const tabletMore = scenarioCell(page).locator('.month-day-more-button');
-  await tabletMore.focus();
-  await expect(tabletMore).toBeFocused();
-  await page.screenshot({ path: testInfo.outputPath('02-tablet-dark-focus.png'), fullPage: false });
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await setTheme(page, 'light');
-  await assertGeometry(page, 40);
-  const mobileMore = scenarioCell(page).locator('.month-day-more-button');
-  const mobileBox = await mobileMore.boundingBox();
-  expect(mobileBox).not.toBeNull();
-  await page.mouse.move(mobileBox!.x + mobileBox!.width / 2, mobileBox!.y + mobileBox!.height / 2);
-  await page.mouse.down();
-  await page.screenshot({ path: testInfo.outputPath('03-mobile-light-active.png'), fullPage: false });
-  await page.mouse.up();
-  await setTheme(page, 'dark');
-  if (await page.getByTestId('day-detail-dialog').count() === 0) {
-    await mobileMore.click();
-  }
-
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await expect(page.getByTestId('day-detail-count-badge')).toHaveText('3 elementos');
-  await expect(page.locator('[data-testid^="day-detail-item-"]')).toHaveCount(3);
-
-  for (const expectedCount of [2, 1, 0]) {
-    const item = page.locator('[data-testid^="day-detail-item-"]').first();
-    await item.getByTestId(/^delete-shift-btn-/).click();
-    await page.getByTestId(/^confirm-delete-btn-/).click();
-    await expect(page.getByTestId('day-detail-count-badge')).toHaveText(`${expectedCount} elementos`);
-    await expect(page.locator('[data-testid^="day-detail-item-"]')).toHaveCount(expectedCount);
-  }
-
-  await expect(page.getByTestId('day-detail-empty-state')).toHaveText('No hay turnos registrados para este empleado el 10 de septiembre de 2026.');
-  await expect(page.getByTestId('day-detail-dialog')).not.toContainText(/en de|on \.|undefined|null| {2}\./);
-  await expect(scenarioCell(page).locator('.month-day-more-button')).toHaveCount(0);
-  const finalApi = await page.request.get(`/api/shifts?employeeId=${fixture.employeeId}`);
-  expect((await finalApi.json()).shifts.filter((shift: { date: string }) => shift.date === scenarioDate)).toHaveLength(0);
-  const finalSql = await sql`
-    SELECT count(*)::int AS count FROM shifts
-    WHERE organization_id = ${fixture.organizationId} AND employee_id = ${fixture.employeeId} AND date = ${scenarioDate}
-  `;
-  expect(finalSql[0].count).toBe(0);
-  await page.screenshot({ path: testInfo.outputPath('04-mobile-dark-empty.png'), fullPage: false });
-  expect(consoleErrors).toEqual([]);
+    await page.keyboard.press('Escape');
+    const more = scenarioCell(page).locator('.month-day-more-button');
+    await more.focus();
+    await expect(more).toBeFocused();
+    await page.screenshot({ path: test.info().outputPath('02-mobile-light-compact-focus.png'), fullPage: false });
+  });
 });

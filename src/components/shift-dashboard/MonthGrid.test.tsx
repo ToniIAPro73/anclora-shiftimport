@@ -128,7 +128,7 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
     expect(document.querySelector('.month-day-more-button')).not.toBeInTheDocument();
   });
 
-  it('renders exactly 2 visible items and +N más button when a day has > 2 shifts (never 3)', () => {
+  it('renders exactly 2 visible items and a compact +N chip when a day has > 2 shifts (never 3)', () => {
     const shifts: Shift[] = [
       { id: 's1', date: '2026-08-15', startTime: '08:00', endTime: '11:00', location: 'Regular', origin: 'MAN' },
       { id: 's2', date: '2026-08-15', startTime: '11:00', endTime: '13:00', location: 'Regular', origin: 'MAN' },
@@ -144,11 +144,11 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
 
     const moreBtn = screen.getByTestId('day-more-btn-2026-08-15');
     expect(moreBtn).toBeInTheDocument();
-    expect(moreBtn).toHaveTextContent('+2 más');
-    expect(moreBtn).toHaveAttribute('aria-label', 'Mostrar 2 turnos más del 2026-08-15');
+    expect(moreBtn).toHaveTextContent('+2');
+    expect(moreBtn).toHaveAttribute('aria-label', 'Mostrar 2 turnos más');
   });
 
-  it('renders +8 más when a day has 10 shifts, never rendering more than 2 badges', () => {
+  it('renders +8 when a day has 10 shifts, never rendering more than 2 badges', () => {
     const shifts: Shift[] = Array.from({ length: 10 }, (_, i) => ({
       id: `s-${i + 1}`,
       date: '2026-08-15',
@@ -164,7 +164,40 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
     expect(badges).toHaveLength(2);
 
     const moreBtn = screen.getByTestId('day-more-btn-2026-08-15');
-    expect(moreBtn).toHaveTextContent('+8 más');
+    expect(moreBtn).toHaveTextContent('+8');
+    expect(moreBtn).toHaveAttribute('aria-label', 'Mostrar 8 turnos más');
+  });
+
+  it('uses compact visible content and singular accessible copy for one extra shift', () => {
+    const shifts: Shift[] = [
+      { id: 's1', date: '2026-08-15', startTime: '08:00', endTime: '11:00', location: 'Regular', origin: 'MAN' },
+      { id: 's2', date: '2026-08-15', startTime: '11:00', endTime: '13:00', location: 'Regular', origin: 'MAN' },
+      { id: 's3', date: '2026-08-15', startTime: '14:00', endTime: '16:00', location: 'Regular', origin: 'MAN' },
+    ];
+
+    renderGrid({ shifts });
+
+    const moreBtn = screen.getByTestId('day-more-btn-2026-08-15');
+    expect(moreBtn).toHaveTextContent('+1');
+    expect(moreBtn).not.toHaveTextContent('más');
+    expect(moreBtn).toHaveAttribute('aria-label', 'Mostrar 1 turno más');
+  });
+
+  it('localizes the compact chip and complete accessible copy in English', () => {
+    const shifts: Shift[] = Array.from({ length: 3 }, (_, i) => ({
+      id: `s-${i + 1}`,
+      date: '2026-08-15',
+      startTime: `${String(8 + i).padStart(2, '0')}:00`,
+      endTime: `${String(9 + i).padStart(2, '0')}:00`,
+      location: 'Regular',
+      origin: 'MAN',
+    }));
+
+    renderGrid({ locale: 'en', shifts });
+
+    const moreBtn = screen.getByTestId('day-more-btn-2026-08-15');
+    expect(moreBtn).toHaveTextContent('+1');
+    expect(moreBtn).toHaveAttribute('aria-label', 'Show 1 more shift');
   });
 
   it('clicking visible shift opens editor without creating a new shift', () => {
@@ -199,7 +232,7 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
     const { rerender } = renderGrid({ shifts, onEditShift, onDeleteShift, onCreateShift });
 
     const moreBtn = screen.getByTestId('day-more-btn-2026-08-15');
-    expect(moreBtn).toHaveTextContent('+2 más');
+    expect(moreBtn).toHaveTextContent('+2');
 
     // Click +2 más
     fireEvent.click(moreBtn);

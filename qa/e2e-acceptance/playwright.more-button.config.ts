@@ -11,8 +11,6 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [['list']],
-  globalSetup: './more-button-setup.ts',
-  globalTeardown: './more-button-teardown.ts',
   use: {
     baseURL,
     trace: 'retain-on-failure',

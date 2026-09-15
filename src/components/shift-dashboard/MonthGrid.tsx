@@ -233,7 +233,10 @@ export const MonthGrid = ({
                         dayDetailTriggerRef.current = event.currentTarget;
                         setSelectedDayDetailDate(iso);
                       }}
-                      aria-label={t('calendar.showMoreShiftsAria', { count: hiddenCount, date: iso })}
+                      aria-label={t(
+                        hiddenCount === 1 ? 'calendar.showMoreShiftsAriaOne' : 'calendar.showMoreShiftsAriaMany',
+                        { count: hiddenCount },
+                      )}
                       data-testid={`day-more-btn-${iso}`}
                     >
                       {t('calendar.showMoreShifts', { count: hiddenCount })}
