@@ -162,5 +162,5 @@ La conciliación se realizó mediante una conexión directa no pooled y dentro d
 1. **PROHIBICIÓN DE DDL DIRECTO EN MAIN**: Ningún agente o desarrollador debe ejecutar migraciones a mano ni sentencias DDL directamente sobre Neon `main`.
 2. **MODO STATUS PREVIO**: Antes de cualquier tarea de base de datos, es obligatorio ejecutar `npm run db:migrate:status`.
 3. **MIGRACIONES NORMALIZADAS**: Los nuevos cambios de esquema deben usar el siguiente número secuencial disponible y aplicarse a través de `db/migrate.mjs` con la acreditación de rama correspondiente.
-4. **RAMAS EFÍMERAS**: Las suites de integración y pruebas deben ejecutarse exclusivamente sobre ramas efímeras acreditadas derivadas de `preview/development`.
+4. **DESTINO ÚNICO**: Todas las ramas Git utilizan exclusivamente Neon `main` (`br-solitary-thunder-b1hm9low`). Las suites de integración y pruebas se aíslan mediante organizaciones, usuarios y external IDs sintéticos con `runId` único, y deben cerrar con teardown y verificación de residuos 0.
 5. **PROTECCIÓN NO ELUDIBLE DE MAIN**: El runner de migraciones rechaza cualquier intento de migrar `main` salvo que se especifiquen simultáneamente: `--allow-main-migration`, el ID exacto `--target-branch=br-solitary-thunder-b1hm9low` (no el alias "main") y `--confirm-main-branch-id=br-solitary-thunder-b1hm9low`.

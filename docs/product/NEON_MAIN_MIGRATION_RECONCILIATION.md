@@ -186,7 +186,7 @@ Tras la conciliación, verificar que:
 1. **Calculo de Checksums SHA-256**:
    Añadir una columna opcional `checksum TEXT` a `_migrations` en una fase futura para asegurar que los archivos aplicados coincidan bit a bit con el repositorio Git.
 2. **Aislamiento Estricto de Entornos**:
-   - Para suites de pruebas automáticas e integración continua: **Exclusivamente ramas efímeras hijas de `preview/development`** (`br-falling-heart-b1d6u2cx`), nunca ramas persistentes.
-   - El runner de integración automatizado implementa acreditación estricta y preflights dobles, garantizando que jamás se conecte ni ejecute escrituras sobre ramas no efímeras.
+   - Para suites de pruebas automáticas e integración continua: **Exclusivamente Neon `main`** (`br-solitary-thunder-b1hm9low`), con organizaciones, usuarios y external IDs sintéticos aislados por `runId`.
+   - El runner de integración automatizado debe ejecutar el preflight de `main`, preservar las invariantes de Groundforce y verificar teardown con cero residuos; no se crean ramas Neon adicionales.
 3. **Regla de Operación Manual**:
    No ejecutar `db/migrate.mjs` sobre `main` hasta haber ejecutado formalmente la conciliación descrita en este documento.

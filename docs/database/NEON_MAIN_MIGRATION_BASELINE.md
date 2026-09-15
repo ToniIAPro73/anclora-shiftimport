@@ -182,7 +182,7 @@ El runner `db/migrate.mjs` carga este archivo mediante `loadBaselineManifest()` 
 
 1. **PROHIBICIÓN DE EJECUCIÓN MANUAL**: Toda evolución del esquema debe realizarse mediante migraciones versionadas y aplicarse mediante `npm run db:migrate`.
 2. **VERIFICACIÓN READ-ONLY PREVIA**: Todo agente o desarrollador debe ejecutar previamente `npm run db:migrate:status`.
-3. **RAMAS EFÍMERAS ACREDITADAS**: Queda prohibido usar ramas persistentes para pruebas de integración. Las suites deben utilizar ramas efímeras creadas a partir de `preview/development`.
+3. **DESTINO ÚNICO**: Todas las ramas Git utilizan exclusivamente Neon `main` (`br-solitary-thunder-b1hm9low`). Las pruebas se aíslan con organizaciones, usuarios y external IDs sintéticos con `runId` único; el teardown es obligatorio y debe verificar cero residuos.
 4. **PROTECCIÓN NO ELUDIBLE DE MAIN**: Toda migración que apunte a Neon `main` exige de forma simultánea: `--allow-main-migration`, el ID exacto de rama `--target-branch=br-solitary-thunder-b1hm9low` (no el alias "main") y confirmación explícita `--confirm-main-branch-id=br-solitary-thunder-b1hm9low`.
 
 ## 7. Cierre post-0039

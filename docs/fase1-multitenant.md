@@ -44,7 +44,7 @@ Integración Vercel ↔ Neon crea (sin valores aquí):
 
 Desarrollo local y validación: `vercel link` + `vercel env pull .env.local`. ShiftImport usa exclusivamente la rama Neon `main` de producción para todas las ramas Git; los `.env*` están en `.gitignore` y nunca se commitean ni imprimen valores.
 
-En Vercel (Production/Preview/Development) las variables ya están inyectadas por la integración. Preview usa database branching de Neon.
+En Vercel (Production/Preview/Development) las variables ya están inyectadas por la integración. Todas las ramas Git usan exclusivamente la rama Neon `main`; las pruebas se aíslan con datos sintéticos y teardown estricto.
 
 ## Autenticación y roles
 
