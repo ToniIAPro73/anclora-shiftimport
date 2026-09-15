@@ -264,4 +264,46 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
 
     expect(screen.queryByTestId('day-more-btn-2026-08-15')).not.toBeInTheDocument();
   });
+
+  it('keeps the selected date and renders the daily empty state after the last shift is deleted', async () => {
+    const onDeleteShift = vi.fn();
+    const shifts: Shift[] = [
+      { id: 's1', date: '2026-08-15', startTime: '08:00', endTime: '11:00', location: 'Regular', origin: 'MAN' },
+      { id: 's2', date: '2026-08-15', startTime: '11:00', endTime: '13:00', location: 'Ausencia', origin: 'MAN' },
+      { id: 's3', date: '2026-08-15', startTime: '14:00', endTime: '16:00', location: 'Regular', origin: 'MAN' },
+    ];
+    const { rerender } = renderGrid({ shifts, onDeleteShift });
+
+    fireEvent.click(screen.getByTestId('day-more-btn-2026-08-15'));
+    await waitFor(() => expect(screen.getByTestId('day-detail-dialog')).toBeInTheDocument());
+
+    const renderCurrent = (currentShifts: Shift[]) => rerender(
+      <I18nProvider>
+        <MonthGrid
+          year={2026}
+          month={7}
+          shifts={currentShifts}
+          onEditShift={vi.fn()}
+          onDeleteShift={onDeleteShift}
+          onCreateShift={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    let currentShifts = shifts;
+    for (const shift of [...shifts].reverse()) {
+      fireEvent.click(screen.getByTestId(`delete-shift-btn-${shift.id}`));
+      fireEvent.click(screen.getByTestId(`confirm-delete-btn-${shift.id}`));
+      await waitFor(() => expect(onDeleteShift).toHaveBeenCalledWith(shift.id));
+      currentShifts = currentShifts.filter((candidate) => candidate.id !== shift.id);
+      renderCurrent(currentShifts);
+    }
+
+    expect(onDeleteShift).toHaveBeenCalledTimes(3);
+    expect(screen.getByTestId('day-detail-count-badge')).toHaveTextContent('0');
+    expect(screen.getByTestId('day-detail-empty-state')).toHaveTextContent(
+      'No hay turnos registrados para este empleado el 15 de agosto de 2026.',
+    );
+    expect(screen.queryByTestId('day-more-btn-2026-08-15')).not.toBeInTheDocument();
+  });
 });

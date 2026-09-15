@@ -35,6 +35,17 @@ describe('i18n', () => {
     expect(translate('en', 'importModal.confirmImport', { ready: 2, total: 3 })).toContain('2/3');
   });
 
+  it('uses one daily date interpolation for the calendar empty state', () => {
+    const date = '15 de agosto de 2026';
+    expect(translate('es', 'calendar.noShiftsForEmployee', { date })).toBe(
+      'No hay turnos registrados para este empleado el 15 de agosto de 2026.',
+    );
+    expect(translate('en', 'calendar.noShiftsForEmployee', { date: '15 August 2026' })).toBe(
+      'There are no shifts recorded for this employee on 15 August 2026.',
+    );
+    expect(translate('es', 'calendar.noShiftsForEmployee', { date })).not.toMatch(/en de|undefined|null| {2}\./);
+  });
+
   it('falls back to Spanish when a key is missing in the requested locale (unknown key returns the key itself)', () => {
     expect(translate('en', 'not.a.real.key')).toBe('not.a.real.key');
   });
