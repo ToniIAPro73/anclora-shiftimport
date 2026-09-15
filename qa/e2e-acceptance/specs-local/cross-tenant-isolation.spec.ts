@@ -41,7 +41,7 @@ for (const source of sourceRoles) {
     const headers = { 'x-organization-id': fixture.orgA };
 
     const employeeMatch = await page.request.get('/api/employees', {
-      headers, params: { match: '1', externalEmployeeId: 'B001' },
+      headers, params: { match: '1', externalEmployeeId: fixture.externalIds.empB1 },
     });
     expect(employeeMatch.status()).toBe(200);
     expect((await employeeMatch.json()).employees).toEqual([]);
@@ -76,7 +76,7 @@ for (const source of sourceRoles) {
       expect(members.status()).toBe(200);
       const memberPayload = await members.json();
       expect(memberPayload.members.every((member: { email: string }) => (
-        !['owner-b@e2e.test', 'planner-b@e2e.test', 'employee-b@e2e.test'].includes(member.email)
+        ![fixture.emails.ownerB, fixture.emails.plannerB, fixture.emails.employeeB].includes(member.email)
       ))).toBe(true);
     } else {
       expect(members.status()).toBe(403);

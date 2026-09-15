@@ -1,7 +1,8 @@
-// End-to-end smoke test of the Phase 1 API against the real dev database.
+// End-to-end smoke test of the Phase 1 API against the authorized Neon main
+// production branch. All records use a unique suffix and are removed.
 // Creates two organizations (two users), exercises isolation invariants,
 // then removes every row it created. Usage:
-//   node --env-file=.env.development.local scripts/smoke-api.mjs
+//   node --env-file=.env.local scripts/smoke-api.mjs
 import { createHash } from 'node:crypto';
 import { neon } from '@neondatabase/serverless';
 import registerHandler from '../api/auth/register.js';
@@ -38,19 +39,19 @@ async function callCapturingToken(handler, request) {
   }
 }
 
-const DEVELOPMENT_HOST_PREFIX = 'ep-winter-bird-';
+const MAIN_HOST_PREFIX = 'ep-lingering-dew-';
 
 function databaseUrl() {
   const value = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!value) throw new Error('DATABASE_URL/POSTGRES_URL is not configured');
   const url = new URL(value);
-  if (!url.hostname.startsWith(DEVELOPMENT_HOST_PREFIX)) {
-    throw new Error('Refusing to run: database host is not the documented Neon development host');
+  if (!url.hostname.startsWith(MAIN_HOST_PREFIX)) {
+    throw new Error('Refusing to run: database host is not the authorized Neon main endpoint');
   }
   return value;
 }
 
-console.log('Database target: Neon development (host prefix verified)');
+console.log('Database target: Neon main production branch (host prefix verified)');
 
 const sql = neon(databaseUrl());
 const suffix = Date.now().toString(36);

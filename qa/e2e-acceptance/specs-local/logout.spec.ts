@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Deterministic logout E2E (authenticated, real Neon dev via `vercel dev`).
+ * Deterministic logout E2E (authenticated, real Neon main via `vercel dev`).
  *
  * Contract: logout must always end on the login screen with NO authenticated
  * chrome left (no team bar, no employee selector, no members button, no

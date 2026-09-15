@@ -5,7 +5,7 @@ import { neon } from '@neondatabase/serverless';
 
 /**
  * §11 full E2E: org -> import employees CSV -> import real PDF -> persist ->
- * query -> reconcile, against the real Neon dev branch via `vercel dev` and
+ * query -> reconcile, against the real Neon main branch via `vercel dev` and
  * the real September 2026 PDF fixture (gitignored, local-only — this spec
  * only runs on a machine that has src/ingestion/fixtures/real/ populated).
  *
@@ -68,10 +68,10 @@ test.describe('§11 import integrity E2E (real PDF)', () => {
     // local-shift-migration test in auth-flow.spec.ts; this test needs more
     // than one employee, so bump it to team here rather than touching the
     // shared fixture (scoped to this spec, no other local spec reads plan).
-    const envFile = readFileSync(join(here, '..', '..', '..', '.env.development.local'), 'utf8');
+    const envFile = readFileSync(join(here, '..', '..', '..', '.env.local'), 'utf8');
     const dbUrlMatch = envFile.match(/^DATABASE_URL=(.+)$/m);
     if (!dbUrlMatch) {
-      throw new Error('DATABASE_URL not found in .env.development.local');
+      throw new Error('DATABASE_URL not found in .env.local');
     }
     const sql = neon(dbUrlMatch[1].trim().replace(/^"|"$/g, ''));
     await sql`UPDATE organizations SET plan = 'team' WHERE id = ${fixture.orgFresh}`;

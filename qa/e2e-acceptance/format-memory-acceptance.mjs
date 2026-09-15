@@ -3,7 +3,7 @@
  * Format Memory v1 — real dev-DB acceptance run (FM-09).
  *
  * Exercises the actual data-access functions in api/_lib/format-profiles.js
- * against the real Neon dev branch (no fakes, no mocks) — unmocked evidence
+ * against the real Neon main branch (no fakes, no mocks) — unmocked evidence
  * for scenarios A-D, F-I from
  * sdd/features/format-memory-v1/04_ACCEPTANCE_TEST_PLAN.md. Scenario E
  * (guest local migration) and the browser-driven parts of A/B/C are already
@@ -13,7 +13,7 @@
  * see 06_FINAL_REPORT.md for the honest ENVIRONMENT_BLOCKED note on full
  * browser-driven Playwright coverage of the multi-step assistant UI.
  *
- * Run: node --env-file=.env.development.local qa/e2e-acceptance/format-memory-acceptance.mjs
+ * Run: node --env-file=.env.local qa/e2e-acceptance/format-memory-acceptance.mjs
  * Cleans up all rows it creates, even on failure.
  */
 import { neon } from '@neondatabase/serverless';

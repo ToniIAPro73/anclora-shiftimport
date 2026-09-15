@@ -12,7 +12,7 @@ const fixture = JSON.parse(readFileSync(join(__dirname, '..', 'artifacts', 'loca
 };
 
 function loadDatabaseUrl(): string {
-  const envFile = readFileSync(join(__dirname, '..', '..', '..', '.env.development.local'), 'utf8');
+  const envFile = readFileSync(join(__dirname, '..', '..', '..', '.env.local'), 'utf8');
   for (const line of envFile.split('\n')) {
     const match = line.match(/^DATABASE_URL=(.+)$/);
     if (match) {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 /**
  * Fase 1.1 local E2E: critical authenticated flows against the real
- * Neon dev branch via `vercel dev`. Fixtures from local-setup.ts.
+ * Neon main via `vercel dev`. Fixtures from local-setup.ts.
  */
 
 const here = __dirname;
@@ -95,14 +95,15 @@ test.describe('Caso 2 — Admin', () => {
     // Membership management: add + remove a user.
     await page.getByRole('button', { name: 'Usuarios de la organización' }).click();
     const membersModal = page.locator('.modal-overlay');
-    await expect(membersModal.getByText('admin@e2e.test')).toBeVisible();
-    await membersModal.getByPlaceholder('Email del usuario').fill('nuevo-miembro@e2e.test');
+    await expect(membersModal.getByText(fixture.emails.admin)).toBeVisible();
+    const newMemberEmail = `nuevo-miembro-${fixture.runId}@e2e.test`;
+    await membersModal.getByPlaceholder('Email del usuario').fill(newMemberEmail);
     await membersModal.getByPlaceholder(/Contraseña inicial/).fill('Temporal-1234');
     await membersModal.getByRole('button', { name: 'Añadir' }).click();
-    await expect(membersModal.getByText('nuevo-miembro@e2e.test')).toBeVisible();
-    const row = membersModal.locator('div', { hasText: 'nuevo-miembro@e2e.test' }).last();
+    await expect(membersModal.getByText(newMemberEmail)).toBeVisible();
+    const row = membersModal.locator('div', { hasText: newMemberEmail }).last();
     await row.getByRole('button', { name: 'Quitar' }).click();
-    await expect(membersModal.getByText('nuevo-miembro@e2e.test')).toHaveCount(0);
+    await expect(membersModal.getByText(newMemberEmail)).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(membersModal).toHaveCount(0);
 

@@ -81,7 +81,7 @@ test('P0 compact tenant and role matrix', async ({ page }) => {
   for (const [emailKey, role] of roles) {
     await login(page, fixture.emails[emailKey]);
     const employeeMatch = await page.request.get('/api/employees', {
-      headers, params: { match: '1', externalEmployeeId: 'B001' },
+      headers, params: { match: '1', externalEmployeeId: fixture.externalIds.empB1 },
     });
     expect(employeeMatch.status(), role).toBe(200);
     expect((await employeeMatch.json()).employees, role).toEqual([]);
@@ -99,7 +99,7 @@ test('P0 compact tenant and role matrix', async ({ page }) => {
     const members = await page.request.get('/api/memberships', { headers });
     if (role === 'OWNER' || role === 'ADMIN') {
       expect(members.status(), role).toBe(200);
-      expect(JSON.stringify(await members.json()), role).not.toContain('owner-b@e2e.test');
+      expect(JSON.stringify(await members.json()), role).not.toContain(fixture.emails.ownerB);
     } else {
       expect(members.status(), role).toBe(403);
     }

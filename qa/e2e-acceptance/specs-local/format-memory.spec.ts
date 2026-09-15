@@ -22,9 +22,9 @@ const PASSWORD = 'Fm09-e2e-Pass-1234';
 const GS03_PDF = join(here, '..', '..', '..', 'src/ingestion/fixtures/acceptance-corpus/fixtures/GS-03_hospitality/source.pdf');
 
 function loadDatabaseUrl(): string {
-  const envFile = readFileSync(join(here, '..', '..', '..', '.env.development.local'), 'utf8');
+  const envFile = readFileSync(join(here, '..', '..', '..', '.env.local'), 'utf8');
   const match = envFile.match(/^DATABASE_URL=(.+)$/m);
-  if (!match) throw new Error('DATABASE_URL not found in .env.development.local');
+  if (!match) throw new Error('DATABASE_URL not found in .env.local');
   return match[1].trim().replace(/^"|"$/g, '');
 }
 

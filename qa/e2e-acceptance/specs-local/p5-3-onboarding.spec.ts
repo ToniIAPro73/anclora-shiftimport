@@ -6,13 +6,13 @@ import { expect, test } from '@playwright/test';
 const root = join(__dirname, '..', '..', '..');
 const password = 'P5.3-flow-pass-1234';
 
-function developmentDatabaseUrl(): string {
-  const envFile = readFileSync(join(root, '.env.development.local'), 'utf8');
+function mainDatabaseUrl(): string {
+  const envFile = readFileSync(join(root, '.env.local'), 'utf8');
   const line = envFile.split('\n').find((entry) => entry.startsWith('DATABASE_URL='));
   if (!line) throw new Error('DATABASE_URL not found');
   const value = line.slice('DATABASE_URL='.length).trim().replace(/^"|"$/g, '');
-  if (!new URL(value).hostname.startsWith('ep-winter-bird-')) {
-    throw new Error('Refusing P5.3 flow: database is not the documented Neon development host');
+  if (!new URL(value).hostname.startsWith('ep-lingering-dew-')) {
+    throw new Error('Refusing P5.3 flow: database is not the documented Neon main host');
   }
   return value;
 }
@@ -22,7 +22,7 @@ test('P5.3 compact browser smoke: Team owner-only onboarding is valid', async ({
   const suffix = `${Date.now()}`;
   const email = `p5-3-owner-${suffix}@e2e.test`;
   const organizationName = `P5.3 Owner Only ${suffix}`;
-  const sql = neon(developmentDatabaseUrl());
+  const sql = neon(mainDatabaseUrl());
   let userId: string | null = null;
   let organizationId: string | null = null;
   const dialogs: string[] = [];

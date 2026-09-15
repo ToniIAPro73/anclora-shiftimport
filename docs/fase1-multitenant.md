@@ -30,7 +30,7 @@ Reglas estructurales:
 ## Migraciones
 
 - Versionadas en `db/migrations/*.sql`, orden por nombre.
-- Runner: `node --env-file=.env.development.local db/migrate.mjs` (local) o con `DATABASE_URL` en el entorno (CI/Vercel).
+- Runner: `node --env-file=.env.local db/migrate.mjs` (local) o con `DATABASE_URL` en el entorno (CI/Vercel), siempre contra Neon `main`.
 - Tabla `_migrations` registra las aplicadas. Base vacía → esquema completo solo con migraciones.
 - Nunca crear esquema desde Neon SQL Editor.
 
@@ -42,7 +42,7 @@ Integración Vercel ↔ Neon crea (sin valores aquí):
 - `DATABASE_URL_UNPOOLED`, `POSTGRES_URL*`, `PG*` (equivalentes)
 - `NEON_PROJECT_ID`
 
-Desarrollo local: `vercel link` + `vercel env pull .env.development.local`. Los `.env*` están en `.gitignore`; nunca commitear ni imprimir valores.
+Desarrollo local y validación: `vercel link` + `vercel env pull .env.local`. ShiftImport usa exclusivamente la rama Neon `main` de producción para todas las ramas Git; los `.env*` están en `.gitignore` y nunca se commitean ni imprimen valores.
 
 En Vercel (Production/Preview/Development) las variables ya están inyectadas por la integración. Preview usa database branching de Neon.
 
@@ -129,7 +129,7 @@ Implementado en `api/_lib/data.js`, nunca en frontend:
 
 ## Invariantes de seguridad (tests)
 
-`api/_lib/data.test.js` + `api/_lib/auth.test.js` + `api/_lib/passwords.test.js` (tests unitarios con sql fake) + `scripts/smoke-api.mjs` (24 checks contra Neon dev) + E2E navegador `qa/e2e-acceptance/playwright.local.config.ts` (5 casos contra `vercel dev` + Neon dev con seed/teardown automático):
+`api/_lib/data.test.js` + `api/_lib/auth.test.js` + `api/_lib/passwords.test.js` (tests unitarios con sql fake) + `scripts/smoke-api.mjs` (24 checks contra Neon main con datos sintéticos) + E2E navegador `qa/e2e-acceptance/playwright.local.config.ts` (casos contra `vercel dev` + Neon main, aislados por `runId` y con teardown automático):
 
 - Aislamiento tenant: lectura/escritura cross-org → 403.
 - Aislamiento empleado: EMPLOYEE no lee/escribe turnos ajenos.

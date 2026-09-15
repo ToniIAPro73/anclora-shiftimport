@@ -8,19 +8,19 @@ const here = __dirname;
 const root = join(here, '..', '..', '..');
 const FLOW_PASSWORD = 'P0-flow-pass-1234';
 
-function developmentDatabaseUrl(): string {
-  const envFile = readFileSync(join(root, '.env.development.local'), 'utf8');
+function mainDatabaseUrl(): string {
+  const envFile = readFileSync(join(root, '.env.local'), 'utf8');
   const line = envFile.split('\n').find((entry) => entry.startsWith('DATABASE_URL='));
   if (!line) throw new Error('DATABASE_URL not found');
   const value = line.slice('DATABASE_URL='.length).trim().replace(/^"|"$/g, '');
   const hostname = new URL(value).hostname;
-  if (!hostname.startsWith('ep-winter-bird-')) {
-    throw new Error('Refusing P0 flow: database is not the documented Neon development host');
+  if (!hostname.startsWith('ep-lingering-dew-')) {
+    throw new Error('Refusing P0 flow: database is not the documented Neon main host');
   }
   return value;
 }
 
-const sql = neon(developmentDatabaseUrl());
+  const sql = neon(mainDatabaseUrl());
 
 function isoDate(value: Date): string {
   return value.toISOString().slice(0, 10);

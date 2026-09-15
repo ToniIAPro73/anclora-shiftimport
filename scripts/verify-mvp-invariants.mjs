@@ -1,26 +1,26 @@
-/* Read-only MVP invariant check for Neon development.
+/* Read-only MVP invariant check for the authorized Neon main production branch.
  *
  * Usage:
- *   node --env-file=.env.development.local scripts/verify-mvp-invariants.mjs
+ *   node --env-file=.env.local scripts/verify-mvp-invariants.mjs
  *
  * The host guard is intentional: this script must never become a convenient
- * way to run the release check against production by mistake.
+ * way to run the release check against an unauthorized database.
  */
 import { neon } from '@neondatabase/serverless';
 
-const DEVELOPMENT_HOST_PREFIX = 'ep-winter-bird-';
+const MAIN_HOST_PREFIX = 'ep-lingering-dew-';
 
 function databaseUrl() {
   const value = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!value) throw new Error('DATABASE_URL/POSTGRES_URL is not configured');
   const url = new URL(value);
-  if (!url.hostname.startsWith(DEVELOPMENT_HOST_PREFIX)) {
-    throw new Error('Refusing to run: database host is not the documented Neon development host');
+  if (!url.hostname.startsWith(MAIN_HOST_PREFIX)) {
+    throw new Error('Refusing to run: database host is not the authorized Neon main endpoint');
   }
   return value;
 }
 
-console.log('Database target: Neon development (host prefix verified)');
+console.log('Database target: Neon main production branch (host prefix verified)');
 
 function count(rows) {
   return Number(rows[0]?.count ?? 0);

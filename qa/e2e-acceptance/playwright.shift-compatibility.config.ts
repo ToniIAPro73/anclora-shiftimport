@@ -1,17 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/**
- * Local E2E battery (Fase 1.1): runs against `vercel dev` with the real
- * Neon main production branch. Fixtures are seeded/removed by global setup /
- * teardown (qa/e2e-acceptance/local-*.ts).
- *
- * Run: npx playwright test --config qa/e2e-acceptance/playwright.local.config.ts
- * Requires: vercel link + .env.local (DATABASE_URL for Neon main production).
- */
 export default defineConfig({
-  testDir: './specs-local',
-  outputDir: './test-results-local',
-  timeout: 90_000,
+  testDir: './specs-compatibility',
+  outputDir: './test-results-compatibility',
+  timeout: 120_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
   workers: 1,
@@ -32,7 +24,5 @@ export default defineConfig({
     timeout: 120_000,
     cwd: '../..',
   },
-  projects: [
-    { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
-  ],
+  projects: [{ name: 'chromium-desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }],
 });

@@ -18,10 +18,11 @@ npm run test:future               # idempotencia/futuro/fail-closed
 La comprobación móvil no repite la mutación completa de scheduling: el flujo completo de negocio
 se ejecuta una vez y el caso móvil sólo cubre los contratos diferenciales de viewport, idioma,
 navegación y cambio de vista. Los tests que necesitan datos comparten el setup/teardown global del
-runner seleccionado, pero cada runner sigue usando fixtures sintéticas aisladas en Neon
-development.
+runner seleccionado. Todos los runners usan exclusivamente Neon `main` de producción y aíslan sus
+fixtures con un `runId` único; el teardown elimina y verifica todos los residuos sintéticos.
 
-No usar estos comandos contra producción. La batería histórica sigue disponible con:
+La batería se ejecuta contra la única rama Neon autorizada (`main`) mediante organizaciones
+sintéticas. La batería histórica sigue disponible con:
 
 ```bash
 npx playwright test --config playwright.local.config.ts
