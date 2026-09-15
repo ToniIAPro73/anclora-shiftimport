@@ -75,6 +75,16 @@ async function createScenario(page: Page, date: string) {
   return payload.saved as Array<{ id: string }>;
 }
 
+async function setThemeViaControl(page: Page, target: 'light' | 'dark') {
+  const toggle = page.getByRole('button', { name: /Cambiar tema/ });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (await page.locator('html').getAttribute('data-theme') === target) return;
+    await toggle.click();
+    await page.waitForTimeout(100);
+  }
+  await expect(page.locator('html')).toHaveAttribute('data-theme', target);
+}
+
 test.describe.serial('shift compatibility against Neon main', () => {
   test('creates three segments through API, verifies SQL and calendar detail, and rejects real overlap', async ({ page }) => {
     test.setTimeout(120_000);
@@ -178,12 +188,7 @@ test.describe.serial('shift compatibility against Neon main', () => {
       await page.setViewportSize({ width, height });
       for (const theme of ['light', 'dark'] as const) {
         if (theme !== currentTheme) {
-          // Pin the persisted mode without reloading so the visual assertions are deterministic.
-          // The control's three-state cycle is covered by the theme unit tests.
-          await page.evaluate((nextTheme) => {
-            window.localStorage.setItem('anclora_theme_mode', nextTheme);
-            document.documentElement.dataset.theme = nextTheme;
-          }, theme);
+          await setThemeViaControl(page, theme);
           currentTheme = theme;
         }
         await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
