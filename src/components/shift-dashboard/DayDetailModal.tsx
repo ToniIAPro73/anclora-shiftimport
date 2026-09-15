@@ -51,7 +51,6 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
     try {
       const d = new Date(date + 'T12:00:00');
       const str = d.toLocaleDateString(locale === 'en' ? 'en-GB' : 'es-ES', {
-        weekday: 'long',
         day: 'numeric',
         month: 'long',
         year: 'numeric',
@@ -236,8 +235,8 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
         )}
 
         {shifts.length === 0 && (
-          <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>
-            {t('calendar.noShiftsForEmployee', { month: '', year: '' })}
+          <p className="day-detail-empty-state" data-testid="day-detail-empty-state">
+            {t('calendar.noShiftsForEmployee', { date: formattedDate })}
           </p>
         )}
       </div>

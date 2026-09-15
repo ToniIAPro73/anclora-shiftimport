@@ -164,8 +164,12 @@
 
 /* More button on MonthGrid cell */
 .month-day-more-button {
-  width: 100%;
-  padding: 2px 6px;
+  box-sizing: border-box;
+  width: calc(100% - 16px);
+  min-height: 40px;
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 8px 6px;
   border-radius: 4px;
   font-size: 0.72rem;
   font-weight: 700;
@@ -174,9 +178,10 @@
   color: var(--shift-more-foreground, var(--color-gold));
   cursor: pointer;
   text-align: center;
-  transition: all 0.15s ease;
-  margin-top: 2px;
-  line-height: 1.4;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  margin: 2px 8px 8px;
+  line-height: 1.2;
+  transform: none;
 }
 
 :root[data-theme='light'] .month-day-more-button {
@@ -188,9 +193,29 @@
 .month-day-more-button:hover {
   background: var(--gold-tint-bg, rgba(212, 175, 55, 0.15));
   border-color: var(--color-gold);
+  transform: none;
 }
 
 :root[data-theme='light'] .month-day-more-button:hover {
   background: rgba(49, 82, 165, 0.12);
   border-color: var(--color-accent);
+}
+
+.month-day-more-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+  transform: none;
+}
+
+.month-day-more-button:active {
+  background: var(--gold-tint-bg, rgba(212, 175, 55, 0.2));
+  border-color: var(--color-gold);
+  transform: none;
+}
+
+.day-detail-empty-state {
+  margin: 0;
+  padding: 24px 0;
+  color: var(--text-muted);
+  text-align: center;
 }
