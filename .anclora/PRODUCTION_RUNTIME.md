@@ -1,0 +1,278 @@
+# Anclora ShiftImport — Production Runtime Manifest
+
+PRODUCTION_RUNTIME_MANIFEST_VERSION=1.0
+STATUS=PRODUCTION_RUNTIME_CONFIRMED
+LOCAL_RUNTIME_MODEL=PRODUCTION_BACKED
+DO_NOT_CREATE_DEVELOPMENT_DATABASE=true
+
+## 1. Application Identity
+
+APPLICATION_NAME=Anclora ShiftImport
+REPOSITORY=anclora-shiftimport
+APPLICATION_TYPE=fullstack
+FRAMEWORK=Vite + React 18 + Tailwind CSS + Vercel Functions (/api/*) + TypeScript
+
+## 2. Runtime Topology
+
+FRONTEND_PROVIDER=Vercel
+BACKEND_PROVIDER=Vercel Serverless Functions (/api/*)
+PRODUCTION_DOMAIN=shiftimport.anclora.com
+PRODUCTION_DEPLOYMENT_PROVIDER=Vercel
+
+```text
+Browser
+   ↓
+Vercel Frontend (Vite Single Page Application)
+   ↓
+Vercel Serverless Functions (/api/*)
+   ├── Neon Production Database (neondb)
+   └── Resend API (Transactional Email)
+```
+
+## 3. Production Database Contract
+
+DATABASE_PROVIDER=Neon Serverless PostgreSQL
+DATABASE_PROJECT=holy-cake-85660318
+DATABASE_PROJECT_ID=holy-cake-85660318
+DATABASE_BRANCH=main
+DATABASE_NAME=neondb
+DATABASE_REGION=eu-central-1 (AWS c-5.eu-central-1.aws.neon.tech)
+DATABASE_ENDPOINT=ep-lingering-dew-b1atfd0w-pooler.c-5.eu-central-1.aws.neon.tech
+DATABASE_ENDPOINT_UNPOOLED=ep-lingering-dew-b1atfd0w.c-5.eu-central-1.aws.neon.tech
+DATABASE_RUNTIME_SCOPE=production
+LOCAL_DATABASE_SCOPE=production
+
+Local development intentionally connects to the Production database.
+
+This is the Anclora operating model.
+
+Do not create or switch to a Development, Preview, Staging, ephemeral,
+local or alternate database unless Toni explicitly requests it.
+
+## 4. Database Migration Contract
+
+DATABASE_SCOPE=production
+LOCAL_DATABASE_SCOPE=production
+
+MIGRATION_SYSTEM=Custom forward-only SQL runner (db/migrate.mjs tracking _migrations)
+MIGRATION_DIRECTORY=./db/migrations
+MIGRATION_RUNNER=npm run db:migrate (node --env-file=.env.local db/migrate.mjs)
+MIGRATION_STATUS_CHECK=npm run db:migrate:status (node --env-file=.env.local db/migrate.mjs --status)
+
+SCHEMA_CHANGES_ALLOWED=true
+PRODUCTION_MIGRATIONS_ALLOWED=true
+MIGRATION_CONFIRMATION_REQUIRED=false
+
+DATA_MIGRATIONS_ALLOWED=true
+BACKFILLS_ALLOWED=true
+INDEX_CHANGES_ALLOWED=true
+CONSTRAINT_CHANGES_ALLOWED=true
+RLS_POLICY_CHANGES_ALLOWED=true
+
+BACKWARD_COMPATIBILITY_PREFERRED=true
+
+DESTRUCTIVE_CHANGES_ALLOWED_WHEN_REQUIRED_BY_IMPLEMENTATION=true
+
+RANDOM_DATABASE_RESET_ALLOWED=false
+UNRELATED_PRODUCTION_DATA_DELETION_ALLOWED=false
+
+When an implementation requires schema modifications (such as CREATE TABLE,
+ALTER TABLE, ADD/DROP COLUMN, INDEX, FOREIGN KEY, CONSTRAINT, ENUM, VIEW,
+FUNCTION, TRIGGER, POLICY, RLS, BACKFILL, or DATA TRANSFORMATION), the agent
+is authorized to create the migration, validate it, check Production, apply
+it to Production, and continue with QA/E2E without requesting additional
+confirmation.
+
+Production database migrations should remain backward-compatible with the
+currently deployed application whenever technically reasonable, because the
+database migration may be applied before the validated development commit is
+promoted to the Production application branch. Prefer expand -> migrate -> contract
+patterns when appropriate.
+
+## 5. Storage Contract
+
+VERCEL_BLOB_REQUIRED=false
+
+ShiftImport does not use Vercel Blob stores. The application operates with
+local-first in-browser storage (IndexedDB/localStorage) for spreadsheet ingestion
+and editing, alongside Neon PostgreSQL serverless persistence for organizational
+data, members, and temporal shift models. Standard browser window.Blob() APIs
+used for client-side CSV/file export must not be confused with Vercel Blob infrastructure.
+
+## 6. Authentication Contract
+
+AUTH_MODEL=Cookie session-based authentication with cryptographic hashing (session_token HttpOnly)
+SESSION_STORAGE=PostgreSQL sessions table (Neon Production)
+USER_STORAGE=PostgreSQL users table (Neon Production)
+OAUTH_PROVIDERS=Google OAuth, GitHub OAuth integration seams (/api/auth/oauth/*)
+PASSWORD_MODEL=scrypt key derivation function (Node.js crypto scryptSync) with salt
+
+## 7. Email Contract
+
+EMAIL_PROVIDER=Resend
+EMAIL_ENV_CONTRACT=RESEND_API_KEY
+EMAIL_FROM_CONTRACT=Anclora Shiftimport <antonio@anclora.com> (AUTH_EMAIL_FROM)
+EMAIL_USAGE=Transactional email delivery (access invitations, password reset links)
+
+## 8. External Integrations
+
+ACTIVE:
+- Resend API (Transactional email delivery via RESEND_API_KEY)
+- Google OAuth / GitHub OAuth (Authentication integration seams)
+
+OPTIONAL:
+- VLM Fallback (Server-side vision language model for degraded PDF/image ingestion; uses fake behavior or optional external provider via VLM_PROVIDER, VLM_API_KEY, VLM_API_URL)
+- Remote Shift Synchronization (Feature-flagged; local-first by default unless VITE_ENABLE_REMOTE_STORAGE=true)
+
+DISABLED:
+- None
+
+## 9. Local Environment Contract
+
+Environment files:
+- Mac:
+  - `/Users/toni/developer/anclora/anclora-shiftimport/.env.local`
+  - `/Users/toni/developer/anclora/anclora-shiftimport/.env.development.local`
+- VPS:
+  - `/home/toni/workspace/anclora/anclora-shiftimport/.env.local`
+  - `/home/toni/workspace/anclora/anclora-shiftimport/.env.development.local`
+
+Permissions: 0600 (-rw-------), strictly gitignored.
+
+Effective Vite Precedence:
+```text
+.env
+  < .env.local
+  < .env.development
+  < .env.development.local
+```
+
+LOCAL_RUNTIME_MODEL=PRODUCTION_BACKED
+
+Production resource variables must resolve to Production resources even when
+the application itself is running locally.
+
+### Separation of Variables:
+- PRODUCTION_RESOURCE_VARIABLES:
+  - `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `PGHOST`, `POSTGRES_URL` → Production Neon PostgreSQL
+  - `RESEND_API_KEY` → Production Resend API
+  - `AUTH_EMAIL_FROM` → Production verified sender address
+  - `AUTH_APP_URL` → Production application base URL
+- LOCAL_ONLY_RUNTIME_VARIABLES:
+  - `SEED_ALLOW_ENV="development"` → Local execution guard for db/seed-dev.mjs
+
+### Critical Clarification on SEED_ALLOW_ENV:
+SEED_ALLOW_ENV="development" only satisfies the application's local execution
+guard. It DOES NOT mean that a Development database is being used. The local
+database connection remains the Production database. Any seed operation executed
+with this environment therefore writes to Production unless the seed command
+explicitly uses another connection. Agents must treat local seeding as a Production
+database write operation.
+
+## 10. Local Runtime Exceptions
+
+VARIABLE=AUTH_APP_URL
+CANONICAL_VALUE=https://shiftimport.anclora.com
+TEMPORARY_LOCAL_VALUE=http://localhost:5173
+WHEN_ALLOWED=Only when a specific local callback, invitation acceptance, or password reset redirection test technically requires the local origin.
+RESTORE_REQUIRED=true
+
+## 11. QA Contract
+
+QA_MODEL=PERSISTENT_PRODUCTION_USER
+QA_SCOPE=production
+QA_REUSE=true
+QA_DELETE_AFTER_TEST=false
+QA_CREATE_IF_MISSING=true
+QA_CREATION_CONFIRMATION_REQUIRED=false
+
+Each authenticated application must have a single persistent QA user.
+Agents must locate it, reuse it, and create it if missing, without requesting
+additional confirmation. Do not delete the persistent QA user after test completion.
+
+Persistent QA fixtures are preferred over creating and deleting a full environment
+on every run. Agents are authorized to create, modify, and clean up data within the
+designated QA scope, but must never modify or delete unrelated production records.
+
+## 12. Git Workflow Contract
+
+WORK_BRANCH=development
+CREATE_FEATURE_BRANCH=false
+AUTO_COMMIT_AFTER_VALIDATION=true
+AUTO_PUSH_DEVELOPMENT=true
+AUTO_PROMOTE=false
+STOP_AFTER_DEVELOPMENT_PUSH=true
+
+```text
+development local
+   ↓
+implementation
+   ↓
+migration if needed
+   ↓
+tests
+   ↓
+QA/E2E
+   ↓
+commit
+   ↓
+push origin/development
+   ↓
+STOP
+```
+
+Agents must NOT create feature/fix/task/agent branches unless Toni explicitly
+requests one for the current mission.
+
+Promotion to staging / production / main requires explicit Toni approval.
+When promotion is requested, preserve the validated development commit SHA
+whenever branch topology allows fast-forward promotion.
+
+## 13. Agent Startup Contract
+
+Before executing tasks, the agent must read and apply in order:
+1. Workspace agent policy (`/home/toni/AGENTS.md` and repository `AGENTS.md`)
+2. Repository-specific instructions (`CLAUDE.md`, `GEMINI.md`, etc.)
+3. `.anclora/PRODUCTION_RUNTIME.md` (this manifest as operative runtime contract)
+4. Relevant AOS standards and contracts (`anclora-governance/standards/`)
+
+## 14. Forbidden Defaults
+
+- Do not create Development DB by default.
+- Do not create Preview DB by default.
+- Do not create temporary feature branches.
+- Do not replace Production env with Development env.
+- Do not delete persistent QA user after testing.
+- Do not automatically promote after development push.
+- Do not reset Production DB merely to simplify testing.
+- Do not delete unrelated Production data.
+- Do not expose secrets.
+
+## 15. Machine-Readable Contract
+
+```text
+PRODUCTION_RUNTIME_MANIFEST_VERSION=1.0
+
+STATUS=PRODUCTION_RUNTIME_CONFIRMED
+LOCAL_RUNTIME_MODEL=PRODUCTION_BACKED
+
+DATABASE_SCOPE=production
+LOCAL_DATABASE_SCOPE=production
+DO_NOT_CREATE_DEVELOPMENT_DATABASE=true
+
+PRODUCTION_MIGRATIONS_ALLOWED=true
+MIGRATION_CONFIRMATION_REQUIRED=false
+BACKWARD_COMPATIBILITY_PREFERRED=true
+
+QA_MODEL=PERSISTENT_PRODUCTION_USER
+QA_REUSE=true
+QA_CREATE_IF_MISSING=true
+QA_DELETE_AFTER_TEST=false
+
+WORK_BRANCH=development
+CREATE_FEATURE_BRANCH=false
+AUTO_COMMIT_AFTER_VALIDATION=true
+AUTO_PUSH_DEVELOPMENT=true
+AUTO_PROMOTE=false
+STOP_AFTER_DEVELOPMENT_PUSH=true
+```
