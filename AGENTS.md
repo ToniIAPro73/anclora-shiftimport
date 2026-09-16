@@ -1,5 +1,15 @@
 # AGENTS.md — Anclora ShiftImport
 
+## Bootstrap de agentes
+
+Antes de realizar tareas sustanciales en este repositorio, el agente debe leer:
+1. [`.anclora/AGENT_PROJECT_CONTEXT.md`](.anclora/AGENT_PROJECT_CONTEXT.md) (v1.0) y seguir su enrutamiento canónico hacia:
+   - [`.anclora/PRODUCTION_RUNTIME.md`](.anclora/PRODUCTION_RUNTIME.md) para ejecución, infraestructura, base de datos (`holy-cake-85660318`), migraciones (`CUSTOM_FORWARD_ONLY`), QA y Git.
+   - [`.anclora/AOS_ADOPTION.md`](.anclora/AOS_ADOPTION.md) para gobernanza, decisiones, excepciones y autoridad AOS.
+   - Fuentes canónicas específicas según el dominio de la tarea (`sdd/`, etc.).
+
+No asumir infraestructura compartida entre productos. Validar siempre hosting, backend, base de datos, auth, variables y ramas en `.anclora/PRODUCTION_RUNTIME.md`.
+
 ## Resumen del repositorio
 - Plataforma dual: Producto Premium B2C (modo invitado y plan Personal local-first en `localStorage`) y suite multi-tenant B2B/B2B2E (gestión operativa de turnos por organización, área y empleado con backend Neon).
 - App Vite + React + TypeScript. Persistencia dual: local-first en `localStorage` (invitado/personal) y PostgreSQL multi-tenant remota vía Vercel Functions (con sesión).

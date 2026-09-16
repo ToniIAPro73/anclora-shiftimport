@@ -18,22 +18,24 @@ Anclora ShiftImport: importador inteligente de cuadrantes para trabajadores por 
 
 ## Fuentes AOS referenciadas
 
-- Constitution: `../anclora-governance/constitution/`
-- MASTER_DECISIONS: `../anclora-governance/knowledge/MASTER_DECISIONS.md`
-- CURRENT_STATE: `../anclora-governance/knowledge/CURRENT_STATE.md`
-- SOURCE_OF_TRUTH_REGISTRY: `../anclora-governance/knowledge/SOURCE_OF_TRUTH_REGISTRY.md`
-- Standards: `../anclora-governance/standards/`
-- Playbooks: `../anclora-governance/playbooks/`
-- Templates: `../anclora-governance/templates/`
-- Operational Registry delegado (Bóveda): `../anclora-vault/00-governance/` (censo `registry/ecosystem-repos.json`, contratos `contracts/`)
+- Constitution: `../../anclora-governance/constitution/`
+- MASTER_DECISIONS: `../../anclora-governance/knowledge/MASTER_DECISIONS.md`
+- CURRENT_STATE: `../../anclora-governance/knowledge/CURRENT_STATE.md`
+- SOURCE_OF_TRUTH_REGISTRY: `../../anclora-governance/knowledge/SOURCE_OF_TRUTH_REGISTRY.md`
+- Standards: `../../anclora-governance/standards/`
+- Playbooks: `../../anclora-governance/playbooks/`
+- Templates: `../../anclora-governance/templates/`
+- Operational Registry delegado (Bóveda): `../../anclora-vault/00-governance/` (censo `registry/ecosystem-repos.json`, contratos `contracts/`)
 
 ## Fuentes oficiales locales
 
 | Tipo de conocimiento | Ruta local | Owner | Relación con AOS |
 | --- | --- | --- | --- |
-| Identidad y guía de agente | `AGENTS.md` | ShiftImport | Local, subordinada |
-| Specs de producto (SDD) | `sdd/` | ShiftImport | PD local |
-| Copias de contratos de marca | `docs/standards/` | Vault (canónico) | Copia local de referencia; el canónico vive en la vault |
+| Contexto de agente del repositorio | [`AGENT_PROJECT_CONTEXT.md`](AGENT_PROJECT_CONTEXT.md) | ShiftImport | Fuente local subordinada al protocolo AOS de agentes (v1.0). |
+| Identidad y guía de agente | [`../AGENTS.md`](../AGENTS.md) | ShiftImport | Local, subordinada |
+| Contrato operativo de runtime | [`PRODUCTION_RUNTIME.md`](PRODUCTION_RUNTIME.md) | ShiftImport | Contrato operativo local canónico (v1.0). |
+| Specs de producto (SDD) | [`../sdd/`](../sdd/) | ShiftImport | PD local |
+| Copias de contratos de marca | [`../docs/standards/`](../docs/standards/) | Vault (canónico) | Copia local de referencia; el canónico vive en la vault |
 
 ## Política de decisiones locales
 
@@ -61,6 +63,6 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 
 ## Documentos relacionados
 
-- `README.md`
-- `sdd/`
-- Dossier canónico: `../anclora-vault/20-products/shiftimport/dossier.md`
+- [`../README.md`](../README.md)
+- [`../sdd/`](../sdd/)
+- Dossier canónico: [`../../anclora-vault/20-products/shiftimport/dossier.md`](../../anclora-vault/20-products/shiftimport/dossier.md)

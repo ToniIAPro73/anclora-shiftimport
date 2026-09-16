@@ -55,6 +55,7 @@ DATABASE_SCOPE=production
 LOCAL_DATABASE_SCOPE=production
 
 MIGRATION_SYSTEM=Custom forward-only SQL runner (db/migrate.mjs tracking _migrations)
+MIGRATION_STRATEGY=CUSTOM_FORWARD_ONLY
 MIGRATION_DIRECTORY=./db/migrations
 MIGRATION_RUNNER=npm run db:migrate (node --env-file=.env.local db/migrate.mjs)
 MIGRATION_STATUS_CHECK=npm run db:migrate:status (node --env-file=.env.local db/migrate.mjs --status)
@@ -118,11 +119,12 @@ EMAIL_USAGE=Transactional email delivery (access invitations, password reset lin
 
 ACTIVE:
 - Resend API (Transactional email delivery via RESEND_API_KEY)
-- Google OAuth / GitHub OAuth (Authentication integration seams)
+- Google OAuth / GitHub OAuth (Authentication integration seams active in Production Vercel via GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_CALLBACK_URL, GITHUB_OAUTH_CLIENT_ID, GITHUB_OAUTH_CLIENT_SECRET, GITHUB_OAUTH_CALLBACK_URL)
 
 OPTIONAL:
 - VLM Fallback (Server-side vision language model for degraded PDF/image ingestion; uses fake behavior or optional external provider via VLM_PROVIDER, VLM_API_KEY, VLM_API_URL)
 - Remote Shift Synchronization (Feature-flagged; local-first by default unless VITE_ENABLE_REMOTE_STORAGE=true)
+- Local OAuth Testing (Social login credentials are optional in local development; application falls back cleanly to local password session authentication)
 
 DISABLED:
 - None
@@ -130,14 +132,8 @@ DISABLED:
 ## 9. Local Environment Contract
 
 Environment files:
-- Mac:
-  - `/Users/toni/developer/anclora/anclora-shiftimport/.env.local`
-  - `/Users/toni/developer/anclora/anclora-shiftimport/.env.development.local`
-- VPS:
-  - `/home/toni/workspace/anclora/anclora-shiftimport/.env.local`
-  - `/home/toni/workspace/anclora/anclora-shiftimport/.env.development.local`
-
-Permissions: 0600 (-rw-------), strictly gitignored.
+- `.env.local` (located in repository root, mode 0600, strictly gitignored)
+- `.env.development.local` (located in repository root, mode 0600, strictly gitignored)
 
 Effective Vite Precedence:
 ```text
@@ -158,6 +154,7 @@ the application itself is running locally.
   - `RESEND_API_KEY` → Production Resend API
   - `AUTH_EMAIL_FROM` → Production verified sender address
   - `AUTH_APP_URL` → Production application base URL
+  - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET` → Production OAuth apps
 - LOCAL_ONLY_RUNTIME_VARIABLES:
   - `SEED_ALLOW_ENV="development"` → Local execution guard for db/seed-dev.mjs
 
@@ -231,10 +228,13 @@ whenever branch topology allows fast-forward promotion.
 ## 13. Agent Startup Contract
 
 Before executing tasks, the agent must read and apply in order:
-1. Workspace agent policy (`/home/toni/AGENTS.md` and repository `AGENTS.md`)
-2. Repository-specific instructions (`CLAUDE.md`, `GEMINI.md`, etc.)
-3. `.anclora/PRODUCTION_RUNTIME.md` (this manifest as operative runtime contract)
-4. Relevant AOS standards and contracts (`anclora-governance/standards/`)
+1. Current explicit instructions from Toni
+2. Workspace agent policy (`../../ANCLORA_WORKSPACE_AGENT_POLICY.md` when installed, `../../AGENTS.md` interim)
+3. Repository agent rules (`../AGENTS.md`)
+4. `.anclora/AGENT_PROJECT_CONTEXT.md` (bootstrap, task routing, and authority map)
+5. `.anclora/PRODUCTION_RUNTIME.md` (this manifest as operative runtime contract)
+6. `.anclora/AOS_ADOPTION.md` (governance, decisions, exceptions)
+7. Repository-specific instructions (`CLAUDE.md`, `GEMINI.md`, etc., when present)
 
 ## 14. Forbidden Defaults
 
@@ -260,6 +260,8 @@ DATABASE_SCOPE=production
 LOCAL_DATABASE_SCOPE=production
 DO_NOT_CREATE_DEVELOPMENT_DATABASE=true
 
+MIGRATION_SYSTEM=Custom forward-only SQL runner (db/migrate.mjs tracking _migrations)
+MIGRATION_STRATEGY=CUSTOM_FORWARD_ONLY
 PRODUCTION_MIGRATIONS_ALLOWED=true
 MIGRATION_CONFIRMATION_REQUIRED=false
 BACKWARD_COMPATIBILITY_PREFERRED=true
