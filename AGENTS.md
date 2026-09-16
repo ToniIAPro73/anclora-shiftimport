@@ -2,6 +2,12 @@
 
 ## Bootstrap de agentes
 
+> [!IMPORTANT]
+> This repository is governed by the Anclora canonical contracts under `.anclora/`.
+> Agent-specific defaults, personal presets, or global agent configurations must NOT override those contracts.
+> Read `.anclora/AGENT_PROJECT_CONTEXT.md` before starting substantial work.
+
+
 Antes de realizar tareas sustanciales en este repositorio, el agente debe leer:
 1. [`.anclora/AGENT_PROJECT_CONTEXT.md`](.anclora/AGENT_PROJECT_CONTEXT.md) (v1.0) y seguir su enrutamiento canónico hacia:
    - [`.anclora/PRODUCTION_RUNTIME.md`](.anclora/PRODUCTION_RUNTIME.md) para ejecución, infraestructura, base de datos (`holy-cake-85660318`), migraciones (`CUSTOM_FORWARD_ONLY`), QA y Git.
