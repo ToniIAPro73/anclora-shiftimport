@@ -29,6 +29,7 @@ export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime, onCre
   const [request, setRequest] = useState<ChangeRequest | null>(null);
   const [actionState, setActionState] = useState<ActionState>('idle');
   const [feedback, setFeedback] = useState('');
+  const [reasonInvalid, setReasonInvalid] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,14 +51,17 @@ export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime, onCre
     event.preventDefault();
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
+      setReasonInvalid(true);
       setFeedback(t('employeeChangeRequest.emptyValidation'));
       return;
     }
     if (trimmedReason.length > MAX_REASON_LENGTH) {
+      setReasonInvalid(true);
       setFeedback(t('employeeChangeRequest.tooLong'));
       return;
     }
 
+    setReasonInvalid(false);
     setActionState('submitting');
     setFeedback('');
     try {
@@ -71,6 +75,7 @@ export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime, onCre
       setRequest(created);
       onCreated?.(created);
       setReason('');
+      setReasonInvalid(false);
       setActionState('idle');
       setFeedback(t('employeeChangeRequest.sent'));
     } catch {
@@ -137,58 +142,88 @@ export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime, onCre
       )}
 
       <form className="employee-change-request__form" onSubmit={handleSubmit}>
-        <label htmlFor="employee-change-request-type">{t('employeeChangeRequest.typeLabel')}</label>
-        <select
-          id="employee-change-request-type"
-          value={requestType}
-          onChange={(event) => setRequestType(event.target.value as ChangeRequestType)}
-          disabled={actionState === 'submitting'}
-        >
-          <option value="TIME_CHANGE">{t('employeeChangeRequest.timeChange')}</option>
-          <option value="OTHER">{t('employeeChangeRequest.other')}</option>
-        </select>
+        <div className="ac-form-field employee-change-request__field">
+          <div className="ac-form-field__head">
+            <label className="ac-form-field__label" htmlFor="employee-change-request-type">{t('employeeChangeRequest.typeLabel')}</label>
+          </div>
+          <div className="ac-form-field__control">
+            <select
+              id="employee-change-request-type"
+              className="field-select"
+              value={requestType}
+              onChange={(event) => setRequestType(event.target.value as ChangeRequestType)}
+              disabled={actionState === 'submitting'}
+            >
+              <option value="TIME_CHANGE">{t('employeeChangeRequest.timeChange')}</option>
+              <option value="OTHER">{t('employeeChangeRequest.other')}</option>
+            </select>
+          </div>
+        </div>
 
         {requestType === 'TIME_CHANGE' && (
           <div className="employee-change-request__time-fields">
-            <div>
-              <label htmlFor="employee-change-request-start-time">{t('employeeChangeRequest.requestedStartTime')}</label>
+            <div className="ac-form-field">
+              <div className="ac-form-field__head">
+                <label className="ac-form-field__label" htmlFor="employee-change-request-start-time">{t('employeeChangeRequest.requestedStartTime')}</label>
+              </div>
+              <div className="ac-form-field__control">
               <input
                 id="employee-change-request-start-time"
+                className="field-input"
                 type="time"
                 value={requestedStartTime}
                 onChange={(event) => setRequestedStartTime(event.target.value)}
                 disabled={actionState === 'submitting'}
                 required
               />
+              </div>
             </div>
-            <div>
-              <label htmlFor="employee-change-request-end-time">{t('employeeChangeRequest.requestedEndTime')}</label>
+            <div className="ac-form-field">
+              <div className="ac-form-field__head">
+                <label className="ac-form-field__label" htmlFor="employee-change-request-end-time">{t('employeeChangeRequest.requestedEndTime')}</label>
+              </div>
+              <div className="ac-form-field__control">
               <input
                 id="employee-change-request-end-time"
+                className="field-input"
                 type="time"
                 value={requestedEndTime}
                 onChange={(event) => setRequestedEndTime(event.target.value)}
                 disabled={actionState === 'submitting'}
                 required
               />
+              </div>
             </div>
           </div>
         )}
 
-        <label htmlFor="employee-change-request-reason">{t('employeeChangeRequest.reasonLabel')}</label>
-        <textarea
-          id="employee-change-request-reason"
-          value={reason}
-          onChange={(event) => {
-            setReason(event.target.value);
-            if (feedback) setFeedback('');
-          }}
-          placeholder={t('employeeChangeRequest.placeholder')}
-          maxLength={MAX_REASON_LENGTH}
-          rows={4}
-          aria-describedby="employee-change-request-hint employee-change-request-feedback"
-          disabled={actionState === 'submitting'}
-        />
+        <div className="ac-form-field employee-change-request__field" data-invalid={reasonInvalid || undefined}>
+          <div className="ac-form-field__head">
+            <label className="ac-form-field__label" htmlFor="employee-change-request-reason">{t('employeeChangeRequest.reasonLabel')} <abbr title="required" aria-hidden="true">*</abbr></label>
+          </div>
+          <div className="ac-form-field__control">
+            <textarea
+              id="employee-change-request-reason"
+              className="field-textarea"
+              value={reason}
+              onChange={(event) => {
+                setReason(event.target.value);
+                setReasonInvalid(false);
+                if (feedback) setFeedback('');
+              }}
+              placeholder={t('employeeChangeRequest.placeholder')}
+              maxLength={MAX_REASON_LENGTH}
+              rows={4}
+              required
+              aria-invalid={reasonInvalid}
+              aria-describedby="employee-change-request-hint employee-change-request-feedback"
+              disabled={actionState === 'submitting'}
+            />
+            <p id="employee-change-request-feedback" className="ac-form-field__message" data-tone={reasonInvalid ? 'danger' : undefined} role={feedback ? (reasonInvalid || actionState === 'error' ? 'alert' : 'status') : undefined} aria-live="polite">
+              {feedback}
+            </p>
+          </div>
+        </div>
         <div className="employee-change-request__form-footer">
           <span id="employee-change-request-hint">{t('employeeChangeRequest.characterCount', { count: reason.length })}</span>
           <button type="submit" disabled={actionState === 'submitting'}>
@@ -196,14 +231,6 @@ export function ChangeRequestForm({ shiftId, shiftStartTime, shiftEndTime, onCre
             {actionState === 'submitting' ? t('employeeChangeRequest.submitting') : t('employeeChangeRequest.submit')}
           </button>
         </div>
-        <p
-          id="employee-change-request-feedback"
-          className="employee-change-request__feedback"
-          role={feedback ? (actionState === 'error' ? 'alert' : 'status') : undefined}
-          aria-live="polite"
-        >
-          {feedback}
-        </p>
       </form>
     </section>
   );

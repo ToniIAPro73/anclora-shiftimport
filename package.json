@@ -22,6 +22,7 @@
     "db:migrate:status": "node --env-file=.env.local db/migrate.mjs --status"
   },
   "dependencies": {
+    "@anclora/design-system": "github:ToniIAPro73/anclora-design-system#bd16740",
     "@neondatabase/serverless": "^1.0.2",
     "axios": "^1.6.0",
     "cors": "^2.8.5",

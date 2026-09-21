@@ -56,10 +56,13 @@ describe('ChangeRequestForm', () => {
 
   it('validates the reason locally and does not send whitespace', async () => {
     renderForm();
-    const reason = screen.getByLabelText('Motivo');
+    const reason = screen.getByRole('textbox', { name: /Motivo/ });
     fireEvent.change(reason, { target: { value: '   ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }));
     expect(await screen.findByText('Escribe el motivo antes de enviar la solicitud.')).toBeTruthy();
+    expect(reason.getAttribute('aria-invalid')).toBe('true');
+    expect(reason.hasAttribute('required')).toBe(true);
+    expect(screen.getByText('Escribe el motivo antes de enviar la solicitud.').getAttribute('id')).toBe('employee-change-request-feedback');
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
@@ -67,12 +70,14 @@ describe('ChangeRequestForm', () => {
     mockedCreate.mockResolvedValue(request());
     mockedCancel.mockResolvedValue(request('CANCELLED'));
     renderForm();
-    fireEvent.change(screen.getByLabelText('Motivo'), { target: { value: '  Necesito cambiar la hora de entrada.  ' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /Motivo/ }), { target: { value: '  Necesito cambiar la hora de entrada.  ' } });
     fireEvent.change(screen.getByLabelText('Tipo de solicitud'), { target: { value: 'TIME_CHANGE' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }));
     await waitFor(() => expect(screen.getByText('Solicitud enviada. Queda pendiente de revisión.')).toBeTruthy());
     expect(mockedCreate).toHaveBeenCalledWith(shiftId, 'TIME_CHANGE', 'Necesito cambiar la hora de entrada.', '09:00', '17:00');
-    expect(screen.getByLabelText('Motivo')).toHaveProperty('value', '');
+    expect(screen.getByRole('textbox', { name: /Motivo/ })).toHaveProperty('value', '');
+    expect(screen.getByLabelText('Tipo de solicitud').classList.contains('field-select')).toBe(true);
+    expect(screen.getByLabelText('Nueva hora de inicio').classList.contains('field-input')).toBe(true);
     expect(screen.getByRole('button', { name: 'Cancelar solicitud' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar solicitud' }));
@@ -84,7 +89,7 @@ describe('ChangeRequestForm', () => {
   it('keeps the reason when the server rejects creation', async () => {
     mockedCreate.mockRejectedValue(new Error('offline'));
     renderForm();
-    const reason = screen.getByLabelText('Motivo');
+    const reason = screen.getByRole('textbox', { name: /Motivo/ });
     fireEvent.change(reason, { target: { value: 'No puedo cubrir este horario.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Enviar solicitud' }));
     await waitFor(() => expect(screen.getByText('No se pudo enviar la solicitud. El texto se ha conservado.')).toBeTruthy());

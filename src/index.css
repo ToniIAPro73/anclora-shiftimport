@@ -1,3 +1,11 @@
+@import '@anclora/design-system/tokens/core.css';
+@import '@anclora/design-system/tokens/semantic.css';
+@import '@anclora/design-system/foundations/primitives.css';
+@import '@anclora/design-system/components/form-field.css';
+
+/* ShiftImport bridge: the pilot adopts the DS Forms contract while the rest
+   of the application keeps its existing product token vocabulary. */
+
 /* Anclora Design System typography (local-first, no CDN) */
 @font-face {
   font-family: 'Inter';
@@ -217,6 +225,23 @@
   --accent: var(--color-accent);
   --accent-subtle: var(--gold-tint-bg);
   --text-secondary: var(--text-muted);
+
+  /* Canonical Forms aliases, resolved to the existing ShiftImport product
+     surface so adopting the DS does not retheme unrelated screens. */
+  --surface-panel: var(--color-bg-elevated);
+  --surface-subtle: var(--panel-muted-bg);
+  --text-eyebrow: var(--text-muted);
+  --border-control: color-mix(in srgb, var(--text-primary) 50%, transparent);
+  --focus-ring: var(--color-accent);
+  --text-on-accent: #101733;
+  --status-danger-border: var(--danger);
+  --status-danger-text: var(--danger);
+  --component-eyebrow-size: 0.78rem;
+  --component-eyebrow-weight: 800;
+  --component-field-head-gap: 6px;
+  --component-field-hint-size: 0.82rem;
+  --component-field-message-size: 0.82rem;
+  --label-tracking: 0.12em;
 }
 
 :root[data-theme='light'] {
@@ -298,6 +323,15 @@
   --accent: var(--color-accent);
   --accent-subtle: var(--gold-tint-bg);
   --text-secondary: var(--text-muted);
+
+  --surface-panel: var(--color-bg-elevated);
+  --surface-subtle: var(--panel-muted-bg);
+  --text-eyebrow: var(--text-muted);
+  --border-control: color-mix(in srgb, var(--text-primary) 50%, transparent);
+  --focus-ring: var(--color-accent);
+  --text-on-accent: #101733;
+  --status-danger-border: var(--danger);
+  --status-danger-text: var(--danger);
 }
 
 * {
@@ -1673,27 +1707,13 @@ select:disabled {
   margin-top: 22px;
 }
 
-.employee-change-request__form label {
-  color: var(--text-primary);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
 .employee-change-request__form select,
-.employee-change-request__form textarea {
+.employee-change-request__form textarea,
+.employee-change-request__form input {
   width: 100%;
   display: block;
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  background: var(--panel-muted-bg);
-  color: var(--text-primary);
   font: inherit;
   font-size: 0.86rem;
-}
-
-.employee-change-request__form select {
-  min-height: 42px;
-  padding: 0 12px;
 }
 
 .employee-change-request__time-fields {
@@ -1705,29 +1725,6 @@ select:disabled {
 .employee-change-request__time-fields > div {
   display: grid;
   gap: 7px;
-}
-
-.employee-change-request__time-fields input {
-  width: 100%;
-  min-height: 42px;
-  padding: 0 12px;
-  border: 1px solid var(--glass-border);
-  border-radius: 12px;
-  background: var(--panel-muted-bg);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 0.86rem;
-}
-
-.employee-change-request__form textarea {
-  min-height: 108px;
-  padding: 12px 13px;
-  resize: vertical;
-  line-height: 1.5;
-}
-
-.employee-change-request__form textarea::placeholder {
-  color: var(--text-muted);
 }
 
 .employee-change-request__form-footer {
@@ -1752,7 +1749,7 @@ select:disabled {
   border: 1px solid var(--color-accent);
   border-radius: 10px;
   background: var(--color-accent);
-  color: var(--color-accent-contrast, #fff);
+  color: var(--text-on-accent);
   font-size: 0.78rem;
   font-weight: 800;
 }
@@ -1763,14 +1760,6 @@ select:disabled {
   opacity: 0.65;
 }
 
-.employee-change-request__feedback {
-  min-height: 1.4em;
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 0.76rem;
-  line-height: 1.45;
-}
-
 .employee-change-request__cancel:hover,
 .employee-change-request__cancel:focus-visible {
   border-color: var(--color-accent);
@@ -1778,9 +1767,6 @@ select:disabled {
 }
 
 .employee-change-request__cancel:focus-visible,
-.employee-change-request__form select:focus-visible,
-.employee-change-request__time-fields input:focus-visible,
-.employee-change-request__form textarea:focus-visible,
 .employee-change-request__form-footer button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
