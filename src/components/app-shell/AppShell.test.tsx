@@ -117,28 +117,37 @@ describe('AppShell', () => {
     expect(callbacks.onImport).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the account menu, exposes logout and closes it with Escape', () => {
+  it('opens the account menu, supports keyboard navigation, exposes logout and returns focus on Escape', () => {
     const callbacks = renderShell('OWNER');
-    fireEvent.click(screen.getByTestId('app-shell-user-menu'));
+    const trigger = screen.getByTestId('app-shell-user-menu');
+    fireEvent.click(trigger);
 
     expect(screen.getByRole('menu')).toBeInTheDocument();
     const logout = screen.getByRole('menuitem', { name: 'Salir' });
+    expect(document.activeElement).toBe(logout);
+    fireEvent.keyDown(logout, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(logout);
     fireEvent.click(logout);
     expect(callbacks.onLogout).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('app-shell-user-menu'));
-    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
   });
 
-  it('opens and closes the mobile drawer without changing the content state', () => {
+  it('opens the modal mobile drawer, traps focus, and returns focus without changing content state', () => {
     renderShell('OWNER');
-    fireEvent.click(screen.getByTestId('app-shell-mobile-menu'));
+    const trigger = screen.getByTestId('app-shell-mobile-menu');
+    fireEvent.click(trigger);
     expect(screen.getByTestId('app-shell')).toHaveClass('is-drawer-open');
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cerrar navegación' }));
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.getByTestId('app-shell')).not.toHaveClass('is-drawer-open');
     expect(screen.getByRole('heading', { name: 'Calendar workspace' })).toBeInTheDocument();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('renders unified Equipo entry point in Gestión group and separates Configuración', () => {

@@ -1,7 +1,10 @@
 @import '@anclora/design-system/tokens/core.css';
 @import '@anclora/design-system/tokens/semantic.css';
 @import '@anclora/design-system/foundations/primitives.css';
+@import '@anclora/design-system/components/button.css';
 @import '@anclora/design-system/components/form-field.css';
+@import '@anclora/design-system/components/menu.css';
+@import '@anclora/design-system/components/drawer.css';
 
 /* ShiftImport bridge: the pilot adopts the DS Forms contract while the rest
    of the application keeps its existing product token vocabulary. */

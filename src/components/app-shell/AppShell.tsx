@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import {
   AreaChart,
   CalendarDays,
@@ -162,39 +162,77 @@ function UserMenu({
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuItemsRef = useRef<HTMLButtonElement[]>([]);
+  const initialFocusIndexRef = useRef(0);
+
+  const focusMenuItem = (index: number) => {
+    const items = menuItemsRef.current.filter((item) => item && !item.disabled);
+    if (!items.length) return;
+    items[(index + items.length) % items.length]?.focus();
+  };
 
   useEffect(() => {
     if (!open) return undefined;
+    focusMenuItem(initialFocusIndexRef.current);
+    initialFocusIndexRef.current = 0;
     const onPointerDown = (event: MouseEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
     document.addEventListener('mousedown', onPointerDown);
-    document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('mousedown', onPointerDown);
-      document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
+
+  const closeMenu = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  const onTriggerKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      initialFocusIndexRef.current = event.key === 'ArrowUp' ? -1 : 0;
+      setOpen(true);
+    }
+  };
+
+  const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = menuItemsRef.current.filter((item) => item && !item.disabled);
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu();
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusMenuItem(index + 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusMenuItem(index - 1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusMenuItem(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusMenuItem(items.length - 1);
+    }
+  };
 
   const displayName = userName.trim() || t('shell.account');
   const initials = displayName.slice(0, 1).toUpperCase();
 
   return (
-    <div className="app-shell__user" ref={menuRef}>
+    <div className="app-shell__user ac-menu" ref={menuRef} data-placement="bottom-end">
       <button
         ref={triggerRef}
         type="button"
-        className="app-shell__user-trigger"
+        className="app-shell__user-trigger ac-button ac-button--ghost"
         aria-label={t('shell.userMenu')}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-controls="app-shell-user-menu"
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={onTriggerKeyDown}
         data-testid="app-shell-user-menu"
       >
         <span className="app-shell__avatar" aria-hidden="true">{initials}</span>
@@ -205,15 +243,15 @@ function UserMenu({
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       {open && (
-        <div className="app-shell__user-menu" role="menu" aria-label={t('shell.userMenu')}>
+        <div id="app-shell-user-menu" className="app-shell__user-menu ac-menu__content" role="menu" aria-label={t('shell.userMenu')} onKeyDown={onMenuKeyDown}>
           {onLogout && (
-            <button type="button" role="menuitem" onClick={() => { setOpen(false); onLogout(); }}>
+            <button ref={(element) => { if (element) menuItemsRef.current[0] = element; }} className="ac-menu__item" type="button" role="menuitem" onClick={() => { closeMenu(); onLogout(); }}>
               <LogOut size={16} aria-hidden="true" />
               {t('auth.logoutAction')}
             </button>
           )}
           {onSignIn && (
-            <button type="button" role="menuitem" onClick={() => { setOpen(false); onSignIn(); }}>
+            <button ref={(element) => { if (element) menuItemsRef.current[1] = element; }} className="ac-menu__item" type="button" role="menuitem" onClick={() => { closeMenu(); onSignIn(); }}>
               {t('auth.signIn')}
             </button>
           )}
@@ -267,6 +305,8 @@ export function AppShell({
     const previousFocus = document.activeElement as HTMLElement | null;
     const focusable = () => drawerRef.current?.querySelector<HTMLElement>('button:not([disabled]), a[href]');
     focusable()?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setDrawerOpen(false);
@@ -289,6 +329,7 @@ export function AppShell({
     document.addEventListener('keydown', onKeyDown);
     return () => {
       document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
   }, [drawerOpen]);
@@ -304,20 +345,25 @@ export function AppShell({
   return (
     <div className={`app-shell${expanded ? ' is-expanded' : ' is-collapsed'}${drawerOpen ? ' is-drawer-open' : ''}`} data-testid="app-shell">
       <a className="app-shell__skip-link" href="#main-content">{t('shell.skipToMain')}</a>
-      <div className="app-shell__mobile-backdrop" aria-hidden="true" onClick={closeDrawer} />
+      <div className="app-shell__mobile-backdrop ac-drawer-backdrop" aria-hidden="true" hidden={!drawerOpen} onClick={closeDrawer} />
       <aside
           ref={drawerRef}
-          className="app-shell__sidebar"
+          className="app-shell__sidebar ac-drawer"
+          id="app-shell-sidebar"
           aria-label={t('shell.sidebarLabel')}
+          role={drawerOpen ? 'dialog' : undefined}
+          aria-modal={drawerOpen ? 'true' : undefined}
+          aria-labelledby={drawerOpen ? 'app-shell-drawer-title' : undefined}
           data-testid="app-shell-sidebar"
         >
           <div className="app-shell__brand">
             <TurnosLogo />
             <div className="app-shell__brand-copy">
-              <strong>Anclora ShiftImport</strong>
+              <strong id="app-shell-drawer-title">Anclora ShiftImport</strong>
               <span>{t('header.subtitle')}</span>
             </div>
           </div>
+          {drawerOpen && <button type="button" className="app-shell__mobile-close ac-button ac-button--ghost ac-button--icon" aria-label={t('shell.closeNavigation')} onClick={closeDrawer}><X size={20} aria-hidden="true" /></button>}
 
           <nav className="app-shell__nav" aria-label={t('shell.navigationLabel')}>
             {/* OPERACIÓN: Calendario, Planificar, Importar, Añadir turno, Solicitudes */}
@@ -408,13 +454,15 @@ export function AppShell({
           </button>
       </aside>
 
-      <div className="app-shell__content">
+      <div className="app-shell__content" aria-hidden={drawerOpen || undefined}>
         <header className="app-shell__topbar">
           <button
             ref={menuTriggerRef}
             type="button"
-            className="app-shell__mobile-menu"
+            className="app-shell__mobile-menu ac-button ac-button--ghost ac-button--icon"
             aria-label={t('shell.openNavigation')}
+            aria-haspopup="dialog"
+            aria-controls="app-shell-sidebar"
             aria-expanded={drawerOpen}
             onClick={() => setDrawerOpen(true)}
             data-testid="app-shell-mobile-menu"
@@ -441,7 +489,6 @@ export function AppShell({
             {languageControl}
             <UserMenu userName={userName} userRole={userRole} onSignIn={onSignIn} onLogout={onLogout} />
           </div>
-          {drawerOpen && <button type="button" className="app-shell__mobile-close" aria-label={t('shell.closeNavigation')} onClick={closeDrawer}><X size={20} aria-hidden="true" /></button>}
         </header>
 
         <main id="main-content" className="app-shell__main" aria-label={t('shell.mainWorkspace')}>

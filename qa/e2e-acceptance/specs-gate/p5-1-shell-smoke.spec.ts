@@ -65,10 +65,10 @@ test('P5.1 shell: owner workspace, compact nav, drawer and account menu', async 
   await page.locator('[data-import-modal]').getByRole('button').first().click();
   await expect(page.locator('[data-import-modal]')).toHaveCount(0);
 
-  await page.getByTestId('sidebar-members').click();
-  await expect(page.getByRole('dialog', { name: /Usuarios de la organización/i })).toBeVisible();
-  await page.getByRole('dialog', { name: /Usuarios de la organización/i }).getByRole('button').first().click();
-  await expect(page.getByRole('dialog', { name: /Usuarios de la organización/i })).toHaveCount(0);
+  await page.getByTestId('sidebar-team').click();
+  await expect(page.getByTestId('equipo-modal')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button').first().click();
+  await expect(page.getByTestId('equipo-modal')).toHaveCount(0);
 
   await page.getByTestId('sidebar-planner').click();
   await expect(page).toHaveURL(/\/app\/schedule$/);
