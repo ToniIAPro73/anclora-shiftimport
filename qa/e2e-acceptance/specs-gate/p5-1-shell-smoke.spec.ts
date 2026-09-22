@@ -124,6 +124,11 @@ test('P5.1 shell: owner workspace, compact nav, drawer and account menu', async 
   console.log(`P5.1 mobile drawer width=${drawerWidth}`);
   expect(drawerWidth).toBeGreaterThan(240);
   await capture(page, testInfo, 'owner-mobile-drawer');
+  await page.locator('.ac-drawer-backdrop').click({ position: { x: 8, y: 8 } });
+  await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
+  await expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+  await expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('app-shell-mobile-menu');
+  await openDrawerAndAssert();
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
   await expect(page.locator('.ac-drawer-backdrop')).toBeHidden();
@@ -142,6 +147,15 @@ test('P5.1 shell: owner workspace, compact nav, drawer and account menu', async 
   await openDrawerAndAssert();
   await expect(sidebar).toHaveCSS('transition-duration', '0s');
   await page.getByTestId('sidebar-calendar').click();
+  await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
+
+  await page.getByRole('button', { name: /Cambiar idioma/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(mobileMenu).toHaveAttribute('aria-label', /Open navigation/);
+  await mobileMenu.click();
+  await expect(page.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+  await expect(page.getByRole('button', { name: 'Close navigation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close navigation' }).click();
   await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
 
   await page.setViewportSize({ width: 1440, height: 900 });
