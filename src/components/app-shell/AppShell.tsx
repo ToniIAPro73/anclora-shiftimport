@@ -293,7 +293,7 @@ export function AppShell({
     return window.localStorage.getItem(SIDEBAR_STATE_KEY) !== 'collapsed';
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const drawerRef = useRef<HTMLElement>(null);
+  const drawerRef = useRef<HTMLElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -341,13 +341,14 @@ export function AppShell({
   };
   const isEmployee = role === 'EMPLOYEE';
   const canManage = role === 'OWNER' || role === 'ADMIN';
+  const SidebarElement = drawerOpen ? 'div' : 'aside';
 
   return (
     <div className={`app-shell${expanded ? ' is-expanded' : ' is-collapsed'}${drawerOpen ? ' is-drawer-open' : ''}`} data-testid="app-shell">
       <a className="app-shell__skip-link" href="#main-content">{t('shell.skipToMain')}</a>
       <div className="app-shell__mobile-backdrop ac-drawer-backdrop" aria-hidden="true" hidden={!drawerOpen} onClick={closeDrawer} />
-      <aside
-          ref={drawerRef}
+      <SidebarElement
+          ref={(element) => { drawerRef.current = element; }}
           className="app-shell__sidebar ac-drawer"
           id="app-shell-sidebar"
           aria-label={t('shell.sidebarLabel')}
@@ -452,7 +453,7 @@ export function AppShell({
           >
             {expanded ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
           </button>
-      </aside>
+        </SidebarElement>
 
       <div className="app-shell__content" aria-hidden={drawerOpen || undefined}>
         <header className="app-shell__topbar">

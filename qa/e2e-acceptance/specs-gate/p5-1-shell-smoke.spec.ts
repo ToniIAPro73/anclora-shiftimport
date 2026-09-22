@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -90,19 +91,61 @@ test('P5.1 shell: owner workspace, compact nav, drawer and account menu', async 
   await capture(page, testInfo, 'owner-collapsed-light-1366');
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload({ waitUntil: 'networkidle' });
-  await page.getByTestId('app-shell-mobile-menu').click();
-  await expect(page.getByTestId('app-shell')).toHaveClass(/is-drawer-open/);
-  await expect(page.getByTestId('sidebar-import')).toBeVisible();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  const mobileMenu = page.getByTestId('app-shell-mobile-menu');
+  const sidebar = page.getByTestId('app-shell-sidebar');
+  const openDrawerAndAssert = async () => {
+    await expect(mobileMenu).toBeVisible();
+    await expect(mobileMenu).toHaveAttribute('aria-label', /Abrir navegación/);
+    await expect(mobileMenu).toHaveAttribute('aria-expanded', 'false');
+    await mobileMenu.click();
+    await expect(page.getByTestId('app-shell')).toHaveClass(/is-drawer-open/);
+    await expect(page.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
+    await expect(page.locator('.ac-drawer-backdrop')).toBeVisible();
+    await expect(page.getByTestId('sidebar-import')).toBeVisible();
+    await expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    await expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
+    await expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Cerrar navegación');
+    const focusableCount = await sidebar.locator('button:not([disabled]), a[href]').count();
+    for (let index = 0; index < focusableCount; index += 1) {
+      await page.keyboard.press('Tab');
+      await expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="app-shell-sidebar"]')))).toBe(true);
+    }
+    await page.keyboard.press('Shift+Tab');
+    await expect(await page.evaluate(() => Boolean(document.activeElement?.closest('[data-testid="app-shell-sidebar"]')))).toBe(true);
+    const axe = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+    expect(axe.violations, JSON.stringify(axe.violations)).toEqual([]);
+  };
+
+  await openDrawerAndAssert();
   const drawerWidth = await page.getByTestId('app-shell-sidebar').evaluate((element) => element.getBoundingClientRect().width);
   console.log(`P5.1 mobile drawer width=${drawerWidth}`);
   expect(drawerWidth).toBeGreaterThan(240);
   await capture(page, testInfo, 'owner-mobile-drawer');
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
+  await expect(page.locator('.ac-drawer-backdrop')).toBeHidden();
+  await expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+  await expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('app-shell-mobile-menu');
+
+  await page.getByRole('button', { name: /Cambiar tema/ }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await openDrawerAndAssert();
+  await capture(page, testInfo, 'owner-mobile-drawer-light');
+  await page.getByRole('button', { name: 'Cerrar navegación' }).click();
+  await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
+  await expect(await page.evaluate(() => document.activeElement?.getAttribute('data-testid'))).toBe('app-shell-mobile-menu');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openDrawerAndAssert();
+  await expect(sidebar).toHaveCSS('transition-duration', '0s');
+  await page.getByTestId('sidebar-calendar').click();
+  await expect(page.getByTestId('app-shell')).not.toHaveClass(/is-drawer-open/);
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.reload({ waitUntil: 'networkidle' });
+  await expect(page.getByTestId('app-shell')).toBeVisible();
   const after = await measureCalendar(page);
   console.log(`P5.1 calendar metrics 1366 baseline=${JSON.stringify(before)} after1440=${JSON.stringify(after)}`);
   expect(after.calendarHeight).toBeGreaterThan(0);
