@@ -36,7 +36,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: inputs.target == 'main'
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Resolve source branch
