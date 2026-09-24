@@ -44,7 +44,7 @@ describe('access invitation primitives', () => {
       email_normalized: 'person@example.test',
       status: 'PENDING',
       created_at: '2026-09-12T00:00:00.000Z',
-      expires_at: '2026-09-19T00:00:00.000Z',
+      expires_at: '2099-09-19T00:00:00.000Z',
       organization_name: 'Estudio Horizonte',
       employee_name: null,
       role: 'EMPLOYEE',
@@ -54,6 +54,27 @@ describe('access invitation primitives', () => {
     expect(result.acceptanceMode).toBe('LINK_EXISTING');
     expect(result).not.toHaveProperty('accountStatus');
     expect(result).not.toHaveProperty('passwordHash');
+  });
+
+  it('rejects an expired invitation with code INVITATION_EXPIRED', async () => {
+    const { token } = createInvitationToken();
+    const sql = () => Promise.resolve([{
+      id: 'invitation-id',
+      organization_id: 'organization-id',
+      organization_person_id: null,
+      email_normalized: 'person@example.test',
+      status: 'PENDING',
+      created_at: '2020-01-01T00:00:00.000Z',
+      expires_at: '2020-01-08T00:00:00.000Z',
+      organization_name: 'Estudio Horizonte',
+      employee_name: null,
+      role: 'EMPLOYEE',
+      account_status: 'ACTIVE',
+    }]);
+    await expect(validateAccessInvitation(sql, token)).rejects.toMatchObject({
+      code: 'INVITATION_EXPIRED',
+      status: 404,
+    });
   });
 
   it('does not allow an existing account to submit a password through acceptance', async () => {

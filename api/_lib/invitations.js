@@ -385,7 +385,7 @@ export async function listAccessDirectory(sql, ctx) {
   };
 }
 
-export async function validateAccessInvitation(sql, token) {
+export async function validateAccessInvitation(sql, token, { now = new Date() } = {}) {
   if (!isValidInvitationToken(token)) {
     const error = new HttpError(404, 'This invitation is not available');
     error.code = 'INVITATION_INVALID';
@@ -408,7 +408,7 @@ export async function validateAccessInvitation(sql, token) {
     WHERE i.token_hash = ${tokenHash}
   `;
   const row = rows[0];
-  const state = invitationPublicState(row);
+  const state = invitationPublicState(row, now);
   if (state !== 'VALID') {
     const error = new HttpError(404, 'This invitation is not available');
     error.code = state === 'EXPIRED' ? 'INVITATION_EXPIRED' : 'INVITATION_INVALID';
