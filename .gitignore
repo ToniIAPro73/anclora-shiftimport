@@ -85,3 +85,7 @@ tmp/
 node_modules
 
 evidence/
+
+# Local Claude Code settings and agent worktrees (per-user, never versioned)
+.claude/settings.local.json
+.claude/worktrees/
