@@ -283,3 +283,31 @@ La ejecución del commit, push y promoción autorizados se comunica con su SHA y
   5. *Preservación de contexto*: conservación de pestaña, filtros y búsqueda en Equipo al cerrar/cancelar la importación masiva (Cap. 24).
 - **Verificación**: `node scripts/generate-manual-pdf.mjs` completado sin error; PDF regenerado en `public/manuals/anclora-shiftimport-manual-usuario-es.pdf`.
 
+## Versión 3.1 — 25/09/2026
+
+- **Versión**: 3.0 → 3.1 (portada y aviso final con fecha 25 de septiembre de 2026).
+- **Motivo**: alinear el texto con el producto tras los cambios posteriores al 09/09/2026 (invitaciones seguras, importación CSV de equipo, calendario con un máximo de dos elementos por día, ausencias temporales y la migración de formularios y menús al sistema de diseño). Cada afirmación nueva se contrastó con el código de `development` (componentes y textos ES de `src/lib/i18n.ts`).
+- **Correcciones de afirmaciones que no coincidían con el producto**:
+  - Cap. 5: se elimina «Resumen del período» (no existe). En móvil hay tarjetas **Propios** y **Empresa** con Mes/Año y un desglose que se desliza en horizontal. **Propios** son turnos manuales y **Empresa** los importados.
+  - Cap. 17: texto real del aviso de desplazamiento («Desplaza horizontalmente para ver los 7 días →»).
+  - Cap. 20 y 29: textos reales del acuse (**Pendiente de confirmar**, **Guardando…**, **Turno reconocido** y el mensaje de error).
+  - Cap. 22 y 24: no existe «Importar CSV» ni un botón Equipo en el encabezado; hay **Importar empleados** e **Importar usuarios**. No se admite arrastrar y soltar. Se corrige la tabla de usuarios (5 columnas).
+  - Cap. 26: **Ajustes** solo aparece a propietarios y administradores (pestañas Perfil, Equipo y Tipos de turno). El tema rota entre sistema, claro y oscuro.
+  - Cap. 27: nombres reales (**Zona de peligro**, **Restaurar estado inicial**, **Restaurar organización**, **Restaurar**).
+- **Contenido nuevo**:
+  - Cap. 3: acceso con Google o GitHub y subsección «Aceptar una invitación».
+  - Cap. 4: visibilidad de las opciones por rol, contador y botón **Actualizar calendario**, menú móvil como ventana.
+  - Cap. 5: tipo **Ausencia**, reglas de compatibilidad de turnos el mismo día, botón **+N** y detalle del día, botón «+» desactivado con Vacaciones.
+  - Cap. 6: al cambiar el tipo se conservan fecha y horas.
+  - Cap. 9: los códigos DL y AJ se leen como Libre.
+  - Cap. 13: estado «Dado de alta — Pendiente de activación» y aviso sobre la mención heredada «Usuarios de la organización».
+  - Cap. 18: campo **Tipo de turno (opcional)** y dos avisos nuevos en la tabla de conflictos.
+  - Cap. 22: barra de herramientas, paginación y acciones de Personas; asistente de 5 pasos con invitación; **Conceder acceso**; **Invitaciones pendientes**.
+  - Cap. 23: **Revocar acceso** en Personas; subpestañas de Asignaciones.
+  - Cap. 24 y 25: reescritos (plantilla, límites, columnas de la vista previa, acciones, resultado, aviso de **Actualizar rol**, invitaciones que caducan a los 7 días y reenvío).
+  - Cap. 28 a 30: nuevas filas de solución de problemas, preguntas frecuentes y términos del glosario.
+- **Capturas**:
+  - `credentials-dark.png` se sustituye por `bulk-result-dark.png`.
+  - Nuevas referencias: `accept-invitation-dark.png`, `day-more-dark.png`, `day-detail-dark.png`, `grant-access-dark.png`, `pending-invitations-dark.png` y `settings-danger-dark.png`.
+  - Todas las capturas se regeneran con `scripts/manual/capture-manual-es.sh` (identidad QA `qa.shiftimport@anclora.test`, organización QA).
+- **Pendiente**: ejecutar la captura, revisar las pantallas pendientes y regenerar el PDF con `node scripts/generate-manual-pdf.mjs`.

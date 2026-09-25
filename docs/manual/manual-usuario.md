@@ -9,8 +9,8 @@
 <div class="cover-subtitle">Aprende paso a paso.<br>Consulta, importa y organiza tus turnos.</div>
 
 <div class="cover-meta">
-  <div class="cover-version">Versión 3.0</div>
-  <div class="cover-date">9 septiembre 2026</div>
+  <div class="cover-version">Versión 3.1</div>
+  <div class="cover-date">25 septiembre 2026</div>
 </div>
 
 <div class="cover-disclaimer">Anclora ShiftImport convierte cuadrantes de turnos (PDF, imagen, CSV o Excel) en un calendario operativo editable y planificable. No sustituye el cuadrante oficial de tu empresa ni constituye un sistema de nóminas.</div>
@@ -91,7 +91,7 @@ Las funciones de equipo dependen también del plan. La tabla describe permisos; 
 
 ### Entrar con una cuenta existente
 
-**Para qué sirve:** recuperar tu espacio y los datos de tu organización. Necesitas el correo y la contraseña de tu cuenta; si tu empresa ya te ha dado acceso, utiliza esos datos.
+**Para qué sirve:** recuperar tu espacio y los datos de tu organización. Necesitas el correo y la contraseña de tu cuenta; si tu empresa ya te ha dado acceso, utiliza esos datos. Si tu cuenta usa Google o GitHub, entra desde **O continúa con**.
 
 1. Abre ShiftImport y pulsa **Iniciar sesión**.
 2. Escribe **Correo electrónico** y **Contraseña**.
@@ -101,6 +101,19 @@ Las funciones de equipo dependen también del plan. La tabla describe permisos; 
 ![Inicio de sesión: utiliza el correo con el que te han concedido acceso](screenshots/login-dark.png)
 
 **Resultado:** verás el calendario correspondiente a tu perfil. Si el acceso falla, comprueba espacios al copiar la contraseña y que estás usando el correo correcto. No crees otra organización para intentar acceder a la de tu empresa.
+
+### Aceptar una invitación
+
+Cuando un administrador te da acceso, recibes un correo con el asunto «Tienes una invitación para unirte a…». El enlace caduca a los 7 días.
+
+1. Abre el enlace del correo.
+2. Si es tu primera cuenta, escribe **Crea tu contraseña** y **Confirma tu contraseña** (al menos 8 caracteres) y pulsa **Crear cuenta y aceptar**.
+3. Si ya tenías cuenta, pulsa **Añadir acceso y aceptar**: tu contraseña y tus preferencias no cambian.
+4. Cuando veas **Acceso activado**, pulsa **Ir a la aplicación**.
+
+Si tenías abierta otra sesión, elige **Cerrar sesión e iniciar con la nueva cuenta** o **Mantener la sesión actual**. Hasta que aceptes la invitación no podrás entrar con esa cuenta.
+
+![Invitación no disponible: si el enlace caducó, ya se usó o fue revocado, pide una nueva a quien te invitó](screenshots/accept-invitation-dark.png)
 
 ### Probar sin cuenta
 
@@ -113,7 +126,7 @@ Pulsa **Continuar sin cuenta** en la pantalla de acceso. Puedes explorar el cale
 ### Crear tu propia cuenta
 
 1. Pulsa **Crear cuenta**.
-2. Indica tu nombre visible, correo y una contraseña de al menos ocho caracteres.
+2. Indica tu **Nombre**, tu correo y una contraseña de al menos ocho caracteres.
 3. Repite la contraseña y revisa los enlaces a términos y privacidad.
 4. Pulsa **Crear cuenta**.
 5. Completa el recorrido de bienvenida y revisa el resumen antes de confirmar.
@@ -132,7 +145,9 @@ El recorrido permite elegir el plan, nombrar la organización y decidir si tú t
 
 ## 4. Reconocer la navegación y elegir la tarea correcta
 
-La barra lateral reúne las tareas. **Calendario** sirve para consultar; **Importar turnos** abre un archivo; **Planificar** prepara semanas futuras. **Equipo**, **Historial de importaciones** y **Formatos aprendidos** aparecen cuando el contexto permite utilizarlos. **Ajustes** reúne preferencias y configuración.
+La barra lateral reúne las tareas. **Calendario** sirve para consultar; **Importar turnos** abre un archivo; **Planificar** prepara semanas futuras. **Historial de importaciones** aparece a quien gestiona turnos. **Equipo**, **Formatos aprendidos** y **Ajustes** solo aparecen a propietarios y administradores. El empleado ve su propio menú: **Importar mis turnos**, **Añadir turno pasado** y **Solicitudes**.
+
+Encima del calendario verás el número de turnos del mes y el botón **Actualizar calendario**, que vuelve a cargar los datos sin salir de la página.
 
 ![Calendario con navegación completa: comprueba organización, rol, empleado y área antes de actuar](screenshots/calendar-month-dark.png)
 
@@ -156,7 +171,7 @@ La barra lateral reúne las tareas. **Calendario** sirve para consultar; **Impor
 
 ![Navegación contraída: los iconos liberan espacio; Expandir navegación recupera los nombres](screenshots/sidebar-collapsed-dark.png)
 
-En móvil, abre la navegación desde su botón. Dentro de ventanas con listas largas, desplázate por la lista para llegar a las filas inferiores. No confundas una fila fuera de la vista con una fila eliminada.
+En móvil, pulsa **Abrir navegación**. El menú se abre como una ventana sobre la pantalla; ciérralo con **Cerrar navegación**, con la tecla Esc o tocando fuera. Dentro de ventanas con listas largas, desplázate por la lista para llegar a las filas inferiores. No confundas una fila fuera de la vista con una fila eliminada.
 
 ## 5. Consultar el calendario, los meses y los colores
 
@@ -168,18 +183,30 @@ En móvil, abre la navegación desde su botón. Dentro de ventanas con listas la
 4. Si hay selectores de área y empleado, elige la persona que quieres consultar.
 5. Lee el tipo de turno y las horas de cada día; abre el turno si necesitas detalle.
 
-El calendario mensual empieza en lunes. Las letras y los colores identifican tipos de turno. El color por sí solo no te dice si se cuentan horas: consulta también el nombre y el horario. **Regular**, **Libre**, **Vacaciones** y **Extras** son tipos iniciales; puedes encontrar otros configurados.
+El calendario mensual empieza en lunes. Las letras y los colores identifican tipos de turno. El color por sí solo no te dice si se cuentan horas: consulta también el nombre y el horario. **Regular**, **Libre**, **Vacaciones**, **Ausencia** y **Extras** son tipos iniciales; puedes encontrar otros configurados. **Ausencia** es una ausencia temporal con hora de inicio y fin (por ejemplo, 11:00–12:00): no suma horas de trabajo y en los totales aparece como «AUS.» en horas.
 
 ### Entender los resúmenes (escritorio y móvil)
 
 - **En pantallas de escritorio:** la barra superior muestra las celdas detalladas con el total del mes (**Tot. M.**) y del año (**Tot. A.**), desglosando los grupos y los tipos individuales con sus horas y días acumulados.
-- **En dispositivos móviles (teléfono / pantallas estrechas):** para que no tengas que desplazarte horizontalmente a ciegas, la barra incorpora automáticamente una tarjeta de resumen móvil (**Resumen del período**). En ella se leen directamente en pantalla los totales principales de horas y días del mes y las horas acumuladas del año, y debajo los distintivos de tipos de turno ajustados en varias líneas sin desbordar el ancho del dispositivo.
+- **En dispositivos móviles (teléfono / pantallas estrechas):** los totales se muestran en dos tarjetas, **Propios** y **Empresa**. Cada una indica arriba las horas y los días de **Mes** y **Año**; debajo, el desglose por tipo se desplaza en horizontal, como recuerda el aviso «Desliza para ver desglose por tipo →».
 
-![Calendario en móvil: la tarjeta superior resume totales de mes y año legibles sin desplazamiento forzado](screenshots/calendar-mobile-dark.png)
+![Calendario en móvil: las tarjetas Propios y Empresa resumen mes y año; el desglose por tipo se desliza en horizontal](screenshots/calendar-mobile-dark.png)
 
-Los grupos **Propios** y **Empresa**, cuando aparecen, distinguen los datos según su clasificación en la aplicación. No sumes las cifras como si fueran categorías salariales: no calculan nóminas, complementos ni certifican la jornada legal.
+El grupo **Propios** suma los turnos añadidos a mano y **Empresa** los que proceden de importaciones. No sumes las cifras como si fueran categorías salariales: no calculan nóminas, complementos ni certifican la jornada legal.
 
-**Si no ves un turno**, comprueba mes, empleado y área. Si procede de una planificación, confirma que esté publicada. Si procede de una importación, revisa su resultado y su historial.
+### Días con más de dos turnos
+
+Cada día del calendario muestra como máximo dos elementos. Si hay más, aparece un botón **+1**, **+2**… Púlsalo para abrir el detalle del día: verás el número total de elementos, agrupados en **Eventos de día completo** y **Turnos con horario**, con las acciones **Editar turno** y **Eliminar turno**. Eliminar pide confirmación: «¿Seguro que deseas eliminar este turno?».
+
+![Día con más turnos: el botón +1 indica que hay elementos que no caben en la celda](screenshots/day-more-dark.png)
+
+![Detalle del día: todos los elementos de la fecha, separados en día completo y turnos con horario](screenshots/day-detail-dark.png)
+
+### Turnos que pueden coincidir el mismo día
+
+**Libre**, **Vacaciones** y una baja de día completo ocupan la jornada entera y no se combinan con ningún otro turno ese día. Los turnos con horario, incluida **Ausencia**, pueden coincidir el mismo día si sus horas no se solapan: por ejemplo, Regular 08:00–11:00, Ausencia 11:00–12:00 y Regular 12:00–16:00. Si intentas combinarlos, verás avisos como «No puedes combinar un día libre con otros turnos en la misma fecha» o «Este horario se solapa con otro registro del mismo día». En un día con vacaciones, el botón **+** de la celda queda desactivado.
+
+**Si no ves un turno**, comprueba mes, empleado y área. Si hay más de dos elementos, abre el detalle del día. Si procede de una planificación, confirma que esté publicada. Si procede de una importación, revisa su resultado y su historial.
 
 > **CONSEJO:** compara al menos el primer día, el último y un turno nocturno con el archivo original. Un horario de 22:00 a 06:00 termina al día siguiente; no lo corrijas a 06:00–22:00.
 
@@ -195,13 +222,15 @@ Los grupos **Propios** y **Empresa**, cuando aparecen, distinguen los datos seg�
 4. Pulsa **Confirmar**.
 5. Vuelve al mes correspondiente y comprueba que aparece.
 
+Al cambiar el **Tipo**, la fecha y las horas que ya escribiste se conservan. **Ausencia** y los demás tipos con horario necesitan hora de inicio y de fin.
+
 ![Alta manual: una fecha pasada y su horario, listos para confirmar](screenshots/manual-create-dark.png)
 
 **Si no se guarda**, revisa la fecha y el aviso. No uses esta acción para planificar hoy o mañana. Tampoco añadas manualmente un turno que ya existe sin comprobarlo.
 
 ### Corregir o eliminar
 
-Si tu perfil permite editar ese turno, al abrirlo verás **Actualizar Turno**. Corrige los campos y confirma, o utiliza **Eliminar** para suprimirlo. Comprueba después el calendario. Un empleado no debe intentar modificar directamente un turno oficial: utiliza **Solicitar cambio**.
+Si tu perfil permite editar ese turno, al abrirlo (desde la celda o desde el detalle del día) verás **Actualizar Turno**. Corrige los campos y confirma, o utiliza **Eliminar** para suprimirlo. Comprueba después el calendario. Un empleado no debe intentar modificar directamente un turno oficial: utiliza **Solicitar cambio**.
 
 Para cambiar una semana publicada, sigue el recorrido de nueva versión del capítulo 19. Para corregir datos que aún no has importado, utiliza la vista previa del capítulo 10: todavía no necesitas borrar nada del calendario.
 
@@ -278,7 +307,7 @@ El **Asistente de formato** puede preguntar por códigos, columnas o días. Cons
 
 ![El asistente pregunta por texto no interpretado: no lo clasifiques como trabajo sin comprobar la leyenda](screenshots/import-assistant-dark.png)
 
-**Ejemplo:** la leyenda dice «M = 08:00–16:00». Asocia M a un turno de trabajo y esas horas. Si N significa 22:00–06:00, conserva el cruce de medianoche. No inventes horas para conseguir una importación completa. Si la pregunta contiene un encabezado como «Recepción» que no representa un turno, utiliza **Ignorar este código o color** cuando esa sea la interpretación correcta.
+**Ejemplo:** la leyenda dice «M = 08:00–16:00». Asocia M a un turno de trabajo y esas horas. Si N significa 22:00–06:00, conserva el cruce de medianoche. Los códigos **DL** y **AJ** se interpretan automáticamente como **Libre**. No inventes horas para conseguir una importación completa. Si la pregunta contiene un encabezado como «Recepción» que no representa un turno, utiliza **Ignorar este código o color** cuando esa sea la interpretación correcta.
 
 **Resultado esperado:** aparece una vista previa revisable. Si aún hay dudas, el asistente puede hacer otra pregunta. Si no puedes responder con seguridad, cancela y consigue una copia con leyenda o un CSV más claro.
 
@@ -382,11 +411,13 @@ Eliminar una fila del nuevo archivo no borra automáticamente un turno de una im
 | Nuevo | Que no existe ya con otro nombre o código; crear la ficha no concede acceso |
 | Ambiguo | Elegir una coincidencia inequívoca antes de seleccionar |
 | Existente — Inactivo | Resolver la situación con un administrador; no crear un duplicado |
-| Pendiente de activación | Completar el alta o vínculo indicado antes de importar sus turnos |
+| Dado de alta — Pendiente de activación | Completar su ficha en **Equipo → Personas** antes de importar sus turnos |
 
 ![Resumen de equipo: compara turnos nuevos, conflictos y errores antes de pulsar Importar](screenshots/team-preview-dark.png)
 
 ![Resultado de equipo: comprueba empleados procesados, turnos creados y errores antes de cerrar](screenshots/import-success-dark.png)
+
+Algunos avisos de la importación todavía hablan de «Usuarios de la organización». Esa pantalla ahora es **Equipo → Personas**, donde la fila de la persona ofrece **Completar ficha**.
 
 **Excel con varias hojas:** revisa cuántas se procesaron y cuántas se ignoraron. Una hoja de notas puede ignorarse; una hoja de turnos que falta exige atención. **JSON/XML:** utiliza archivos con una estructura de empleados, fechas y horarios reconocible; no cualquier exportación será compatible.
 
@@ -497,7 +528,7 @@ Un **borrador** es una propuesta editable. Guardar un turno en él todavía no c
 
 En pantallas con menor ancho disponible (tablets en vertical o ventanas reducidas a menos de 980 px), el horario de los siete días de la semana excede el espacio en pantalla:
 
-- **Indicador persistente de desplazamiento:** tanto en la vista de **Cuadrícula** como en la de **Tabla accesible**, la aplicación muestra en la parte superior el aviso permanente `Desplaza horizontalmente para ver todos los días de la semana (L-D)` acompañado de un degradado sutil en el margen derecho, visible sin depender de pasar el ratón por encima.
+- **Indicador persistente de desplazamiento:** tanto en la vista de **Cuadrícula** como en la de **Tabla accesible**, la aplicación muestra en la parte superior el aviso permanente «Desplaza horizontalmente para ver los 7 días →» acompañado de un degradado sutil en el margen derecho, visible sin depender de pasar el ratón por encima.
 - **Desplazamiento táctil o con ratón:** arrastra horizontalmente la tabla o utiliza la barra de desplazamiento inferior para moverte con fluidez de lunes a domingo.
 - **Navegación por teclado:** el contenedor de la tabla cuenta con foco accesible (`Tab`). Al situarte sobre él, utiliza las teclas de flecha (← / →) para desplazarte de columna a columna sin mover horizontalmente el resto de la página.
 
@@ -513,7 +544,7 @@ No crees personas de relleno para abrir la cuadrícula. Comprueba el filtro y si
 
 1. En la fila de la persona y el día correcto, pulsa la acción de añadir.
 2. Comprueba **Empleado** y **Fecha** en **Añadir turno**.
-3. Introduce **Inicio**, **Fin** y, si procede, **Ubicación**.
+3. Elige **Tipo de turno (opcional)**; por defecto es Regular. Introduce **Inicio**, **Fin** y, si procede, **Ubicación** (opcional).
 4. Guarda y comprueba la celda.
 5. Para corregir, abre **Editar turno**, cambia los campos y guarda.
 6. Para retirar una propuesta, usa **Eliminar turno** y lee la confirmación.
@@ -525,6 +556,8 @@ No crees personas de relleno para abrir la cuadrícula. Comprueba el filtro y si
 | Aviso | Qué comprobar |
 | --- | --- |
 | El horario se solapa con otro turno | Revisa los dos intervalos del mismo empleado y corrige uno |
+| No puedes combinar un evento de jornada completa con otros turnos | Libre o vacaciones ocupan todo el día; quita el otro turno o cambia la fecha |
+| Ausencia temporal y otros turnos horarios necesitan hora de inicio y fin | Completa **Inicio** y **Fin** |
 | Menos de 11 horas de descanso | Ajusta el final de una jornada o el inicio de la siguiente |
 | La versión ya no es editable | Recarga; otra persona puede haber publicado |
 | El turno queda fuera del ámbito | Vuelve al empleado o área que puedes gestionar |
@@ -590,10 +623,10 @@ Comprueba la fecha, el horario y la ubicación o tipo de jornada asignada. Para 
 
 #### Cómo confirmar la recepción de tu turno
 
-1. Al abrir el turno, si aún está pendiente de acuse, verás el botón dorado **Confirmar recepción**.
-2. Pulsa el botón: mientras el sistema registra el acuse, se mostrará el mensaje **Confirmando recepción…**.
-3. Una vez registrado, el botón se sustituye por el estado **Recepción confirmada** en verde, dejando constancia de que has revisado tu horario oficial.
-4. Si ocurre una incidencia temporal de red, verás el aviso **Error al confirmar la recepción. Inténtalo de nuevo**, manteniendo el turno intacto y permitiéndote reintentar la acción sin duplicar peticiones.
+1. Al abrir el turno, si aún no lo has confirmado, verás el estado **Pendiente de confirmar** y el botón **Confirmar recepción**.
+2. Pulsa el botón: mientras se registra el acuse, verás **Guardando…**.
+3. Cuando termine, el estado cambia a **Turno reconocido**.
+4. Si hay un problema de conexión, verás «No se pudo confirmar el turno. Inténtalo de nuevo.». El turno no cambia y puedes repetir la acción.
 
 ![Detalle del turno del empleado: fecha, horario y botón para confirmar la recepción del turno publicado](screenshots/employee-detail-dark.png)
 
@@ -656,23 +689,45 @@ En un cambio de horario aprobado, comprueba las horas resultantes. «Otro motivo
 
 No crees otra ficha de María solo porque ahora necesita una contraseña. Vincula su acceso con la ficha existente para que consulte los turnos que le corresponden.
 
+### Encontrar a una persona en Equipo → Personas
+
+Abre **Equipo** en la barra lateral y la pestaña **Personas**. La barra de herramientas reúne el buscador («Buscar por nombre, email o ID…»), los filtros de **Acceso**, **Rol**, **Área** y **Estado de la persona**, y los botones **Invitaciones pendientes**, **Importar empleados**, **Importar usuarios** y **Añadir persona**. La tabla muestra diez personas por página; usa **Página anterior** y **Página siguiente** para recorrerla.
+
+Según la situación de cada fila verás **Completar ficha**, **Editar ficha**, **Conceder acceso** o **Revocar acceso**.
+
+![Personas: la barra de herramientas reúne búsqueda, filtros, invitaciones, importaciones CSV y Añadir persona](screenshots/equipo-personas-dark.png)
+
 ### Añadir una persona o varias
 
-**Quién puede hacerlo:** propietario o administrador. **Antes de empezar:** comprueba si la persona ya aparece en la búsqueda y ten su nombre, correo si va a tener acceso e identificador si lo usa el cuadrante.
+**Quién puede hacerlo:** propietario o administrador. **Antes de empezar:** comprueba si la persona ya aparece en la búsqueda y ten su nombre, su correo si va a tener acceso y su identificador si lo usa el cuadrante.
 
-- **Alta individual:** en **Equipo → Personas**, pulsa **Añadir persona** para abrir el asistente paso a paso:
-  1. En **Identidad**, indica el nombre.
-  2. En **Acceso**, decide si necesita una cuenta.
-  3. En **Empleo**, decide si necesita ficha de empleado y completa sus datos.
-  4. Revisa el rol y su ámbito (área o global).
-  5. Revisa la confirmación y confirma el alta. Guarda las credenciales si se muestran.
-- **Alta masiva mediante CSV:** en la barra de herramientas de **Equipo → Personas**, pulsa directamente **Importar CSV** para cargar un lote de empleados o de usuarios desde un archivo sin salir del workspace (detallado en el capítulo 24).
+- **Alta individual:** pulsa **Añadir persona**. El asistente **Añadir nueva persona** tiene cinco pasos:
+  1. **Identidad:** el nombre completo.
+  2. **Acceso:** decide si podrá iniciar sesión y, si es así, su email de acceso.
+  3. **Empleo:** decide si necesita ficha de empleado y completa área e identificador.
+  4. **Rol y Ámbito:** el rol en la organización y, para un planificador, su ámbito.
+  5. **Confirmación:** revisa el resumen y pulsa **Confirmar y crear persona**.
+- **Alta masiva:** usa **Importar empleados** o **Importar usuarios** (capítulo 24).
 
-![Personas: la barra de herramientas reúne búsqueda, filtros, Añadir persona e Importar CSV](screenshots/equipo-personas-dark.png)
+Si la persona tendrá acceso, se le envía una invitación por correo: «La persona establecerá su propia contraseña al aceptar el enlace seguro. Nunca se envían contraseñas temporales.». Si el correo no sale, verás «La invitación se creó, pero el correo no pudo enviarse. Puedes reenviarla desde el listado.».
 
 ![Añadir persona: empieza por la identidad y revisa después acceso, empleo y permisos](screenshots/team-add-person-dark.png)
 
-Crear una ficha y conceder acceso son decisiones separadas. Revisa el estado final: una persona **pendiente de activación** puede necesitar completar su alta antes de recibir turnos por importación. Sigue **Completar alta** cuando el resultado lo indique.
+Crear una ficha y conceder acceso son decisiones separadas. Si una importación indica que la persona está pendiente de activación, pulsa **Completar alta** en el resultado o **Completar ficha** en su fila.
+
+### Dar acceso a una ficha que ya existe
+
+1. En **Personas**, localiza la fila y pulsa **Conceder acceso**.
+2. Escribe el **Email de acceso** y elige el **Rol en la organización**. Si esa persona ya tuvo acceso antes, el email aparece precompletado.
+3. Pulsa **Siguiente**, revisa el resumen en **Revisar acceso** y pulsa **Enviar invitación**.
+
+![Conceder acceso: indica el email y el rol; la persona recibirá una invitación para activar su cuenta](screenshots/grant-access-dark.png)
+
+### Seguir las invitaciones pendientes
+
+Pulsa **Invitaciones pendientes**; el número indica cuántas hay. Si no hay ninguna, el botón está desactivado. En la ventana puedes buscar por email o persona, ordenar por **Más recientes**, **Más antiguos** o **Caducidad próxima**, y ver el estado del envío (**Enviado**, **Error al enviar** o **Pendiente**) y la fecha de caducidad. **Reenviar** genera un enlace nuevo y el anterior deja de valer. **Revocar** anula la invitación.
+
+![Invitaciones pendientes: comprueba el envío y la caducidad antes de reenviar o revocar](screenshots/pending-invitations-dark.png)
 
 ## 23. Roles, áreas, asignaciones y propiedad
 
@@ -682,7 +737,7 @@ Crear una ficha y conceder acceso son decisiones separadas. Revisa el estado fin
 
 1. Abre **Equipo → Roles y acceso**.
 2. Localiza a la persona por nombre y correo.
-3. Pulsa **Cambiar rol** o **Gestionar ámbito**, según la tarea.
+3. Pulsa **Cambiar rol** o, en un planificador, **Gestionar ámbito**.
 4. Elige el rol y, para planificación, toda la organización, áreas o empleados.
 5. Guarda y comprueba el resumen de la persona.
 
@@ -690,7 +745,9 @@ Crear una ficha y conceder acceso son decisiones separadas. Revisa el estado fin
 
 ![Ámbito del planificador: selecciona las áreas o personas que realmente debe gestionar](screenshots/planner-scope-dark.png)
 
-**Revocar acceso** impide utilizar ese acceso a la organización; no lo utilices para borrar el historial de un empleado ni para recuperar una contraseña. El administrador no puede modificar la condición del propietario.
+También puedes revisar todos los ámbitos en **Equipo → Asignaciones → Planificadores → Ámbitos**.
+
+**Revocar acceso** está en la fila de la persona, en **Personas**. Pide confirmación: «{nombre} dejará de poder entrar en esta organización. Su ficha de empleado y sus datos de trabajo se conservarán.». No lo utilices para borrar el historial de un empleado ni para recuperar una contraseña. Si más adelante necesitas devolverle el acceso, usa **Conceder acceso**. El administrador no puede modificar la condición del propietario.
 
 ### Crear o modificar un área
 
@@ -700,11 +757,11 @@ Las áreas son opcionales. Sirven para agrupar, por ejemplo, Recepción y Manten
 
 ### Mover varias personas a un área
 
-1. Abre **Equipo → Asignaciones**.
+1. Abre **Equipo → Asignaciones** y la subpestaña **Empleados → Área (Cambio masivo)**.
 2. Busca y selecciona a los empleados afectados.
 3. Elige el área de destino o la opción sin área, si procede.
-4. Indica la fecha a partir de la cual entra en vigor el cambio.
-5. Revisa el número seleccionado, aplica el cambio y comprueba el mensaje.
+4. Indica la **Fecha de efecto**, a partir de la cual entra en vigor el cambio.
+5. Revisa el número seleccionado, pulsa **Aplicar a N empleados** y comprueba el mensaje.
 
 ![Asignaciones: revisa personas seleccionadas, destino y fecha de entrada en vigor](screenshots/equipo-asignaciones-dark.png)
 
@@ -712,7 +769,7 @@ Esta fecha permite distinguir el cambio nuevo de asignaciones anteriores. No la 
 
 ### Transferir la propiedad
 
-Solo el propietario activo puede hacerlo. En **Roles y acceso**, pulsa **Transferir propiedad**, selecciona el nuevo titular y el rol que conservará el anterior, lee la advertencia y completa la confirmación. Comprueba la nueva titularidad al terminar. No se realiza escogiendo Propietario en un cambio de rol ordinario.
+Solo el propietario activo ve el botón. En **Roles y acceso**, pulsa **Transferir propiedad**, selecciona el nuevo titular y el rol que conservará el anterior, lee la advertencia y completa la confirmación. Comprueba la nueva titularidad al terminar. No se realiza escogiendo Propietario en un cambio de rol ordinario.
 
 ![Transferencia de propiedad: revisa al nuevo titular y tu rol posterior antes de confirmar](screenshots/ownership-transfer-dark.png)
 
@@ -720,79 +777,84 @@ No transfieras la titularidad para dar permisos temporales. Para eso, utiliza lo
 
 ## 24. Dar de alta muchos empleados o usuarios mediante CSV
 
-**Quién puede hacerlo:** propietario o administrador con la gestión de equipo habilitada. **Ruta principal:** abre el menú lateral **Equipo** (o pulsa el botón **Equipo** en el encabezado) y, dentro de la pestaña **Personas**, pulsa el botón **Importar CSV**.
+**Quién puede hacerlo:** propietario o administrador con la gestión de equipo habilitada. **Ruta:** **Equipo → Personas** y el botón **Importar empleados** o **Importar usuarios**.
 
-La ventana **Carga masiva mediante CSV** te permite cargar tanto archivos de empleados (fichas del cuadrante) como de usuarios (cuentas de acceso), con validación automática y vista previa antes de guardar cambios. Si necesitas incorporar ambos, realiza la carga en dos pasos: primero los empleados y después los usuarios para que queden vinculados automáticamente mediante su identificador.
+Cada botón abre su propia ventana: **Importar empleados desde CSV** o **Importar usuarios y accesos desde CSV**. Si necesitas ambas cosas, importa primero los empleados y después los usuarios, para que el identificador los vincule. Al cerrar la ventana, **Equipo** conserva la pestaña, la búsqueda y los filtros.
 
-Al cerrar o cancelar el proceso de importación masiva en cualquier momento, la ventana de **Equipo** conserva intactos la pestaña activa, el texto de búsqueda y los filtros que tuvieras seleccionados.
+En las dos ventanas:
+
+- **Seleccionar archivo CSV** elige el archivo. No se admite arrastrar y soltar.
+- **Descargar plantilla** obtiene un CSV de ejemplo con las cabeceras correctas.
+- El archivo puede ocupar hasta 2 MB y tener hasta 1.000 filas; la importación de usuarios admite hasta 500 filas por envío.
+- La **Vista previa** muestra **Fila**, la persona (**Ficha de empleado** o **Email de acceso**), la **Acción** prevista y el **Detalle**, más el resumen «N filas · M procesables».
+- **Confirmar importación** solo se activa si alguna fila se puede procesar. Tras confirmar, la tabla pasa a **Resultado** y puedes pulsar **Descargar informe CSV**.
 
 ### Primero: importar fichas de empleados
 
-Prepara un CSV con las cabeceras **external_employee_id** y **name**. La columna **area** es opcional. Los nombres de cabecera se escriben así para que la aplicación los reconozca; son las únicas palabras técnicas que necesitas conservar en el archivo.
+Prepara un CSV con las cabeceras **externalEmployeeId** y **name**; la columna **area** es opcional. También se reconocen variantes como **external_employee_id**, **idEmpleado** o **nombre**.
 
-| external_employee_id | name | area |
+| externalEmployeeId | name | area |
 | --- | --- | --- |
 | ANA01 | Ana Demo | Recepción |
 | CAR02 | Carlos Demo | Recepción |
 
-1. En **Equipo → Personas**, pulsa **Importar CSV**.
-2. Pulsa **Seleccionar archivo CSV** (o arrastra el archivo) y elige tu CSV de empleados.
-3. Comprueba la vista previa con el recuento de filas nuevas, existentes y con error.
-4. Si hay errores, corrígelos en el archivo CSV y vuelve a seleccionarlo.
-5. Pulsa **Confirmar importación** cuando el resumen sea correcto.
-6. Revisa el mensaje de éxito con los empleados creados.
+1. En **Equipo → Personas**, pulsa **Importar empleados**.
+2. Pulsa **Seleccionar archivo CSV** y elige el archivo.
+3. Revisa la **Acción** de cada fila: **Crear**, **Actualizar**, **Sin cambios**, **Omitir duplicado** o **Error**.
+4. Si hay errores, corrige el archivo y vuelve a seleccionarlo.
+5. Pulsa **Confirmar importación**.
+6. Revisa el resultado: creados, actualizados, sin cambios y rechazados.
 
-![Alta masiva de empleados: comprueba identificador, nombre y estado de cada fila](screenshots/bulk-employees-dark.png)
+![Alta masiva de empleados: comprueba la acción prevista para cada ficha antes de confirmar](screenshots/bulk-employees-dark.png)
 
-El alta de empleados **no crea cuentas**, aunque el archivo incluya un correo. Un identificador existente puede corresponder a una ficha que se actualiza; no cambies el código para eludir una coincidencia. Un área desconocida produce una incidencia: créala o corrige su nombre antes de reintentar.
+La importación de empleados **no crea cuentas**, aunque el archivo incluya un correo. Un identificador que ya existe corresponde a una ficha existente: no cambies el código para eludir la coincidencia. Un área que no existe en la organización produce un error: créala o corrige su nombre antes de reintentar.
 
 ### Después: importar accesos de usuarios
 
-Prepara un CSV con **email**, **displayName**, **role**, **externalEmployeeId** y **locale**. También se aceptan aliases como **name**, **nombre**, **external_employee_id** o **idEmpleado**. El idioma puede ser **es** o **en** y, si se omite, se usa el idioma activo de la aplicación. Para roles habituales utiliza **ADMIN**, **PLANNER** o **EMPLOYEE**. La propiedad se gestiona mediante el recorrido específico del capítulo 23.
+Prepara un CSV con **email**, **displayName**, **role**, **externalEmployeeId** y **locale**. Son obligatorias **email** y **role**; también se aceptan variantes como **correo**, **rol**, **name**, **nombre** o **idEmpleado**. El idioma puede ser **es** o **en**; si se omite, se usa el idioma activo. Los roles válidos son **ADMIN**, **PLANNER** y **EMPLOYEE**. **OWNER** no se puede importar: la propiedad se gestiona como indica el capítulo 23.
 
 | email | displayName | role | externalEmployeeId | locale |
-| --- | --- | --- | --- |
+| --- | --- | --- | --- | --- |
 | ana@example.invalid | Ana Demo | EMPLOYEE | ANA01 | es |
 | carlos@example.invalid | Carlos Demo | PLANNER |  | en |
 
-1. En **Equipo → Personas**, pulsa **Importar CSV**.
+1. En **Equipo → Personas**, pulsa **Importar usuarios**.
 2. Selecciona tu archivo CSV de usuarios.
-3. Comprueba correo, nombre, rol y el vínculo con el empleado en la tabla de vista previa.
-4. Revisa los totales: cuentas nuevas, ya miembros y errores.
-5. Pulsa **Confirmar importación**.
-6. Revisa el resultado y, si lo necesitas, descarga el informe CSV seguro. Las cuentas nuevas reciben una invitación y establecen su propia contraseña; nunca se generan ni se exportan contraseñas temporales.
+3. Revisa la **Acción** de cada fila: **Invitar**, **Actualizar rol**, **Sin cambios**, **Invitación ya pendiente**, **Omitir duplicado** o **Error**.
+4. Pulsa **Confirmar importación**.
+5. Revisa el resultado (invitaciones creadas, sin email enviado, actualizados, sin cambios y rechazados) y, si lo necesitas, pulsa **Descargar informe CSV**.
 
 ![Alta masiva de usuarios: el correo da acceso y el identificador enlaza con la ficha existente](screenshots/bulk-users-dark.png)
 
 ![Vista previa con errores: una fila errónea necesita corrección antes de considerarla dada de alta](screenshots/bulk-errors-dark.png)
 
-La importación de usuarios **no crea empleados nuevos**. Si necesitas ambos, crea las fichas primero. Un usuario global activo conserva su contraseña, OAuth y accesos anteriores; solo se añade la pertenencia nueva. Las invitaciones pendientes no se duplican al repetir el mismo CSV. Revisa el resultado fila a fila.
+> **IMPORTANTE:** si el email ya pertenece a un miembro con otro rol, la fila aparece como **Actualizar rol** y, al confirmar, **cambia su rol**. Revisa esas filas antes de confirmar.
+
+La importación de usuarios **no crea empleados**: si indicas un identificador, la ficha debe existir y no estar vinculada a otra cuenta. Una cuenta que ya existía conserva su contraseña y sus accesos; solo se añade la pertenencia nueva. Las invitaciones pendientes no se duplican al repetir el mismo CSV.
 
 ## 25. Seguridad de las invitaciones CSV
 
-La importación CSV no crea credenciales iniciales para entregar. Cada cuenta nueva recibe un enlace de invitación seguro y establece su contraseña en la pantalla de aceptación. El informe descargable contiene solo el resultado de cada fila.
+La importación de usuarios no crea contraseñas ni credenciales para entregar. Cada cuenta nueva recibe por correo un enlace de invitación seguro y establece su propia contraseña al aceptarlo (capítulo 3). El enlace caduca a los 7 días.
 
-1. Revisa las filas con invitación creada y el estado de entrega.
-2. Si necesitas compartir el resultado operativo, descarga el informe CSV seguro.
-3. Para una entrega fallida, usa el reenvío desde el listado de invitaciones; se genera un token nuevo.
+1. En el resultado, revisa cuántas invitaciones se crearon y cuántas quedaron **sin email enviado**.
+2. Si necesitas compartir el resultado operativo, pulsa **Descargar informe CSV**; contiene solo el estado de cada fila.
+3. Para una entrega fallida, abre **Invitaciones pendientes** y pulsa **Reenviar**; se genera un enlace nuevo.
 
-![Resultado del alta: descarga antes de cerrar; los valores de contraseña están ocultos en esta captura](screenshots/credentials-dark.png)
+![Resultado de la importación: revisa los recuentos y descarga el informe antes de cerrar](screenshots/bulk-result-dark.png)
 
-> **SEGURIDAD:** no se guardan ni exportan contraseñas temporales. El token solo existe durante la generación y el envío; la base de datos conserva exclusivamente su hash.
+> **SEGURIDAD:** no se guardan ni se exportan contraseñas temporales. El enlace solo existe en el correo enviado; la aplicación conserva únicamente una huella (hash) que no permite reconstruirlo.
 
-**«Se muestra una vez» no significa «solo permite un inicio de sesión».** Tampoco debes suponer que se exige automáticamente cambiarla en el primer acceso.
+### Si pierdes una contraseña
 
-### Si pierdes una contraseña de un alta legacy
+El alta inicial de una organización puede mostrar contraseñas temporales para administradores o planificadores creados en ese momento. Guárdalas antes de cerrar: no se pueden volver a consultar.
 
-Esta sección solo aplica al onboarding legacy que aún conserva compatibilidad histórica. El importador CSV no genera contraseñas temporales: para una cuenta nueva, utiliza el enlace de invitación y establece la contraseña en la pantalla de aceptación. No revoques y concedas acceso esperando que cambie la contraseña de una cuenta ya existente.
-
-En el acceso, **¿Olvidaste tu contraseña?** abre el formulario de recuperación. Introduce tu correo y sigue el aviso. El mensaje de solicitud no confirma por sí mismo que se haya entregado un correo. Si no recibes el enlace, utiliza el contacto de soporte mostrado en la aplicación; la entrega automática no está verificada en esta edición. Si recibes un enlace válido, úsalo para establecer una contraseña nueva y vuelve a iniciar sesión.
+En el acceso, **¿Olvidaste tu contraseña?** abre el formulario de recuperación. Introduce tu correo y sigue el aviso. El mensaje de solicitud no confirma por sí mismo que se haya entregado un correo. Si no recibes el enlace, utiliza el contacto de soporte mostrado en la aplicación. No revoques y vuelvas a conceder el acceso esperando que cambie la contraseña de una cuenta ya existente.
 
 ## 26. Perfil, tipos de turno, idioma y tema
 
 ### Ajustar tu perfil
 
-Si tu navegación ofrece **Ajustes**, abre **Ajustes → Perfil**. Revisa el nombre y los identificadores que se muestran para tu uso. Los controles disponibles dependen de si estás como invitado, empleado o gestor. Guarda los cambios con la acción disponible y comprueba el resultado. Cambiar tu nombre de perfil no concede permisos ni sustituye un vínculo de empleado incorrecto.
+**Ajustes** solo aparece a propietarios y administradores, en la barra lateral. Tiene las pestañas **Perfil**, **Equipo** y **Tipos de turno**. Abre **Ajustes → Perfil** y revisa el nombre y los identificadores que se muestran. Guarda los cambios con la acción disponible y comprueba el resultado. Cambiar tu nombre de perfil no concede permisos ni sustituye un vínculo de empleado incorrecto.
 
 ![Perfil: revisa los datos personales y los identificadores que ayudan a reconocer tu cuadrante](screenshots/settings-profile-dark.png)
 
@@ -810,7 +872,7 @@ Si tu navegación ofrece **Ajustes**, abre **Ajustes → Perfil**. Revisa el nom
 
 ### Cambiar idioma y apariencia
 
-Utiliza el control **ES / EN** para alternar español e inglés. El botón de tema permite cambiar la apariencia entre las opciones disponibles. El calendario mensual utiliza lunes como primer día en ambos idiomas. Cambiar el idioma o el tema no cambia los turnos.
+Utiliza el control **ES / EN** para alternar español e inglés. El botón de tema pasa sucesivamente por **sistema**, **claro** y **oscuro**; el tema inicial es el oscuro. El calendario mensual utiliza lunes como primer día en ambos idiomas. Cambiar el idioma o el tema no cambia los turnos.
 
 Si buscas un botón descrito en español y ves la interfaz en inglés, vuelve temporalmente a ES para seguir los pasos. El modo oscuro es la referencia visual de este manual.
 
@@ -842,11 +904,13 @@ ShiftImport aplica controles de acceso y separación por organización. Esto no 
 
 **Solo propietarios y administradores.** Esta acción es para un reinicio operativo deliberado, no para resolver un error puntual.
 
-1. Abre **Ajustes → Equipo** y localiza **Restablecer la situación inicial**.
-2. Lee la explicación y comprueba la organización activa.
-3. Escribe **RESTABLECER** cuando se solicite.
-4. Confirma únicamente si quieres eliminar los datos operativos indicados.
+1. Abre **Ajustes → Equipo** y localiza la **Zona de peligro**.
+2. Pulsa **Restaurar estado inicial**, lee el aviso de la ventana **Restaurar organización** y comprueba la organización activa.
+3. Escribe **RESTABLECER** en el campo «Escribe RESTABLECER para confirmar».
+4. Pulsa **Restaurar** únicamente si quieres eliminar los datos operativos indicados; si no, pulsa **Cancelar**.
 5. Revisa el resultado antes de volver a crear empleados o importar.
+
+![Restaurar organización: la acción solo se ejecuta después de escribir RESTABLECER; cancela si no estás seguro](screenshots/settings-danger-dark.png)
 
 Se eliminan turnos, importaciones y fichas de empleados, incluidas las vinculadas a gestores. Se conservan la organización, las cuentas y sus accesos, el plan, las áreas y los formatos aprendidos. No es una eliminación de cuenta. Si solo necesitas retirar un archivo, utiliza el capítulo 16.
 
@@ -864,7 +928,7 @@ Empieza por comprobar **sesión, organización, empleado, área y periodo**. Lee
 | No puedo confirmar | Falta sesión, hay bloqueos o no hay filas nuevas | Lee el pie del importador y el contador |
 | Solo hay turnos futuros | No hay histórico o se excluye el futuro | Un gestor debe usar borradores; el empleado consulta lo publicado |
 | La carga es parcial | Algunas filas o empleados quedaron fuera | Revisa el resultado y corrige lo pendiente |
-| Empleado pendiente o inactivo | Alta incompleta o estado no operativo | Utiliza Completar alta o la gestión de equipo autorizada |
+| Empleado pendiente o inactivo | Alta incompleta o estado no operativo | Utiliza **Completar alta** o **Equipo → Personas → Completar ficha** |
 | No encuentro una importación | Filtro, página, organización o alcance | Quita filtros y revisa contexto e historial |
 | No puedo eliminar la carga | Falta rol o ya está eliminada | Comprueba su estado; solo un gestor autorizado puede borrarla |
 | No puedo publicar | Conflicto, descanso, ámbito o versión no editable | Corrige el aviso y recarga el estado actual |
@@ -872,8 +936,11 @@ Empieza por comprobar **sesión, organización, empleado, área y periodo**. Lee
 | No veo Equipo | Rol, plan o navegación distinta | Comprueba tu perfil; no todos los usuarios gestionan personas |
 | No puedo resolver una solicitud | Es propia, queda fuera del ámbito o la política no lo permite | Debe resolverla otro gestor habilitado |
 | El portal no carga | Conexión o sesión | Usa Reintentar y vuelve a entrar si es necesario |
-| Falla el acuse de recibo de un turno | Corte temporal de conexión o sesión expirada | Comprueba la red y pulsa de nuevo en Confirmar recepción; el turno se conserva intacto |
-| No tengo la contraseña temporal | Se cerró la ventana sin guardar | Busca la descarga; si no existe, consulta soporte |
+| Falla el acuse de recibo de un turno | Corte temporal de conexión o sesión expirada | Comprueba la red y pulsa de nuevo **Confirmar recepción**; el turno se conserva intacto |
+| «Esta invitación ya no está disponible» | El enlace caducó, ya se usó o se revocó | Pide a un administrador que la reenvíe desde **Invitaciones pendientes** |
+| La persona no recibió la invitación | Fallo de entrega del correo | En **Invitaciones pendientes**, revisa el estado y pulsa **Reenviar** |
+| No puedo añadir un turno ese día | Hay Libre o Vacaciones, o el horario se solapa | Revisa el detalle del día; los eventos de día completo no se combinan |
+| No veo todos los turnos del día | El día tiene más de dos elementos | Pulsa **+1**, **+2**… para abrir el detalle del día |
 
 Si necesitas soporte, indica la tarea, la fecha aproximada, el mensaje literal y si estabas en modo invitado o con cuenta. Nunca adjuntes contraseñas. Evita incluir datos personales de compañeros en una captura de ayuda.
 
@@ -961,15 +1028,19 @@ La planificación ya publicada, si existe. Los nuevos cambios que solo están en
 
 ### ¿Dónde confirmo que he visto mi turno?
 
-Pulsa sobre cualquier turno publicado en tu calendario personal. En la ventana de detalle que se abre, pulsa el botón dorado **Confirmar recepción**. El estado cambiará a **Recepción confirmada**. Si necesitas solicitar una modificación del horario publicado, abre **Solicitudes → Nueva solicitud**.
+Pulsa sobre cualquier turno publicado en tu calendario personal. En la ventana de detalle que se abre, pulsa **Confirmar recepción**. El estado cambiará de **Pendiente de confirmar** a **Turno reconocido**. Si necesitas solicitar una modificación del horario publicado, abre **Solicitudes → Nueva solicitud**.
 
 ### ¿Cómo añado muchas personas?
 
-Utiliza el CSV de empleados para las fichas y el CSV de usuarios para los accesos. Sigue el orden y las cabeceras del capítulo 24.
+En **Equipo → Personas**, usa **Importar empleados** para las fichas e **Importar usuarios** para los accesos. Sigue el orden y las cabeceras del capítulo 24.
 
 ### ¿Se envían automáticamente las contraseñas iniciales?
 
-No debes darlo por hecho: la interfaz de alta indica que debes guardarlas o compartirlas y que no se han enviado por correo.
+No se envían contraseñas. Al añadir una persona con acceso, o al importar usuarios, se envía una invitación por correo y la persona crea su propia contraseña. Solo el alta inicial de una organización puede mostrar contraseñas temporales, que debes guardar en ese momento.
+
+### Me han invitado, ¿cómo entro?
+
+Abre el enlace del correo, crea tu contraseña (o añade el acceso a tu cuenta existente) y pulsa **Ir a la aplicación**. El enlace caduca a los 7 días.
 
 ### ¿Cómo cambio idioma o tema?
 
@@ -1002,9 +1073,11 @@ Se eliminan turnos, importaciones y empleados de toda la organización. Se conse
 | Conflicto | Diferencia o incompatibilidad que necesita una decisión |
 | Solicitud | Petición de cambio que puede estar pendiente o resuelta |
 | Credenciales | Correo y contraseña para acceder |
+| Invitación | Enlace enviado por correo para activar el acceso a una organización |
+| Ausencia | Tipo de turno con horario que registra horas de ausencia, no de trabajo |
 
 ### Aviso de uso
 
-Esta guía explica las funciones verificadas de la edición de producto revisada el 9 de septiembre de 2026. Las opciones pueden variar según permisos, plan y disponibilidad del servicio. Las pantallas son ejemplos con datos sintéticos, no instrucciones laborales de una empresa concreta.
+Esta guía explica las funciones verificadas de la edición de producto revisada el 25 de septiembre de 2026. Las opciones pueden variar según permisos, plan y disponibilidad del servicio. Las pantallas son ejemplos con datos sintéticos, no instrucciones laborales de una empresa concreta.
 
 Revisa los turnos y contrástalos con las comunicaciones de tu empresa. ShiftImport es una herramienta de apoyo: sus métricas y avisos no sustituyen asesoramiento laboral, cálculos de nómina ni una certificación de jornada. Consulta los textos vigentes desde **Términos**, **Privacidad** y **Aviso legal** en la aplicación.

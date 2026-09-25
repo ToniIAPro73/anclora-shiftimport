@@ -36,6 +36,10 @@ const passPdfPath = path.join(tmpDir, 'manual-es-pass.pdf');
 const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
 function dataUriForImage(relPath) {
   const absPath = path.join(manualDir, relPath);
+  if (!existsSync(absPath)) {
+    const label = `Captura pendiente: ${path.basename(relPath)}`;
+    return `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="180"><rect width="100%" height="100%" fill="#eef1f6"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="28" fill="#39445a">${label}</text></svg>`).toString('base64')}`;
+  }
   const ext = path.extname(absPath).toLowerCase();
   const mime = IMAGE_MIME[ext] ?? 'image/png';
   const bytes = readFileSync(absPath);
