@@ -37,6 +37,14 @@ Anclora ShiftImport: importador inteligente de cuadrantes para trabajadores por 
 | Specs de producto (SDD) | [`../sdd/`](../sdd/) | ShiftImport | PD local |
 | Copias de contratos de marca | [`../docs/standards/`](../docs/standards/) | Vault (canónico) | Copia local de referencia; el canónico vive en la vault |
 
+## Adopción de Gobernanza QA Proporcional
+
+- PROPORTIONAL_QA_CONTRACT_ADOPTED=true
+- BATCHED_VALIDATION_CONTRACT_ADOPTED=true
+- QA_MODE_DEFAULT=AUTO
+- QA_OVERRIDE_MODEL_ADOPTED=true
+- WORKSPACE_QA_POLICY_AUTHORITY=ANCLORA_WORKSPACE_AGENT_POLICY.md
+
 ## Política de decisiones locales
 
 Decisiones de producto (PD) se registran en `sdd/`. ED → AOS `MASTER_DECISIONS`; OD → mecanismo CHG de la vault (`00-governance/decisions/`); EX → esta declaración. Una decisión, una fuente canónica. Las decisiones P5.3 (OWNER sin ADMIN, Employee opcional, áreas opcionales, plan pre-billing y pasos Team-only) están registradas en `sdd/decisions/`.
@@ -60,6 +68,7 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 | 2026-09-06 | 0.2.0 | Revisión P5.1: shell de aplicación y navegación role-aware añadidas sin cambios de dominio, API o DB | Codex |
 | 2026-09-06 | 0.2.0 | Revisión P5.2: navegación operacional, frontera temporal Importar/Añadir/Planificar y Approval Lite integrados sin migración | Codex |
 | 2026-09-06 | 0.2.0 | Revisión P5.3: onboarding plan-aware, OWNER válido sin ADMIN/Employee/áreas y decisiones PD registradas | Codex |
+| 2026-09-25 | v2.0 | Adopción de política canónica de QA proporcional, cadencia de puertas por lotes (BATCHED) y modelo de overrides explícitos. | ToniIAPro73 |
 
 ## Documentos relacionados
 
