@@ -37,13 +37,22 @@ Anclora ShiftImport: importador inteligente de cuadrantes para trabajadores por 
 | Specs de producto (SDD) | [`../sdd/`](../sdd/) | ShiftImport | PD local |
 | Copias de contratos de marca | [`../docs/standards/`](../docs/standards/) | Vault (canónico) | Copia local de referencia; el canónico vive en la vault |
 
-## Adopción de Gobernanza QA Proporcional
+## Adopción de Gobernanza QA Proporcional y Economía Adaptativa
 
 - PROPORTIONAL_QA_CONTRACT_ADOPTED=true
 - BATCHED_VALIDATION_CONTRACT_ADOPTED=true
 - QA_MODE_DEFAULT=AUTO
 - QA_OVERRIDE_MODEL_ADOPTED=true
-- WORKSPACE_QA_POLICY_AUTHORITY=ANCLORA_WORKSPACE_AGENT_POLICY.md
+- FAST_MINIMUM_SUFFICIENT_TESTING_ADOPTED=true
+- FAST_FULL_SUITE_PROHIBITION_ADOPTED=true
+- STOP_WHEN_SUFFICIENT_EVIDENCE_ADOPTED=true
+
+- ADAPTIVE_TOKEN_ECONOMY_CONTRACT_ADOPTED=true
+- CAVEMAN_MODE_DEFAULT=AUTO
+- CAVEMAN_TASK_LEVEL_REEVALUATION=true
+- CAVEMAN_OVERRIDE_MODEL_ADOPTED=true
+
+- WORKSPACE_POLICY_AUTHORITY=ANCLORA_WORKSPACE_AGENT_POLICY.md
 
 ## Política de decisiones locales
 
@@ -69,6 +78,7 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 | 2026-09-06 | 0.2.0 | Revisión P5.2: navegación operacional, frontera temporal Importar/Añadir/Planificar y Approval Lite integrados sin migración | Codex |
 | 2026-09-06 | 0.2.0 | Revisión P5.3: onboarding plan-aware, OWNER válido sin ADMIN/Employee/áreas y decisiones PD registradas | Codex |
 | 2026-09-25 | v2.0 | Adopción de política canónica de QA proporcional, cadencia de puertas por lotes (BATCHED) y modelo de overrides explícitos. | ToniIAPro73 |
+| 2026-09-25 | v2.1 | Adopción de economía adaptativa (CAVEMAN_MODE=AUTO) y endurecimiento FAST QA (sin suites completas por defecto, mínimo suficiente, detención ante evidencia suficiente). | ToniIAPro73 |
 
 ## Documentos relacionados
 
