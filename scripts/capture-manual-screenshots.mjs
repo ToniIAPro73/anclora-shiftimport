@@ -4,15 +4,16 @@
  * sembrados por scripts/seed-manual-demo.mjs.
  *
  * Uso:
- *   node --env-file=.env.development.local scripts/seed-manual-demo.mjs
+ *   (seed-manual-demo.mjs está bloqueado: escribía en producción; usar la organización QA existente)
  *   npx vercel dev --listen 3199
- *   node scripts/capture-manual-screenshots.mjs
+ *   node --env-file=.env.development.local scripts/capture-manual-screenshots.mjs
+ *   Recomendado: scripts/manual/recapture-manual.sh (docs/manual/RECAPTURE.md)
  *
  * Reutiliza el playwright-core ya instalado en qa/e2e-acceptance/node_modules
  * (Chromium de Playwright) — no añade una dependencia nueva al repo.
  */
 import { chromium } from '../qa/e2e-acceptance/node_modules/playwright-core/index.mjs';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,7 +24,20 @@ const BASE = process.env.MANUAL_APP_URL ?? 'http://localhost:3199';
 const W = 1440;
 const H = 900;
 
-const fixture = JSON.parse(readFileSync(path.join(root, 'tmp', 'manual-demo-fixture.json'), 'utf8'));
+// QA-safe (CHG-0014): credenciales de la identidad QA persistente, sin fixture sembrada.
+function qaEmail(value, name) {
+  if (!value || !value.toLowerCase().endsWith('@anclora.test')) throw new Error(`${name}: solo identidades QA @anclora.test`);
+  return value;
+}
+const fixture = {
+  emails: {
+    admin: qaEmail(process.env.MANUAL_QA_EMAIL ?? 'qa.shiftimport@anclora.test', 'MANUAL_QA_EMAIL'),
+    empleado: qaEmail(process.env.MANUAL_QA_EMPLOYEE_EMAIL, 'MANUAL_QA_EMPLOYEE_EMAIL'),
+  },
+  password: process.env.MANUAL_QA_PASSWORD,
+  employeePassword: process.env.MANUAL_QA_EMPLOYEE_PASSWORD,
+};
+if (!fixture.password || !fixture.employeePassword) throw new Error('Faltan MANUAL_QA_PASSWORD / MANUAL_QA_EMPLOYEE_PASSWORD.');
 
 mkdirSync(OUT, { recursive: true });
 
@@ -206,7 +220,7 @@ let employeePage;
 // ── 14-16. Importar cuadrante individual (empleado, GS-03 fixture) ────────
 {
   const page = await newPage();
-  await loginAs(page, fixture.emails.empleado, fixture.password);
+  await loginAs(page, fixture.emails.empleado, fixture.employeePassword);
   await page.goto(`${BASE}/app`, { waitUntil: 'load' });
 
   const GS03_PDF = path.join(root, 'src/ingestion/fixtures/acceptance-corpus/fixtures/GS-03_hospitality/source.pdf');

@@ -5,6 +5,13 @@
  * Imprime el JSON de la fixture en stdout y lo guarda en
  * tmp/manual-demo-fixture.json para que capture-manual-screenshots.mjs lo lea.
  */
+// BLOQUEADO (2026-09-25, CHG-0014): este script inserta organizaciones, usuarios y turnos
+// directamente en la base de datos de producción (modelo PRODUCTION_BACKED), lo que viola el
+// contrato QA (.anclora/PRODUCTION_RUNTIME.md: QA_REUSE=true, identidad QA persistente,
+// sin datos nuevos fuera de QA). La recaptura del manual usa ahora
+// scripts/manual/recapture-manual.sh con la organización QA existente (docs/manual/RECAPTURE.md).
+console.error('seed-manual-demo.mjs está bloqueado: escribe en producción. Usa scripts/manual/recapture-manual.sh (docs/manual/RECAPTURE.md).');
+process.exit(1);
 import { neon } from '@neondatabase/serverless';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { hashPassword } from '../api/_lib/passwords.js';
