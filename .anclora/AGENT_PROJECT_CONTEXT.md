@@ -33,7 +33,7 @@ storage and multi-tenant PostgreSQL organization workspaces.
 When starting work in this repository, agents must read sources in this exact order:
 
 1. Current explicit instruction from Toni (highest operational priority).
-2. Workspace agent policy (`../../ANCLORA_WORKSPACE_AGENT_POLICY.md` — currently `WORKSPACE_POLICY_STATUS=PENDING_GLOBAL_INSTALLATION`, with `../../AGENTS.md` as interim workspace guidance).
+2. Workspace agent policy (`../../ANCLORA_WORKSPACE_AGENT_POLICY.md`, canonical and active; `../../AGENTS.md` is only its workspace adapter). Promotion semantics inherit the workspace Canonical Promotion Policy: default no automatic promotion; explicit current-task user authorization permits gated, repository-supported promotion.
 3. Repository agent rules (`../AGENTS.md`).
 4. `.anclora/AGENT_PROJECT_CONTEXT.md` (this file — bootstrap, index, routing, and authority map).
 5. `.anclora/PRODUCTION_RUNTIME.md` (canonical runtime contract: topology, database, migrations, QA, Git).
@@ -202,7 +202,7 @@ Essential operational invariants:
 - **Local Seeding**: `SEED_ALLOW_ENV="development"` satisfies the local guard only; seeding writes to Production. Treat local seeding as a Production write.
 - **Migrations**: Schema changes are authorized via `npm run db:migrate` (`CUSTOM_FORWARD_ONLY` strategy). Confirmations are not required; backward compatibility is preferred.
 - **QA Testing**: Locate, reuse, or create the persistent production QA user. Never delete it after testing.
-- **Git Flow**: Work directly on `development`. Do not create feature branches by default. Commit after validation and push to `origin/development`, then STOP. Do not promote without explicit approval.
+- **Git Flow**: Work directly on `development`. Do not create feature branches by default. Commit after validation and push to `origin/development`, then STOP by default. An explicit current-task user request may authorize a new, gated promotion operation under the workspace Canonical Promotion Policy; prior mission-scoped `No promotion` instructions do not persist.
 - **Governance**: Elevation to AOS is required for multi-repo or constitutional changes.
 
 ## 9. Machine-Readable Bootstrap
@@ -239,5 +239,5 @@ MEMORY_CLASSIFICATION=HISTORICAL_NON_NORMATIVE
 INFRASTRUCTURE_INFERENCE_ALLOWED=false
 CROSS_PRODUCT_INFRASTRUCTURE_ASSUMPTION_ALLOWED=false
 
-WORKSPACE_POLICY_STATUS=PENDING_GLOBAL_INSTALLATION
+WORKSPACE_POLICY_STATUS=ACTIVE
 ```

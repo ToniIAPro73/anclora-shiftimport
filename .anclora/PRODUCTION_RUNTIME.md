@@ -219,6 +219,13 @@ AUTO_COMMIT_AFTER_VALIDATION=true
 AUTO_PUSH_DEVELOPMENT=true
 AUTO_PROMOTE=false
 STOP_AFTER_DEVELOPMENT_PUSH=true
+EXPLICIT_PROMOTION_ALLOWED=true
+PROMOTION_AUTHORIZATION_SCOPE=CURRENT_TASK_OR_CONVERSATION
+PROMOTION_ORDER=development->staging->production->main
+PROMOTION_REQUIRES_PRE_STEP_GATES=true
+PROMOTION_STOP_ON_GATE_FAILURE=true
+PROMOTION_FORCE_PUSH_ALLOWED=false
+PROMOTION_OLD_AUTHORIZATION_PERSISTS=false
 
 ```text
 development local
@@ -239,9 +246,12 @@ STOP
 Agents must NOT create feature/fix/task/agent branches unless Toni explicitly
 requests one for the current mission.
 
-Promotion to staging / production / main requires explicit Toni approval.
-When promotion is requested, preserve the validated development commit SHA
-whenever branch topology allows fast-forward promotion.
+Promotion to staging / production / main is not automatic. An explicit current
+user request authorizes a separate promotion operation, subject to the workspace
+Canonical Promotion Policy and this repository's release gates. Preserve the
+validated development commit SHA whenever branch topology allows fast-forward
+promotion, and stop on any failed gate; never force-push or infer permanent
+authorization from an older task.
 
 ## 13. Agent Startup Contract
 
@@ -261,7 +271,8 @@ Before executing tasks, the agent must read and apply in order:
 - Do not create temporary feature branches.
 - Do not replace Production env with Development env.
 - Do not delete persistent QA user after testing.
-- Do not automatically promote after development push.
+- Do not automatically promote after development push; `STOP_AFTER_DEVELOPMENT_PUSH=true`
+  is the default stop rule and does not prohibit a separately requested, gated promotion.
 - Do not reset Production DB merely to simplify testing.
 - Do not delete unrelated Production data.
 - Do not expose secrets.
@@ -299,4 +310,11 @@ AUTO_COMMIT_AFTER_VALIDATION=true
 AUTO_PUSH_DEVELOPMENT=true
 AUTO_PROMOTE=false
 STOP_AFTER_DEVELOPMENT_PUSH=true
+EXPLICIT_PROMOTION_ALLOWED=true
+PROMOTION_AUTHORIZATION_SCOPE=CURRENT_TASK_OR_CONVERSATION
+PROMOTION_ORDER=development->staging->production->main
+PROMOTION_REQUIRES_PRE_STEP_GATES=true
+PROMOTION_STOP_ON_GATE_FAILURE=true
+PROMOTION_FORCE_PUSH_ALLOWED=false
+PROMOTION_OLD_AUTHORIZATION_PERSISTS=false
 ```
