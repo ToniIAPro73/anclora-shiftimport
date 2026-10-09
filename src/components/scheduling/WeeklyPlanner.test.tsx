@@ -12,6 +12,13 @@ import { upsertShiftType } from '../../lib/shift-types';
 import { WeeklyPlanner } from './WeeklyPlanner';
 import { getOperationalDate } from '../../lib/operational-date';
 
+// Keep the fixture week (28 Sep–4 Oct 2026) in the future regardless of the
+// calendar day on which the suite runs. The planner must still enforce its
+// real historical-date rule; this test fixture simply needs a stable clock.
+vi.mock('../../lib/operational-date', () => ({
+  getOperationalDate: () => '2026-09-25',
+}));
+
 setupLocalStorageMock();
 
 vi.mock('../../lib/remote', async (importOriginal) => {

@@ -668,18 +668,32 @@ export async function bulkCreateEmployees(sql, ctx, items, { sync = false, activ
 
     try {
       const inserted = area.areaId
-        ? await sql`
-            INSERT INTO employees (organization_id, external_employee_id, name, status, area_id)
-            VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${activateWithoutAccess ? 'active' : 'pending_access'}, ${area.areaId})
-            ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
-            RETURNING *
-          `
-        : await sql`
-            INSERT INTO employees (organization_id, external_employee_id, name, status)
-            VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${activateWithoutAccess ? 'active' : 'pending_access'})
-            ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
-            RETURNING *
-          `;
+        ? (activateWithoutAccess
+          ? await sql`
+              INSERT INTO employees (organization_id, external_employee_id, name, status, area_id)
+              VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'active', ${area.areaId})
+              ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+              RETURNING *
+            `
+          : await sql`
+              INSERT INTO employees (organization_id, external_employee_id, name, status, area_id)
+              VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access', ${area.areaId})
+              ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+              RETURNING *
+            `)
+        : (activateWithoutAccess
+          ? await sql`
+              INSERT INTO employees (organization_id, external_employee_id, name, status)
+              VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'active')
+              ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+              RETURNING *
+            `
+          : await sql`
+              INSERT INTO employees (organization_id, external_employee_id, name, status)
+              VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access')
+              ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
+              RETURNING *
+            `);
       if (inserted.length > 0) {
         const employee = mapEmployeeRow(inserted[0]);
         if (employee.externalEmployeeId) {

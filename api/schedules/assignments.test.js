@@ -13,6 +13,7 @@ const SCHEDULE = '33333333-3333-4333-8333-333333333333';
 const VERSION = '44444444-4444-4444-8444-444444444444';
 const ASSIGNMENT = '55555555-5555-4555-8555-555555555555';
 const EMPLOYEE = '66666666-6666-4666-8666-666666666666';
+const PLANNING_DATE = '2026-10-12';
 
 const planner = {
   user: { id: '77777777-7777-4777-8777-777777777777' },
@@ -24,10 +25,10 @@ function makeSql({ status = 'DRAFT' } = {}) {
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     if (text.startsWith('SELECT sv.id AS version_id')) {
-      return Promise.resolve([{ version_id: VERSION, schedule_id: SCHEDULE, status: state.status, organization_id: ORG, area_id: AREA, period_start: '2026-09-28', period_end: '2026-10-04' }]);
+      return Promise.resolve([{ version_id: VERSION, schedule_id: SCHEDULE, status: state.status, organization_id: ORG, area_id: AREA, period_start: PLANNING_DATE, period_end: '2026-10-18' }]);
     }
     if (text.startsWith('SELECT sa.id')) {
-      return Promise.resolve([{ id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: '2026-09-29', start_time: '09:00', end_time: '17:00', location: 'Original', shift_type: 'Regular', counts_as_work: true, created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' }]);
+      return Promise.resolve([{ id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: PLANNING_DATE, start_time: '09:00', end_time: '17:00', location: 'Original', shift_type: 'Regular', counts_as_work: true, created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' }]);
     }
     if (text.startsWith('SELECT id, area_id, status')) {
       return Promise.resolve([{ id: EMPLOYEE, area_id: AREA, status: 'active' }]);
@@ -38,7 +39,7 @@ function makeSql({ status = 'DRAFT' } = {}) {
       return Promise.resolve([row]);
     }
     if (text.startsWith('UPDATE shift_assignments')) {
-      return Promise.resolve([{ id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: values[1], start_time: values[2], end_time: values[3], location: values[4], created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-02T00:00:00.000Z' }]);
+      return Promise.resolve([{ id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: PLANNING_DATE, start_time: values[2], end_time: values[3], location: values[4], created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-02T00:00:00.000Z' }]);
     }
     if (text.startsWith('DELETE FROM shift_assignments')) return Promise.resolve([{ id: ASSIGNMENT }]);
     return Promise.resolve([]);
@@ -73,15 +74,15 @@ describe('ShiftAssignment draft CRUD', () => {
 
   it('creates an assignment inside the schedule period', async () => {
     const assignment = await createAssignment(makeSql(), planner, SCHEDULE, VERSION, {
-      employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk',
+      employeeId: EMPLOYEE, date: PLANNING_DATE, startTime: '09:00', endTime: '17:00', location: 'Front desk',
     });
-    expect(assignment).toMatchObject({ scheduleVersionId: VERSION, employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00', location: 'Front desk' });
+    expect(assignment).toMatchObject({ scheduleVersionId: VERSION, employeeId: EMPLOYEE, date: PLANNING_DATE, startTime: '09:00', endTime: '17:00', location: 'Front desk' });
   });
 
   it('allows a configured non-working assignment without times', async () => {
     const result = await createAssignment(makeSql(), planner, SCHEDULE, VERSION, {
       employeeId: EMPLOYEE,
-      date: '2026-09-29',
+      date: PLANNING_DATE,
       shiftType: 'Libre',
       countsAsWork: false,
       startTime: null,
@@ -118,7 +119,7 @@ describe('ShiftAssignment draft CRUD', () => {
     const sql = makeSql({ status });
     const expected = { status: 409, code: 'VERSION_NOT_EDITABLE' };
     await expect(createAssignment(sql, planner, SCHEDULE, VERSION, {
-      employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00',
+      employeeId: EMPLOYEE, date: PLANNING_DATE, startTime: '09:00', endTime: '17:00',
     })).rejects.toMatchObject(expected);
     await expect(updateAssignment(sql, planner, SCHEDULE, VERSION, ASSIGNMENT, { location: 'Nope' }))
       .rejects.toMatchObject(expected);
@@ -134,12 +135,12 @@ describe('ShiftAssignment draft CRUD', () => {
     const scopedSql = (strings, ...values) => {
       const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
       if (text.startsWith('SELECT sv.id AS version_id')) {
-        return Promise.resolve([{ version_id: VERSION, schedule_id: SCHEDULE, status: 'DRAFT', organization_id: ORG, area_id: '88888888-8888-4888-8888-888888888888', period_start: '2026-09-28', period_end: '2026-10-04' }]);
+        return Promise.resolve([{ version_id: VERSION, schedule_id: SCHEDULE, status: 'DRAFT', organization_id: ORG, area_id: '88888888-8888-4888-8888-888888888888', period_start: PLANNING_DATE, period_end: '2026-10-18' }]);
       }
       return original(strings, ...values);
     };
     await expect(createAssignment(scopedSql, planner, SCHEDULE, VERSION, {
-      employeeId: EMPLOYEE, date: '2026-09-29', startTime: '09:00', endTime: '17:00',
+      employeeId: EMPLOYEE, date: PLANNING_DATE, startTime: '09:00', endTime: '17:00',
     })).rejects.toMatchObject({ status: 403, code: 'SCOPE_FORBIDDEN' });
   });
 });
