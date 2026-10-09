@@ -681,17 +681,19 @@ export interface BulkCreateResult {
 
 /** "Create all new employees" — one request, many rows. `key` is a
  * caller-supplied correlation id (e.g. the TeamRow key) echoed back per
- * result so the caller can map results back without parsing name/id. */
+ * result so the caller can map results back without parsing name/id.
+ * Team PDF imports may explicitly activate records without worker access;
+ * ordinary employee bulk imports keep the pending-access default. */
 export async function bulkCreateRemoteEmployees(items: {
   key: string;
   name: string;
   externalEmployeeId?: string;
   areaId?: string | null;
   areaName?: string;
-}[]): Promise<BulkCreateResult[]> {
+}[], options: { activateWithoutAccess?: boolean } = {}): Promise<BulkCreateResult[]> {
   const payload = await apiFetch<{ results: BulkCreateResult[] }>('/api/employees/bulk', {
     method: 'POST',
-    body: JSON.stringify({ employees: items, sync: true }),
+    body: JSON.stringify({ employees: items, sync: true, activateWithoutAccess: options.activateWithoutAccess === true }),
   });
   return payload.results;
 }

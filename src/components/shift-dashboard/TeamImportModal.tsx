@@ -604,8 +604,8 @@ export const TeamImportModal = ({
         key: row.key,
         name: row.name,
         externalEmployeeId: row.externalEmployeeId || undefined,
-        areaId: importAreaId ?? undefined,
-      })));
+        ...(importAreaId ? { areaId: importAreaId } : {}),
+      })), { activateWithoutAccess: true });
       const byKey = new Map<string, BulkCreateResult>(results.map((result) => [result.key, result]));
 
       // Counts come from `results` directly, never from mutating a closure
@@ -617,7 +617,7 @@ export const TeamImportModal = ({
       let hitPlanLimit = false;
       for (const result of results) {
         if (result.status === 'created') created += 1;
-        else if (result.status === 'existing' || result.status === 'existing_inactive') existing += 1;
+        else if (result.status === 'existing' || result.status === 'existing_inactive' || result.status === 'updated') existing += 1;
         else {
           failed += 1;
           if (result.reason === 'plan_limit') hitPlanLimit = true;
@@ -635,10 +635,9 @@ export const TeamImportModal = ({
           return { ...row, status: 'recognized_inactive', candidates: [result.employee], resolvedEmployeeId: null };
         }
         // Only an ACTIVE employee is import-ready (backend enforces this
-        // too). A row that just got created, or that matched an existing
-        // but still pending_access employee, must show as such — never
-        // silently marked 'recognized'+selected, which would let the admin
-        // believe shifts are about to import when they will be rejected.
+        // too). The team-PDF bulk path explicitly activates operational
+        // records without worker access; ordinary pending-access matches
+        // remain blocked and visible.
         if (result.employee.status !== 'active') {
           return { ...row, status: 'recognized_pending', candidates: [result.employee], resolvedEmployeeId: null, selected: false };
         }

@@ -540,9 +540,12 @@ export async function createEmployee(sql, ctx, input) {
  * time) and processed sequentially — no concurrency, so the plan-limit
  * running count below can't race itself. Never creates a User; `user_id`
  * is simply omitted from the INSERT, staying NULL per the schema default.
+ * `activateWithoutAccess` is reserved for the authenticated team-PDF import:
+ * an operational employee may be active without a worker login when only the
+ * organization administrator needs access.
  * Partial failure is the point: one bad row never aborts the rest.
  */
-export async function bulkCreateEmployees(sql, ctx, items, { sync = false } = {}) {
+export async function bulkCreateEmployees(sql, ctx, items, { sync = false, activateWithoutAccess = false } = {}) {
   requireRole(ctx, 'ADMIN');
 
   // The roster index covers employees of ANY status so an inactive employee
@@ -619,6 +622,18 @@ export async function bulkCreateEmployees(sql, ctx, items, { sync = false } = {}
     const matched = (externalId && byExternalId.get(externalId))
       || (!externalId && byName.get(name.toLowerCase()));
     if (matched) {
+      if (activateWithoutAccess && matched.status === 'pending_access') {
+        const activatedRows = await sql`
+          UPDATE employees
+          SET status = 'active', deactivated_at = NULL, updated_at = NOW()
+          WHERE id = ${matched.id} AND organization_id = ${ctx.organizationId}
+          RETURNING *
+        `;
+        const employee = activatedRows[0] ? mapEmployeeRow(activatedRows[0]) : { ...matched, status: 'active' };
+        if (employee.externalEmployeeId) byExternalId.set(employee.externalEmployeeId, employee);
+        results.push({ key, status: 'updated', employee });
+        continue;
+      }
       const changed = matched.name !== name || (matched.areaId ?? null) !== (area.areaId ?? null);
       if (sync && changed) {
         try {
@@ -655,13 +670,13 @@ export async function bulkCreateEmployees(sql, ctx, items, { sync = false } = {}
       const inserted = area.areaId
         ? await sql`
             INSERT INTO employees (organization_id, external_employee_id, name, status, area_id)
-            VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access', ${area.areaId})
+            VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${activateWithoutAccess ? 'active' : 'pending_access'}, ${area.areaId})
             ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
             RETURNING *
           `
         : await sql`
             INSERT INTO employees (organization_id, external_employee_id, name, status)
-            VALUES (${ctx.organizationId}, ${externalId}, ${name}, 'pending_access')
+            VALUES (${ctx.organizationId}, ${externalId}, ${name}, ${activateWithoutAccess ? 'active' : 'pending_access'})
             ON CONFLICT (organization_id, external_employee_id) WHERE external_employee_id IS NOT NULL DO NOTHING
             RETURNING *
           `;

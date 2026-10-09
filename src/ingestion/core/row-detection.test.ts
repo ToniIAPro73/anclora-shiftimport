@@ -46,3 +46,25 @@ describe('findEmployeeRowItems — widened-column TYPE_B export variant', () => 
     expect(row!.rowItems.some((item) => item.text === 'Ejemplo Apellido, Nombre')).toBe(false);
   });
 });
+
+describe('findEmployeeRowItems — ID anchor wins over fuzzy neighbouring names', () => {
+  it('does not absorb a preceding row that shares name tokens', () => {
+    const items: PdfTextItem[] = [
+      { text: '10001', x: 60, y: 500, width: 0, height: 0, page: 1 },
+      { text: 'Perez Colomar, Maria Victoria', x: 90, y: 500, width: 0, height: 0, page: 1 },
+      { text: '08:00', x: 300, y: 500, width: 0, height: 0, page: 1 },
+      { text: '104807', x: 60, y: 400, width: 0, height: 0, page: 1 },
+      { text: 'Colomar Sanchez, Maria Jose', x: 90, y: 400, width: 0, height: 0, page: 1 },
+      { text: '09:00', x: 300, y: 400, width: 0, height: 0, page: 1 },
+      { text: '20002', x: 60, y: 300, width: 0, height: 0, page: 1 },
+    ];
+
+    const row = findEmployeeRowItems(
+      items,
+      { employeeName: 'Colomar Sanchez, Maria Jose', employeeIdentifiers: ['104807'] },
+      rules,
+    );
+
+    expect(row?.rowItems.map((item) => item.text)).toEqual(['09:00']);
+  });
+});

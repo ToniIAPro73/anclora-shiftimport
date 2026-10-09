@@ -920,6 +920,14 @@ describe('bulk employee creation ("Crear todos los nuevos")', () => {
     expect(calls.some((c) => c.text.includes('INSERT INTO users') || c.text.includes('INSERT INTO memberships'))).toBe(false);
   });
 
+  it('team PDF mode activates employee records without creating worker access', async () => {
+    const { sql } = makeFakeSql();
+    const { results } = await bulkCreateEmployees(sql, adminCtx, [
+      { key: 'k1', name: 'Ana', externalEmployeeId: 'EXT1' },
+    ], { activateWithoutAccess: true });
+    expect(results[0]).toMatchObject({ status: 'created', employee: { status: 'active', userId: null } });
+  });
+
   it('a row with no name fails as invalid, never reaches the DB write', async () => {
     const { sql, calls } = makeFakeSql();
     const { results } = await bulkCreateEmployees(sql, adminCtx, [{ key: 'k1', name: '', externalEmployeeId: 'EXT1' }]);

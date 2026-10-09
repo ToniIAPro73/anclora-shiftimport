@@ -434,7 +434,7 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
     expect(mockedBulkCreateRemoteEmployees).toHaveBeenCalledWith([
       { key: 'e0', name: 'Ana Nueva', externalEmployeeId: 'EXT0' },
       { key: 'e1', name: 'Beto Nuevo', externalEmployeeId: 'EXT1' },
-    ]);
+    ], { activateWithoutAccess: true });
 
     await waitFor(() => expect(screen.getByText('1 creados · 1 ya existentes · 0 errores')).toBeTruthy());
     // Both rows are now recognized+selected — no manual refresh needed.
@@ -485,7 +485,7 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
 
     await waitFor(() => expect(mockedBulkCreateRemoteEmployees).toHaveBeenCalledWith([
       { key: 'e0', name: 'Ana Nueva', externalEmployeeId: 'EXT0', areaId: 'area-s' },
-    ]));
+    ], { activateWithoutAccess: true }));
   });
 
   it('area-scoped team import stores areaId on the import record', async () => {

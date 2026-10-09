@@ -30,6 +30,7 @@ export default async function handler(req, res) {
 
     const result = await bulkCreateEmployees(sql, ctx, employees, {
       sync: req.body?.sync === true,
+      activateWithoutAccess: req.body?.activateWithoutAccess === true,
     });
     return sendJson(res, 200, result);
   } catch (error) {

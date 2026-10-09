@@ -159,6 +159,26 @@ export function findNameMarkerIndex(pageItems: PdfTextItem[], nameTokens: string
   return band ? pageItems.indexOf(band[0]) : -1;
 }
 
+/** Finds the printed name nearest to an ID marker, without fuzzy name matching. */
+function findNearestNameMarkerIndex(pageItems: PdfTextItem[], idIndex: number, rules: RowWindowRules): number {
+  const idItem = pageItems[idIndex];
+  if (!idItem) {
+    return -1;
+  }
+
+  let nearestIndex = -1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const band of findAllNameMarkerBands(pageItems, rules)) {
+    const index = pageItems.indexOf(band[0]);
+    const distance = Math.abs(band[0].y - idItem.y);
+    if (distance < nearestDistance) {
+      nearestIndex = index;
+      nearestDistance = distance;
+    }
+  }
+  return nearestIndex;
+}
+
 /** True when the item text prefix-matches at least min(2, tokens) name tokens. */
 export function matchesNameTokens(text: string, nameTokens: string[]): boolean {
   const normalized = normalizeText(text);
@@ -387,7 +407,15 @@ function locateRowOnPage(
     return null;
   }
 
-  const markerIndexes = [nameIndex, idIndex].filter((index) => index >= 0);
+  // A resolvable identifier is the strongest row anchor. Name matching is
+  // intentionally fuzzy and can legitimately return a neighbouring row
+  // (e.g. shared surname tokens); combining that first name candidate with
+  // the target id widens the row band across unrelated employees. The
+  // identity-mismatch guard runs before this function, so an ID-backed row
+  // must be located from the ID alone.
+  const markerIndexes = idFound
+    ? [findNearestNameMarkerIndex(pageItems, idIndex, rules), idIndex].filter((index) => index >= 0)
+    : [nameIndex].filter((index) => index >= 0);
   if (markerIndexes.length === 0) {
     return null;
   }
