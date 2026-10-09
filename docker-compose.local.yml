@@ -1,0 +1,25 @@
+name: anclora-shiftimport-local
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    container_name: anclora-shiftimport-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${SHIFTIMPORT_DB_NAME:?Set SHIFTIMPORT_DB_NAME in .env.docker.local}
+      POSTGRES_USER: ${SHIFTIMPORT_DB_USER:?Set SHIFTIMPORT_DB_USER in .env.docker.local}
+      POSTGRES_PASSWORD: ${SHIFTIMPORT_DB_PASSWORD:?Set SHIFTIMPORT_DB_PASSWORD in .env.docker.local}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - anclora_shiftimport_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  anclora_shiftimport_postgres_data:
+    name: anclora_shiftimport_postgres_data
