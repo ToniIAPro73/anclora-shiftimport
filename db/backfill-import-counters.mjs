@@ -14,7 +14,7 @@
 // Usage:
 //   node --env-file=.env.development.local db/backfill-import-counters.mjs
 //   DATABASE_URL="postgres://..." node db/backfill-import-counters.mjs
-import { neon } from '@neondatabase/serverless';
+import { createTaggedSql } from './connection.mjs';
 
 const MONTHS_ES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -38,7 +38,7 @@ async function main() {
     throw new Error('DATABASE_URL is not configured');
   }
 
-  const sql = neon(connectionString);
+  const sql = createTaggedSql(connectionString);
 
   const targets = await sql`
     SELECT id, period_year, period_month

@@ -954,10 +954,10 @@ COMMIT;
         const trimmed = (text || '').trim();
         queriesExecuted.push({ text: trimmed, params });
 
-        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'")) {
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '_migrations'")) {
           return [{ exists: 1 }];
         }
-        if (trimmed.includes("FROM information_schema.columns WHERE table_schema = 'public'")) {
+        if (trimmed.includes("FROM information_schema.columns WHERE table_schema = current_schema()")) {
           return [
             { table_name: 'organizations', column_name: 'id' },
             { table_name: '_migrations', column_name: 'name' },
@@ -977,7 +977,7 @@ COMMIT;
             { table_name: 'shifts', column_name: 'shift_type' },
           ];
         }
-        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public'")) {
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = current_schema()")) {
           return [
             { table_name: 'organizations' },
             { table_name: 'password_reset_tokens' },
@@ -1074,10 +1074,10 @@ COMMIT;
         const trimmed = (text || '').trim();
         queriesExecuted.push({ text: trimmed, params });
 
-        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'")) {
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '_migrations'")) {
           return [{ exists: 1 }];
         }
-        if (trimmed.includes("FROM information_schema.columns WHERE table_schema = 'public'")) {
+        if (trimmed.includes("FROM information_schema.columns WHERE table_schema = current_schema()")) {
           return [
             { table_name: 'organizations', column_name: 'id' },
             { table_name: '_migrations', column_name: 'name' },
@@ -1097,7 +1097,7 @@ COMMIT;
             { table_name: 'shifts', column_name: 'shift_type' },
           ];
         }
-        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = 'public'")) {
+        if (trimmed.includes("FROM information_schema.tables WHERE table_schema = current_schema()")) {
           return [
             { table_name: 'organizations' },
             { table_name: 'password_reset_tokens' },

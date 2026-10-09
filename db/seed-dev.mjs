@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { neon } from '@neondatabase/serverless';
+import { createTaggedSql } from './connection.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DATASET_PATH = join(ROOT, 'test-data/fixtures/parser-regression/02_team_preloaded_40_employees.json');
@@ -224,7 +224,7 @@ async function main() {
   if (!connectionString) {
     abort('DATABASE_URL is not configured.');
   }
-  const sql = neon(connectionString);
+  const sql = createTaggedSql(connectionString);
 
   const employees = await loadDataset();
   const organization = await resolveOrganization(sql, args);

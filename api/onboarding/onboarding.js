@@ -260,11 +260,10 @@ export default async function handler(req, res) {
       }
     }
 
-    const organizationType = input.plan === 'team' ? 'company' : 'personal';
     const queries = [
       sql`
-        INSERT INTO organizations (id, name, type, plan)
-        VALUES (${organizationId}, ${input.organizationName}, ${organizationType}, ${input.plan})
+        INSERT INTO organizations (id, name, plan)
+        VALUES (${organizationId}, ${input.organizationName}, ${input.plan})
         ON CONFLICT (id) DO NOTHING
       `,
       sql`

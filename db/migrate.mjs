@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { neon, Client } from '@neondatabase/serverless';
+import { createClient, createTaggedSql, isLocalConnection } from './connection.mjs';
 
 export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
 export const BASELINE_MANIFEST_PATH = join(dirname(fileURLToPath(import.meta.url)), '../docs/database/migration-baseline-main.json');
@@ -712,12 +712,12 @@ export async function executeSql(sqlOrClient, queryText, params = []) {
  */
 export async function extractSchemaCatalog(sqlOrClient) {
   const [hasMigrationsRes, tablesRes, columnsRes, routinesRes, indexesRes, constraintsRes] = await Promise.all([
-    executeSql(sqlOrClient, "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '_migrations'"),
-    executeSql(sqlOrClient, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"),
-    executeSql(sqlOrClient, "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'"),
-    executeSql(sqlOrClient, "SELECT routine_name FROM information_schema.routines WHERE routine_schema = 'public'"),
-    executeSql(sqlOrClient, "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'"),
-    executeSql(sqlOrClient, "SELECT conname, pg_get_constraintdef(oid) AS def, conrelid::regclass::text AS table_name FROM pg_constraint WHERE connamespace = 'public'::regnamespace"),
+    executeSql(sqlOrClient, "SELECT 1 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = '_migrations'"),
+    executeSql(sqlOrClient, "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()"),
+    executeSql(sqlOrClient, "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = current_schema()"),
+    executeSql(sqlOrClient, "SELECT routine_name FROM information_schema.routines WHERE routine_schema = current_schema()"),
+    executeSql(sqlOrClient, "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema()"),
+    executeSql(sqlOrClient, "SELECT conname, pg_get_constraintdef(oid) AS def, conrelid::regclass::text AS table_name FROM pg_constraint WHERE connamespace = current_schema()::regnamespace"),
   ]);
 
   const tableExists = hasMigrationsRes.length > 0;
@@ -999,8 +999,8 @@ export async function inspectMigrationsStatus(
  * Prints formatted human-readable migration status.
  */
 export function printStatus(status, { neonInfo = null } = {}) {
-  console.log('=== NEON MIGRATION STATUS ===');
-  if (neonInfo) {
+  console.log(`=== ${neonInfo?.environment === 'local-docker' ? 'LOCAL DOCKER' : 'NEON'} MIGRATION STATUS ===`);
+  if (neonInfo && neonInfo.environment !== 'local-docker') {
     if (neonInfo.unresolved) {
       console.log(`Neon Project ID: ${neonInfo.projectId || 'N/A'}`);
       console.log(`Neon Branch: UNRESOLVED (${neonInfo.error})`);
@@ -1221,6 +1221,19 @@ export function accreditDestinationBranch(
     );
   }
 
+  if (isLocalConnection(connectionString)) {
+    const localTarget = (targetBranch || expectedBranchName || expectedBranchId || '').trim().toLowerCase();
+    if (localTarget !== 'local-docker') {
+      throw new Error("Local Docker migrations require --target-branch=local-docker.");
+    }
+    return {
+      accredited: true,
+      branch: { id: 'local-docker', name: 'local-docker', default: false, protected: false },
+      endpoint: { id: 'local-docker', host: hostname },
+      targetBranch,
+    };
+  }
+
   const resolvedProjectId = projectId || getNeonProjectId();
   if (!resolvedProjectId) {
     throw new Error('NEON_PROJECT_ID environment variable or --project-id flag is required. Hardcoded default project ID has been removed.');
@@ -1353,7 +1366,7 @@ async function _executeMigrationsOnClient(
   // Check if _migrations already has checksum column
   const colCheckRes = await client.query(`
     SELECT 1 FROM information_schema.columns 
-    WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'
+    WHERE table_schema = current_schema() AND table_name = '_migrations' AND column_name = 'checksum'
   `);
   let hasChecksumCol = (Array.isArray(colCheckRes) ? colCheckRes : colCheckRes?.rows || []).length > 0;
 
@@ -1376,7 +1389,7 @@ async function _executeMigrationsOnClient(
       if (!hasChecksumCol) {
         const afterDdl = await client.query(`
           SELECT 1 FROM information_schema.columns
-          WHERE table_schema = 'public' AND table_name = '_migrations' AND column_name = 'checksum'
+          WHERE table_schema = current_schema() AND table_name = '_migrations' AND column_name = 'checksum'
         `);
         hasChecksumCol = (Array.isArray(afterDdl) ? afterDdl : afterDdl?.rows || []).length > 0;
       }
@@ -1467,7 +1480,7 @@ export async function runMigrations(options = {}) {
   });
 
   // 3. Create real Client internally using connectionString and connect AFTER accreditation
-  const client = new Client(connectionString);
+  const client = createClient(connectionString);
   await client.connect();
 
   try {
@@ -1520,7 +1533,10 @@ export async function main(args = process.argv.slice(2), env = process.env) {
 
     let neonInfo = null;
     let resolutionError = null;
-    if (projectId) {
+    if (isLocalConnection(connectionString)) {
+      neonInfo = { environment: 'local-docker' };
+    }
+    if (projectId && !isLocalConnection(connectionString)) {
       try {
         const resolved = resolveNeonBranchFromConnectionString(connectionString, { projectId });
         neonInfo = {
@@ -1539,7 +1555,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
       }
     }
 
-    const sql = neon(connectionString);
+    const sql = createTaggedSql(connectionString);
     const status = await inspectMigrationsStatus(sql);
     printStatus(status, { neonInfo });
 

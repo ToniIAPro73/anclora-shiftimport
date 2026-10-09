@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { neon } from '@neondatabase/serverless';
+import { createTaggedSql } from '../../db/connection.mjs';
 
 export const SESSION_COOKIE = 'anclora_session';
 const SESSION_TTL_DAYS = 30;
@@ -14,7 +14,7 @@ export function getSql() {
   if (!connectionString) {
     throw new Error('DATABASE_URL is not configured');
   }
-  cachedSql = neon(connectionString);
+  cachedSql = createTaggedSql(connectionString);
   return cachedSql;
 }
 
