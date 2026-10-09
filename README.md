@@ -94,13 +94,15 @@ npm install
 npm run dev
 ```
 
-`npm run dev` sirve el frontend con Vite. Para ejecutar también las Vercel
-Functions localmente, usa `vercel dev` en otra terminal dentro del mismo
-repositorio; ambos procesos leen la configuración server-side existente y no
-exponen `DATABASE_URL` ni `RESEND_API_KEY` al bundle.
+`npm run dev` levanta el PostgreSQL exclusivo de ShiftImport definido en
+`docker-compose.local.yml`, espera su healthcheck, aplica las migraciones
+pendientes mediante el runner canónico y arranca `vercel dev` en `:5173`.
+Usa `.env.local` para la aplicación y `.env.docker.local` para Docker; ambos
+ficheros están fuera de Git. Para arrancar únicamente Vite, usa
+`npm run dev:frontend`.
 
-Validación: `npm run lint && npm run build`. El desarrollo local usa la única
-base Neon `main` mediante `.env.local` (ignorado por Git); `npm run
+Validación: `npm run lint && npm run build`. El desarrollo local usa el
+PostgreSQL Docker dedicado de ShiftImport mediante `.env.local`; `npm run
 db:migrate:status` acredita el ledger sin escribir. Ver [`SETUP.md`](./SETUP.md)
 y [`backend-setup.md`](./backend-setup.md) para configuración.
 

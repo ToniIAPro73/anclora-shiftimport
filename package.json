@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/start-local.mjs",
+    "dev:frontend": "vite",
     "proxy": "node proxy-server.mjs",
     "dev:full": "concurrently \"npm run proxy\" \"npm run dev\"",
     "build": "tsc && vite build",
