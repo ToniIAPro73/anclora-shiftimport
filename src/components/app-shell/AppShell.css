@@ -44,6 +44,21 @@
   transition: width 180ms ease, padding 180ms ease;
 }
 
+/* The shell owns the edge of the viewport; nested drawer styles must not
+   reintroduce rounded corners in either desktop or mobile presentation. */
+.app-shell__sidebar.ac-drawer {
+  align-items: stretch;
+  display: flex;
+  gap: 0;
+  width: auto;
+  min-height: 100dvh;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--glass-border);
+  padding: 20px 12px 14px;
+  box-shadow: none;
+}
+
 .app-shell__brand {
   display: flex;
   align-items: center;
@@ -93,13 +108,16 @@
 .app-shell__nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; }
 .app-shell__nav-badge { margin-left: auto; min-width: 20px; padding: 2px 6px; border-radius: 999px; background: var(--gold-tint-bg); color: var(--text-primary); font-size: 0.68rem; text-align: center; }
 
-.app-shell__collapse { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 40px; margin-top: 12px; padding: 8px; border: 1px solid var(--border-soft); border-radius: 10px; color: var(--text-muted); font-size: 0.74rem; }
-.app-shell__collapse:hover { background: var(--panel-muted-bg); color: var(--text-primary); transform: none; }
+.app-shell__collapse { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; min-height: 40px; margin-top: 12px; padding: 8px; border: 0; border-radius: 0; background: transparent; color: var(--text-muted); font-size: 0.74rem; }
+.app-shell__collapse:hover { background: transparent; color: var(--text-primary); transform: none; }
+.app-shell__collapse:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .app-shell.is-collapsed .app-shell__brand { justify-content: center; padding-inline: 0; }
+.app-shell.is-collapsed .app-shell__brand .brand-mark { flex: 0 0 38px; }
 .app-shell.is-collapsed .app-shell__brand-copy,
 .app-shell.is-collapsed .app-shell__nav-label,
 .app-shell.is-collapsed .app-shell__nav-group-label { display: none; }
 .app-shell.is-collapsed .app-shell__nav-item { justify-content: center; padding-inline: 8px; }
+.app-shell.is-collapsed .app-shell__nav-icon { flex: 0 0 20px; }
 .app-shell.is-collapsed .app-shell__nav-item.is-active::before { left: 0; }
 .app-shell.is-collapsed .app-shell__nav-badge { position: absolute; top: 3px; right: 3px; min-width: 16px; padding: 1px 4px; font-size: 0.58rem; }
 
@@ -188,7 +206,7 @@
 
 @media (max-width: 980px) {
   .app-shell { display: block; }
-  .app-shell__sidebar { position: fixed; inset: 0 auto 0 0; width: min(290px, calc(100vw - 56px)); transform: translateX(-105%); transition: transform 180ms ease; box-shadow: var(--shadow-soft); }
+  .app-shell__sidebar { position: fixed; inset: 0 auto 0 0; width: min(290px, calc(100vw - 56px)); min-height: 100dvh; max-height: none; transform: translateX(-105%); transition: transform 180ms ease; box-shadow: var(--shadow-soft); }
   .app-shell.is-drawer-open .app-shell__sidebar { transform: translateX(0); }
   .app-shell.is-collapsed .app-shell__sidebar { width: min(290px, calc(100vw - 56px)); }
   .app-shell.is-collapsed .app-shell__brand-copy,
