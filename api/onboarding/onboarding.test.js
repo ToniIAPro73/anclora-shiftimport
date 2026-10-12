@@ -140,6 +140,8 @@ describe('POST /api/onboarding', () => {
     const organizationInsert = state.sql.queries.find((query) => query.text.includes('INSERT INTO organizations'));
     expect(organizationInsert?.text).toContain('plan');
     expect(organizationInsert?.values).toContain('team');
+    expect(organizationInsert?.text).toContain('type');
+    expect(organizationInsert?.values).toContain('company');
     expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO areas'))).toHaveLength(1);
     expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO employees'))).toHaveLength(2);
     expect(state.sql.queries.filter((query) => query.text.includes('INSERT INTO memberships'))).toHaveLength(2);

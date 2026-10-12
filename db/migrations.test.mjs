@@ -26,6 +26,18 @@ const importOutcomeMigrationPath = resolve(dirname(fileURLToPath(import.meta.url
 const shiftTypeSemanticsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0034_shift_type_semantics.sql');
 const operationalAssignmentsMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0035_operational_assignments.sql');
 const temporalOrgModelMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0036_temporal_organizational_model.sql');
+const organizationTypeMigrationPath = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations', '0040_organization_type.sql');
+
+describe('0040 organization type migration contract', () => {
+  it('backfills type from the existing organization plan and constrains supported values', async () => {
+    const sql = await readFile(organizationTypeMigrationPath, 'utf8');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS type TEXT');
+    expect(sql).toContain("CASE WHEN plan = 'team' THEN 'company' ELSE 'personal' END");
+    expect(sql).toContain("ALTER COLUMN type SET DEFAULT 'personal'");
+    expect(sql).toContain('ALTER COLUMN type SET NOT NULL');
+    expect(sql).toContain("CHECK (type IN ('personal', 'company'))");
+  });
+});
 
 describe('0013 membership roles migration contract', () => {
   it('keeps a CHECK constraint for exactly the four MVP roles', async () => {

@@ -569,6 +569,9 @@ export const MIGRATION_SENTINELS = {
     cat.routines.has('check_user_access_pending_person_invitation_integrity') &&
     cat.routines.has('guard_user_access_invitation_mutation') &&
     cat.routines.has('guard_user_access_invitation_delete'),
+  '0040_organization_type.sql': (cat) =>
+    cat.columns.has('organizations.type') &&
+    cat.constraints.has('organizations_type_check'),
 };
 
 /**

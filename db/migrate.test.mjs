@@ -460,6 +460,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'shifts.shift_type',
           '_migrations.checksum',
           'users.account_status',
+          'organizations.type',
         ],
         routines: [
           'transfer_organization_ownership_temporal',
@@ -480,6 +481,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
           { conname: '_migrations_checksum_format_chk', def: "CHECK (checksum ~ '^[0-9a-f]{64}$')" },
           { conname: 'users_account_status_check', def: "CHECK (account_status IN ('PENDING_INVITATION', 'ACTIVE', 'SUSPENDED'))" },
+          { conname: 'organizations_type_check', def: "CHECK (type IN ('personal', 'company'))", table_name: 'organizations' },
           { conname: 'user_access_invitations_token_hash_key', def: 'UNIQUE (token_hash)' },
           { conname: 'user_access_invitations_person_org_fkey', def: 'FOREIGN KEY (organization_person_id, organization_id)' },
         ],
