@@ -78,6 +78,13 @@ const catalogQueries = {
            md5(pg_get_functiondef(p.oid)) AS definition_hash
       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public' AND p.prokind IN ('f','p')
+       AND NOT EXISTS (
+         SELECT 1 FROM pg_depend d
+          WHERE d.classid = 'pg_proc'::regclass
+            AND d.objid = p.oid
+            AND d.refclassid = 'pg_extension'::regclass
+            AND d.deptype = 'e'
+       )
      ORDER BY p.proname, pg_get_function_identity_arguments(p.oid)`,
   extensions: `
     SELECT e.extname AS name, n.nspname AS schema
