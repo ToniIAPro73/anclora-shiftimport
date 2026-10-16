@@ -109,6 +109,24 @@
 .recon-pager__pages .eff-button { align-self: center; width: 34px; min-height: 34px; padding: 0; justify-content: center; }
 .recon-pager__page.is-current { background: color-mix(in srgb, var(--color-gold) 16%, transparent); border-color: var(--color-gold); color: var(--text-primary); pointer-events: none; }
 
+/* Annual target (configured): compact composition so it fits a desktop modal without vertical scroll. */
+.stats-modal__panel--target { gap: 10px; }
+.stats-modal__panel--target .hero-metric { padding: 12px 18px; gap: 14px; }
+.stats-modal__panel--target .hero-metric__icon { width: 46px; height: 46px; }
+.stats-modal__panel--target .hero-metric__value { font-size: clamp(1.7rem, 3.4vw, 2.2rem); }
+.metric-grid--target { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.metric-grid--target .metric-card { padding: 10px 12px 10px 16px; gap: 4px 8px; }
+.metric-grid--target .metric-card__icon { width: 28px; height: 28px; border-radius: 8px; }
+.metric-grid--target .metric-card__label { font-size: 0.8rem; }
+.metric-grid--target .metric-card__value { font-size: 1.25rem; }
+.metric-grid--target .metric-card--status { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; padding: 8px 14px 8px 18px; }
+.metric-grid--target .metric-card--status .eff-status { font-size: 0.95rem; }
+.stats-modal__panel--target .planned-card { padding: 10px 14px; gap: 10px; }
+.stats-modal__panel--target .planned-card__icon { width: 32px; height: 32px; }
+.stats-modal__panel--target .eff-progress { height: 8px; }
+
+@media (max-width: 1100px) { .metric-grid--target { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 @media (max-width: 720px) {
   .hero-metric { grid-template-columns: auto minmax(0, 1fr); padding: 14px; gap: 12px; }
   .hero-metric__icon { width: 44px; height: 44px; }

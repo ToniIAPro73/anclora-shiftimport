@@ -101,6 +101,39 @@ test.describe('QA mirror — review scenarios (2026 only, pilot employee)', () =
   });
 });
 
+test.describe('QA mirror — annual target tab fits without scrolling', () => {
+  test('desktop 1536×864: Objetivo anual shows everything with no vertical scroll', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'desktop-only layout contract');
+    await page.setViewportSize({ width: 1536, height: 864 });
+    await selectPilot(page);
+    await page.getByTestId('calendar-stats-button').click();
+    const dialog = page.getByRole('dialog', { name: 'Estadísticas' });
+    await dialog.getByRole('tab', { name: /Objetivo/ }).click();
+    await expect(dialog.getByTestId('eff-contract-minimum')).toBeVisible();
+
+    // four target cards on ONE row
+    const tops = await dialog.locator('.metric-grid--target .metric-card:not(.metric-card--status)').evaluateAll(
+      (cards) => cards.map((card) => Math.round(card.getBoundingClientRect().top)),
+    );
+    expect(tops).toHaveLength(4);
+    expect(new Set(tops).size).toBe(1);
+
+    await expect(dialog.getByTestId('eff-contract-status')).toBeVisible();
+    await expect(dialog.getByTestId('eff-contract-projection')).toBeVisible();
+    await expect(dialog.getByTestId('stats-modal-close')).toBeVisible();
+
+    // the real scroll container of the modal must not overflow
+    const overflow = await dialog.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
+    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight + 1);
+    await dialog.screenshot({ path: shot('annual-target-1536x864-dark') });
+
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'light'));
+    const light = await dialog.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
+    expect(light.scrollHeight).toBeLessThanOrEqual(light.clientHeight + 1);
+    await dialog.screenshot({ path: shot('annual-target-1536x864-light') });
+  });
+});
+
 test.describe('QA mirror — write scope', () => {
   test('writes go ONLY to the QA mirror; the source organization is untouched', async ({ request }) => {
     const c = ctx();

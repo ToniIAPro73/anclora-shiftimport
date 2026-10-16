@@ -172,7 +172,7 @@ function TargetPanel({
       : t('effectiveStats.statusWithin');
 
   return (
-    <section className="stats-modal__panel" aria-label={heading} data-testid="eff-contract-card">
+    <section className="stats-modal__panel stats-modal__panel--target" aria-label={heading} data-testid="eff-contract-card">
       <HeroMetric
         icon={<Target size={26} />}
         label={t('effectiveStats.effectiveSoFar')}
@@ -192,7 +192,7 @@ function TargetPanel({
         <div className="eff-progress__fill" style={{ width: `${fill}%` }} />
         <div className="eff-progress__marker" style={{ left: `${minMarker}%` }} aria-hidden="true" />
       </div>
-      <div className="metric-grid">
+      <div className="metric-grid metric-grid--target">
         <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.minimum')} value={hours(minimum)} style={NEUTRAL_ACCENT} testId="eff-contract-minimum" />
         <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.maximum')} value={hours(maximum)} style={NEUTRAL_ACCENT} testId="eff-contract-maximum" />
         <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginUsed')} value={hours(evaluation.marginUsedMinutes ?? 0)} style={shiftAccentStyle('Regular')} testId="eff-contract-margin-used" />
