@@ -3152,6 +3152,22 @@ select:disabled {
   display: none;
 }
 
+.import-modal-review-extra {
+  /* Source summary + identity + temporal decision: bounded and scrollable (never clipped) so the row list below
+     always keeps room; the decision is reachable by natural scrolling of this region. */
+  flex: 0 0 auto;
+  overflow-y: auto;
+  max-height: 42vh;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+.import-modal-review-extra::-webkit-scrollbar { width: 8px; }
+.import-modal-review-extra::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 8px; }
+
+.import-modal__shifts-list {
+  min-height: 120px;
+}
+
 .import-modal__footer {
   flex: 0 0 auto;
   padding-top: 12px;
@@ -5042,9 +5058,16 @@ button[aria-busy='true'] {
      can shrink to make real room for the row list below, on either arm of
      this query. */
   .import-modal-review-extra {
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     overflow-y: auto;
-    max-height: 34vh;
+    max-height: 38vh;
+    max-height: 38dvh;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .import-modal__shifts-list {
+    min-height: 140px;
   }
 
   .jt-counter-modal-content {
@@ -7191,3 +7214,16 @@ button[aria-busy='true'] {
   .onboarding-wizard__plan { min-height: auto; }
   .onboarding-wizard__summary > div { grid-template-columns: 1fr; gap: 3px; }
 }
+
+/* Day annotations (DCF incidence / observation): discreet chips, never a new layer inside the cell. */
+.month-day-annotations { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; margin-right: 4px; }
+.month-day-dcf-chip,
+.month-day-comment-chip {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 18px; padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--color-gold) 55%, transparent); border-radius: 6px;
+  background: color-mix(in srgb, var(--color-gold) 14%, transparent); color: var(--text-primary);
+  font: inherit; font-size: 0.62rem; font-weight: 800; line-height: 1; cursor: pointer;
+}
+.month-day-comment-chip { color: var(--text-muted); border-color: var(--glass-border); background: var(--panel-muted-bg); }
+.month-day-dcf-chip:focus-visible,
+.month-day-comment-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }

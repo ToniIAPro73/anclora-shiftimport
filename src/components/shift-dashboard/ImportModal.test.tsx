@@ -32,6 +32,11 @@ vi.mock('../../ingestion/team-roster', async (importOriginal) => {
 });
 
 const apiFetchMock = vi.fn();
+// The source-identity gate asks the API which employee a TRYP payroll number belongs to; here it is explicitly mapped.
+vi.mock('../../lib/remote', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/remote')>()),
+  resolveSourceIdentifier: vi.fn().mockResolvedValue({ mapped: true, employee: { id: 'emp-1', name: 'Sebastian Pozo Mendoza', externalEmployeeId: '84881', status: 'active' } }),
+}));
 vi.mock('../../lib/session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/session')>();
   return { ...actual, apiFetch: (...args: unknown[]) => apiFetchMock(...args) };
@@ -887,7 +892,6 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       await waitFor(() => expect(screen.getByTestId('import-diagnostics')).toBeTruthy(), { timeout: 10000 });
       expect(screen.getByText('Este archivo contiene colores cuyo significado todavía no conocemos. Indica a qué tipo de turno corresponde cada color o elige ignorarlo.')).toBeTruthy();
       expect(screen.getByText('Clasificar colores detectados')).toBeTruthy();
-
       const rows = screen.getAllByTestId('unknown-color-row');
       expect(rows).toHaveLength(2);
 

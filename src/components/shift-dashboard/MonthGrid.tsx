@@ -5,11 +5,12 @@ import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
-import { AlertTriangle, History, Plus } from 'lucide-react';
+import { AlertTriangle, History, MessageSquare, Plus } from 'lucide-react';
 import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 import { sortDayShifts } from '../../lib/shifts';
 import { DayDetailModal } from './DayDetailModal';
+import type { DayAnnotation } from '../../lib/remote';
 import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
 
 export const MAX_VISIBLE_DAY_ITEMS = 2;
@@ -33,6 +34,10 @@ interface MonthGridProps {
   /** Changes on every request so the same date can be opened again. */
   requestedDetailNonce?: number;
   onDayChanged?: () => void;
+  /** DCF incidences / observations of the visible month. */
+  annotations?: DayAnnotation[];
+  canEditAnnotations?: boolean;
+  onAnnotationsChanged?: () => void;
 }
 
 export const MonthGrid = ({
@@ -50,6 +55,9 @@ export const MonthGrid = ({
   requestedDetailDate = null,
   requestedDetailNonce = 0,
   onDayChanged,
+  annotations = [],
+  canEditAnnotations = false,
+  onAnnotationsChanged,
 }: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
   const weekStartsOn = getWeekStartsOn(locale);
@@ -192,6 +200,9 @@ export const MonthGrid = ({
             const hasVacationShift = dayShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const isHistorical = isHistoricalDate(iso, todayISO);
             const needsReview = dayShifts.some((shift) => shift.effectiveState === 'REQUIRES_REVIEW');
+            const dayAnnotations = annotations.filter((item) => item.date === iso);
+            const hasDcf = dayAnnotations.some((item) => item.kind === 'DCF');
+            const hasComment = dayAnnotations.some((item) => item.kind === 'COMMENT');
             const hasChange = dayShifts.some((shift) => shift.layer === 'CHANGE' || Boolean(shift.changeId) || shift.hasHistory === true);
             const actionInput = { date: iso, today: todayISO, role, hasEditableSchedule: editableScheduleDates.has(iso), hasVacation: hasVacationShift };
             const action = getCalendarAction(actionInput);
@@ -227,6 +238,34 @@ export const MonthGrid = ({
                   >
                     {day}
                   </div>
+                  {(hasDcf || hasComment) && (
+                    <span className="month-day-annotations" data-testid={`day-annotations-${iso}`}>
+                      {hasDcf && (
+                        <button
+                          type="button"
+                          className="month-day-dcf-chip"
+                          onClick={(event) => { event.stopPropagation(); dayDetailTriggerRef.current = event.currentTarget; setSelectedDayDetailDate(iso); }}
+                          aria-label={t('annotations.dcfIndicatorAria', { date: iso })}
+                          title={t('annotations.dcfName')}
+                          data-testid={`day-dcf-${iso}`}
+                        >
+                          DCF
+                        </button>
+                      )}
+                      {hasComment && (
+                        <button
+                          type="button"
+                          className="month-day-comment-chip"
+                          onClick={(event) => { event.stopPropagation(); dayDetailTriggerRef.current = event.currentTarget; setSelectedDayDetailDate(iso); }}
+                          aria-label={t('annotations.commentIndicatorAria', { date: iso })}
+                          title={t('annotations.commentsTitle')}
+                          data-testid={`day-comment-${iso}`}
+                        >
+                          <MessageSquare size={11} strokeWidth={2.2} />
+                        </button>
+                      )}
+                    </span>
+                  )}
                   {provenanceEnabled && (needsReview || hasChange) && (
                     <button
                       type="button"
@@ -302,6 +341,9 @@ export const MonthGrid = ({
           provenance={provenanceEnabled && employeeId
             ? { employeeId, canReconcile, onChanged: onDayChanged }
             : undefined}
+          annotations={annotations.filter((item) => item.date === selectedDayDetailDate)}
+          canEditAnnotations={canEditAnnotations}
+          onAnnotationsChanged={onAnnotationsChanged}
         />
       )}
     </div>

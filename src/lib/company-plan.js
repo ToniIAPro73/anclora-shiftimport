@@ -25,6 +25,8 @@ export const RECONCILIATION_OUTCOME = Object.freeze({
   MODIFIED: 'MODIFIED',
   COMPANY_ADOPTED_LOCAL: 'COMPANY_ADOPTED_LOCAL',
   REQUIRES_REVIEW: 'REQUIRES_REVIEW',
+  /** Evidence from an employee calendar replaced a plan-only effective day (plan preserved, evidence explainable). */
+  EVIDENCE_APPLIED: 'EVIDENCE_APPLIED',
 });
 
 /** `publish` is the pre-rename wire value: it always meant "include the future", never "auto-publish". */
@@ -202,19 +204,34 @@ export function resolveBaseline(revisions, { from, to }) {
  *   days already awaiting review stay REQUIRES_REVIEW (never silently resolved)
  * Historical dates never become MODIFIED silently: a contradiction with the effective history is REQUIRES_REVIEW.
  */
-export function reconcileThreeWay({ baseline, next, effective, today, reviewDays = new Set() }) {
+export function reconcileThreeWay({ baseline, next, effective, today, reviewDays = new Set(), planOnlyDays = new Set() }) {
   const B = indexRows(baseline); const N = indexRows(next); const E = indexRows(effective);
+  // Rows flagged `evidence` come from an employee calendar for a past date: they describe what the employee
+  // calendar SHOWS (effective evidence), not what the company planned.
+  const evidenceDays = new Set(next.filter((entry) => entry.evidence).map((entry) => dayKey(entry.employeeKey, String(entry.row.date).slice(0, 10))));
   const outcomes = [];
   for (const [key, newRows] of N) {
     const [employeeKey, date] = key.split('\u001f');
     const b = B.get(key); const e = E.get(key);
     const retrospective = date < today;
-    const base = { employeeKey, date, next: newRows, baseline: b ?? null, effective: e ?? null, retrospective };
+    const evidence = evidenceDays.has(key);
+    const base = { employeeKey, date, next: newRows, baseline: b ?? null, effective: e ?? null, retrospective, evidence };
     let outcome;
     if (reviewDays.has(key)) outcome = RECONCILIATION_OUTCOME.REQUIRES_REVIEW; // never resolve a pending day silently
+    else if (evidence) {
+      // Employee-calendar evidence is compared with the effective day only (the plan baseline is not involved).
+      if (!e) outcome = RECONCILIATION_OUTCOME.NEW;
+      else if (sameDay(e, newRows)) outcome = RECONCILIATION_OUTCOME.UNCHANGED;
+      else outcome = planOnlyDays.has(key) ? RECONCILIATION_OUTCOME.EVIDENCE_APPLIED : RECONCILIATION_OUTCOME.REQUIRES_REVIEW;
+    }
     else if (!b && !e) outcome = RECONCILIATION_OUTCOME.NEW;
-    // First import (no baseline): a day that already matches the effective calendar is simply UNCHANGED.
-    else if (!b && e) outcome = sameDay(e, newRows) ? RECONCILIATION_OUTCOME.UNCHANGED : RECONCILIATION_OUTCOME.REQUIRES_REVIEW;
+    // First import (no baseline): a day that already matches the effective calendar is simply UNCHANGED. A past day that
+    // differs keeps its effective state (the plan is recorded, the difference stays explainable); a future day that a
+    // planner already drafted differently needs a human decision.
+    else if (!b && e) {
+      if (sameDay(e, newRows)) outcome = RECONCILIATION_OUTCOME.UNCHANGED;
+      else outcome = retrospective ? RECONCILIATION_OUTCOME.KEPT_LOCAL : RECONCILIATION_OUTCOME.REQUIRES_REVIEW;
+    }
     else if (sameDay(b, newRows)) {
       outcome = !e || sameDay(e, b) ? RECONCILIATION_OUTCOME.UNCHANGED : RECONCILIATION_OUTCOME.KEPT_LOCAL;
     } else if (!e || sameDay(e, b)) {
@@ -227,13 +244,14 @@ export function reconcileThreeWay({ baseline, next, effective, today, reviewDays
 }
 
 export function summarizeOutcomes(outcomes) {
-  const summary = { total: outcomes.length, unchanged: 0, new: 0, keptLocal: 0, modified: 0, companyAdoptedLocal: 0, requiresReview: 0 };
+  const summary = { total: outcomes.length, unchanged: 0, new: 0, keptLocal: 0, modified: 0, companyAdoptedLocal: 0, requiresReview: 0, evidenceApplied: 0 };
   for (const item of outcomes) {
     if (item.outcome === RECONCILIATION_OUTCOME.UNCHANGED) summary.unchanged += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.NEW) summary.new += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.KEPT_LOCAL) summary.keptLocal += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.MODIFIED) summary.modified += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.COMPANY_ADOPTED_LOCAL) summary.companyAdoptedLocal += 1;
+    else if (item.outcome === RECONCILIATION_OUTCOME.EVIDENCE_APPLIED) summary.evidenceApplied += 1;
     else summary.requiresReview += 1;
   }
   return summary;

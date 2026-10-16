@@ -186,3 +186,55 @@ describe('import fingerprints', () => {
       .toBe(dayFingerprint([row('2026-02-06', 'Regular', '13:00', '21:00')]));
   });
 });
+
+describe('source-aware semantics (synthetic data)', () => {
+  const wed = '2026-06-02';
+  const plan0602 = [{ employeeKey: K, date: wed, row: row(wed, 'Regular', '14:00', '22:00') }];
+  const eff = (rows) => rows.map((r) => ({ employeeKey: K, date: r.date, row: r }));
+
+  it('comment-only changes alter the DOCUMENT fingerprint but never the PLAN fingerprint', () => {
+    const base = [entry(K, row(wed, 'Regular', '14:00', '22:00'))];
+    const withNote = [{ ...base[0], annotations: [{ kind: 'COMMENT', text: 'cambio de turno' }] }];
+    const withOtherNote = [{ ...base[0], annotations: [{ kind: 'COMMENT', text: 'otro texto' }] }];
+    expect(planFingerprint(withNote)).toBe(planFingerprint(base));
+    expect(planFingerprint(withOtherNote)).toBe(planFingerprint(base));
+    expect(documentFingerprint(withNote)).not.toBe(documentFingerprint(base));
+    expect(documentFingerprint(withNote)).not.toBe(documentFingerprint(withOtherNote));
+  });
+
+  it('a DCF marker without hours changes the DOCUMENT fingerprint, not the PLAN one', () => {
+    const base = [entry(K, row(wed, 'Libre'))];
+    const dcf = [{ ...base[0], annotations: [{ kind: 'DCF', startTime: null, endTime: null }] }];
+    expect(planFingerprint(dcf)).toBe(planFingerprint(base));
+    expect(documentFingerprint(dcf)).not.toBe(documentFingerprint(base));
+  });
+
+  it('02/06: employee Baja evidence over a published 14-22 plan keeps the plan and applies the Baja as effective', () => {
+    const planDay = eff([row(wed, 'Regular', '14:00', '22:00')]);
+    const evidence = [{ employeeKey: K, date: wed, evidence: true, row: row(wed, 'Baja') }];
+    const outcomes = reconcileThreeWay({
+      baseline: plan0602, next: evidence, effective: planDay, today: '2026-10-16',
+      planOnlyDays: new Set([`${K}\u001f${wed}`]),
+    });
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0].outcome).toBe(O.EVIDENCE_APPLIED);
+    expect(outcomes[0].baseline).not.toBeNull(); // plan baseline stays reachable for the explanation
+  });
+
+  it('evidence over a day with a human override is never applied silently', () => {
+    const evidence = [{ employeeKey: K, date: wed, evidence: true, row: row(wed, 'Baja') }];
+    const outcomes = reconcileThreeWay({
+      baseline: plan0602, next: evidence, effective: eff([row(wed, 'Regular', '13:00', '21:00')]), today: '2026-10-16',
+      planOnlyDays: new Set(),
+    });
+    expect(outcomes[0].outcome).toBe(O.REQUIRES_REVIEW);
+  });
+
+  it('a pending-review day is never resolved by re-importing the same document', () => {
+    const outcomes = reconcileThreeWay({
+      baseline: plan0602, next: plan0602, effective: eff([row(wed, 'Baja')]), today: '2026-10-16',
+      reviewDays: new Set([`${K}\u001f${wed}`]),
+    });
+    expect(outcomes[0].outcome).toBe(O.REQUIRES_REVIEW);
+  });
+});

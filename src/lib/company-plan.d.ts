@@ -1,7 +1,7 @@
 export type TemporalClass = 'HISTORICAL' | 'FUTURE' | 'MIXED';
 export type DocumentClass = 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED';
 export type ImportDecision = 'historical-only' | 'historical-and-plan';
-export type ReconciliationOutcomeKind = 'UNCHANGED' | 'NEW' | 'KEPT_LOCAL' | 'MODIFIED' | 'COMPANY_ADOPTED_LOCAL' | 'REQUIRES_REVIEW';
+export type ReconciliationOutcomeKind = 'UNCHANGED' | 'NEW' | 'KEPT_LOCAL' | 'MODIFIED' | 'COMPANY_ADOPTED_LOCAL' | 'REQUIRES_REVIEW' | 'EVIDENCE_APPLIED';
 
 export interface PlanRowInput {
   date: string;
@@ -17,13 +17,13 @@ export interface PlanRowInput {
   dutyRole?: string | null;
   duty_role?: string | null;
 }
-export interface PlanEntry { employeeKey: string; row: PlanRowInput }
+export interface PlanEntry { employeeKey: string; row: PlanRowInput; evidence?: boolean }
 export interface PlanRevisionInput { revisionNumber: number; coverageFrom: string; coverageTo: string; rows: PlanEntry[] }
 export interface ReconciliationItem {
-  employeeKey: string; date: string; outcome: ReconciliationOutcomeKind; retrospective: boolean;
+  employeeKey: string; date: string; outcome: ReconciliationOutcomeKind; retrospective: boolean; evidence?: boolean;
   next: PlanRowInput[]; baseline: PlanRowInput[] | null; effective: PlanRowInput[] | null;
 }
-export interface OutcomeSummary { total: number; unchanged: number; new: number; keptLocal: number; modified: number; companyAdoptedLocal: number; requiresReview: number }
+export interface OutcomeSummary { total: number; unchanged: number; new: number; keptLocal: number; modified: number; companyAdoptedLocal: number; requiresReview: number; evidenceApplied: number }
 
 export const TEMPORAL_CLASS: Readonly<Record<TemporalClass, TemporalClass>>;
 export const DOCUMENT_CLASS: Readonly<Record<DocumentClass, DocumentClass>>;
@@ -41,7 +41,7 @@ export function normalizePlanRow(row: PlanRowInput): { date: string; type: strin
 export function planRowSignature(employeeKey: string, row: PlanRowInput): string;
 export function planCanonicalLines(rows: PlanEntry[]): string[];
 export function resolveBaseline(revisions: PlanRevisionInput[], range: { from: string; to: string }): PlanEntry[];
-export function reconcileThreeWay(input: { baseline: PlanEntry[]; next: PlanEntry[]; effective: PlanEntry[]; today: string; reviewDays?: Set<string> }): ReconciliationItem[];
+export function reconcileThreeWay(input: { baseline: PlanEntry[]; next: PlanEntry[]; effective: PlanEntry[]; today: string; reviewDays?: Set<string>; planOnlyDays?: Set<string> }): ReconciliationItem[];
 export function summarizeOutcomes(outcomes: ReconciliationItem[]): OutcomeSummary;
 export function sameContent(a: PlanRowInput | null | undefined, b: PlanRowInput | null | undefined): boolean;
 export function daySignature(rows?: PlanRowInput[]): string;

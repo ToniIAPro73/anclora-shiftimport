@@ -7,6 +7,7 @@ import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
 import { reconcileImport, ReconciliationReport } from './lib/import-reconciliation';
+import type { ImportSourceInfo } from './ingestion/parsers/file';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
 import { getShiftTypeSemantics } from './lib/shift-types';
 import { formatEmployeeProfileLabel } from './lib/personas';
@@ -35,6 +36,9 @@ import {
   listRemoteEmployees,
   listRemoteScheduleVersions,
   loadAnnualTargets,
+  loadCalendarAnnotations,
+  saveImportAnnotations,
+  type DayAnnotation,
   loadReconciliation,
   type ReconciliationWorklist,
   loadRemoteShifts,
@@ -139,7 +143,7 @@ interface ImportFailure {
 interface PendingImportRetry {
   newShifts: Shift[];
   targetPeriod: ImportPeriod;
-  selector?: { name: string; externalId: string };
+  selector?: { name: string; externalId: string; employeeId?: string };
   areaId?: string | null;
   fileName?: string;
   fileFingerprint?: string;
@@ -758,6 +762,23 @@ function App() {
   const [reconciliationAttempt, setReconciliationAttempt] = useState(0);
   const [calendarDataVersion, setCalendarDataVersion] = useState(0);
   useEffect(() => { setCalendarDataVersion((value) => value + 1); }, [shifts]);
+  // DCF incidences and observations of the visible month (backend sessions only).
+  const [annotations, setAnnotations] = useState<DayAnnotation[]>([]);
+  const [annotationsVersion, setAnnotationsVersion] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    if (!session || !activeEmployeeId || needsOrgChoice) {
+      setAnnotations([]);
+      return undefined;
+    }
+    const first = monthDays[0];
+    const last = monthDays[monthDays.length - 1];
+    loadCalendarAnnotations(activeEmployeeId, first, last)
+      .then((items) => { if (!cancelled) setAnnotations(items); })
+      .catch(() => { if (!cancelled) setAnnotations([]); });
+    return () => { cancelled = true; };
+  }, [session, activeEmployeeId, needsOrgChoice, monthDays, annotationsVersion, calendarDataVersion]);
+
   useEffect(() => {
     let cancelled = false;
     if (!session || !activeEmployeeId || needsOrgChoice) {
@@ -1039,7 +1060,7 @@ function App() {
    * - new → ADMIN may create the employee inline and continue.
    */
   const resolveImportEmployee = useCallback(async (
-    selector?: { name: string; externalId: string },
+    selector?: { name: string; externalId: string; employeeId?: string },
     areaId?: string | null,
   ): Promise<RemoteEmployee | null> => {
     if (!session) {
@@ -1048,6 +1069,12 @@ function App() {
 
     if (session.role === 'EMPLOYEE') {
       return employees.find((employee) => employee.id === session.employeeId) ?? null;
+    }
+
+    // Explicitly resolved by the source-identity gate (mapping / canonical id / admin association): authoritative.
+    if (selector?.employeeId) {
+      const explicit = (await listRemoteEmployees().catch(() => employees)).find((employee) => employee.id === selector.employeeId) ?? null;
+      if (explicit && explicit.status === 'active') return explicit;
     }
 
     const selected = employees.find((employee) => employee.id === selectedEmployeeId) ?? null;
@@ -1192,12 +1219,13 @@ function App() {
   const handleConfirmImport = async (
     newShifts: Shift[],
     targetPeriod: ImportPeriod,
-    selector?: { name: string; externalId: string },
+    selector?: { name: string; externalId: string; employeeId?: string },
     areaId?: string | null,
     fileName?: string,
     fileFingerprint?: string,
     selfImportSummary?: SelfImportSummary,
     futureImportDecision: FutureImportDecision = 'historical-only',
+    importSource?: ImportSourceInfo,
   ): Promise<boolean> => {
     // Defense in depth: the modal disables guest confirmation, and the
     // controller also fails closed so a stale event cannot write locally.
@@ -1381,6 +1409,21 @@ function App() {
       );
     }
 
+    // DCF incidences / observations travel with the rows of the document (not only with the rows that were new).
+    const annotationItems = normalizedIncoming.flatMap((shift) => (shift.annotations ?? []).map((annotation) => ({
+      date: shift.date, kind: annotation.kind, text: annotation.text, startTime: annotation.startTime ?? null, endTime: annotation.endTime ?? null,
+    })));
+    const persistAnnotations = async (employeeId: string, forImportId?: string | null) => {
+      if (annotationItems.length === 0) return;
+      try {
+        await saveImportAnnotations({ employeeId, importId: forImportId ?? null, sourceKind: importSource?.kind ?? null, items: annotationItems });
+        setAnnotationsVersion((value) => value + 1);
+      } catch (error) {
+        console.error('Failed to persist import annotations', error);
+        setAppFeedback({ kind: 'alert', message: t('annotations.saveFailed') });
+      }
+    };
+
     // A repeated document with no changes is a no-op. Tell the user clearly
     // and do not create another Import record or send an empty write request.
     // This also protects the flow when a second import is started after the
@@ -1411,6 +1454,7 @@ function App() {
         }).catch((error) => console.error('Failed to persist self-import future outcome', error));
         return false;
       }
+      await persistAnnotations(targetEmployeeId ?? selectedEmployeeId ?? '', importId);
       setAppFeedback({ kind: 'status', message: t('importModal.alreadyImported', { count: identicalCount }) });
       return false;
     }
@@ -1520,13 +1564,14 @@ function App() {
             periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
             futureConsent: 'historical-and-plan',
             weekStart: getPlannerWeekStartPreference(),
+            sourceKind: importSource?.kind,
+            sourceSystem: importSource?.system ?? null,
+            sourceIdentifier: importSource?.identifier ?? null,
+            annotations: annotationItems,
           });
-          const persisted = historicalUpserts.length > 0
-            ? await loadRemoteShifts(targetEmployeeId)
-            : [];
-          const reconciliation = historicalUpserts.length > 0
-            ? reconcileImport(historicalUpserts, persisted)
-            : null;
+          // The server reconciles the document against the company plan and the effective calendar (it may keep a
+          // local override or park a discrepancy for review), so the row-by-row client check no longer applies here.
+          const reconciliation = null as ReconciliationReport | null;
           if (reconciliation?.status === 'FAIL') {
             console.error('Mixed import reconciliation FAILED', { ...futureResult, employeeId: targetEmployeeId, reconciliation });
             setImportResult(reconciliation);
@@ -1542,7 +1587,7 @@ function App() {
             status: 'COMPLETED',
             historical: {
               submittedCount: historicalUpserts.length,
-              persistedCount: reconciliation?.matchedCount ?? 0,
+              persistedCount: futureResult.historical.persistedCount,
               existingCount: identicalCount,
             },
             future: {
@@ -1610,6 +1655,7 @@ function App() {
         // Unreachable because anonymous confirmation is rejected above.
         throw new Error('Authenticated session required for import persistence');
       }
+      await persistAnnotations(targetEmployeeId, importId);
       applySuccessTail();
       return true;
     } catch (error) {
@@ -2179,6 +2225,9 @@ function App() {
             canReconcile={Boolean(canConfigureTarget)}
             requestedDetailDate={requestedDetailDate}
             requestedDetailNonce={requestedDetailNonce}
+            annotations={annotations}
+            canEditAnnotations={Boolean(session?.role && ['OWNER', 'ADMIN', 'PLANNER'].includes(session.role))}
+            onAnnotationsChanged={() => setAnnotationsVersion((value) => value + 1)}
             onDayChanged={() => { void refreshCalendarData(); }}
           />
         </section>
@@ -2425,6 +2474,8 @@ function App() {
             return self ? { name: self.name, externalId: self.externalEmployeeId ?? '' } : null;
           })()}
           identityLocked={session?.role === 'EMPLOYEE'}
+          canAssociateIdentity={session?.role === 'ADMIN' || session?.role === 'OWNER'}
+          lockedEmployeeId={session?.employeeId ?? null}
           userId={session?.user.id ?? null}
           organizationId={session?.organizationId ?? null}
           isAuthenticated={Boolean(session)}

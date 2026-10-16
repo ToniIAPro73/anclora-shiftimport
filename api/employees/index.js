@@ -26,6 +26,7 @@ export default async function handler(req, res) {
         const result = await findEmployeeMatch(sql, ctx, {
           externalEmployeeId: req.query?.externalEmployeeId,
           name: req.query?.name,
+          sourceSystem: req.query?.sourceSystem,
         });
         return sendJson(res, 200, result);
       }

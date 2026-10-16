@@ -446,6 +446,8 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'calendar_changes',
           'employee_annual_targets',
           'company_plan_revisions',
+          'calendar_annotations',
+          'employee_source_identifiers',
         ],
         columns: [
           'organizations.plan',
@@ -496,6 +498,8 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           { conname: 'user_access_invitations_person_org_fkey', def: 'FOREIGN KEY (organization_person_id, organization_id)' },
           { conname: 'employee_annual_targets_unique', def: 'UNIQUE (organization_id, employee_id, year)' },
           { conname: 'company_plan_revisions_unique', def: 'UNIQUE (organization_id, scope_key, revision_number)' },
+          { conname: 'calendar_annotations_unique', def: 'UNIQUE (organization_id, employee_id, date, kind, origin)' },
+          { conname: 'employee_source_identifiers_unique', def: 'UNIQUE (organization_id, source_system, external_identifier)' },
         ],
       });
 

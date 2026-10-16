@@ -198,6 +198,7 @@ export interface PlanChangeCounts {
   keptLocal: number;
   companyAdoptedLocal: number;
   requiresReview: number;
+  evidenceApplied?: number;
 }
 
 export interface FutureImportResult {
@@ -227,7 +228,10 @@ export interface FutureImportResult {
     baselineRevision: number | null;
     revisionCreated: boolean;
     changes: PlanChangeCounts;
+    evidenceDaysApplied?: number;
   };
+  sourceKind?: string;
+  annotations?: { submitted: number };
   import: RemoteImport;
 }
 
@@ -826,7 +830,7 @@ export async function confirmRemoteFutureImport(input: {
   sourceFormat: string;
   fileFingerprint: string;
   employeeId: string;
-  shifts: Array<Pick<Shift, 'id' | 'date' | 'startTime' | 'endTime' | 'location' | 'origin' | 'sourceFormat'> & { employeeId?: string; areaId?: string | null }>;
+  shifts: Array<Pick<Shift, 'id' | 'date' | 'startTime' | 'endTime' | 'location' | 'origin' | 'sourceFormat' | 'annotations'> & { employeeId?: string; areaId?: string | null }>;
   deleteIds?: string[];
   periodYear: number | null;
   periodMonth: number | null;
@@ -836,6 +840,12 @@ export async function confirmRemoteFutureImport(input: {
   periodLabel?: string;
   futureConsent: FutureImportConsent;
   weekStart?: 'monday' | 'sunday';
+  sourceKind?: 'EMPLOYEE_CALENDAR_EXPORT' | 'PUBLISHED_CALENDAR_EXPORT' | 'TEAM_SCHEDULE_EXPORT' | 'UNKNOWN';
+  /** Source-system number carried by the document; the server verifies it against the target employee. */
+  sourceSystem?: string | null;
+  sourceIdentifier?: string | null;
+  /** Annotations (DCF, observations) of every row of the document. */
+  annotations?: Array<{ date: string; kind: 'DCF' | 'COMMENT'; text?: string; startTime?: string | null; endTime?: string | null }>;
 }): Promise<FutureImportResult> {
   return apiFetch<FutureImportResult>('/api/imports/confirm-split', {
     method: 'POST',
@@ -847,7 +857,7 @@ export async function confirmRemoteFutureImport(input: {
 export async function previewPlanImport(input: {
   fileFingerprint: string;
   employeeId?: string;
-  shifts: Array<Pick<Shift, 'id' | 'date' | 'startTime' | 'endTime' | 'location' | 'origin' | 'sourceFormat'> & { employeeId?: string; areaId?: string | null }>;
+  shifts: Array<Pick<Shift, 'id' | 'date' | 'startTime' | 'endTime' | 'location' | 'origin' | 'sourceFormat' | 'annotations'> & { employeeId?: string; areaId?: string | null }>;
   areaId?: string | null;
   importMode?: 'individual' | 'team';
   periodKind?: 'single' | 'multi';
@@ -1390,9 +1400,16 @@ export async function loadCalendarStats(employeeId: string, year: number, month?
 
 export interface ReconciliationShiftLabel { type: string; startTime: string | null; endTime: string | null }
 
+export type ReconciliationReasonCode = 'EFFECTIVE_DIFFERS_FROM_PLAN' | 'PLAN_CHANGED' | 'PENDING_REVIEW';
+
 export interface ReconciliationItem {
   date: string;
   status: 'PENDING' | 'RESOLVED';
+  /** Company plan before the latest change / now, and the effective calendar (when the information exists). */
+  companyBefore?: ReconciliationShiftLabel[] | null;
+  companyNow?: ReconciliationShiftLabel[] | null;
+  effective?: ReconciliationShiftLabel[];
+  reasonCode?: ReconciliationReasonCode;
   company: ReconciliationShiftLabel[];
   current: ReconciliationShiftLabel[];
   resolvedAt: string | null;
@@ -1412,4 +1429,58 @@ export async function loadReconciliation(employeeId: string, year: number): Prom
   return apiFetch<ReconciliationWorklist>(
     `/api/calendar/reconciliation?employeeId=${encodeURIComponent(employeeId)}&year=${year}`,
   );
+}
+
+
+// ------------------------------------------------------------ day annotations (DCF, observations)
+
+export interface DayAnnotation {
+  id: string;
+  employeeId: string;
+  date: string;
+  kind: 'DCF' | 'COMMENT';
+  text: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  /** DCF: HOURS_UNKNOWN = the source says it exists but not when (never invented). */
+  completeness: 'HOURS_UNKNOWN' | 'HOURS_KNOWN' | null;
+  origin: 'IMPORT' | 'MANUAL';
+  sourceKind: string | null;
+}
+
+export async function loadCalendarAnnotations(employeeId: string, from: string, to: string): Promise<DayAnnotation[]> {
+  const payload = await apiFetch<{ annotations: DayAnnotation[] }>(
+    `/api/calendar/annotations?employeeId=${encodeURIComponent(employeeId)}&from=${from}&to=${to}`,
+  );
+  return payload.annotations;
+}
+
+export async function saveImportAnnotations(input: {
+  employeeId: string;
+  importId?: string | null;
+  sourceKind?: string | null;
+  items: Array<{ date: string; kind: 'DCF' | 'COMMENT'; text?: string; startTime?: string | null; endTime?: string | null }>;
+}): Promise<{ saved: number }> {
+  return apiFetch('/api/calendar/annotations', { method: 'POST', body: JSON.stringify(input) });
+}
+
+/** OWNER / ADMIN / PLANNER only. Both times empty = back to "hours unknown". */
+export async function setDcfInterval(input: { employeeId: string; date: string; startTime: string | null; endTime: string | null }) {
+  return apiFetch<{ completeness: 'HOURS_UNKNOWN' | 'HOURS_KNOWN' }>('/api/calendar/annotations', { method: 'PATCH', body: JSON.stringify(input) });
+}
+
+// ------------------------------------------------------------ source identifiers (explicit mappings only)
+
+export interface SourceIdentifierResolution {
+  mapped: boolean;
+  employee: { id: string; name: string; externalEmployeeId: string | null; status: string } | null;
+}
+
+export async function resolveSourceIdentifier(sourceSystem: string, externalIdentifier: string): Promise<SourceIdentifierResolution> {
+  return apiFetch(`/api/employees/identifiers?sourceSystem=${encodeURIComponent(sourceSystem)}&externalIdentifier=${encodeURIComponent(externalIdentifier)}`);
+}
+
+/** ADMIN+: explicit association of a source number with an employee. Never inferred. */
+export async function createSourceIdentifierMapping(input: { employeeId: string; sourceSystem: string; externalIdentifier: string }) {
+  return apiFetch<{ created: boolean } & SourceIdentifierResolution>('/api/employees/identifiers', { method: 'POST', body: JSON.stringify(input) });
 }

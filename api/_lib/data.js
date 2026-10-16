@@ -306,7 +306,7 @@ function assertScopedResource(scope, { employeeId = null, areaId = null } = {}) 
   }
 }
 
-async function assertEmployeeInOrg(sql, ctx, employeeId) {
+export async function assertEmployeeInOrg(sql, ctx, employeeId) {
   const rows = await sql`
     SELECT id, status FROM employees
     WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
@@ -429,7 +429,7 @@ function matchKindForStatus(status) {
  * would leak other employees' names/ids to a curious/malicious request. An
  * EMPLOYEE can only ever "match" their own linked row, or get 'new' (never
  * another employee's row, never 'ambiguous' with other people). */
-export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) {
+export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name, sourceSystem = null }) {
   const normalizedName = String(name ?? '').trim().toLowerCase();
   const externalId = String(externalEmployeeId ?? '').trim();
 
@@ -447,6 +447,22 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
     return selfMatches ? { kind: 'recognized', employees: [self] } : { kind: 'new', employees: [] };
   }
 
+  // 1. Known source-specific identifier mapping (explicitly configured, never inferred).
+  if (externalId && sourceSystem) {
+    const mapped = await sql`
+      SELECT e.* FROM employee_source_identifiers i
+      JOIN employees e ON e.id = i.employee_id AND e.organization_id = i.organization_id
+      WHERE i.organization_id = ${ctx.organizationId} AND i.source_system = ${String(sourceSystem).trim()}
+        AND i.external_identifier = ${externalId}
+    `;
+    const inScope = mapped.filter((row) => scope.type !== 'AREA' || row.area_id === scope.areaId);
+    if (inScope.length === 1) {
+      const employee = mapEmployeeRow(inScope[0]);
+      return { kind: matchKindForStatus(employee.status), employees: [employee], matchedBy: 'SOURCE_IDENTIFIER' };
+    }
+  }
+
+  // 2. Canonical external_employee_id.
   if (externalId) {
     const rows = scope.type === 'AREA'
       ? await sql`
@@ -479,6 +495,11 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name }) 
           WHERE organization_id = ${ctx.organizationId}
             AND lower(trim(name)) = ${normalizedName}
         `;
+    // A name alone never links a document to someone whose canonical payroll number DIFFERS from the one the
+    // document carries (another system may use another number): ask, never guess.
+    if (externalId && rows.some((row) => row.external_employee_id && row.external_employee_id !== externalId)) {
+      return { kind: 'ambiguous', employees: rows.map(mapEmployeeRow), reason: 'IDENTIFIER_MISMATCH' };
+    }
     if (rows.length === 1) {
       const employees = rows.map(mapEmployeeRow);
       return { kind: matchKindForStatus(employees[0].status), employees };

@@ -119,3 +119,10 @@ recupera `PDF`/`MAN`). Confianza `HIGH` (se aplica), `MEDIUM` (requiere regla) y
 sin decisión. `--apply` exige copia verificada, una sola transacción y demuestra que ningún otro
 empleado cambió; `--rollback` restaura el estado previo. Los días futuros que solo existen en el
 Excel no se escriben desde aquí: pertenecen al flujo de importación/publicación.
+
+## 8. Anotaciones y explicación de reconciliación
+
+- El calendario muestra solo la capa efectiva; **DCF** y **observaciones** aparecen como indicadores discretos. Un DCF sin horas
+  muestra «Horario no especificado» en el detalle del día y no altera horas efectivas ni estadísticas.
+- El modal de reconciliación muestra por día **Empresa antes / Empresa ahora / Calendario efectivo** y el motivo en lenguaje
+  natural (sin UUID ni huellas). En días pendientes, «efectivo» es lo que el calendario tenía localmente frente al plan.

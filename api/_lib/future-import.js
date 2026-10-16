@@ -9,6 +9,8 @@ import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
 import { getOperationalDate } from './operational-date.js';
 import { createNewDraftFromVersionTx } from './scheduling.js';
+import { normalizeAnnotationItems } from './annotations.js';
+import { assertSourceIdentifierTarget } from './employee-identifiers.js';
 import { documentFingerprint, planFingerprint } from './import-fingerprints.js';
 import {
   IMPORT_DECISION,
@@ -20,9 +22,19 @@ import {
   normalizePlanRow,
   reconcileThreeWay,
   resolveBaseline,
+  sameDay,
   summarizeOutcomes,
 } from '../../src/lib/company-plan.js';
 
+/**
+ * The company plan changed iff some PLAN day differs from the baseline plan (or there is no baseline yet). Days that are
+ * merely awaiting a human decision (already pending, or a local override) are NOT a plan change: re-importing an
+ * unchanged document must stay idempotent however many reconciliations are open.
+ */
+const planDiffersFromBaseline = (outcomes, hasExistingPlan) =>
+  !hasExistingPlan || outcomes.some((item) => !item.evidence && (!item.baseline || !sameDay(item.baseline, item.next)));
+
+const SOURCE_KINDS = new Set(['EMPLOYEE_CALENDAR_EXPORT', 'PUBLISHED_CALENDAR_EXPORT', 'TEAM_SCHEDULE_EXPORT', 'UNKNOWN']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -203,19 +215,39 @@ async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
     requireFeature(ctx.plan, 'multiEmployeeImport', 'This plan cannot import future shifts for multiple employees');
   }
 
-  const normalized = dated.shifts.map((shift) => ({
+  // SOURCE KIND is a third, independent dimension (what produced the document). An employee-calendar export is
+  // effective-calendar EVIDENCE for its past dates; published calendars / team schedules / unknown sources are the PLAN.
+  const importMode = input.importMode === 'team' ? 'team' : 'individual';
+  const sourceKind = SOURCE_KINDS.has(input.sourceKind) ? input.sourceKind : (importMode === 'team' ? 'TEAM_SCHEDULE_EXPORT' : 'UNKNOWN');
+  const normalized = dated.shifts.map((shift, index) => ({
     ...shift,
     employeeId: shift.employeeId,
     areaId: requestedAreaId ?? employees.get(shift.employeeId)?.area_id ?? null,
     employeeKey: employeeBusinessKey({ externalEmployeeId: employees.get(shift.employeeId)?.external_employee_id, name: employees.get(shift.employeeId)?.name }) ?? `uuid:${shift.employeeId}`,
+    role: sourceKind === 'EMPLOYEE_CALENDAR_EXPORT' && shift.temporalClass === 'HISTORICAL' ? 'EVIDENCE' : 'PLAN',
+    annotations: Array.isArray(rawShifts[index]?.annotations) ? rawShifts[index].annotations : [],
   }));
+  // Informational annotations (DCF, observations) that came with the rows; validated, never interpreted as hours.
+  const annotationItems = [];
+  for (const shift of normalized) {
+    for (const annotation of shift.annotations) annotationItems.push({ employeeId: shift.employeeId, ...annotation, date: shift.date });
+  }
+  // Top-level list: annotations of EVERY row of the document, including rows already in the calendar.
+  for (const annotation of Array.isArray(input.annotations) ? input.annotations : []) {
+    annotationItems.push({ ...annotation, employeeId: annotation.employeeId || defaultEmployeeId });
+  }
+  const annotationsByEmployee = new Map();
+  for (const employeeId of employeeIds) {
+    const own = annotationItems.filter((item) => item.employeeId === employeeId);
+    if (own.length) annotationsByEmployee.set(employeeId, normalizeAnnotationItems(own));
+  }
 
   return {
     dated, decision, weekStart, scope, requestedAreaId, areaNameSnapshot, employeeIds, employees,
-    normalized, fileFingerprint,
+    normalized, fileFingerprint, sourceKind, annotationsByEmployee,
     future: normalized.filter((shift) => shift.temporalClass === 'FUTURE'),
     historical: normalized.filter((shift) => shift.temporalClass === 'HISTORICAL'),
-    importMode: input.importMode === 'team' ? 'team' : 'individual',
+    importMode,
     periodKind: input.periodKind === 'multi' ? 'multi' : 'single',
   };
 }
@@ -247,11 +279,12 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
     rows: (Array.isArray(revision.rows) ? revision.rows : []).map((stored) => ({ employeeKey: stored.k, row: fromStoredRow(stored) })),
   }));
   const baseline = resolveBaseline(revisions, { from, to });
+  const planNormalized = normalized.filter((shift) => shift.role === 'PLAN');
 
   // Effective = what the operation currently has: draft assignments (incl. planner edits) win over published shifts.
   const keyByEmployee = new Map(normalized.map((shift) => [shift.employeeId, shift.employeeKey]));
   const shiftRows = await sql`
-    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role
+    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role, layer, provenance
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ANY(${employeeIds}::uuid[])
       AND date BETWEEN ${from} AND ${to} AND effective_state = 'EFFECTIVE'
@@ -280,7 +313,20 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
     for (const row of rows) effective.push({ employeeKey: keyByEmployee.get(employeeId), row });
   }
 
-  const next = normalized.map((shift) => ({ employeeKey: shift.employeeKey, row: toPlanRow(shift) }));
+  const next = normalized.map((shift) => ({ employeeKey: shift.employeeKey, row: toPlanRow(shift), evidence: shift.role === 'EVIDENCE', annotations: shift.annotations }));
+  // A day whose effective rows are ALL plain company-plan rows (no admin/employee change, no history from another
+  // system) can be superseded by employee-calendar evidence without a human decision; anything else needs review.
+  const planOnlyDays = new Set();
+  const effectiveRowIdsByDay = new Map();
+  const dayInfo = new Map();
+  for (const row of shiftRows) {
+    const key = `${keyByEmployee.get(row.employee_id)}\u001f${row.date}`;
+    if (!dayInfo.has(key)) dayInfo.set(key, { all: true, ids: [] });
+    const info = dayInfo.get(key);
+    info.ids.push(row.id);
+    if (!(row.layer === 'COMPANY_PLAN' && (row.provenance === null || row.provenance === 'COMPANY_IMPORT' || row.provenance === 'SCHEDULE_PUBLICATION'))) info.all = false;
+  }
+  for (const [key, info] of dayInfo) { if (info.all) planOnlyDays.add(key); effectiveRowIdsByDay.set(key, info.ids); }
   // Days already awaiting reconciliation are never resolved by an import.
   const pending = await sql`
     SELECT DISTINCT employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date
@@ -289,11 +335,14 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
       AND date BETWEEN ${from} AND ${to} AND effective_state = 'REQUIRES_REVIEW'
   `;
   const reviewDays = new Set(pending.map((row) => `${keyByEmployee.get(row.employee_id)}\u001f${row.date}`));
-  const outcomes = reconcileThreeWay({ baseline, next, effective, today: dated.cutoff, reviewDays });
+  const outcomes = reconcileThreeWay({ baseline, next, effective, today: dated.cutoff, reviewDays, planOnlyDays });
   const summary = summarizeOutcomes(outcomes);
-  const nextPlanEntries = normalized.filter((shift) => shift.temporalClass === 'FUTURE').map((shift) => ({ employeeKey: shift.employeeKey, row: toPlanRow(shift) }));
+  // PLAN rows only: employee-calendar evidence never becomes a company-plan revision.
+  const nextPlanEntries = planNormalized.map((shift) => ({ employeeKey: shift.employeeKey, row: toPlanRow(shift) }));
   return {
-    scopeKey, from, to, revisions, baseline, outcomes, summary,
+    scopeKey, from, to, revisions, baseline, outcomes, summary, planEntryCount: nextPlanEntries.length, effectiveRowIdsByDay,
+    planFrom: planNormalized.length ? planNormalized.map((shift) => shift.date).sort()[0] : null,
+    planTo: planNormalized.length ? planNormalized.map((shift) => shift.date).sort().at(-1) : null,
     latestRevision: latest[0]?.latest ?? 0,
     hasExistingPlan: baseline.length > 0,
     planFingerprint: planFingerprint(nextPlanEntries),
@@ -304,6 +353,7 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
 const outcomeCounts = (summary) => ({
   new: summary.new, unchanged: summary.unchanged, modified: summary.modified,
   keptLocal: summary.keptLocal, companyAdoptedLocal: summary.companyAdoptedLocal, requiresReview: summary.requiresReview,
+  evidenceApplied: summary.evidenceApplied,
 });
 
 /**
@@ -330,7 +380,7 @@ export async function previewFutureImport(sql, ctx, input = {}) {
     plan: {
       baselineRevision: evaluation.latestRevision || null,
       changes: outcomeCounts(evaluation.summary),
-      wouldCreateRevision: !evaluation.hasExistingPlan || evaluation.outcomes.some((item) => !item.retrospective && [OUTCOME.NEW, OUTCOME.MODIFIED, OUTCOME.COMPANY_ADOPTED_LOCAL, OUTCOME.REQUIRES_REVIEW].includes(item.outcome)),
+      wouldCreateRevision: planDiffersFromBaseline(evaluation.outcomes, evaluation.hasExistingPlan),
       weeksAffected: weeks,
     },
     autoPublish: false,
@@ -360,6 +410,9 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
   } = prepared;
 
   const effectiveImportEmployeeId = employeeIds[0];
+  if (importMode !== 'team' && input.sourceSystem && input.sourceIdentifier) {
+    await assertSourceIdentifierTarget(sql, ctx, { sourceSystem: input.sourceSystem, sourceIdentifier: input.sourceIdentifier, employeeId: effectiveImportEmployeeId });
+  }
   const contextFingerprint = importContextFingerprint({
     sourceFormat: String(input.sourceFormat ?? ''),
     periodYear: input.periodYear ?? null,
@@ -413,11 +466,13 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     ORDER BY created_at ASC LIMIT 1
   `)[0] ?? null;
   const sameFileDifferentDecision = Boolean(priorSameFile) && !planApplied && priorSameFile.import_decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN;
-  const futureOutcomes = evaluation.outcomes.filter((item) => !item.retrospective);
-  const planChanged = !evaluation.hasExistingPlan || futureOutcomes.some((item) => [OUTCOME.NEW, OUTCOME.MODIFIED, OUTCOME.COMPANY_ADOPTED_LOCAL, OUTCOME.REQUIRES_REVIEW].includes(item.outcome));
+  // Only PLAN rows decide whether the company plan changed (employee-calendar evidence never does).
+  const planOutcomes = evaluation.outcomes.filter((item) => !item.evidence);
+  const hasPlanRows = evaluation.planEntryCount > 0;
+  const planChanged = hasPlanRows && planDiffersFromBaseline(planOutcomes, evaluation.hasExistingPlan);
   let duplicateKind = null;
   if (existingImport && planApplied) duplicateKind = 'DUPLICATE_FILE';
-  else if (!planChanged) {
+  else if (hasPlanRows && !planChanged) {
     const sameDocument = (await sql`
       SELECT 1 AS found FROM imports
       WHERE organization_id = ${ctx.organizationId} AND document_fingerprint = ${evaluation.documentFingerprint}
@@ -425,7 +480,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     `).length > 0;
     duplicateKind = sameDocument ? 'DUPLICATE_DOCUMENT' : 'DUPLICATE_PLAN';
   }
-  const createsRevision = !duplicateKind;
+  const createsRevision = hasPlanRows && !duplicateKind;
   const revisionNumber = createsRevision ? evaluation.latestRevision + 1 : null;
 
   const weeks = new Map();
@@ -442,6 +497,9 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
   const replaceDays = duplicateKind === 'DUPLICATE_FILE' ? [] : evaluation.outcomes.filter((item) => item.outcome === OUTCOME.MODIFIED || item.outcome === OUTCOME.COMPANY_ADOPTED_LOCAL);
   const reviewRows = duplicateKind === 'DUPLICATE_FILE' ? [] : normalized.filter((shift) => outcomeOf(shift) === OUTCOME.REQUIRES_REVIEW);
   const historicalToWrite = duplicateKind === 'DUPLICATE_FILE' ? [] : historical.filter((shift) => outcomeOf(shift) === OUTCOME.NEW);
+  // Employee-calendar evidence that contradicts a plain company-plan day: the plan rows are SUPERSEDED (kept as history),
+  // the evidence becomes the effective day, and a calendar change records why. The plan itself is not touched.
+  const evidenceDaysApplied = duplicateKind === 'DUPLICATE_FILE' ? [] : evaluation.outcomes.filter((item) => item.outcome === OUTCOME.EVIDENCE_APPLIED);
 
   const groupsToWrite = new Map();
   for (const shift of futureToDraft) {
@@ -512,6 +570,36 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     LIMIT 1
   `);
 
+  // DCF / observations travel with the document: persisted in the same transaction, linked to this import.
+  let annotationStatementCount = 0;
+  for (const [annotationEmployeeId, items] of prepared.annotationsByEmployee) {
+    for (const item of items) {
+      annotationStatementCount += 1;
+      labels.push(`annotation:${item.kind}:${item.date}`);
+      queries.push((txn) => txn`
+        INSERT INTO calendar_annotations (
+          organization_id, employee_id, date, kind, body, start_time, end_time, completeness, origin, source_kind, import_id,
+          created_by_user_id, updated_by_user_id
+        ) VALUES (
+          ${ctx.organizationId}, ${annotationEmployeeId}, ${item.date}, ${item.kind}, ${item.body}, ${item.startTime}, ${item.endTime},
+          ${item.completeness}, 'IMPORT', ${prepared.sourceKind},
+          (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId} AND employee_id = ${effectiveImportEmployeeId}
+            AND file_fingerprint = ${fileFingerprint} AND context_fingerprint = ${contextFingerprint} ORDER BY created_at ASC LIMIT 1),
+          ${ctx.user.id}, ${ctx.user.id}
+        )
+        ON CONFLICT (organization_id, employee_id, date, kind, origin) DO UPDATE SET
+          body = EXCLUDED.body,
+          start_time = CASE WHEN calendar_annotations.completeness = 'HOURS_KNOWN' AND EXCLUDED.completeness = 'HOURS_UNKNOWN' THEN calendar_annotations.start_time ELSE EXCLUDED.start_time END,
+          end_time = CASE WHEN calendar_annotations.completeness = 'HOURS_KNOWN' AND EXCLUDED.completeness = 'HOURS_UNKNOWN' THEN calendar_annotations.end_time ELSE EXCLUDED.end_time END,
+          completeness = CASE WHEN calendar_annotations.completeness = 'HOURS_KNOWN' AND EXCLUDED.completeness = 'HOURS_UNKNOWN' THEN calendar_annotations.completeness ELSE EXCLUDED.completeness END,
+          source_kind = EXCLUDED.source_kind, updated_by_user_id = EXCLUDED.updated_by_user_id, updated_at = NOW()
+        RETURNING id
+      `);
+    }
+  }
+  const annotationOffset = queries.length - annotationStatementCount;
+  void annotationOffset;
+
   for (const group of groupList) {
     const ids = scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`);
     labels.push(`schedule-create:${group.periodStart}:${group.areaId ?? 'global'}`);
@@ -569,7 +657,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
       INSERT INTO shifts (
         id, organization_id, employee_id, import_id, area_id, date,
         start_time, end_time, location, origin, shift_type, counts_as_work,
-        semantic_fingerprint, updated_at
+        semantic_fingerprint, layer, provenance, updated_at
       )
       SELECT ${id}, ${ctx.organizationId}, ${shift.employeeId},
              (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
@@ -579,7 +667,8 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
                ORDER BY created_at ASC LIMIT 1),
              ${shift.areaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null}, ${shift.location}, 'IMP',
              ${shift.shiftType}, ${shift.countsAsWork},
-             ${[shift.employeeKey, shift.date, shift.shiftType ?? '', shift.startTime, shift.endTime].join('\u001f')}, NOW()
+             ${[shift.employeeKey, shift.date, shift.shiftType ?? '', shift.startTime, shift.endTime].join('\u001f')},
+             ${shift.role === 'EVIDENCE' ? 'CHANGE' : 'COMPANY_PLAN'}, ${shift.role === 'EVIDENCE' ? 'SYSTEM' : 'COMPANY_IMPORT'}, NOW()
       ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
       WHERE semantic_fingerprint IS NOT NULL
       DO UPDATE SET updated_at = NOW()
@@ -659,6 +748,57 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     }
   }
 
+  // Evidence applied over a plain plan day: record the change, supersede the plan rows (kept), insert the evidence.
+  const evidenceOffset = queries.length;
+  const evidenceChangeIds = [];
+  for (const day of evidenceDaysApplied) {
+    const dayRows = normalized.filter((shift) => shift.employeeKey === day.employeeKey && shift.date === day.date);
+    const supersedeIds = evaluation.effectiveRowIdsByDay.get(`${day.employeeKey}\u001f${day.date}`) ?? [];
+    const sample = dayRows[0];
+    if (!sample || supersedeIds.length === 0) continue;
+    const changeId = randomUUID();
+    evidenceChangeIds.push(changeId);
+    const snap = (rows) => rows.map((row) => { const n = normalizePlanRow(row); return { shiftType: n.type, startTime: n.start || null, endTime: n.end || null }; });
+    labels.push(`evidence-change:${day.date}`);
+    queries.push((txn) => txn`
+      INSERT INTO calendar_changes (
+        id, organization_id, employee_id, date, change_type, actor_user_id, actor_role, self_change, source, reason,
+        before_state, after_state, approval_status
+      ) VALUES (
+        ${changeId}, ${ctx.organizationId}, ${sample.employeeId}, ${day.date}, 'REPLACE_DAY', ${ctx.user.id}, ${ctx.role}, FALSE, 'SYSTEM',
+        'Employee calendar export shows a different day than the company plan; the plan is preserved',
+        ${JSON.stringify(snap(day.effective ?? []))}::jsonb, ${JSON.stringify(snap(dayRows.map(toPlanRow)))}::jsonb, 'APPLIED'
+      )
+      RETURNING id
+    `);
+    labels.push(`evidence-supersede:${day.date}`);
+    queries.push((txn) => txn`
+      UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), change_id = ${changeId}, updated_at = NOW()
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${sample.employeeId} AND id = ANY(${supersedeIds}::uuid[])
+        AND effective_state = 'EFFECTIVE'
+      RETURNING id
+    `);
+    for (const row of dayRows) {
+      labels.push(`evidence-insert:${assignmentIdentity(row)}`);
+      queries.push((txn) => txn`
+        INSERT INTO shifts (
+          id, organization_id, employee_id, import_id, area_id, date, start_time, end_time, location, origin,
+          shift_type, counts_as_work, layer, provenance, effective_state, plan_revision, change_id, updated_at
+        )
+        SELECT ${randomUUID()}, ${ctx.organizationId}, ${row.employeeId},
+               (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
+                 AND employee_id = ${effectiveImportEmployeeId}
+                 AND file_fingerprint = ${fileFingerprint} AND context_fingerprint = ${contextFingerprint}
+                 ORDER BY created_at ASC LIMIT 1),
+               ${row.areaId}, ${row.date}, ${row.startTime || null}, ${row.endTime || null}, ${row.location}, 'IMP',
+               ${row.shiftType}, ${row.countsAsWork}, 'CHANGE', 'SYSTEM', 'EFFECTIVE', 1, ${changeId}, NOW()
+        RETURNING id
+      `);
+    }
+  }
+  const evidenceCount = evidenceChangeIds.length;
+  void evidenceOffset;
+
   // Discrepancies become company-plan rows awaiting review (they never overwrite the effective calendar).
   for (const shift of reviewRows) {
     labels.push(`review:${assignmentIdentity(shift)}`);
@@ -674,7 +814,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
                AND context_fingerprint = ${contextFingerprint}
                ORDER BY created_at ASC LIMIT 1),
              ${shift.areaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null}, ${shift.location}, 'IMP',
-             ${shift.shiftType}, ${shift.countsAsWork}, 'COMPANY_PLAN', 'COMPANY_IMPORT', 'REQUIRES_REVIEW',
+             ${shift.shiftType}, ${shift.countsAsWork}, ${shift.role === 'EVIDENCE' ? 'CHANGE' : 'COMPANY_PLAN'}, ${shift.role === 'EVIDENCE' ? 'SYSTEM' : 'COMPANY_IMPORT'}, 'REQUIRES_REVIEW',
              ${revisionNumber ?? Math.max(1, evaluation.latestRevision)}, NOW()
       WHERE NOT EXISTS (
         SELECT 1 FROM shifts r
@@ -689,7 +829,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
   // Versioned company plan: one new revision only when the plan really changed.
   const revisionOffset = queries.length;
   if (createsRevision) {
-    const rows = normalized.map((shift) => ({ k: shift.employeeKey, ...toStoredRow(toPlanRow(shift)) }));
+    const rows = normalized.filter((shift) => shift.role === 'PLAN').map((shift) => ({ k: shift.employeeKey, ...toStoredRow(toPlanRow(shift)) }));
     const summaryJson = JSON.stringify({
       baselineRevision: evaluation.latestRevision || null,
       changes: outcomeCounts(evaluation.summary),
@@ -707,7 +847,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
           AND file_fingerprint = ${fileFingerprint} AND context_fingerprint = ${contextFingerprint}
           ORDER BY created_at ASC LIMIT 1),
         ${evaluation.planFingerprint}, ${evaluation.documentFingerprint}, ${document.documentClass},
-        ${evaluation.from}, ${evaluation.to}, ${rows.length}, ${JSON.stringify(rows)}::jsonb, ${summaryJson}::jsonb, ${ctx.user.id}
+        ${evaluation.planFrom}, ${evaluation.planTo}, ${rows.length}, ${JSON.stringify(rows)}::jsonb, ${summaryJson}::jsonb, ${ctx.user.id}
       )
       RETURNING id, revision_number
     `);
@@ -765,6 +905,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     classification: dated.classification,
     cutoff: dated.cutoff,
     decision,
+    sourceKind: prepared.sourceKind,
     importId: importRow.id,
     deduplicated: duplicateKind === 'DUPLICATE_FILE',
     duplicate: duplicateKind,
@@ -793,7 +934,9 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
       baselineRevision: evaluation.latestRevision || null,
       revisionCreated: Boolean(revisionResult),
       changes: outcomeCounts(evaluation.summary),
+      evidenceDaysApplied: evidenceCount,
     },
+    annotations: { submitted: annotationStatementCount },
     import: updatedImport ? mapImportRow(updatedImport) : { id: importRow.id },
     transactionQueryCount: labels.length,
   };

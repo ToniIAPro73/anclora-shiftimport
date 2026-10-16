@@ -586,6 +586,11 @@ export const MIGRATION_SENTINELS = {
     cat.columns.has('imports.document_fingerprint') &&
     cat.columns.has('imports.import_decision') &&
     cat.constraints.has('company_plan_revisions_unique'),
+  '0043_calendar_annotations_and_source_identifiers.sql': (cat) =>
+    cat.tables.has('calendar_annotations') &&
+    cat.tables.has('employee_source_identifiers') &&
+    cat.constraints.has('calendar_annotations_unique') &&
+    cat.constraints.has('employee_source_identifiers_unique'),
 };
 
 /**

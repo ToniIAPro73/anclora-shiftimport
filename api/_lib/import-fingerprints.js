@@ -19,7 +19,9 @@ export function documentFingerprint(entries, context = {}) {
   for (const entry of entries) {
     const n = normalizePlanRow(entry.row);
     if (!byEmployee.has(entry.employeeKey)) byEmployee.set(entry.employeeKey, []);
-    byEmployee.get(entry.employeeKey).push(`${n.date}|${n.type}|${n.start}|${n.end}|${n.duty}`);
+    // Annotations (DCF, observation text) are part of the DOCUMENT, never of the business PLAN.
+    const notes = (entry.annotations ?? []).map((a) => (a.kind === 'COMMENT' ? `C:${String(a.text ?? '').trim()}` : `D:${a.startTime ?? ''}-${a.endTime ?? ''}`)).sort().join(',');
+    byEmployee.get(entry.employeeKey).push(`${n.date}|${n.type}|${n.start}|${n.end}|${n.duty}|${notes}`);
   }
   const employees = [...byEmployee.entries()]
     .sort(([a], [b]) => a.localeCompare(b))

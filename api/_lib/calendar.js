@@ -13,6 +13,7 @@ import {
   resolveDay,
 } from '../../src/lib/effective-calendar.js';
 import { getOperationalDate } from './operational-date.js';
+import { employeeBusinessKey, sameDay } from '../../src/lib/company-plan.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -530,13 +531,46 @@ export async function listReconciliationDays(sql, ctx, employeeId, year) {
     const normalized = normalizeCalendarRow(row);
     return { type: classifyKind(normalized).type, startTime: normalized.startTime, endTime: normalized.endTime };
   };
+  // Company-plan history for the explanation "Empresa antes / Empresa ahora / Calendario efectivo".
+  const employee = (await sql`SELECT external_employee_id, name FROM employees WHERE id = ${targetEmployeeId} AND organization_id = ${ctx.organizationId}`)[0];
+  const employeeKey = employee ? employeeBusinessKey({ externalEmployeeId: employee.external_employee_id, name: employee.name }) : null;
+  const revisionRows = employeeKey ? await sql`
+    SELECT revision_number, rows FROM company_plan_revisions
+    WHERE organization_id = ${ctx.organizationId} AND scope_key = 'global' AND coverage_to >= ${from} AND coverage_from <= ${to}
+    ORDER BY revision_number DESC
+  ` : [];
+  const planRowsFor = (date) => revisionRows
+    .map((revision) => ({
+      revision: revision.revision_number,
+      rows: (Array.isArray(revision.rows) ? revision.rows : [])
+        .filter((stored) => stored.k === employeeKey && stored.d === date)
+        .map((stored) => ({ type: stored.t, startTime: stored.s || null, endTime: stored.e || null })),
+    }))
+    .filter((entry) => entry.rows.length > 0);
+  const toPlan = (rows) => rows.map((r) => ({ shiftType: r.type, startTime: r.startTime, endTime: r.endTime, date: '' }));
   const items = dates.map((date) => {
     const provenance = buildDayProvenance(unwrap(date));
     const resolution = resolvedByDate.get(date);
     const isPending = pendingDates.has(date);
+    const planHistory = planRowsFor(date);
+    const companyNow = planHistory[0]?.rows ?? null;
+    const companyBefore = planHistory.find((entry, index) => index > 0 && !sameDay(toPlan(entry.rows), toPlan(companyNow ?? [])))?.rows ?? null;
+    // A day awaiting review has no resolved effective state yet: the "effective" side is what the calendar held
+    // locally (the review rows that are NOT the company's plan row); if nothing differs, the review rows themselves.
+    const reviewLabels = isPending ? unwrap(date).filter((row) => normalizeCalendarRow(row).effectiveState === 'REQUIRES_REVIEW').map(label) : [];
+    const sameLabel = (a, b) => a.type === b.type && (a.startTime ?? null) === (b.startTime ?? null) && (a.endTime ?? null) === (b.endTime ?? null);
+    const localOnly = reviewLabels.filter((entry) => !(companyNow ?? []).some((planned) => sameLabel(planned, entry)));
+    const effectiveRows = isPending ? (localOnly.length ? localOnly : reviewLabels) : provenance.effective.map(label);
+    let reasonCode = 'PENDING_REVIEW';
+    if (companyNow && effectiveRows.length && !sameDay(toPlan(companyNow), toPlan(effectiveRows))) reasonCode = 'EFFECTIVE_DIFFERS_FROM_PLAN';
+    else if (companyBefore) reasonCode = 'PLAN_CHANGED';
     return {
       date,
       status: isPending ? 'PENDING' : 'RESOLVED',
+      companyBefore,
+      companyNow,
+      effective: effectiveRows,
+      reasonCode,
       company: provenance.companyCurrent.map(label),
       current: (isPending
         ? unwrap(date).map(normalizeCalendarRow).filter((row) => row.effectiveState === 'REQUIRES_REVIEW')

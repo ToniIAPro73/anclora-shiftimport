@@ -39,6 +39,8 @@ import { fingerprintFile } from '../../lib/file-fingerprint';
 import { deriveEffectiveTemporalSummary, splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
 import { FutureImportConsent } from './FutureImportConsent';
+import { SourceIdentityPanel, type ResolvedSourceEmployee } from './SourceIdentityPanel';
+import type { ImportSourceInfo } from '../../ingestion/parsers/file';
 
 export interface SelfImportSummary {
   totalRows: number;
@@ -55,13 +57,14 @@ interface ImportModalProps {
   onConfirmImport: (
     shifts: Shift[],
     targetPeriod: ImportPeriod,
-    selector?: { name: string; externalId: string },
+    selector?: { name: string; externalId: string; employeeId?: string },
     /** Area the import belongs to (null = org-scoped). Guests never send one. */
     areaId?: string | null,
     fileName?: string,
     fileFingerprint?: string,
     selfImportSummary?: SelfImportSummary,
     futureImportDecision?: FutureImportDecision,
+    importSource?: ImportSourceInfo,
   ) => Promise<boolean>;
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
@@ -75,6 +78,10 @@ interface ImportModalProps {
    * account, not free text — Name/ID become read-only context, never a
    * selector the user can retype to import as someone else. */
   identityLocked?: boolean;
+  /** ADMIN/OWNER: may explicitly associate a source-system number with an employee. */
+  canAssociateIdentity?: boolean;
+  /** Employee linked to the account (EMPLOYEE role): the only acceptable target. */
+  lockedEmployeeId?: string | null;
   /** Current authenticated user ID for user-scoped profile loading. */
   userId?: string | null;
   /** Active organization (null = guest): selects local vs organization-scoped
@@ -158,6 +165,7 @@ function toDomainShift(shift: ParsedCalendarShift): Shift {
     location: normalizedType || 'Regular',
     origin: 'IMP',
     sourceFormat: shift.sourceFormat ?? undefined,
+    annotations: shift.annotations,
   };
 }
 
@@ -311,7 +319,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, canAssociateIdentity = false, lockedEmployeeId = null, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
   const { locale, t, tl } = useI18n();
   const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
@@ -345,6 +353,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [detectedFormat, setDetectedFormat] = useState<string | null>(null);
   // Phase 1A: analysis-driven quality state + inline assistant session.
   const [analysis, setAnalysis] = useState<DocumentAnalysisResult | null>(null);
+  const [sourceEmployee, setSourceEmployee] = useState<ResolvedSourceEmployee | null>(null);
   const [qualityOverride, setQualityOverride] = useState<ImportResult | null>(null);
   const [assistantSession, setAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
   const [assistantDismissed, setAssistantDismissed] = useState(false);
@@ -428,6 +437,20 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     const split = splitImportByOperationalDate(ready);
     return deriveEffectiveTemporalSummary(split, { identityLocked, decision: futureImportDecision });
   }, [parsedShifts, identityLocked, futureImportDecision]);
+
+  const sourceAnnotationCounts = useMemo(() => {
+    let dcf = 0;
+    let comments = 0;
+    for (const shift of parsedShifts) {
+      for (const annotation of shift.annotations ?? []) {
+        if (annotation.kind === 'DCF') dcf += 1;
+        else comments += 1;
+      }
+    }
+    return { dcf, comments };
+  }, [parsedShifts]);
+  // A TRYP export carries a source-system number: the target employee must be resolved explicitly (never by name).
+  const sourceIdentityBlocking = Boolean(analysis?.source?.system && analysis.source.identifier && !sourceEmployee);
 
   const actionableCount = useMemo(() => {
     if (parsedShifts.length === 0) {
@@ -589,6 +612,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setColorResolutions({});
     setScanTime(null);
     setAnalysis(null);
+    setSourceEmployee(null);
     setQualityOverride(null);
     setAssistantSession(null);
     setAssistantDismissed(false);
@@ -1082,9 +1106,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
     // identityLocked: the selector is always the account's own identity —
     // never whatever text sits in the (now read-only) fields.
-    const selector = identityLocked
-      ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
-      : { name: employeeName.trim(), externalId: employeeId.trim() };
+    const selector = sourceEmployee
+      ? { name: sourceEmployee.name, externalId: sourceEmployee.externalEmployeeId ?? '', employeeId: sourceEmployee.id }
+      : identityLocked
+        ? { name: employeePreset?.name ?? '', externalId: employeePreset?.externalId ?? '' }
+        : { name: employeeName.trim(), externalId: employeeId.trim() };
 
       const persisted = await onConfirmImport(
         finalShifts,
@@ -1095,6 +1121,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         file ? await fingerprintFile(file) : undefined,
         selfImportSummary ?? undefined,
         futureImportDecision,
+        analysis?.source,
       );
       if (persisted) {
         onClose();
@@ -1860,6 +1887,30 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               </div>
             )}
 
+            {analysis?.source && analysis.source.kind !== 'UNKNOWN' && (
+              <div role="status" data-testid="import-source-summary" data-source-kind={analysis.source.kind} style={{ marginTop: '12px', padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', display: 'grid', gap: '4px', fontSize: '0.86rem' }}>
+                <strong>{t('importModal.sourceSummaryTitle')}: {t(`importModal.sourceKind.${analysis.source.kind}`)}</strong>
+                {parsedShifts.length > 0 && (
+                  <span>{t('importModal.sourcePeriod', { period: `${[...parsedShifts].map((shift) => shift.date).sort()[0]} → ${[...parsedShifts].map((shift) => shift.date).sort().slice(-1)[0]}` })}</span>
+                )}
+                <span>{t(temporalSummary.historical > 0 && temporalSummary.future > 0 ? 'importModal.sourceContent.MIXED' : temporalSummary.future > 0 ? 'importModal.sourceContent.FUTURE' : 'importModal.sourceContent.HISTORICAL')}</span>
+                {temporalSummary.historical > 0 && <span>{t(analysis.source.kind === 'EMPLOYEE_CALENDAR_EXPORT' ? 'importModal.sourceUsageHistoricalEvidence' : 'importModal.sourceUsageHistoricalPlan')}</span>}
+                {temporalSummary.future > 0 && <span>{t('importModal.sourceUsageFuture')}</span>}
+                {sourceAnnotationCounts.dcf + sourceAnnotationCounts.comments > 0 && <span>{t('importModal.sourceAnnotations', { dcf: sourceAnnotationCounts.dcf, comments: sourceAnnotationCounts.comments })}</span>}
+              </div>
+            )}
+            {analysis?.source?.system && analysis.source.identifier && (
+              <SourceIdentityPanel
+                sourceSystem={analysis.source.system}
+                identifier={analysis.source.identifier}
+                documentName={analysis.source.employeeName}
+                canAssociate={canAssociateIdentity && !identityLocked}
+                lockedEmployeeId={identityLocked ? lockedEmployeeId : null}
+                presetEmployeeId={null}
+                onResolved={setSourceEmployee}
+              />
+            )}
+
             {temporalSummary.future > 0 && (
               identityLocked ? (
                 <div
@@ -1912,7 +1963,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           )}
           <button
             className="btn-gold import-process-button"
-            disabled={!isAuthenticated || (actionableCount === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || isImporting}
+            disabled={!isAuthenticated || sourceIdentityBlocking || (actionableCount === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: interactionLocked ? 'wait' : undefined }}

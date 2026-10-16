@@ -110,8 +110,9 @@ export function ReconciliationModal({
             <>
               <div className="recon-list__head" aria-hidden="true">
                 <span>{t('reconModal.colDate')}</span>
-                <span>{t('reconModal.colCompany')}</span>
-                <span>{t('reconModal.colCurrent')}</span>
+                <span>{t('reconModal.colBefore')}</span>
+                <span>{t('reconModal.colNow')}</span>
+                <span>{t('reconModal.colEffective')}</span>
                 <span>{t('reconModal.colStatus')}</span>
                 <span>{t('reconModal.colActions')}</span>
               </div>
@@ -126,9 +127,13 @@ export function ReconciliationModal({
                   return (
                     <li key={item.date} className="recon-row" data-testid={`recon-row-${item.date}`} data-status={item.status}>
                       <strong className="recon-row__date">{formatDate(item.date)}</strong>
-                      <span className="recon-row__cell" data-label={t('reconModal.companyLabel')}>{describe(item.company)}</span>
-                      <span className="recon-row__cell recon-row__cell--current" data-label={t('reconModal.currentLabel')}>
-                        {describe(item.current)}
+                      <span className="recon-row__cell" data-label={t('reconModal.colBefore')} data-testid={`recon-before-${item.date}`}>{describe(item.companyBefore ?? [])}</span>
+                      <span className="recon-row__cell" data-label={t('reconModal.colNow')} data-testid={`recon-now-${item.date}`}>{describe(item.companyNow ?? item.company)}</span>
+                      <span className="recon-row__cell recon-row__cell--current" data-label={t('reconModal.colEffective')} data-testid={`recon-effective-${item.date}`}>
+                        {describe(item.effective ?? item.current)}
+                        {pending && item.reasonCode && (
+                          <small className="recon-row__reason" data-testid={`recon-why-${item.date}`}>{t(`reconModal.reason.${item.reasonCode}`)}</small>
+                        )}
                         {reasonText && (
                           <small className="recon-row__reason" title={reason?.full || undefined} data-testid={`recon-reason-${item.date}`}>{reasonText}</small>
                         )}

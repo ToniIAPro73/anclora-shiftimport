@@ -57,3 +57,36 @@ contexto), **PLAN** (contenido de negocio por `external_employee_id`). Resultado
 decisión **no** queda bloqueado: se procesa lo pendiente.
 
 La decisión P5.5 `Import ≠ Publish` se restablece sin excepciones.
+
+## Semántica por origen del documento (SOURCE_KIND)
+
+Tres dimensiones independientes: **SOURCE_KIND** (qué documento es, por estructura, nunca por el nombre del
+fichero), **clase temporal** (fechas que contiene) y **clase de negocio** (qué efecto tiene).
+
+| SOURCE_KIND | Evidencia estructural | Efecto |
+|---|---|---|
+| `EMPLOYEE_CALENDAR_EXPORT` | hoja `Leyenda` con `Calendario = Empleado` | pasado = evidencia del calendario efectivo e incidencias; futuro = candidato de planificación (solo con `historical-and-plan`) |
+| `PUBLISHED_CALENDAR_EXPORT` | `Calendario = Publicado` | Plan Empresa (línea base / actualización); nunca se publica solo ni sobrescribe el efectivo histórico |
+| `TEAM_SCHEDULE_EXPORT` | estructura de equipo (PDF/XLSX multiempleado con nómina) | Plan Empresa multiempleado |
+
+- La evidencia de un calendario de empleado **no** cambia el `PLAN_FINGERPRINT` ni crea revisión; solo las filas de plan lo hacen.
+- Día con plan publicado 14:00–22:00 y evidencia de empleado «Baja»: el plan se conserva (revisión + fila sustituida como
+  historial), el efectivo pasa a Baja (`EVIDENCE_APPLIED`, cambio `REPLACE_DAY` con procedencia `SYSTEM`). Si el día ya tenía una
+  decisión humana distinta o estaba pendiente, nunca se resuelve en silencio (`REQUIRES_REVIEW`).
+- Un cambio de plan existe solo si algún día de PLAN difiere de la línea base; los días pendientes no hacen que un reimport
+  idéntico cree revisiones (idempotencia).
+
+### Anotaciones (`calendar_annotations`)
+
+- **DCF** («Descanso Compensación Formación»): su existencia se importa **sin inventar horas** (`HOURS_UNKNOWN`); es informativo
+  (`DCF_ALTERS_EFFECTIVE_HOURS=false`) y no crea alerta de reconciliación. OWNER/ADMIN/PLANNER pueden completar el intervalo
+  (`HOURS_KNOWN`); EMPLEADO no. Un reimport nunca degrada horas ya completadas.
+- **Observaciones** (`[texto]`): se guardan como anotaciones de origen `IMPORT`, distintas de los comentarios escritos por usuarios.
+  Cambian el `DOCUMENT_FINGERPRINT`, nunca el `PLAN_FINGERPRINT`.
+
+### Identidad por sistema de origen (`employee_source_identifiers`)
+
+La misma persona tiene números distintos por sistema (`TRYP_EMPLOYEE_CALENDAR`/6888, `TRYP_TEAM_SCHEDULE`/84881). Orden de
+resolución: mapeo explícito por organización → identificador canónico → ambigüedad (bloqueo). Nunca por nombre ni por
+semejanza. El mapeo lo crea solo un ADMIN+ de forma explícita; un EMPLEADO solo puede importar si el número está asociado a su
+propio empleado. El servidor lo exige (`409 SOURCE_IDENTIFIER_MISMATCH` / `SOURCE_IDENTIFIER_UNMAPPED`).

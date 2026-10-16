@@ -70,3 +70,8 @@ Every non-success outcome states:
 
 No import outcome is communicated only through a native browser dialog or a
 transient toast.
+
+## Resultado por origen
+
+La respuesta de confirmación incluye `sourceKind`, `plan.evidenceDaysApplied` y `annotations.submitted`. Un reimport con solo
+cambios de observaciones es `DUPLICATE_PLAN` para el plan (sin revisión) aunque el documento sea distinto.

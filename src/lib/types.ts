@@ -1,3 +1,4 @@
+import type { ImportAnnotation } from './import-types';
 export type ShiftCategory = 'Mañana' | 'Tarde' | 'Noche';
 
 /**
@@ -33,6 +34,8 @@ export interface Shift {
   changeId?: string | null;
   /** The day also holds superseded/absorbed rows (history available). */
   hasHistory?: boolean;
+  /** Import-time annotations (DCF incidence, observations) that travel with the row; persisted separately. */
+  annotations?: ImportAnnotation[];
 }
 
 export interface ShiftWithDerived extends Shift {

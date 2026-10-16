@@ -13,7 +13,7 @@
  * The UI (ImportModal) depends on the generic contract here, never on the
  * PDF implementation. Capability metadata lives in ../formats.ts.
  */
-import { CalendarImportContext, ParsedCalendarShift } from '../../lib/import-types';
+import { CalendarImportContext, ImportAnnotation, ParsedCalendarShift } from '../../lib/import-types';
 import { IngestionError, VlmErrorCode } from '../../lib/ingestion-errors';
 import { computeImportResult, ImportResult, QualitySignals } from '../../lib/import-quality';
 import { UserFormatProfile } from '../../lib/format-profiles';
@@ -44,6 +44,8 @@ import { analyzeShiftsFromItems, DocumentStructureAnalysis } from '../analysis';
 import { AssistantQuestion, generateAssistantQuestions } from '../assistant';
 import { loadXlsxWorksheets, parseXlsxTeamWorkbook, XLSX_STYLE_TOKEN_PREFIX } from '../adapters/xlsx-workbook';
 import { codeOverridesFromLearning, ShiftCodeMapping } from '../core/shift-code-profile';
+import { parseTrypCalendarExport } from '../adapters/tryp-calendar-export';
+import type { SourceKind } from '../source-kind';
 
 // The canonical alias table lives in ../tabular-assistant (shared with the
 // tabular assistant fallback); re-exported here for API compatibility.
@@ -525,8 +527,19 @@ export async function parseEmployeeShiftsFromFile(
  * those become UNRECOGNIZED/REVIEW states with questions for the UI.
  * --------------------------------------------------------------------- */
 
+/** What the document IS (structural evidence): who produced it and which identity namespace its payroll number belongs to. */
+export interface ImportSourceInfo {
+  kind: SourceKind;
+  /** Identity namespace of `identifier` (the same person has different numbers per source system). */
+  system: string | null;
+  identifier: string | null;
+  employeeName: string | null;
+}
+
 export interface DocumentAnalysisResult {
   kind: DocumentKind;
+  /** Present when the structure identifies the producer (TRYP calendar exports); drives plan/evidence semantics. */
+  source?: ImportSourceInfo;
   context: CalendarImportContext;
   shifts: ParsedCalendarShift[];
   quality: ImportResult;
@@ -892,7 +905,94 @@ function analyzeRosterDocument(
  * /api/ingestion/vlm. The outcome either replaces the result (state capped
  * at REVIEW) or marks it with vlmError — it never throws.
  */
+/** Maps a TRYP calendar export to the generic analysis result, keeping DCF/observations as annotations. */
+function buildTrypAnalysisResult(
+  tryp: NonNullable<Awaited<ReturnType<typeof parseTrypCalendarExport>>>,
+  context: CalendarImportContext,
+): DocumentAnalysisResult {
+  const shifts: ParsedCalendarShift[] = tryp.rows.map((row) => {
+    const annotations: ImportAnnotation[] = [];
+    if (row.dcf) annotations.push({ kind: 'DCF', startTime: null, endTime: null }); // hours are not in the source: never invented
+    if (row.comment) annotations.push({ kind: 'COMMENT', text: row.comment });
+    return {
+      date: row.date,
+      startTime: row.startTime,
+      endTime: row.endTime,
+      origin: 'IMP',
+      sourceFormat: 'excel',
+      isValid: true,
+      confidence: 1,
+      rawText: row.code,
+      shiftType: row.shiftType,
+      notes: row.comment,
+      color: null,
+      ...(annotations.length ? { annotations } : {}),
+    };
+  });
+  const signals: QualitySignals = {
+    knownProfileMatched: false,
+    profileDrift: false,
+    periodDetected: true,
+    employeeMatch: 'strong',
+    expectedDays: shifts.length,
+    mappedDays: shifts.length,
+    totalTokens: shifts.length + tryp.unrecognized.length,
+    recognizedTokens: shifts.length,
+    unknownTokens: [...new Set(tryp.unrecognized.map((item) => item.text))],
+    invalidTimes: 0,
+    incompleteAssignments: 0,
+  };
+  const quality = computeImportResult(shifts, signals);
+  const first = shifts[0]?.date;
+  return {
+    kind: 'excel',
+    source: { kind: tryp.sourceKind, system: tryp.sourceSystem, identifier: tryp.sourceIdentifier, employeeName: tryp.employeeName },
+    context,
+    shifts,
+    quality,
+    structure: null,
+    questions: [],
+    detectedContext: first ? { month: Number(first.slice(5, 7)) - 1, year: Number(first.slice(0, 4)) } : context,
+  };
+}
+
+/**
+ * Entry point. A TRYP calendar export is recognised structurally (legend sheet), never by file name. When every cell is
+ * explained by text, the dedicated adapter is authoritative; when some cells carry meaning only through colour, the
+ * generic positional pipeline (which asks the user about colours) stays in charge and only receives the source info and
+ * the DCF/observation annotations.
+ */
 export async function analyzeDocumentFile(
+  file: File,
+  selector: EmployeeSelector,
+  savedProfilesHint?: UserFormatProfile[],
+  contextOverride?: CalendarImportContext,
+  vlm?: VlmFallbackHooks,
+  xlsxOptions?: XlsxStyleImportOptions,
+): Promise<DocumentAnalysisResult> {
+  if (classifyDocument(file) === 'excel') {
+    const tryp = await parseTrypCalendarExport(file);
+    if (tryp && tryp.colorOnlyCells === 0) return buildTrypAnalysisResult(tryp, contextOverride ?? await detectCalendarContext(file));
+    if (tryp) {
+      const generic = await analyzeDocumentFileGeneric(file, selector, savedProfilesHint, contextOverride, vlm, xlsxOptions);
+      const byDate = new Map(tryp.rows.map((row) => [row.date, row]));
+      return {
+        ...generic,
+        source: { kind: tryp.sourceKind, system: tryp.sourceSystem, identifier: tryp.sourceIdentifier, employeeName: tryp.employeeName },
+        shifts: generic.shifts.map((shift) => {
+          const row = byDate.get(shift.date);
+          const annotations: ImportAnnotation[] = [];
+          if (row?.dcf) annotations.push({ kind: 'DCF', startTime: null, endTime: null });
+          if (row?.comment) annotations.push({ kind: 'COMMENT', text: row.comment });
+          return annotations.length ? { ...shift, annotations } : shift;
+        }),
+      };
+    }
+  }
+  return analyzeDocumentFileGeneric(file, selector, savedProfilesHint, contextOverride, vlm, xlsxOptions);
+}
+
+async function analyzeDocumentFileGeneric(
   file: File,
   selector: EmployeeSelector,
   savedProfilesHint?: UserFormatProfile[],

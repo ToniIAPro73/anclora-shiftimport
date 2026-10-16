@@ -8,6 +8,8 @@ import { ModalShell } from '../ui/ModalShell';
 import './DayDetailModal.css';
 import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
 import { DayProvenancePanel } from './DayProvenancePanel';
+import { DayAnnotationsPanel } from './DayAnnotationsPanel';
+import type { DayAnnotation } from '../../lib/remote';
 
 export interface DayDetailModalProps {
   isOpen: boolean;
@@ -19,6 +21,10 @@ export interface DayDetailModalProps {
   triggerRef?: React.RefObject<HTMLElement | null>;
   /** Effective-calendar provenance (backend sessions only). */
   provenance?: { employeeId: string; canReconcile: boolean; onChanged?: () => void };
+  /** DCF incidences / observations of this day (backend sessions). */
+  annotations?: DayAnnotation[];
+  canEditAnnotations?: boolean;
+  onAnnotationsChanged?: () => void;
 }
 
 function formatDuration(startTime?: string, endTime?: string): string | null {
@@ -45,6 +51,9 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
   onDeleteShift,
   triggerRef,
   provenance,
+  annotations = [],
+  canEditAnnotations = false,
+  onAnnotationsChanged,
 }) => {
   const { locale, t } = useI18n();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -242,6 +251,16 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
           <p className="day-detail-empty-state" data-testid="day-detail-empty-state">
             {t('calendar.noShiftsForEmployee', { date: formattedDate })}
           </p>
+        )}
+
+        {provenance && annotations.length > 0 && (
+          <DayAnnotationsPanel
+            employeeId={provenance.employeeId}
+            date={date}
+            annotations={annotations}
+            canEdit={canEditAnnotations}
+            onChanged={onAnnotationsChanged}
+          />
         )}
 
         {provenance && (
