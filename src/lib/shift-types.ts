@@ -28,7 +28,7 @@ export interface ShiftTypeDefinition {
   /** Domain accounting flags; countsAsWork remains as a legacy alias. */
   contributesWorkedTime?: boolean;
   contributesAbsenceTime?: boolean;
-  /** Archived types are hidden from AddShiftModal/StatsBar but kept for
+  /** Archived types are hidden from AddShiftModal and statistics but kept for
    * existing shifts and can be restored; they are never hard-deleted. */
   archived?: boolean;
 }
@@ -54,6 +54,10 @@ export const DEFAULT_SHIFT_TYPES: ShiftTypeDefinition[] = [
     category: 'absence', timed: false, allDay: true, exclusive: true, contributesWorkedTime: false, contributesAbsenceTime: false,
   },
   {
+    id: 'Baja', label: 'Baja', shortLabel: 'Bajas', color: '#ed9cdc', countsAsWork: false,
+    category: 'absence', timed: false, allDay: true, exclusive: true, contributesWorkedTime: false, contributesAbsenceTime: false,
+  },
+  {
     id: 'Ausencia', label: 'Ausencia', shortLabel: 'AUS.', color: '#a855f7', countsAsWork: false,
     category: 'absence', timed: true, allDay: false, exclusive: false, contributesWorkedTime: false, contributesAbsenceTime: true,
   },
@@ -76,6 +80,8 @@ const DEFAULT_SHIFT_TYPE_ALIASES: Record<string, string> = {
   vacaciones: 'Vacaciones',
   'vac.': 'Vacaciones',
   vac: 'Vacaciones',
+  baja: 'Baja',
+  'sick leave': 'Baja',
   ausencia: 'Ausencia',
   ausencias: 'Ausencia',
   absence: 'Ausencia',

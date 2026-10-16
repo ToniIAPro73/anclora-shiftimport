@@ -20,8 +20,14 @@ setupLocalStorageMock();
 describe('configurable shift type registry', () => {
   it('defaults are neutral and company-agnostic', () => {
     const ids = getShiftTypes().map((type) => type.id);
-    expect(ids).toEqual(['Regular', 'Libre', 'Vacaciones', 'Ausencia', 'Extras']);
+    expect(ids).toEqual(['Regular', 'Libre', 'Vacaciones', 'Baja', 'Ausencia', 'Extras']);
     expect(ids).not.toContain('JT');
+  });
+
+  it('Baja is a whole-day, exclusive, non-working canonical type', () => {
+    const semantics = getShiftTypeSemantics('Baja');
+    expect(semantics).toMatchObject({ allDay: true, exclusive: true, contributesWorkedTime: false, contributesAbsenceTime: false });
+    expect(resolveShiftTypeId('baja')).toBe('Baja');
   });
 
   it('JT and company tokens are NOT universal semantics', () => {

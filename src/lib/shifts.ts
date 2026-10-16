@@ -269,9 +269,6 @@ export const aggregateWeeklyStats = (shifts: Shift[], totalDays: number = 7): We
   };
 };
 
-export const filterShiftsByOrigin = (shifts: Shift[], origin: ShiftOrigin): Shift[] =>
-  shifts.filter((shift) => getShiftOrigin(shift) === origin);
-
 export const sortDayShifts = (shifts: Shift[]): Shift[] => {
   return [...shifts].sort((a, b) => {
     const aTimed = hasShiftTimes(a);

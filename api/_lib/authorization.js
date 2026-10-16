@@ -23,6 +23,8 @@ export const ACTIONS = Object.freeze({
   APPROVE_REQUEST: 'APPROVE_REQUEST',
   REJECT_REQUEST: 'REJECT_REQUEST',
   TRANSFER_OWNERSHIP: 'TRANSFER_OWNERSHIP',
+  MANAGE_ANNUAL_TARGET: 'MANAGE_ANNUAL_TARGET',
+  VIEW_ANNUAL_TARGET: 'VIEW_ANNUAL_TARGET',
 });
 
 /**
@@ -111,6 +113,19 @@ export function can(actor, action, target = {}) {
     case ACTIONS.ASSIGN_EMPLOYEE:
     case ACTIONS.ASSIGN_PLANNER:
       return role === 'OWNER' || role === 'ADMIN';
+
+    case ACTIONS.MANAGE_ANNUAL_TARGET:
+      // Contractual working-time targets: OWNER/ADMIN only. PLANNER is
+      // read-only by default; an EMPLOYEE can never edit their own range.
+      return role === 'OWNER' || role === 'ADMIN';
+
+    case ACTIONS.VIEW_ANNUAL_TARGET:
+      if (role === 'OWNER' || role === 'ADMIN') return true;
+      if (role === 'PLANNER') return isTargetInScope(actor, target);
+      if (role === 'EMPLOYEE') {
+        return Boolean(actor.employeeId && target.employeeId && target.employeeId === actor.employeeId);
+      }
+      return false;
 
     case ACTIONS.TRANSFER_OWNERSHIP:
       // Only the sole active OWNER can initiate ownership transfer

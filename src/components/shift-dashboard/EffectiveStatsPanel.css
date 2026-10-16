@@ -1,0 +1,309 @@
+/* Effective calendar statistics. Responsive cards; state is always conveyed
+   with text, never by color alone. */
+.eff-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+
+.eff-stats__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.eff-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
+.eff-card__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.eff-card__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.eff-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.eff-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eff-metric dt {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.eff-metric dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.eff-metric--primary {
+  grid-column: 1 / -1;
+}
+
+.eff-metric--primary dd {
+  font-size: 1.5rem;
+  color: var(--color-gold, #d4af37);
+}
+
+.eff-card__planned,
+.eff-card__disclaimer {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.eff-card__disclaimer {
+  font-size: 0.7rem;
+  color: var(--text-subtle);
+}
+
+.eff-card__toggle {
+  display: none;
+  align-self: flex-start;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--color-gold, #d4af37);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.eff-metrics--more.is-expanded {
+  display: grid;
+}
+
+.eff-status {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.eff-status__label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.eff-status--below_minimum::before { content: '▼ '; }
+.eff-status--within_range::before { content: '● '; }
+.eff-status--above_maximum::before { content: '▲ '; }
+
+.eff-progress {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--border-soft);
+  overflow: hidden;
+}
+
+.eff-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-gold, #d4af37);
+}
+
+.eff-progress__marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--text-primary);
+}
+
+.eff-contract__empty {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.eff-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border-control, var(--glass-border));
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.eff-button--ghost {
+  border-color: transparent;
+  color: var(--color-gold, #d4af37);
+}
+
+.eff-button:focus-visible,
+.eff-card__toggle:focus-visible,
+.eff-link:focus-visible {
+  outline: 2px solid var(--color-gold, #d4af37);
+  outline-offset: 2px;
+}
+
+.eff-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-gold, #d4af37);
+  background: var(--glass-bg);
+  font-size: 0.82rem;
+}
+
+.eff-alert > svg {
+  flex: 0 0 16px;
+  margin-top: 2px;
+}
+
+.eff-alert > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.eff-alert__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.eff-link {
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  color: var(--color-gold, #d4af37);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+@media (max-width: 1100px) {
+  .eff-stats__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .eff-card--contract {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .eff-stats__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .eff-card__toggle {
+    display: inline-flex;
+    align-items: center;
+  }
+  .eff-metrics--more {
+    display: none;
+  }
+}
+
+@media (min-width: 721px) {
+  .eff-metrics--more {
+    display: grid;
+  }
+}
+
+.eff-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eff-form__intro,
+.eff-form__note {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.eff-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.eff-form__field input,
+.eff-form__field textarea {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-control, var(--glass-border));
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+}
+
+.eff-form__margin {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.eff-form__error {
+  margin: 0;
+  color: var(--color-gold, #d4af37);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.eff-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.eff-button--primary {
+  background: var(--color-gold, #d4af37);
+  border-color: var(--color-gold, #d4af37);
+  color: var(--text-on-accent, #101733);
+}

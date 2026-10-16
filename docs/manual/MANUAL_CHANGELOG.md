@@ -1,5 +1,10 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-10-16 · calendario efectivo
+
+- Cap. 5 («Entender los resúmenes»): se sustituyen las tarjetas **Propios** / **Empresa** por las tarjetas del calendario efectivo (mes, año y objetivo anual), el aviso de días pendientes de reconciliación y el historial del día. Se retira la captura móvil que mostraba las tarjetas antiguas; la captura nueva y el PDF (`public/manuals/…`) deben regenerarse con `scripts/capture-manual-screenshots.mjs` y `scripts/generate-manual-pdf.mjs` sobre datos de demostración (no con datos reales).
+- Contrato: `docs/product/EFFECTIVE_CALENDAR_CONTRACT.md`.
+
 Fecha de comprobación: 9 de septiembre de 2026. Documento editorial de trazabilidad; no es una auditoría UX/UI ni una certificación del despliegue.
 
 ## Versión y alcance

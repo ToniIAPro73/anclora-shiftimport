@@ -24,6 +24,15 @@ export interface Shift {
   employeeId?: string;
   acknowledgementStatus?: 'PENDING' | 'ACKNOWLEDGED';
   acknowledgedAt?: string | null;
+  /** Effective-calendar metadata (backend sessions only). Missing = effective company plan. */
+  layer?: 'COMPANY_PLAN' | 'CHANGE';
+  provenance?: string | null;
+  dutyRole?: string | null;
+  effectiveState?: 'EFFECTIVE' | 'SUPERSEDED' | 'ABSORBED' | 'METADATA_ONLY' | 'REQUIRES_REVIEW';
+  planRevision?: number;
+  changeId?: string | null;
+  /** The day also holds superseded/absorbed rows (history available). */
+  hasHistory?: boolean;
 }
 
 export interface ShiftWithDerived extends Shift {

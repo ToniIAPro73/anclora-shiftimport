@@ -2801,6 +2801,32 @@ select:disabled {
   -webkit-backdrop-filter: blur(8px);
 }
 
+.month-day-history-button {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  margin-left: auto;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--panel-muted-bg) 78%, transparent);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+}
+
+.month-day-history-button[data-review] {
+  border-color: var(--color-gold);
+  color: var(--color-gold);
+}
+
+.month-day-history-button:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
 .month-day-add-button:hover,
 .month-day-add-button:focus-visible {
   transform: none !important;
@@ -2902,209 +2928,10 @@ select:disabled {
   flex: 1;
 }
 
-.stats-bar-container {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  width: 100%;
-}
-
-.totals-mobile-container {
-  display: none;
-}
-
-.totals-ribbon {
-  position: relative;
-  display: grid;
-  gap: 1px;
-  flex-shrink: 0;
-  min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--glass-border) transparent;
-  justify-items: center;
-}
-
-.totals-ribbon::-webkit-scrollbar {
-  height: 8px;
-}
-
-.totals-ribbon::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
-  border-radius: 999px;
-}
-
-.totals-ribbon::after {
-  position: absolute;
-  top: 1px;
-  right: 0;
-  bottom: 1px;
-  width: 22px;
-  pointer-events: none;
-  content: '';
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--panel-muted-bg) 94%, transparent));
-  border-radius: 0 10px 10px 0;
-}
-
-.totals-line {
-  position: relative;
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 0;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 10px;
-  border: 1px solid var(--border-soft);
-  background: var(--panel-muted-bg);
-  backdrop-filter: var(--glass-blur);
-  min-height: 0;
-  width: max-content;
-  overflow: hidden;
-}
-
-.totals-line::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  bottom: 1px;
-  width: 20px;
-  pointer-events: none;
-  background: linear-gradient(270deg, rgba(25, 35, 80, 0.88) 0%, rgba(25, 35, 80, 0) 100%);
-  border-radius: 0 10px 10px 0;
-}
-
-:root[data-theme='light'] .totals-line::after {
-  background: linear-gradient(270deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0) 100%);
-}
-
 @media (max-width: 980px) {
-  .totals-line::after,
   .month-grid-shell::after {
     display: block;
   }
-}
-.totals-line-title {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
-  padding-right: 0;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-surface);
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.totals-line-title::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--border-soft);
-}
-
-.totals-line-values {
-  display: grid;
-  align-items: center;
-  justify-content: start;
-  column-gap: 0;
-  overflow: hidden;
-  padding-bottom: 2px;
-  padding-right: 0;
-  font-size: 0.62rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  width: max-content;
-}
-
-.totals-section-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-  white-space: nowrap;
-  text-align: center;
-  border-right: 1px solid var(--border-soft);
-}
-
-.totals-section-token {
-  color: var(--text-primary);
-}
-
-.totals-token {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  color: var(--text-primary);
-  text-align: center;
-  border-right: 1px solid var(--border-soft);
-}
-
-.totals-line-values > :last-child {
-  border-right: none;
-}
-
-.totals-token strong {
-  font-size: 0.58rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-subtle);
-  margin-right: 4px;
-}
-
-.totals-token.type-regular {
-  color: #3b82f6;
-}
-
-.totals-token.type-regular strong {
-  color: #3b82f6;
-}
-
-.totals-token.type-jt {
-  color: #a78bfa;
-}
-
-.totals-token.type-jt strong {
-  color: #a78bfa;
-}
-
-.totals-token.type-libre {
-  color: #ef4444;
-}
-
-.totals-token.type-libre strong {
-  color: #ef4444;
-}
-
-.totals-token.type-extras {
-  color: #D4AF37;
-}
-
-.totals-token.type-extras strong {
-  color: #D4AF37;
-}
-
-.totals-token.type-vacaciones {
-  color: #16a34a;
-}
-
-.totals-token.type-vacaciones strong {
-  color: #16a34a;
 }
 
 /* Glass Containers (Week Columns) */
@@ -4535,21 +4362,6 @@ button[aria-busy='true'] {
   color: var(--shift-event-foreground, var(--shift-custom-foreground));
 }
 
-.totals-token.type-regular,
-.totals-token.type-regular strong { color: var(--shift-regular-foreground); }
-.totals-token.type-jt,
-.totals-token.type-jt strong { color: var(--shift-leadership-foreground); }
-.totals-token.type-ausencia,
-.totals-token.type-ausencias,
-.totals-token.type-ausencia strong,
-.totals-token.type-ausencias strong { color: var(--shift-absence-foreground); }
-.totals-token.type-libre,
-.totals-token.type-libre strong { color: var(--shift-day-off-foreground); }
-.totals-token.type-extras,
-.totals-token.type-extras strong { color: var(--shift-overtime-foreground); }
-.totals-token.type-vacaciones,
-.totals-token.type-vacaciones strong { color: var(--shift-vacation-foreground); }
-
 .month-day-more-button {
   background: var(--shift-more-background);
   color: var(--shift-more-foreground);
@@ -4638,7 +4450,6 @@ button[aria-busy='true'] {
 }
 
 @media (max-width: 980px) {
-  .totals-ribbon::after,
   .weekly-planner__grid-wrap::after,
   .weekly-planner__table-wrap::after {
     opacity: 1;
@@ -4935,12 +4746,6 @@ button[aria-busy='true'] {
   }
 }
 
-@media (max-width: 1280px) {
-  .totals-line-values {
-    font-size: 0.58rem;
-  }
-}
-
 @media (max-width: 980px) {
   .dashboard-header {
     grid-template-columns: 1fr;
@@ -4993,19 +4798,6 @@ button[aria-busy='true'] {
     flex: 1;
     padding: 8px 10px;
     font-size: 0.82rem;
-  }
-
-  .totals-line {
-    grid-template-columns: 62px minmax(0, 1fr);
-    padding: 5px 6px;
-  }
-
-  .totals-line-title {
-    font-size: 0.67rem;
-  }
-
-  .totals-line-values {
-    font-size: 0.58rem;
   }
 
   .month-grid-root {
@@ -5112,100 +4904,6 @@ button[aria-busy='true'] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .totals-ribbon--desktop {
-    display: none !important;
-  }
-
-  .totals-mobile-container {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 100%;
-    margin-bottom: 6px;
-  }
-
-  .totals-mobile-card {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 8px 10px;
-    background: var(--panel-muted-bg);
-    border: 1px solid var(--border-soft);
-    border-radius: 12px;
-    backdrop-filter: var(--glass-blur);
-  }
-
-  .totals-mobile-card__header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .totals-mobile-card__title {
-    font-size: 0.72rem;
-    font-weight: 800;
-    color: var(--text-primary);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .totals-mobile-card__primary-metrics {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .totals-mobile-card__breakdown-wrap {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .totals-mobile-card__breakdown {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: var(--glass-border) transparent;
-    padding: 4px 1px;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .totals-mobile-card__breakdown:focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 2px;
-    border-radius: 6px;
-  }
-
-  .totals-mobile-card__hint {
-    font-size: 0.62rem;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding-top: 2px;
-  }
-
-  .totals-ribbon {
-    gap: 4px;
-  }
-
-  .totals-line {
-    grid-template-columns: 58px minmax(0, 1fr);
-    padding: 5px;
-    border-radius: 9px;
-  }
-
-  .totals-line-values {
-    font-size: 0.56rem;
   }
 
   .month-grid-root {
@@ -5481,10 +5179,6 @@ button[aria-busy='true'] {
     flex: 0 0 auto;
     padding: 6px 10px;
     font-size: 0.8rem;
-  }
-
-  .totals-line {
-    padding: 2px 6px;
   }
 
   /* Let the calendar size to its content: the unlocked page scroll absorbs

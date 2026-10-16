@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { Shift } from './lib/types';
-import { getMonthDaysISO, getDaysInMonth, getPlannerWeekStartPreference } from './lib/week';
+import { getMonthDaysISO, getPlannerWeekStartPreference } from './lib/week';
 import { clearAnonymousShiftDraft, loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
 import { findShiftConflict } from './lib/shift-conflicts';
 
@@ -34,8 +34,10 @@ import {
   listRemoteApprovalRequests,
   listRemoteEmployees,
   listRemoteScheduleVersions,
+  loadAnnualTargets,
   loadRemoteShifts,
   matchRemoteEmployee,
+  RemoteAnnualTarget,
   RemoteArea,
   RemoteEmployee,
   syncRemoteShifts,
@@ -43,7 +45,8 @@ import {
 import { findAreaMismatch } from './lib/areas';
 import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
 import { setVlmFallbackSessionActive } from './ingestion/vlm-client';
-import { StatsBar } from './components/shift-dashboard/StatsBar';
+import { EffectiveStatsPanel } from './components/shift-dashboard/EffectiveStatsPanel';
+import { AnnualTargetModal } from './components/shift-dashboard/AnnualTargetModal';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
@@ -718,7 +721,6 @@ function App() {
   }, [route, session]);
 
   const monthDays = useMemo(() => getMonthDaysISO(currentYear, currentMonth), [currentYear, currentMonth]);
-  const daysInMonth = useMemo(() => getDaysInMonth(currentYear, currentMonth), [currentYear, currentMonth]);
 
   const currentMonthShifts = useMemo(() => {
     const firstDay = monthDays[0];
@@ -729,9 +731,40 @@ function App() {
     () => shifts.filter((shift) => shift.date.startsWith(`${currentYear}-`)),
     [shifts, currentYear],
   );
-  const daysInYear = useMemo(
-    () => new Date(currentYear, 12, 0).getDate() === 366 ? 366 : 365,
-    [currentYear],
+  const monthRange = useMemo(
+    () => ({ from: monthDays[0], to: monthDays[monthDays.length - 1] }),
+    [monthDays],
+  );
+  const monthLabel = useMemo(() => `${tl('calendar.months')[currentMonth]} ${currentYear}`, [tl, currentMonth, currentYear]);
+  const todayOperational = getOperationalDate();
+
+  // Annual working-time targets are configured per employee AND per year and
+  // only exist for backend sessions (local-first guests have no contract).
+  const activeEmployeeId = session
+    ? (selectedEmployeeId ?? session.employeeId ?? null)
+    : null;
+  const [annualTargets, setAnnualTargets] = useState<RemoteAnnualTarget[]>([]);
+  const [targetModalOpen, setTargetModalOpen] = useState(false);
+  const [requestedDetailDate, setRequestedDetailDate] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!session || !activeEmployeeId || needsOrgChoice) {
+      setAnnualTargets([]);
+      return undefined;
+    }
+    loadAnnualTargets(activeEmployeeId)
+      .then((targets) => { if (!cancelled) setAnnualTargets(targets); })
+      .catch(() => { if (!cancelled) setAnnualTargets([]); });
+    return () => { cancelled = true; };
+  }, [session, activeEmployeeId, needsOrgChoice]);
+  const currentYearTarget = useMemo(
+    () => annualTargets.find((target) => target.year === currentYear) ?? null,
+    [annualTargets, currentYear],
+  );
+  const canConfigureTarget = session?.role === 'OWNER' || session?.role === 'ADMIN';
+  const activeEmployeeName = useMemo(
+    () => employees.find((employee) => employee.id === activeEmployeeId)?.name ?? session?.user.displayName ?? '',
+    [employees, activeEmployeeId, session],
   );
 
   const editingShift = useMemo(() =>
@@ -2092,11 +2125,23 @@ function App() {
 
         {!accountIncomplete && !needsOrgChoice && (
           <>
-        <StatsBar
-          currentMonthShifts={currentMonthShifts}
-          daysInMonth={daysInMonth}
-          currentYearShifts={currentYearShifts}
-          daysInYear={daysInYear}
+        <EffectiveStatsPanel
+          monthShifts={currentMonthShifts}
+          yearShifts={currentYearShifts}
+          year={currentYear}
+          monthLabel={monthLabel}
+          monthRange={monthRange}
+          today={todayOperational}
+          target={currentYearTarget
+            ? {
+              minimumAnnualMinutes: currentYearTarget.minimumAnnualMinutes,
+              maximumAnnualMinutes: currentYearTarget.maximumAnnualMinutes,
+            }
+            : null}
+          showContract={Boolean(session && activeEmployeeId)}
+          canConfigureTarget={Boolean(canConfigureTarget)}
+          onConfigureTarget={() => setTargetModalOpen(true)}
+          onOpenDay={(date) => setRequestedDetailDate(date)}
         />
 
         <section className="calendar-stage">
@@ -2109,8 +2154,25 @@ function App() {
             onCreateShift={handleCreateShiftForDate}
             role={session?.role ?? null}
             editableScheduleDates={editableScheduleDates}
+            employeeId={activeEmployeeId}
+            provenanceEnabled={Boolean(session && activeEmployeeId)}
+            canReconcile={Boolean(canConfigureTarget)}
+            requestedDetailDate={requestedDetailDate}
+            onDayChanged={() => { void refreshCalendarData(); }}
           />
         </section>
+        {session && activeEmployeeId && (
+          <AnnualTargetModal
+            isOpen={targetModalOpen}
+            onClose={() => setTargetModalOpen(false)}
+            employeeId={activeEmployeeId}
+            employeeName={activeEmployeeName}
+            year={currentYear}
+            current={currentYearTarget}
+            canEdit={Boolean(canConfigureTarget)}
+            onSaved={(saved) => setAnnualTargets((targets) => [...targets.filter((target) => target.year !== saved.year), saved])}
+          />
+        )}
           </>
         )}
       </div>

@@ -572,6 +572,14 @@ export const MIGRATION_SENTINELS = {
   '0040_organization_type.sql': (cat) =>
     cat.columns.has('organizations.type') &&
     cat.constraints.has('organizations_type_check'),
+  '0041_effective_calendar_and_annual_targets.sql': (cat) =>
+    cat.tables.has('calendar_changes') &&
+    cat.tables.has('employee_annual_targets') &&
+    cat.columns.has('shifts.effective_state') &&
+    cat.columns.has('shifts.layer') &&
+    cat.columns.has('shifts.provenance') &&
+    cat.columns.has('shifts.duty_role') &&
+    cat.constraints.has('employee_annual_targets_unique'),
 };
 
 /**

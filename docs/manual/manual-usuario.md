@@ -187,12 +187,29 @@ El calendario mensual empieza en lunes. Las letras y los colores identifican tip
 
 ### Entender los resúmenes (escritorio y móvil)
 
-- **En pantallas de escritorio:** la barra superior muestra las celdas detalladas con el total del mes (**Tot. M.**) y del año (**Tot. A.**), desglosando los grupos y los tipos individuales con sus horas y días acumulados.
-- **En dispositivos móviles (teléfono / pantallas estrechas):** los totales se muestran en dos tarjetas, **Propios** y **Empresa**. Cada una indica arriba las horas y los días de **Mes** y **Año**; debajo, el desglose por tipo se desplaza en horizontal, como recuerda el aviso «Desliza para ver desglose por tipo →».
+Las estadísticas se calculan solo sobre el **calendario efectivo**: lo que actualmente se considera
+vigente para cada día. Ya no se separan en «Propios» y «Empresa»; el origen de un dato se conserva
+como trazabilidad, pero no decide qué se suma.
 
-![Calendario en móvil: las tarjetas Propios y Empresa resumen mes y año; el desglose por tipo se desliza en horizontal](screenshots/calendar-mobile-dark.png)
+- **Mes y año:** tarjetas con las **horas efectivas hasta hoy**, **Regular**, **Extras** y
+  **Ausencias**; con «Ver detalle» (siempre visible en escritorio) aparecen los **días trabajados**,
+  **libres**, de **vacaciones** y de **baja**. Si hay horas futuras ya planificadas se muestran aparte
+  como **Planificado futuro**: nunca se suman a las horas efectivas.
+- **Objetivo anual:** cada empleado puede tener, para cada año, un mínimo y un máximo de horas. La
+  tarjeta muestra horas efectivas actuales, mínimo, máximo, margen utilizado y restante, y un estado
+  escrito («Dentro del rango contractual», «Faltan X h Y min para alcanzar el mínimo» o «Exceso sobre
+  máximo»). Es información operativa: no calcula nóminas ni certifica la jornada legal. Si el año no
+  tiene objetivo, verás **Objetivo anual no configurado**; los administradores y el propietario
+  pueden pulsar **Configurar**. Los objetivos no se copian de un año a otro.
+- **Días pendientes de reconciliación:** si los datos de la empresa y el historial no coinciden, el día
+  se marca (⚠), sus horas no se suman y aparece un aviso con las fechas. Un administrador puede
+  abrirlas y registrar una decisión con motivo.
+- **Móvil:** las tarjetas se apilan y el detalle se expande bajo demanda.
 
-El grupo **Propios** suma los turnos añadidos a mano y **Empresa** los que proceden de importaciones. No sumes las cifras como si fueran categorías salariales: no calculan nóminas, complementos ni certifican la jornada legal.
+Un día cuyo plan cambió respecto a lo que comunicó la empresa muestra un pequeño icono de historial.
+Ábrelo para ver lo **efectivo**, el **plan de empresa original** y vigente, la cronología de
+**cambios** (quién, cuándo y por qué) y, si procede, que el antiguo código **JT** (jefe de turno) es
+solo una función y no añade horas.
 
 ### Días con más de dos turnos
 

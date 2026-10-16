@@ -7,6 +7,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 import './DayDetailModal.css';
 import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
+import { DayProvenancePanel } from './DayProvenancePanel';
 
 export interface DayDetailModalProps {
   isOpen: boolean;
@@ -16,6 +17,8 @@ export interface DayDetailModalProps {
   onEditShift: (id: string) => void;
   onDeleteShift?: (id: string) => void | Promise<void>;
   triggerRef?: React.RefObject<HTMLElement | null>;
+  /** Effective-calendar provenance (backend sessions only). */
+  provenance?: { employeeId: string; canReconcile: boolean; onChanged?: () => void };
 }
 
 function formatDuration(startTime?: string, endTime?: string): string | null {
@@ -41,6 +44,7 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
   onEditShift,
   onDeleteShift,
   triggerRef,
+  provenance,
 }) => {
   const { locale, t } = useI18n();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -238,6 +242,15 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
           <p className="day-detail-empty-state" data-testid="day-detail-empty-state">
             {t('calendar.noShiftsForEmployee', { date: formattedDate })}
           </p>
+        )}
+
+        {provenance && (
+          <DayProvenancePanel
+            employeeId={provenance.employeeId}
+            date={date}
+            canReconcile={provenance.canReconcile}
+            onChanged={provenance.onChanged}
+          />
         )}
       </div>
     </ModalShell>

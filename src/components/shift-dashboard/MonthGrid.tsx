@@ -5,7 +5,7 @@ import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
-import { Plus } from 'lucide-react';
+import { AlertTriangle, History, Plus } from 'lucide-react';
 import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 import { sortDayShifts } from '../../lib/shifts';
@@ -23,6 +23,14 @@ interface MonthGridProps {
   onCreateShift: (date: string) => void;
   role?: Role | null;
   editableScheduleDates?: ReadonlySet<string>;
+  /** Employee whose effective calendar is displayed (backend sessions). */
+  employeeId?: string | null;
+  /** Day provenance is only available with a backend session. */
+  provenanceEnabled?: boolean;
+  canReconcile?: boolean;
+  /** Opens the day detail from outside (e.g. unresolved-day links). */
+  requestedDetailDate?: string | null;
+  onDayChanged?: () => void;
 }
 
 export const MonthGrid = ({
@@ -34,6 +42,11 @@ export const MonthGrid = ({
   onCreateShift,
   role = null,
   editableScheduleDates = new Set<string>(),
+  employeeId = null,
+  provenanceEnabled = false,
+  canReconcile = false,
+  requestedDetailDate = null,
+  onDayChanged,
 }: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
   const weekStartsOn = getWeekStartsOn(locale);
@@ -42,6 +55,12 @@ export const MonthGrid = ({
   const [isTouchUi, setIsTouchUi] = useState(false);
   const [selectedDayDetailDate, setSelectedDayDetailDate] = useState<string | null>(null);
   const dayDetailTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (requestedDetailDate) {
+      setSelectedDayDetailDate(requestedDetailDate);
+    }
+  }, [requestedDetailDate]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -169,6 +188,8 @@ export const MonthGrid = ({
             const isWeekend = index % 7 >= 5;
             const hasVacationShift = dayShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const isHistorical = isHistoricalDate(iso, todayISO);
+            const needsReview = dayShifts.some((shift) => shift.effectiveState === 'REQUIRES_REVIEW');
+            const hasChange = dayShifts.some((shift) => shift.layer === 'CHANGE' || Boolean(shift.changeId) || shift.hasHistory === true);
             const actionInput = { date: iso, today: todayISO, role, hasEditableSchedule: editableScheduleDates.has(iso), hasVacation: hasVacationShift };
             const action = getCalendarAction(actionInput);
             const reason = calendarActionReason(action, actionInput);
@@ -203,6 +224,23 @@ export const MonthGrid = ({
                   >
                     {day}
                   </div>
+                  {provenanceEnabled && (needsReview || hasChange) && (
+                    <button
+                      type="button"
+                      className="month-day-history-button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        dayDetailTriggerRef.current = event.currentTarget;
+                        setSelectedDayDetailDate(iso);
+                      }}
+                      aria-label={`${needsReview ? t('dayHistory.reviewBadge') : t('dayHistory.changedBadge')} — ${t('dayHistory.open')}`}
+                      title={needsReview ? t('dayHistory.reviewBadge') : t('dayHistory.changedBadge')}
+                      data-testid={`day-history-btn-${iso}`}
+                      data-review={needsReview || undefined}
+                    >
+                      {needsReview ? <AlertTriangle size={13} strokeWidth={2.2} /> : <History size={13} strokeWidth={2.2} />}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="month-day-add-button"
@@ -258,6 +296,9 @@ export const MonthGrid = ({
           onEditShift={onEditShift}
           onDeleteShift={onDeleteShift}
           triggerRef={dayDetailTriggerRef}
+          provenance={provenanceEnabled && employeeId
+            ? { employeeId, canReconcile, onChanged: onDayChanged }
+            : undefined}
         />
       )}
     </div>

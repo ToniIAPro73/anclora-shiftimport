@@ -250,6 +250,14 @@ export function mapShiftRow(row) {
     origin: row.origin,
     acknowledgementStatus: row.acknowledgement_status ?? 'PENDING',
     acknowledgedAt: row.acknowledged_at ?? null,
+    layer: row.layer ?? 'COMPANY_PLAN',
+    provenance: row.provenance ?? null,
+    legacyOrigin: row.legacy_origin ?? null,
+    dutyRole: row.duty_role ?? null,
+    effectiveState: row.effective_state ?? 'EFFECTIVE',
+    planRevision: row.plan_revision ?? 1,
+    changeId: row.change_id ?? null,
+    hasHistory: row.has_history === true,
   };
 }
 
@@ -305,7 +313,7 @@ async function assertEmployeeInOrg(sql, ctx, employeeId) {
   return rows[0];
 }
 
-async function assertEmployeeInScope(sql, ctx, employeeId) {
+export async function assertEmployeeInScope(sql, ctx, employeeId) {
   const employee = await assertEmployeeInOrg(sql, ctx, employeeId);
   const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA') {
@@ -2178,18 +2186,32 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
       ? await sql`
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                 start_time, end_time, location, origin, shift_type, counts_as_work
+                 start_time, end_time, location, origin, shift_type, counts_as_work,
+                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+                 EXISTS (
+                   SELECT 1 FROM shifts h
+                   WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
+                     AND h.date = shifts.date AND h.effective_state IN ('SUPERSEDED', 'ABSORBED')
+                 ) AS has_history
           FROM shifts
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
             AND area_id = ${effectiveAreaId}
+            AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
           ORDER BY date ASC, start_time ASC, id ASC
         `
       : await sql`
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                 start_time, end_time, location, origin, shift_type, counts_as_work
+                 start_time, end_time, location, origin, shift_type, counts_as_work,
+                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+                 EXISTS (
+                   SELECT 1 FROM shifts h
+                   WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
+                     AND h.date = shifts.date AND h.effective_state IN ('SUPERSEDED', 'ABSORBED')
+                 ) AS has_history
           FROM shifts
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+            AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
           ORDER BY date ASC, start_time ASC, id ASC
         `;
     return rows.map(mapShiftRow);
@@ -2200,18 +2222,32 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
     ? await sql`
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
-               start_time, end_time, location, origin, shift_type, counts_as_work
+               start_time, end_time, location, origin, shift_type, counts_as_work,
+               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+                 EXISTS (
+                   SELECT 1 FROM shifts h
+                   WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
+                     AND h.date = shifts.date AND h.effective_state IN ('SUPERSEDED', 'ABSORBED')
+                 ) AS has_history
         FROM shifts
         WHERE organization_id = ${ctx.organizationId}
           AND area_id = ${effectiveAreaId}
+          AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
         ORDER BY date ASC, start_time ASC, id ASC
       `
     : await sql`
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
-               start_time, end_time, location, origin, shift_type, counts_as_work
+               start_time, end_time, location, origin, shift_type, counts_as_work,
+               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+                 EXISTS (
+                   SELECT 1 FROM shifts h
+                   WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
+                     AND h.date = shifts.date AND h.effective_state IN ('SUPERSEDED', 'ABSORBED')
+                 ) AS has_history
         FROM shifts
         WHERE organization_id = ${ctx.organizationId}
+          AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
         ORDER BY date ASC, start_time ASC, id ASC
       `;
   return rows.map(mapShiftRow);
@@ -2241,6 +2277,7 @@ export async function listTodayShifts(sql, ctx) {
     WHERE organization_id = ${ctx.organizationId}
       AND employee_id = ${ctx.employeeId}
       AND date = CURRENT_DATE
+      AND effective_state = 'EFFECTIVE'
     ORDER BY start_time ASC, end_time ASC, id ASC
   `;
   return rows.map(mapShiftRow);
@@ -2269,6 +2306,7 @@ export async function listWeekShifts(sql, ctx, weekStart) {
       AND employee_id = ${ctx.employeeId}
       AND date >= ${weekStart}::date
       AND date < (${weekStart}::date + INTERVAL '7 days')
+      AND effective_state = 'EFFECTIVE'
     ORDER BY date ASC, start_time ASC, end_time ASC, id ASC
   `;
   return rows.map(mapShiftRow);
@@ -2831,7 +2869,11 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     const semanticFingerprint = shift.origin === 'IMP'
       ? sha256([employeeId, shift.date, shift.shiftType ?? '', shift.countsAsWork ?? '', shift.startTime, shift.endTime, shift.location].join('\u001f'))
       : null;
-    prepared.push({ shift, id, employeeId, shiftAreaId, semanticFingerprint });
+    const writeLayer = shift.origin === 'MAN' ? 'CHANGE' : 'COMPANY_PLAN';
+    const writeProvenance = shift.origin === 'MAN'
+      ? (ctx.role === 'EMPLOYEE' ? 'EMPLOYEE_REQUEST' : 'MANUAL_ADMIN_CHANGE')
+      : 'COMPANY_IMPORT';
+    prepared.push({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance });
   }
 
   if (prepared.length === 0) {
@@ -2857,6 +2899,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
       WHERE organization_id = ${ctx.organizationId}
         AND employee_id = ${first.employeeId}
         AND date = ${first.shift.date}
+        AND effective_state = 'EFFECTIVE'
     `;
     for (const item of items) {
       const candidate = {
@@ -2869,6 +2912,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
       };
       const relevantExisting = existingRows.filter((row) => (
         !(item.semanticFingerprint && row.semantic_fingerprint === item.semanticFingerprint)
+        && String(row.shift_type ?? '').trim().toLowerCase() !== 'jt'
       ));
       const conflict = findAssignmentConflict(relevantExisting, candidate, item.id);
       if (conflict) {
@@ -2911,16 +2955,16 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     }
   }
 
-  const rowsPerShift = await sql.transaction((txn) => prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint }) => (
+  const rowsPerShift = await sql.transaction((txn) => prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance }) => (
     semanticFingerprint
       ? txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
                           start_time, end_time, location, origin, shift_type, counts_as_work,
-                          updated_at, semantic_fingerprint)
+                          updated_at, semantic_fingerprint, layer, provenance)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
               ${shiftAreaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null},
               ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork},
-              NOW(), ${semanticFingerprint})
+              NOW(), ${semanticFingerprint}, ${writeLayer}, ${writeProvenance})
       ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
       WHERE semantic_fingerprint IS NOT NULL
       DO UPDATE SET updated_at = NOW()
@@ -2930,10 +2974,12 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     `
       : txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
-                          start_time, end_time, location, origin, shift_type, counts_as_work, updated_at)
+                          start_time, end_time, location, origin, shift_type, counts_as_work, updated_at,
+                          layer, provenance)
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
               ${shiftAreaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null},
-              ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork}, NOW())
+              ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork}, NOW(),
+              ${writeLayer}, ${writeProvenance})
       ON CONFLICT (id) DO UPDATE SET
         date = EXCLUDED.date,
         start_time = EXCLUDED.start_time,

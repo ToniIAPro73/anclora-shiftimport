@@ -15,7 +15,8 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
-      ...(process.env.TEMPORAL_MODEL_DATABASE_URL ? [] : ['**/*.integration.test.mjs']),
+      ...(process.env.TEMPORAL_MODEL_DATABASE_URL ? [] : ['**/temporal-org-model.integration.test.mjs']),
+      ...(process.env.EFFECTIVE_CALENDAR_DATABASE_URL ? [] : ['**/effective-calendar.integration.test.mjs']),
     ],
   },
 });

@@ -1,4 +1,5 @@
 import { Shift } from './types';
+import type { DayProvenance } from './effective-calendar.js';
 import { apiFetch } from './session';
 import { getShiftType } from './shifts';
 import { shiftTypeCountsAsWork } from './shift-types';
@@ -261,6 +262,13 @@ interface RemoteShiftRow {
   countsAsWork?: boolean | null;
   acknowledgementStatus?: 'PENDING' | 'ACKNOWLEDGED';
   acknowledgedAt?: string | null;
+  layer?: 'COMPANY_PLAN' | 'CHANGE';
+  provenance?: string | null;
+  dutyRole?: string | null;
+  effectiveState?: Shift['effectiveState'];
+  planRevision?: number;
+  changeId?: string | null;
+  hasHistory?: boolean;
 }
 
 const toShift = (row: RemoteShiftRow): Shift => ({
@@ -275,6 +283,13 @@ const toShift = (row: RemoteShiftRow): Shift => ({
   employeeId: row.employeeId,
   acknowledgementStatus: row.acknowledgementStatus,
   acknowledgedAt: row.acknowledgedAt,
+  layer: row.layer,
+  provenance: row.provenance ?? null,
+  dutyRole: row.dutyRole ?? null,
+  effectiveState: row.effectiveState,
+  planRevision: row.planRevision,
+  changeId: row.changeId ?? null,
+  hasHistory: row.hasHistory === true,
 });
 
 export async function loadRemoteShifts(employeeId: string): Promise<Shift[]> {
@@ -1201,4 +1216,98 @@ export async function bulkMoveRemoteEmployeesArea(input: {
  * organization and the admin account). Org-scoped, irreversible. */
 export async function resetOrganization(): Promise<{ reset: boolean; deleted: { shifts: number; imports: number; employees: number } }> {
   return apiFetch('/api/organizations/reset', { method: 'POST' });
+}
+
+
+// ---------------------------------------------------------------------------
+// Effective calendar: annual targets, day provenance, administrative changes.
+// ---------------------------------------------------------------------------
+
+export interface RemoteAnnualTarget {
+  id: string;
+  employeeId: string;
+  year: number;
+  minimumAnnualMinutes: number;
+  maximumAnnualMinutes: number;
+  marginMinutes: number;
+  notes: string;
+  source: string;
+  updatedAt: string;
+}
+
+export async function loadAnnualTargets(employeeId: string): Promise<RemoteAnnualTarget[]> {
+  const payload = await apiFetch<{ targets: RemoteAnnualTarget[] }>(
+    `/api/calendar/annual-targets?employeeId=${encodeURIComponent(employeeId)}`,
+  );
+  return payload.targets;
+}
+
+export async function saveAnnualTarget(input: {
+  employeeId: string;
+  year: number;
+  minimumAnnualMinutes: number;
+  maximumAnnualMinutes: number;
+  notes?: string;
+}): Promise<RemoteAnnualTarget> {
+  const payload = await apiFetch<{ target: RemoteAnnualTarget }>('/api/calendar/annual-targets', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  return payload.target;
+}
+
+export interface RemoteCalendarChange {
+  id: string;
+  changeType: string;
+  actorRole: string;
+  actorName: string | null;
+  selfChange: boolean;
+  source: string;
+  reason: string;
+  before: Array<{ shiftType: string; startTime: string | null; endTime: string | null }>;
+  after: Array<{ shiftType: string; startTime: string | null; endTime: string | null }>;
+  approvalStatus: string;
+  createdAt: string;
+}
+
+export interface RemoteDayHistory {
+  employeeId: string;
+  date: string;
+  rows: RemoteShiftRow[];
+  changes: RemoteCalendarChange[];
+  provenance: DayProvenance;
+}
+
+export async function loadDayHistory(employeeId: string, date: string): Promise<RemoteDayHistory> {
+  return apiFetch<RemoteDayHistory>(
+    `/api/calendar/changes?employeeId=${encodeURIComponent(employeeId)}&date=${encodeURIComponent(date)}`,
+  );
+}
+
+export interface CalendarChangeInput {
+  employeeId: string;
+  date: string;
+  changeType: string;
+  reason: string;
+  after?: Array<{ shiftType: string; startTime?: string | null; endTime?: string | null }>;
+  supersedeShiftIds?: string[];
+}
+
+export async function applyCalendarChangeRemote(input: CalendarChangeInput) {
+  return apiFetch<{ result: { changeId: string; selfChange: boolean } }>('/api/calendar/changes', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function reconcileCalendarDayRemote(input: {
+  employeeId: string;
+  date: string;
+  keepShiftIds: string[];
+  reason: string;
+}) {
+  return apiFetch<{ result: { changeId: string } }>('/api/calendar/changes', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'RECONCILE', ...input }),
+  });
 }

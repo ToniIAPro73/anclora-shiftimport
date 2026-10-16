@@ -445,7 +445,7 @@ describe('WeeklyPlanner', () => {
     it('applies canonical colors and visible textual labels for regular, libre, vacaciones, baja, custom and fallback types', async () => {
       // 1. Configure custom shift types: Baja (countsAsWork: false) and Guardia
       upsertShiftType({
-        id: 'baja',
+        id: 'Baja',
         label: 'Baja',
         shortLabel: 'BAJA',
         color: '#8b5cf6',
@@ -490,7 +490,7 @@ describe('WeeklyPlanner', () => {
       const bajaShift = assignment({
         id: 'shift-baja',
         date: '2026-10-01',
-        shiftType: 'baja',
+        shiftType: 'Baja',
         startTime: undefined,
         endTime: undefined,
       });
@@ -539,7 +539,7 @@ describe('WeeklyPlanner', () => {
 
       // 4. BAJA_COLOR (#8b5cf6) with countsAsWork: false
       const bajaBtn = screen.getByRole('button', { name: /Baja/ });
-      expect(bajaBtn).toHaveAttribute('data-shift-type', 'baja');
+      expect(bajaBtn).toHaveAttribute('data-shift-type', 'Baja');
       expect(bajaBtn).toHaveAttribute('data-shift-visual', 'leave');
       expect(within(bajaBtn).getByText('Baja')).toBeInTheDocument();
 
@@ -559,7 +559,7 @@ describe('WeeklyPlanner', () => {
 
     it('displays shift type name in accessible table view', async () => {
       upsertShiftType({
-        id: 'baja',
+        id: 'Baja',
         label: 'Baja',
         shortLabel: 'BAJA',
         color: '#8b5cf6',
@@ -569,7 +569,7 @@ describe('WeeklyPlanner', () => {
       const bajaShift = assignment({
         id: 'shift-baja-table',
         date: '2026-09-28',
-        shiftType: 'baja',
+        shiftType: 'Baja',
         startTime: undefined,
         endTime: undefined,
       });

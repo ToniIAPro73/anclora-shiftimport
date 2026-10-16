@@ -184,3 +184,32 @@ describe('Canonical Authorization Service (can)', () => {
     });
   });
 });
+
+describe('annual target authorization', () => {
+  const owner = { userId: 'u1', role: 'OWNER' };
+  const admin = { userId: 'u2', role: 'ADMIN', employeeId: 'emp-admin' };
+  const planner = { userId: 'u3', role: 'PLANNER', plannerScopeType: 'ORGANIZATION' };
+  const areaPlanner = { userId: 'u4', role: 'PLANNER', plannerScopeType: 'AREAS', scopedAreaIds: ['a1'] };
+  const employee = { userId: 'u5', role: 'EMPLOYEE', employeeId: 'emp-1' };
+
+  it('only OWNER and ADMIN configure targets', () => {
+    expect(can(owner, ACTIONS.MANAGE_ANNUAL_TARGET, {})).toBe(true);
+    expect(can(admin, ACTIONS.MANAGE_ANNUAL_TARGET, {})).toBe(true);
+    expect(can(planner, ACTIONS.MANAGE_ANNUAL_TARGET, {})).toBe(false);
+    expect(can(employee, ACTIONS.MANAGE_ANNUAL_TARGET, { employeeId: 'emp-1' })).toBe(false);
+  });
+
+  it('read access follows scope; an EMPLOYEE only reads their own target', () => {
+    expect(can(admin, ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: 'anyone' })).toBe(true);
+    expect(can(planner, ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: 'anyone' })).toBe(true);
+    expect(can(areaPlanner, ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: 'x', areaId: 'a1' })).toBe(true);
+    expect(can(areaPlanner, ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: 'x', areaId: 'a2' })).toBe(false);
+    expect(can(employee, ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: 'emp-1' })).toBe(true);
+    expect(can(employee, ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: 'emp-2' })).toBe(false);
+  });
+
+  it('an ADMIN with an employee profile keeps admin rights; the profile alone grants nothing', () => {
+    expect(can(admin, ACTIONS.EDIT_SHIFT, { employeeId: 'emp-admin' })).toBe(true);
+    expect(can(employee, ACTIONS.EDIT_SHIFT, { employeeId: 'emp-1' })).toBe(false);
+  });
+});
