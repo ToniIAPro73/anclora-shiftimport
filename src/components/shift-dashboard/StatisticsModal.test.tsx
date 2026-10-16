@@ -142,4 +142,34 @@ describe('StatisticsModal', () => {
     expect(screen.getByTestId('eff-month-planned')).toHaveTextContent('96 h');
     spy.mockRestore();
   });
+
+  it('shows a hero metric and a color-tokenised metric grid (calendar shift tokens, no hardcoded hex)', () => {
+    const { container } = renderModal();
+    expect(container.querySelector('.hero-metric')).not.toBeNull();
+    const regular = screen.getByTestId('eff-month-regular');
+    expect(regular.getAttribute('style')).toContain('var(--shift-regular-border)');
+    expect(screen.getByTestId('eff-month-extras').getAttribute('style')).toContain('var(--shift-overtime-border)');
+    expect(screen.getByTestId('eff-month-free-days').getAttribute('style')).toContain('var(--shift-day-off-border)');
+    expect(screen.getByTestId('eff-month-vacation-days').getAttribute('style')).toContain('var(--shift-vacation-border)');
+    expect(screen.getByTestId('eff-month-sick-days').getAttribute('style')).toContain('var(--shift-leave-border)');
+    // worked days is not a shift type: neutral accent, never a shift color
+    expect(screen.getByTestId('eff-month-worked-days').getAttribute('style')).not.toContain('--shift-');
+    for (const element of container.querySelectorAll('[style]')) expect(element.getAttribute('style')).not.toMatch(/#[0-9a-f]{3,6}/i);
+  });
+
+  it('planned future is a separate secondary card', () => {
+    renderModal({ today: '2026-02-01' });
+    const planned = screen.getByTestId('eff-month-planned');
+    expect(planned.className).toContain('planned-card');
+    expect(planned).toHaveTextContent('Planificado futuro (resto del mes)');
+  });
+
+  it('tabs are buttons with a stable accessible name even when a short label is shown', () => {
+    renderModal();
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs).toHaveLength(3);
+    expect(screen.getByRole('tablist', { name: 'Periodo de las estadísticas' })).toBeInTheDocument();
+    for (const tab of tabs) expect(tab.tagName).toBe('BUTTON');
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'stats-tab-month');
+  });
 });

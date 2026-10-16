@@ -42,8 +42,8 @@ describe('ReconciliationModal', () => {
   it('is a dialog with the pending badge and the three tabs', () => {
     renderModal(worklist(7));
     expect(screen.getByRole('dialog', { name: 'Reconciliación de días' })).toHaveAttribute('aria-modal', 'true');
-    expect(screen.getByTestId('recon-modal-badge')).toHaveTextContent('7');
-    expect(screen.getByRole('tab', { name: /Pendientes/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('recon-modal-badge')).toHaveTextContent('7 pendientes');
+    expect(screen.getByRole('tab', { name: 'Pendientes' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Resueltos' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Todos' })).toBeInTheDocument();
   });
@@ -62,6 +62,7 @@ describe('ReconciliationModal', () => {
     expect(screen.queryByTestId('recon-row-2026-02-02')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Resueltos' }));
     expect(screen.getByTestId('recon-row-2026-02-02')).toHaveTextContent('Confirmado con el jefe');
+    expect(screen.getByTestId('recon-row-2026-02-02')).toHaveTextContent('Resuelto');
     expect(screen.queryByTestId('recon-row-2026-01-01')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Todos' }));
     expect(screen.getByTestId('recon-range')).toHaveTextContent('1–4 de 4');
@@ -103,5 +104,47 @@ describe('pageWindow', () => {
     expect(pageWindow(1, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(pageWindow(1, 20)).toEqual([1, 2, 'gap', 20]);
     expect(pageWindow(10, 20)).toEqual([1, 'gap', 9, 10, 11, 'gap', 20]);
+  });
+});
+
+describe('ReconciliationModal — presentation', () => {
+  it('hides technical run ids / UUIDs and summarises the reason', () => {
+    const technical: ReconciliationItem = {
+      ...resolved,
+      resolvedReason: '[run 1acfbb93-09f0-40c3-9860-8de50a26b3d8] Reconciled (HIGH): consistent with company calendar',
+    };
+    renderModal({ employeeId: 'e1', year: 2026, pendingCount: 0, resolvedCount: 1, items: [technical] });
+    fireEvent.click(screen.getByRole('tab', { name: 'Resueltos' }));
+    const reason = screen.getByTestId('recon-reason-2026-02-02');
+    expect(reason).toHaveTextContent('Coincide con el plan de la empresa');
+    const row = screen.getByTestId('recon-row-2026-02-02');
+    expect(row.textContent).not.toMatch(/run|1acfbb93|[0-9a-f]{8}-[0-9a-f]{4}/i);
+    expect(reason.getAttribute('title') ?? '').not.toMatch(/1acfbb93/);
+  });
+
+  it('status is conveyed by text, not only color', () => {
+    renderModal(worklist(1));
+    expect(screen.getByTestId('recon-row-2026-01-01')).toHaveTextContent('Pendiente');
+    fireEvent.click(screen.getByRole('tab', { name: 'Resueltos' }));
+    expect(screen.getByTestId('recon-row-2026-02-02')).toHaveTextContent('Resuelto');
+  });
+
+  it('review is the primary action on every row and the calendar icon has a tooltip + label', () => {
+    renderModal(worklist(1));
+    expect(screen.getByRole('button', { name: 'Revisar el día 01/01/2026' })).toHaveTextContent('Revisar');
+    const view = screen.getByRole('button', { name: 'Ver el día 01/01/2026 en el calendario' });
+    expect(view).toHaveAttribute('title', 'Ver día en calendario');
+  });
+
+  it('tabs use arrow-key navigation and Home/End', () => {
+    renderModal(worklist(2));
+    const pendingTab = screen.getByRole('tab', { name: 'Pendientes' });
+    pendingTab.focus();
+    fireEvent.keyDown(pendingTab, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Resueltos' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Resueltos' }), { key: 'End' });
+    expect(screen.getByRole('tab', { name: 'Todos' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Todos' }), { key: 'Home' });
+    expect(screen.getByRole('tab', { name: 'Pendientes' })).toHaveAttribute('aria-selected', 'true');
   });
 });

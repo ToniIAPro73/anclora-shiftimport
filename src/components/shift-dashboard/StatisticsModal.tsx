@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Settings2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BarChart3, CalendarCheck, CalendarClock, CalendarOff, Clock, EyeOff, Gauge, HeartPulse, Settings2, Star, Target, Umbrella } from 'lucide-react';
 import type { Shift } from '../../lib/types';
 import { computeEffectiveStats, evaluateAnnualTarget } from '../../lib/effective-calendar.js';
 import type { ContractEvaluation, StatsBucket } from '../../lib/effective-calendar.js';
@@ -7,6 +7,9 @@ import { loadCalendarStats, type RemoteCalendarStats } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { formatDuration } from './format-duration';
 import { ModalShell } from '../ui/ModalShell';
+import { SegmentedTabs, type SegmentedTab } from '../ui/SegmentedTabs';
+import { HeroMetric, MetricCard, PlannedCard } from './StatsCards';
+import { NEUTRAL_ACCENT, shiftAccentStyle } from './stats-accents';
 import './EffectiveStatsPanel.css';
 import './CalendarModals.css';
 
@@ -46,19 +49,13 @@ interface StatisticsModalProps {
   onConfigureTarget?: () => void;
 }
 
-function Metric({ label, value, testId, emphasis = false }: { label: string; value: string; testId?: string; emphasis?: boolean }) {
-  return (
-    <div className={emphasis ? 'eff-metric eff-metric--primary' : 'eff-metric'} data-testid={testId}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
-}
+const ICON = 18;
 
 function PeriodPanel({
-  heading, realized, planned, plannedLabel, noData, t, locale, testId,
+  heading, contextLabel, realized, planned, plannedLabel, noData, t, locale, testId,
 }: {
   heading: string;
+  contextLabel: string;
   realized: StatsBucket;
   planned: StatsBucket;
   plannedLabel: string;
@@ -68,28 +65,43 @@ function PeriodPanel({
   testId: string;
 }) {
   const days = (count: number) => t('effectiveStats.daysValue', { count });
+  const hours = (minutes: number) => formatDuration(minutes, t, locale);
+  if (noData) {
+    return (
+      <section className="stats-modal__panel" aria-label={heading} data-testid={testId}>
+        <div className="stats-empty" data-testid={`${testId}-no-data`}>
+          <BarChart3 size={28} aria-hidden="true" />
+          <strong>{t('statsModal.noData')}</strong>
+          <span>{heading}</span>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="stats-modal__panel" aria-label={heading} data-testid={testId}>
-      <h3 className="eff-card__title">{heading}</h3>
-      {noData ? (
-        <p className="eff-contract__empty" data-testid={`${testId}-no-data`}>{t('statsModal.noData')}</p>
-      ) : (
-        <>
-          <dl className="eff-metrics stats-modal__metrics">
-            <Metric emphasis label={t('effectiveStats.realizedHours')} value={formatDuration(realized.effectiveMinutes, t, locale)} testId={`${testId}-effective`} />
-            <Metric label={t('effectiveStats.regular')} value={formatDuration(realized.regularMinutes, t, locale)} testId={`${testId}-regular`} />
-            <Metric label={t('effectiveStats.extras')} value={formatDuration(realized.extrasMinutes, t, locale)} testId={`${testId}-extras`} />
-            <Metric label={t('effectiveStats.absences')} value={formatDuration(realized.absenceMinutes, t, locale)} testId={`${testId}-absence`} />
-            <Metric label={t('effectiveStats.workedDays')} value={days(realized.workedDays)} testId={`${testId}-worked-days`} />
-            <Metric label={t('effectiveStats.freeDays')} value={days(realized.freeDays)} testId={`${testId}-free-days`} />
-            <Metric label={t('effectiveStats.vacationDays')} value={days(realized.vacationDays)} testId={`${testId}-vacation-days`} />
-            <Metric label={t('effectiveStats.sickLeaveDays')} value={days(realized.sickLeaveDays)} testId={`${testId}-sick-days`} />
-          </dl>
-          <p className="eff-card__planned" data-testid={`${testId}-planned`}>
-            {plannedLabel}: <strong>{formatDuration(planned.effectiveMinutes, t, locale)}</strong>
-          </p>
-        </>
-      )}
+      <HeroMetric
+        icon={<BarChart3 size={26} />}
+        label={t('effectiveStats.realizedHours')}
+        value={hours(realized.effectiveMinutes)}
+        context={contextLabel}
+        valueTestId={`${testId}-effective`}
+      />
+      <div className="metric-grid">
+        <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.regular')} value={hours(realized.regularMinutes)} style={shiftAccentStyle('Regular')} testId={`${testId}-regular`} />
+        <MetricCard icon={<Star size={ICON} />} label={t('effectiveStats.extras')} value={hours(realized.extrasMinutes)} style={shiftAccentStyle('Extras')} testId={`${testId}-extras`} />
+        <MetricCard icon={<EyeOff size={ICON} />} label={t('effectiveStats.absences')} value={hours(realized.absenceMinutes)} style={shiftAccentStyle('Ausencia')} testId={`${testId}-absence`} />
+        <MetricCard icon={<CalendarCheck size={ICON} />} label={t('effectiveStats.workedDays')} value={days(realized.workedDays)} style={NEUTRAL_ACCENT} testId={`${testId}-worked-days`} />
+        <MetricCard icon={<CalendarOff size={ICON} />} label={t('effectiveStats.freeDays')} value={days(realized.freeDays)} style={shiftAccentStyle('Libre')} testId={`${testId}-free-days`} />
+        <MetricCard icon={<Umbrella size={ICON} />} label={t('effectiveStats.vacationDays')} value={days(realized.vacationDays)} style={shiftAccentStyle('Vacaciones')} testId={`${testId}-vacation-days`} />
+        <MetricCard icon={<HeartPulse size={ICON} />} label={t('effectiveStats.sickLeaveDays')} value={days(realized.sickLeaveDays)} style={shiftAccentStyle('Baja')} testId={`${testId}-sick-days`} />
+        <PlannedCard
+          icon={<CalendarClock size={ICON} />}
+          label={plannedLabel}
+          value={hours(planned.effectiveMinutes)}
+          note={t('statsModal.footnote')}
+          testId={`${testId}-planned`}
+        />
+      </div>
     </section>
   );
 }
@@ -107,17 +119,23 @@ function TargetPanel({
   locale: string;
 }) {
   const heading = t('statsModal.targetHeading', { year });
+  const hours = (minutes: number) => formatDuration(minutes, t, locale);
+  const configureButton = (ghost: boolean, label: string, testId: string) => canConfigure && onConfigure && (
+    <button type="button" className={ghost ? 'eff-button eff-button--ghost' : 'eff-button eff-button--primary'} onClick={onConfigure} data-testid={testId}>
+      <Settings2 size={14} aria-hidden="true" /> {label}
+    </button>
+  );
+
   if (!target || evaluation.status === 'UNCONFIGURED') {
     return (
       <section className="stats-modal__panel" aria-label={heading} data-testid="eff-contract-card">
-        <h3 className="eff-card__title">{heading}</h3>
-        <p className="stats-modal__unconfigured" data-testid="eff-contract-unconfigured">{t('statsModal.targetUnconfigured')}</p>
-        {canConfigure && onConfigure && (
-          <button type="button" className="eff-button" onClick={onConfigure} data-testid="eff-contract-configure">
-            <Settings2 size={14} aria-hidden="true" /> {t('statsModal.configureTarget')}
-          </button>
-        )}
-        <p className="eff-card__disclaimer">{t('statsModal.configureHint')}</p>
+        <div className="target-hero">
+          <Target size={30} aria-hidden="true" className="target-hero__icon" />
+          <span className="hero-metric__label">{heading}</span>
+          <strong className="target-hero__value" data-testid="eff-contract-unconfigured">{t('statsModal.targetUnconfigured')}</strong>
+          <p className="target-hero__hint">{t('statsModal.configureHint')}</p>
+          {configureButton(false, t('statsModal.configureTarget'), 'eff-contract-configure')}
+        </div>
       </section>
     );
   }
@@ -128,16 +146,15 @@ function TargetPanel({
   if (evaluation.status === 'NO_DATA') {
     return (
       <section className="stats-modal__panel" aria-label={heading} data-testid="eff-contract-card">
-        <h3 className="eff-card__title">{heading}</h3>
-        <p className="stats-modal__unconfigured" data-testid="eff-contract-range">{range}</p>
-        <p className="eff-status eff-status--no_data" data-testid="eff-contract-status" data-status="NO_DATA">
-          <span className="eff-status__label">{t('effectiveStats.statusLabel')}:</span> {t('statsModal.statusNoData')}
-        </p>
-        {canConfigure && onConfigure && (
-          <button type="button" className="eff-button eff-button--ghost" onClick={onConfigure} data-testid="eff-contract-edit">
-            <Settings2 size={14} aria-hidden="true" /> {t('effectiveStats.editTarget')}
-          </button>
-        )}
+        <div className="target-hero">
+          <Target size={30} aria-hidden="true" className="target-hero__icon" />
+          <span className="hero-metric__label">{heading}</span>
+          <strong className="target-hero__value" data-testid="eff-contract-range">{range}</strong>
+          <p className="eff-status eff-status--no_data" data-testid="eff-contract-status" data-status="NO_DATA">
+            <span className="eff-status__label">{t('effectiveStats.statusLabel')}:</span> {t('statsModal.statusNoData')}
+          </p>
+          {configureButton(true, t('effectiveStats.editTarget'), 'eff-contract-edit')}
+        </div>
       </section>
     );
   }
@@ -149,24 +166,20 @@ function TargetPanel({
   const fill = Math.min(100, (effective / scale) * 100);
   const minMarker = Math.min(100, (minimum / scale) * 100);
   const statusText = evaluation.status === 'BELOW_MINIMUM'
-    ? t('effectiveStats.statusBelow', { amount: formatDuration(evaluation.missingToMinimumMinutes ?? 0, t, locale) })
+    ? t('effectiveStats.statusBelow', { amount: hours(evaluation.missingToMinimumMinutes ?? 0) })
     : evaluation.status === 'ABOVE_MAXIMUM'
-      ? t('effectiveStats.statusAbove', { amount: formatDuration(evaluation.excessOverMaximumMinutes ?? 0, t, locale) })
+      ? t('effectiveStats.statusAbove', { amount: hours(evaluation.excessOverMaximumMinutes ?? 0) })
       : t('effectiveStats.statusWithin');
 
   return (
     <section className="stats-modal__panel" aria-label={heading} data-testid="eff-contract-card">
-      <div className="eff-card__title-row">
-        <h3 className="eff-card__title">{heading}</h3>
-        {canConfigure && onConfigure && (
-          <button type="button" className="eff-button eff-button--ghost" onClick={onConfigure} data-testid="eff-contract-edit">
-            <Settings2 size={14} aria-hidden="true" /> {t('effectiveStats.editTarget')}
-          </button>
-        )}
-      </div>
-      <p className={`eff-status eff-status--${evaluation.status.toLowerCase()}`} data-testid="eff-contract-status" data-status={evaluation.status}>
-        <span className="eff-status__label">{t('effectiveStats.statusLabel')}:</span> {statusText}
-      </p>
+      <HeroMetric
+        icon={<Target size={26} />}
+        label={t('effectiveStats.effectiveSoFar')}
+        value={hours(effective)}
+        context={range}
+        valueTestId="eff-contract-effective"
+      />
       <div
         className="eff-progress"
         role="progressbar"
@@ -174,24 +187,31 @@ function TargetPanel({
         aria-valuemin={0}
         aria-valuemax={Math.max(maximum, effective)}
         aria-valuenow={effective}
-        aria-valuetext={`${formatDuration(effective, t, locale)} / ${formatDuration(maximum, t, locale)}`}
+        aria-valuetext={`${hours(effective)} / ${hours(maximum)}`}
       >
         <div className="eff-progress__fill" style={{ width: `${fill}%` }} />
         <div className="eff-progress__marker" style={{ left: `${minMarker}%` }} aria-hidden="true" />
       </div>
-      <dl className="eff-metrics stats-modal__metrics">
-        <Metric label={t('effectiveStats.effectiveSoFar')} value={formatDuration(effective, t, locale)} testId="eff-contract-effective" />
-        <Metric label={t('effectiveStats.minimum')} value={formatDuration(minimum, t, locale)} testId="eff-contract-minimum" />
-        <Metric label={t('effectiveStats.maximum')} value={formatDuration(maximum, t, locale)} testId="eff-contract-maximum" />
-        <Metric label={t('effectiveStats.marginUsed')} value={formatDuration(evaluation.marginUsedMinutes ?? 0, t, locale)} testId="eff-contract-margin-used" />
-        <Metric label={t('effectiveStats.marginRemaining')} value={formatDuration(evaluation.marginRemainingMinutes ?? 0, t, locale)} testId="eff-contract-margin-remaining" />
-      </dl>
+      <div className="metric-grid">
+        <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.minimum')} value={hours(minimum)} style={NEUTRAL_ACCENT} testId="eff-contract-minimum" />
+        <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.maximum')} value={hours(maximum)} style={NEUTRAL_ACCENT} testId="eff-contract-maximum" />
+        <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginUsed')} value={hours(evaluation.marginUsedMinutes ?? 0)} style={shiftAccentStyle('Regular')} testId="eff-contract-margin-used" />
+        <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginRemaining')} value={hours(evaluation.marginRemainingMinutes ?? 0)} style={shiftAccentStyle('Vacaciones')} testId="eff-contract-margin-remaining" />
+        <div className="metric-card metric-card--status metric-card--wide">
+          <span className="eff-status__label">{t('effectiveStats.statusLabel')}</span>
+          <strong className={`eff-status eff-status--${evaluation.status.toLowerCase()}`} data-testid="eff-contract-status" data-status={evaluation.status}>{statusText}</strong>
+        </div>
+      </div>
       {plannedMinutes > 0 && (
-        <p className="eff-card__planned" data-testid="eff-contract-projection">
-          {t('effectiveStats.projection')}: <strong>{formatDuration(effective + plannedMinutes, t, locale)}</strong>
-        </p>
+        <PlannedCard
+          icon={<CalendarClock size={ICON} />}
+          label={t('effectiveStats.projection')}
+          value={hours(effective + plannedMinutes)}
+          note={t('effectiveStats.disclaimer')}
+          testId="eff-contract-projection"
+        />
       )}
-      <p className="eff-card__disclaimer">{t('effectiveStats.disclaimer')}</p>
+      {configureButton(true, t('effectiveStats.editTarget'), 'eff-contract-edit')}
     </section>
   );
 }
@@ -212,7 +232,6 @@ export function StatisticsModal({
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ month: null, year: null, target: null });
 
   useEffect(() => {
     if (!isOpen || !employeeId) return undefined;
@@ -252,20 +271,11 @@ export function StatisticsModal({
     };
   }, [employeeId, local, remote, year]);
 
-  const tabs: Array<{ id: Tab; label: string }> = [
-    { id: 'month', label: t('statsModal.tabMonth') },
-    { id: 'year', label: t('statsModal.tabYear', { year }) },
-    ...(showContract ? [{ id: 'target' as Tab, label: t('statsModal.tabTarget') }] : []),
+  const tabs: Array<SegmentedTab<Tab>> = [
+    { id: 'month', label: t('statsModal.tabMonth'), shortLabel: t('statsModal.tabMonthShort') },
+    { id: 'year', label: t('statsModal.tabYear', { year }), shortLabel: t('statsModal.tabYearShort') },
+    ...(showContract ? [{ id: 'target' as Tab, label: t('statsModal.tabTarget'), shortLabel: t('statsModal.tabTargetShort') }] : []),
   ];
-
-  const onTabKeyDown = (event: React.KeyboardEvent, index: number) => {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
-    if (!step) return;
-    event.preventDefault();
-    const next = tabs[(index + step + tabs.length) % tabs.length];
-    setTab(next.id);
-    tabRefs.current[next.id]?.focus();
-  };
 
   const monthNoData = data ? data.month.realized.effectiveMinutes === 0 && data.month.planned.effectiveMinutes === 0
     && data.month.realized.workedDays + data.month.realized.freeDays + data.month.realized.vacationDays + data.month.realized.sickLeaveDays === 0 : false;
@@ -275,33 +285,22 @@ export function StatisticsModal({
       isOpen={isOpen}
       onClose={onClose}
       title={t('statsModal.title')}
-      maxWidth="720px"
+      maxWidth="800px"
       width="100%"
       className="stats-modal"
       closeAriaLabel={t('common.close')}
       closeTestId="stats-modal-close"
     >
       <div data-testid="statistics-modal">
-        <div className="stats-modal__tabs" role="tablist" aria-label={t('statsModal.tabsLabel')}>
-          {tabs.map((entry, index) => (
-            <button
-              key={entry.id}
-              ref={(element) => { tabRefs.current[entry.id] = element; }}
-              type="button"
-              role="tab"
-              id={`stats-tab-${entry.id}`}
-              aria-selected={tab === entry.id}
-              aria-controls="stats-tabpanel"
-              tabIndex={tab === entry.id ? 0 : -1}
-              className={tab === entry.id ? 'stats-modal__tab is-active' : 'stats-modal__tab'}
-              onClick={() => setTab(entry.id)}
-              onKeyDown={(event) => onTabKeyDown(event, index)}
-              data-testid={`stats-tab-${entry.id}`}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          tabs={tabs}
+          value={tab}
+          onChange={setTab}
+          ariaLabel={t('statsModal.tabsLabel')}
+          idPrefix="stats-tab"
+          panelId="stats-tabpanel"
+          testIdPrefix="stats-tab"
+        />
         <div id="stats-tabpanel" role="tabpanel" aria-labelledby={`stats-tab-${tab}`} className="stats-modal__body">
           {loading && !data && <p role="status" className="eff-contract__empty">{t('statsModal.loading')}</p>}
           {failed && !data && (
@@ -313,6 +312,7 @@ export function StatisticsModal({
           {data && tab === 'month' && (
             <PeriodPanel
               heading={monthLabel}
+              contextLabel={monthLabel}
               realized={data.month.realized}
               planned={data.month.planned}
               plannedLabel={t('statsModal.plannedMonth')}
@@ -325,6 +325,7 @@ export function StatisticsModal({
           {data && tab === 'year' && (
             <PeriodPanel
               heading={t('effectiveStats.yearHeading', { year })}
+              contextLabel={String(year)}
               realized={data.year.realized}
               planned={data.year.planned}
               plannedLabel={t('statsModal.plannedYear')}
@@ -347,7 +348,6 @@ export function StatisticsModal({
             />
           )}
         </div>
-        <p className="eff-card__disclaimer">{t('statsModal.footnote')}</p>
       </div>
     </ModalShell>
   );

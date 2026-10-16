@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3 } from 'lucide-react';
 import type { ReconciliationItem, ReconciliationShiftLabel, ReconciliationWorklist } from '../../lib/remote';
 import { translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
+import { SegmentedTabs, type SegmentedTab } from '../ui/SegmentedTabs';
+import { summarizeReason } from './reconciliation-display';
 import { RECONCILIATION_PAGE_SIZE, pageWindow } from './reconciliation-paging';
 import './CalendarModals.css';
 
-type Filter = 'PENDING' | 'RESOLVED' | 'ALL';
+type Filter = 'pending' | 'resolved' | 'all';
 
 interface ReconciliationModalProps {
   isOpen: boolean;
@@ -31,15 +33,15 @@ export function ReconciliationModal({
   isOpen, onClose, worklist, loading, failed, onRetry, onReview, onViewDay,
 }: ReconciliationModalProps) {
   const { t, locale } = useI18n();
-  const [filter, setFilter] = useState<Filter>('PENDING');
+  const [filter, setFilter] = useState<Filter>('pending');
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (isOpen) { setFilter('PENDING'); setPage(1); }
+    if (isOpen) { setFilter('pending'); setPage(1); }
   }, [isOpen]);
 
   const visible = useMemo<ReconciliationItem[]>(
-    () => (worklist?.items ?? []).filter((item) => filter === 'ALL' || item.status === filter),
+    () => (worklist?.items ?? []).filter((item) => filter === 'all' || item.status.toLowerCase() === filter),
     [worklist, filter],
   );
   const totalPages = Math.max(1, Math.ceil(visible.length / RECONCILIATION_PAGE_SIZE));
@@ -55,10 +57,10 @@ export function ReconciliationModal({
     }).join(' · ');
   };
 
-  const tabs: Array<{ id: Filter; label: string; count: number | null }> = [
-    { id: 'PENDING', label: t('reconModal.tabPending'), count: pendingCount },
-    { id: 'RESOLVED', label: t('reconModal.tabResolved'), count: null },
-    { id: 'ALL', label: t('reconModal.tabAll'), count: null },
+  const tabs: Array<SegmentedTab<Filter>> = [
+    { id: 'pending', label: t('reconModal.tabPending') },
+    { id: 'resolved', label: t('reconModal.tabResolved') },
+    { id: 'all', label: t('reconModal.tabAll') },
   ];
 
   const from = visible.length ? (safePage - 1) * RECONCILIATION_PAGE_SIZE + 1 : 0;
@@ -70,35 +72,30 @@ export function ReconciliationModal({
       onClose={onClose}
       title={t('reconModal.title')}
       hideHeader
-      maxWidth="820px"
+      maxWidth="860px"
       width="100%"
       className="recon-modal"
       closeAriaLabel={t('common.close')}
     >
       <div data-testid="reconciliation-modal">
         <div className="recon-modal__header">
-          <AlertTriangle size={20} aria-hidden="true" className="recon-modal__icon" />
+          <AlertTriangle size={22} aria-hidden="true" className="recon-modal__icon" />
           <h2 className="recon-modal__title">{t('reconModal.title')}</h2>
-          <span className="recon-modal__badge" data-testid="recon-modal-badge">{pendingCount}</span>
+          {pendingCount > 0 && (
+            <span className="recon-modal__badge" data-testid="recon-modal-badge">{t('reconModal.pendingBadge', { count: pendingCount })}</span>
+          )}
           <button type="button" className="theme-toggle recon-modal__close" onClick={onClose} aria-label={t('common.close')} data-testid="recon-modal-close">×</button>
         </div>
 
-        <div className="stats-modal__tabs" role="tablist" aria-label={t('reconModal.tabsLabel')}>
-          {tabs.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              role="tab"
-              aria-selected={filter === entry.id}
-              aria-controls="recon-tabpanel"
-              className={filter === entry.id ? 'stats-modal__tab is-active' : 'stats-modal__tab'}
-              onClick={() => { setFilter(entry.id); setPage(1); }}
-              data-testid={`recon-tab-${entry.id.toLowerCase()}`}
-            >
-              {entry.label}{entry.count !== null && entry.count > 0 ? ` (${entry.count})` : ''}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          tabs={tabs}
+          value={filter}
+          onChange={(id) => { setFilter(id); setPage(1); }}
+          ariaLabel={t('reconModal.tabsLabel')}
+          idPrefix="recon-tab"
+          panelId="recon-tabpanel"
+          testIdPrefix="recon-tab"
+        />
 
         <div id="recon-tabpanel" role="tabpanel" className="recon-modal__body">
           {loading && !worklist && <p role="status" className="eff-contract__empty">{t('reconModal.loading')}</p>}
@@ -119,42 +116,51 @@ export function ReconciliationModal({
                 <span>{t('reconModal.colActions')}</span>
               </div>
               <ul className="recon-list" data-testid="recon-list">
-                {pageItems.map((item) => (
-                  <li key={item.date} className="recon-row" data-testid={`recon-row-${item.date}`} data-status={item.status}>
-                    <strong className="recon-row__date">{formatDate(item.date)}</strong>
-                    <span className="recon-row__cell" data-label={t('reconModal.companyLabel')}>{describe(item.company)}</span>
-                    <span className="recon-row__cell recon-row__cell--current" data-label={t('reconModal.currentLabel')}>
-                      {describe(item.current)}
-                      {item.status === 'RESOLVED' && item.resolvedReason && (
-                        <small className="recon-row__reason">{t('reconModal.resolvedWhy', { reason: item.resolvedReason })}</small>
-                      )}
-                    </span>
-                    <span className={`recon-row__status recon-row__status--${item.status.toLowerCase()}`}>
-                      {item.status === 'PENDING' ? t('reconModal.statusPending') : t('reconModal.statusResolved')}
-                    </span>
-                    <span className="recon-row__actions">
-                      <button
-                        type="button"
-                        className="eff-button"
-                        onClick={() => onReview(item.date)}
-                        aria-label={t('reconModal.reviewAria', { date: formatDate(item.date) })}
-                        data-testid={`recon-review-${item.date}`}
-                      >
-                        {item.status === 'PENDING' ? t('reconModal.resolve') : t('reconModal.review')}
-                      </button>
-                      <button
-                        type="button"
-                        className="eff-button eff-button--ghost"
-                        onClick={() => onViewDay(item.date)}
-                        aria-label={t('reconModal.viewDayAria', { date: formatDate(item.date) })}
-                        title={t('reconModal.viewDay')}
-                        data-testid={`recon-view-${item.date}`}
-                      >
-                        <CalendarDays size={14} aria-hidden="true" />
-                      </button>
-                    </span>
-                  </li>
-                ))}
+                {pageItems.map((item) => {
+                  const reason = item.status === 'RESOLVED' ? summarizeReason(item.resolvedReason) : null;
+                  const reasonText = reason
+                    ? reason.kind === 'matchesPlan' ? t('reconModal.reasonMatchesPlan')
+                      : reason.kind === 'reconciled' ? t('reconModal.reasonReconciled') : reason.text
+                    : null;
+                  const pending = item.status === 'PENDING';
+                  return (
+                    <li key={item.date} className="recon-row" data-testid={`recon-row-${item.date}`} data-status={item.status}>
+                      <strong className="recon-row__date">{formatDate(item.date)}</strong>
+                      <span className="recon-row__cell" data-label={t('reconModal.companyLabel')}>{describe(item.company)}</span>
+                      <span className="recon-row__cell recon-row__cell--current" data-label={t('reconModal.currentLabel')}>
+                        {describe(item.current)}
+                        {reasonText && (
+                          <small className="recon-row__reason" title={reason?.full || undefined} data-testid={`recon-reason-${item.date}`}>{reasonText}</small>
+                        )}
+                      </span>
+                      <span className={`recon-row__status recon-row__status--${item.status.toLowerCase()}`}>
+                        {pending ? <Clock3 size={13} aria-hidden="true" /> : <CheckCircle2 size={13} aria-hidden="true" />}
+                        {pending ? t('reconModal.statusPending') : t('reconModal.statusResolved')}
+                      </span>
+                      <span className="recon-row__actions">
+                        <button
+                          type="button"
+                          className={pending ? 'eff-button eff-button--primary' : 'eff-button'}
+                          onClick={() => onReview(item.date)}
+                          aria-label={t('reconModal.reviewAria', { date: formatDate(item.date) })}
+                          data-testid={`recon-review-${item.date}`}
+                        >
+                          {t('reconModal.review')}
+                        </button>
+                        <button
+                          type="button"
+                          className="eff-button eff-button--icon"
+                          onClick={() => onViewDay(item.date)}
+                          aria-label={t('reconModal.viewDayAria', { date: formatDate(item.date) })}
+                          title={t('reconModal.viewDay')}
+                          data-testid={`recon-view-${item.date}`}
+                        >
+                          <CalendarDays size={16} aria-hidden="true" />
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
               <nav className="recon-pager" aria-label={t('reconModal.pagination')}>
                 <span className="recon-pager__range" data-testid="recon-range">
