@@ -8,6 +8,7 @@ import {
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
 import { getOperationalDate } from './operational-date.js';
+import { createNewDraftFromVersionTx, publishScheduleVersionTx } from './scheduling.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -120,10 +121,10 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     );
   }
 
-  if (input.futureConsent !== 'draft') {
+  if (input.futureConsent !== 'publish') {
     throw requestError(
       409,
-      'Future rows require explicit consent before they can be added to draft planning',
+      'Future rows require explicit consent before they can be published',
       'FUTURE_IMPORT_CONSENT_REQUIRED',
     );
   }
@@ -176,6 +177,12 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     if (scope.type === 'SELF' && employeeId !== scope.employeeId) {
       throw requestError(403, 'Future assignments are outside your employee scope', 'SCOPE_FORBIDDEN');
     }
+    if (scope.type === 'AREAS' && !scope.areaIds.includes(rows[0].area_id)) {
+      throw requestError(403, 'Future assignments are outside your assigned areas', 'SCOPE_FORBIDDEN');
+    }
+    if (scope.type === 'EMPLOYEES' && !scope.employeeIds.includes(employeeId)) {
+      throw requestError(403, 'Future assignments are outside your employee scope', 'SCOPE_FORBIDDEN');
+    }
     if (scope.type === 'AREA' && rows[0].area_id !== scope.areaId) {
       throw requestError(403, 'Future assignments are outside your assigned area', 'SCOPE_FORBIDDEN');
     }
@@ -216,6 +223,37 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   });
   if (existingImport[0]?.deleted_at) {
     throw requestError(409, 'This import was already deleted and cannot be replayed', 'IMPORT_ALREADY_DELETED');
+  }
+  if (existingImport[0]?.id) {
+    const prior = await sql`
+      SELECT COALESCE(SUM(assignment_count), 0)::integer AS assignments,
+             COUNT(*)::integer AS weeks,
+             COUNT(*) FILTER (WHERE status = 'PUBLISHED')::integer AS published_weeks,
+             COALESCE(jsonb_agg(jsonb_build_object(
+               'periodStart', period_start, 'status', status, 'createdShiftCount', 0
+             ) ORDER BY period_start), '[]'::jsonb) AS publication_results
+      FROM (
+        SELECT s.period_start, sv.status, COUNT(sa.id)::integer AS assignment_count
+        FROM shift_assignments sa
+        JOIN schedule_versions sv ON sv.id = sa.schedule_version_id
+        JOIN schedules s ON s.id = sv.schedule_id
+        WHERE sa.import_id = ${existingImport[0].id}
+        GROUP BY s.period_start, sv.status
+      ) prior_weeks
+    `;
+    const historicalRows = await sql`SELECT COUNT(*)::integer AS count FROM shifts WHERE import_id = ${existingImport[0].id}`;
+    const assignmentCount = Number(prior[0]?.assignments ?? 0);
+    const historicalCount = Number(historicalRows[0]?.count ?? 0);
+    if (assignmentCount || historicalCount) {
+      return {
+        classification: dated.classification, cutoff: dated.cutoff, importId: existingImport[0].id, deduplicated: true,
+        historical: { submittedCount: historical.length, persistedCount: historicalCount, deletedCount: 0 },
+        future: { submittedCount: future.length, createdAssignmentCount: 0, existingAssignmentCount: assignmentCount,
+          affectedWeekCount: Number(prior[0]?.weeks ?? 0), publishedWeekCount: Number(prior[0]?.published_weeks ?? 0),
+          publishedShiftCount: Number(prior[0]?.assignments ?? 0),
+          publicationResults: Array.isArray(prior[0]?.publication_results) ? prior[0].publication_results : [] },
+      };
+    }
   }
 
   const deleteIds = distinct((Array.isArray(input.deleteIds) ? input.deleteIds : []).map((id) => String(id ?? '').trim()).filter(Boolean));
@@ -260,9 +298,28 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   const groupList = [...groups.values()];
   const scheduleIds = new Map();
   for (const group of groupList) {
-    scheduleIds.set(`${group.periodStart}:${group.areaId ?? 'global'}`, {
-      scheduleId: randomUUID(),
-      versionId: randomUUID(),
+    const key = `${group.periodStart}:${group.areaId ?? 'global'}`;
+    const current = await sql`
+      SELECT s.id AS schedule_id, sv.id AS version_id, sv.status,
+             COUNT(sa.id)::integer AS assignment_count,
+             COUNT(sa.id) FILTER (WHERE sa.import_id IS DISTINCT FROM ${existingImport[0]?.id ?? null})::integer AS foreign_assignment_count
+      FROM schedules s
+      LEFT JOIN schedule_versions sv ON sv.schedule_id = s.id AND sv.status IN ('DRAFT', 'PUBLISHED', 'LOCKED', 'COMPLETED')
+      LEFT JOIN shift_assignments sa ON sa.schedule_version_id = sv.id
+      WHERE s.organization_id = ${ctx.organizationId} AND s.area_id IS NOT DISTINCT FROM ${group.areaId}
+        AND s.period_start = ${group.periodStart}
+      GROUP BY s.id, sv.id, sv.status, sv.version_number
+      ORDER BY (sv.status = 'DRAFT') DESC NULLS LAST, sv.version_number DESC NULLS LAST LIMIT 1
+    `;
+    const row = current[0];
+    if (row?.status === 'DRAFT' && Number(row.foreign_assignment_count) > 0) {
+      throw requestError(409, `The planning week ${group.periodStart} contains assignments from another import`, 'AUTO_PUBLISH_SHARED_DRAFT_CONFLICT');
+    }
+    scheduleIds.set(key, {
+      scheduleId: row?.schedule_id ?? randomUUID(),
+      versionId: row?.status === 'DRAFT' ? row.version_id : randomUUID(),
+      existingDraft: row?.status === 'DRAFT',
+      sourceVersionId: row && row.status !== 'DRAFT' ? row.version_id : null,
     });
   }
 
@@ -311,7 +368,11 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       RETURNING id
     `);
     labels.push(`schedule-draft:${group.periodStart}:${group.areaId ?? 'global'}`);
-    queries.push((txn) => txn`
+    if (ids.sourceVersionId) {
+      queries.push((txn) => createNewDraftFromVersionTx(
+        txn, ctx, ids.scheduleId, ids.sourceVersionId, ids.versionId, scope.type === 'AREA', scope.type === 'AREA' ? scope.areaId : null,
+      ));
+    } else queries.push((txn) => txn`
       WITH target_schedule AS MATERIALIZED (
         SELECT s.id, s.area_id
         FROM schedules s
@@ -336,7 +397,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
         RETURNING id, schedule_id, version_number
       )
       SELECT ts.id AS schedule_id,
-             COALESCE(cd.id, ed.id) AS version_id,
+        COALESCE(cd.id, ed.id) AS version_id,
              COALESCE(cd.version_number, ed.version_number) AS version_number,
              (cd.id IS NOT NULL) AS created
       FROM target_schedule ts
@@ -404,16 +465,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
                ${shift.shiftType}, ${shift.countsAsWork}, NOW()
         FROM schedule_versions sv
         JOIN schedules s ON s.id = sv.schedule_id
-        WHERE sv.id = COALESCE(
-          (SELECT id FROM schedule_versions WHERE id = ${ids.versionId} AND status = 'DRAFT'),
-          (SELECT sv2.id FROM schedule_versions sv2
-           JOIN schedules s2 ON s2.id = sv2.schedule_id
-           WHERE s2.organization_id = ${ctx.organizationId}
-             AND s2.area_id IS NOT DISTINCT FROM ${group.areaId}
-             AND s2.period_start = ${group.periodStart}
-             AND sv2.status = 'DRAFT'
-           ORDER BY sv2.version_number ASC LIMIT 1)
-        )
+        WHERE sv.id = ${ids.versionId}
           AND s.organization_id = ${ctx.organizationId}
           AND sv.status = 'DRAFT'
         AND NOT EXISTS (
@@ -455,12 +507,26 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     RETURNING *
   `);
 
+  const publishOffset = queries.length;
+  for (const group of groupList) {
+    const ids = scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`);
+    labels.push(`publish:${group.periodStart}`);
+    queries.push((txn) => publishScheduleVersionTx(txn, ctx, ids.scheduleId, ids.versionId));
+  }
+  if (groupList.length > 0) {
+    const versionIds = groupList.map((group) => scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`).versionId);
+    labels.push('assert-published');
+    queries.push((txn) => txn`
+      SELECT 1 / CASE WHEN COUNT(*) = ${groupList.length} THEN 1 ELSE 0 END AS publication_guard
+      FROM schedule_versions WHERE id = ANY(${versionIds}::uuid[]) AND status = 'PUBLISHED'
+    `);
+  }
+
   const transactionResult = await sql.transaction((txn) => queries.map((query) => query(txn)));
   const importRow = transactionResult[0]?.[0];
   if (!importRow?.id) throw requestError(500, 'Import transaction did not return an import id');
   const deduplicated = importRow.inserted === false;
   const scheduleOffset = 1;
-  const draftResults = groupList.map((_, index) => transactionResult[scheduleOffset + index * 2 + 1] ?? []);
   const historicalOffset = scheduleOffset + groupList.length * 2;
   const historicalResults = transactionResult.slice(historicalOffset, historicalOffset + historical.length);
   const deleteOffset = historicalOffset + historical.length;
@@ -469,8 +535,19 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   const futureOffset = deleteOffset + deleteIds.length;
   const futureResults = transactionResult.slice(futureOffset, futureOffset + future.length);
   const assignmentCount = futureResults.reduce((count, rows) => count + rows.length, 0);
-  const createdDrafts = draftResults.filter((rows) => rows[0]?.created).length;
-  const updatedImport = transactionResult[transactionResult.length - 1]?.[0];
+  const updatedImport = transactionResult[publishOffset - 1]?.[0];
+  const publicationResults = transactionResult.slice(publishOffset, publishOffset + groupList.length).map((rows, index) => ({
+    periodStart: groupList[index].periodStart,
+    status: 'PUBLISHED',
+    createdShiftCount: Number(rows[0]?.created_shift_count ?? 0),
+  }));
+  const { createShiftPublishedNotifications } = await import('./data.js');
+  for (const group of groupList) {
+    const versionId = scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`).versionId;
+    try { await createShiftPublishedNotifications(sql, ctx, versionId); } catch (error) {
+      console.error('[notifications] SHIFT_PUBLISHED generation failed', { organizationId: ctx.organizationId, scheduleVersionId: versionId, error: error instanceof Error ? error.message : 'unknown' });
+    }
+  }
   return {
     classification: dated.classification,
     cutoff: dated.cutoff,
@@ -485,16 +562,10 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       submittedCount: future.length,
       createdAssignmentCount: assignmentCount,
       existingAssignmentCount: future.length - assignmentCount,
-      draftCount: groups.size,
-      createdDraftCount: createdDrafts,
-    drafts: draftResults.map((rows, index) => rows[0] ? { ...rows[0], group: groupList[index] } : null).filter(Boolean).map(({ schedule_id: scheduleId, version_id: scheduleVersionId, version_number: versionNumber, group }) => ({
-        scheduleId,
-        scheduleVersionId,
-        versionNumber: Number(versionNumber),
-        periodStart: group.periodStart,
-        periodEnd: addDays(group.periodStart, 6),
-        areaId: group.areaId,
-      })),
+      affectedWeekCount: groups.size,
+      publishedWeekCount: publicationResults.length,
+      publishedShiftCount: publicationResults.reduce((count, item) => count + item.createdShiftCount, 0),
+    publicationResults,
     },
     import: updatedImport ? mapImportRow(updatedImport) : { id: importRow.id },
     transactionQueryCount: labels.length,

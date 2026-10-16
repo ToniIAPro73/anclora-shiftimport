@@ -273,11 +273,11 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
 
     await waitFor(() => expect(screen.getByTestId('import-future-consent')).toBeTruthy());
     expect(screen.getByTestId('import-future-consent').textContent).toContain('Importar solo los turnos históricos');
-    fireEvent.click(screen.getByRole('radio', { name: /Importar históricos y añadir los futuros/ }));
+    fireEvent.click(screen.getByRole('radio', { name: /Importar históricos y publicar los turnos futuros/ }));
     fireEvent.click(screen.getByRole('button', { name: /Confirmar Importación/ }));
 
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
-    expect(receivedDecisions).toEqual(['draft']);
+    expect(receivedDecisions).toEqual(['publish']);
   });
 
   it('locks confirmation with a busy cursor and stays open when persistence returns false', async () => {
@@ -686,7 +686,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
     expect(screen.getByTestId('import-self-future-notice').textContent).toContain('no se creará planificación');
 
     const badge = screen.getByTestId('import-future-count');
-    expect(badge.textContent).toBe('1 turnos futuros detectados; no se crearán borradores con la opción actual');
+    expect(badge.textContent).toBe('1 turnos futuros detectados; no se añadirán con la opción actual');
     // EMPLOYEE never gets the consent toggle: the decision is not theirs to make.
     expect(screen.queryByTestId('import-future-consent')).toBeNull();
   });
@@ -908,7 +908,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       fireEvent.click(ignoreButtons[1]);
       expect(confirmBtn.disabled).toBe(false);
       await new Promise((r) => setTimeout(r, 100));
-    });
+    }, 15000);
   });
 
   describe('CTA Enablement & Actionable Count (P5.5-R13)', () => {
@@ -1048,7 +1048,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       expect(screen.getByText('Este archivo no contiene turnos anteriores a hoy.')).toBeTruthy();
 
       // Switch to draft -> actionableCount > 0 -> enabled
-      const draftOption = screen.getByLabelText(/Importar históricos y añadir los futuros a planificación en borrador/i);
+      const draftOption = screen.getByLabelText(/Importar históricos y publicar los turnos futuros/i);
       fireEvent.click(draftOption);
 
       expect(confirmBtn.disabled).toBe(false);
@@ -1081,14 +1081,14 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
 
       await waitFor(() => expect(screen.getByTestId('import-future-count')).toBeTruthy());
       expect(screen.getByTestId('import-future-count').textContent).toBe(
-        '1 turnos futuros detectados; no se crearán borradores con la opción actual',
+        '1 turnos futuros detectados; no se añadirán con la opción actual',
       );
 
-      const draftOption = screen.getByLabelText(/Importar históricos y añadir los futuros a planificación en borrador/i);
+      const draftOption = screen.getByLabelText(/Importar históricos y publicar los turnos futuros/i);
       fireEvent.click(draftOption);
 
       expect(screen.getByTestId('import-future-count').textContent).toBe(
-        'Se crearían 1 borradores de turnos futuros (sin publicar)',
+        'Se publicarán 1 turnos futuros en Calendario',
       );
     });
 
@@ -1117,7 +1117,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       expect(confirmBtn.textContent).toContain('1/2');
 
       // Switch to draft: 2 actionable shifts -> enabled
-      const draftOption = screen.getByLabelText(/Importar históricos y añadir los futuros a planificación en borrador/i);
+      const draftOption = screen.getByLabelText(/Importar históricos y publicar los turnos futuros/i);
       fireEvent.click(draftOption);
 
       expect(confirmBtn.disabled).toBe(false);

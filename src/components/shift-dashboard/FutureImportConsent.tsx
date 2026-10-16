@@ -35,11 +35,11 @@ export const FutureImportConsent = ({ decision, onChange, testId }: FutureImport
         <input
           type="radio"
           name={`${testId}-decision`}
-          value="draft"
-          checked={decision === 'draft'}
-          onChange={() => onChange('draft')}
+          value="publish"
+          checked={decision === 'publish'}
+          onChange={() => onChange('publish')}
         />
-        <span>{t('importModal.futureConsentDraft')}</span>
+        <span>{t('importModal.futureConsentPublish')}</span>
       </label>
       <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-subtle)' }}>{t('importModal.futureConsentCancelHint')}</p>
     </fieldset>

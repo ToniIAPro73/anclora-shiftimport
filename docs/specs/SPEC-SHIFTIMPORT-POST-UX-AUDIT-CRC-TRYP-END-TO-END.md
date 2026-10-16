@@ -950,7 +950,7 @@ en `api/` ni `db/`), nunca omitirse.
 | Application shell y navegación role-aware | NUEVO POST-P5 | P5.1 | MEDIO | `AppShell.test.tsx`, `p5-1-shell-smoke.spec.ts` | calendario, contexto, logout y Portal EMPLOYEE preservados |
 | Navegación operacional y frontera temporal | NUEVO POST-P5.1; remediación visual/temporal post-M15 | P5.2 | ALTO | tests de contrato, `p5-2-operations.spec.ts`, `calendar-actions.test.ts` | Approval Lite, Import/Añadir/Planificar, scopes, planner modal y shell preservados |
 | Onboarding plan-aware y gobernanza inicial | NUEVO POST-P5.2; defecto OWNER-only reproducido | P5.3 | ALTO | `OnboardingChoiceModal.test.tsx`, `api/onboarding/onboarding.test.js`, smoke compacto | OWNER válido sin Employee/ADMIN/Area; plan server-side; atomicidad y User↔Employee |
-| Importación temporal mixta y drafts | NUEVO POST-P5.4; hoy/futuro se enviaban sin consentimiento | P5.5 | ALTO | `confirm-split.test.js`, `future-import.spec.ts`, `ImportModal.test.tsx` | `date < today` histórico; `date >= today` DRAFT; no auto-publish; EMPLOYEE sin futuro |
+| Importación temporal mixta y auto-publicación Safe Import | NUEVO POST-P5.4; futuro requiere consentimiento explícito y publicación canónica atómica | P5.5+ | ALTO | `confirm-split.test.js`, `future-import.spec.ts`, `ImportModal.test.tsx` | OWNER/ADMIN/PLANNER con scope y `futureConsent=publish`; semanas PUBLISHED; EMPLOYEE sin futuro; resto de flujos conserva P5.5 |
 | Modo invitado local-first | SÍ | P3 (LegalPage) | MEDIO | manual + `LandingPage.test.tsx` | Sin sesión, todo en `localStorage`; reset solo local |
 | Tema claro y oscuro | SÍ (browser) | P1, P3, P4, P7 | MEDIO | QA visual + capturas de Gate | Contraste correcto en ambas superficies |
 | `prefers-reduced-motion` | SÍ (R1-M14) | P1, P3, P4 | BAJO | `ImportModal.test.tsx` | Spinner y transiciones respetan la preferencia |
@@ -1176,8 +1176,12 @@ la organización; el cliente no puede elegir el alcance.
 **D-P5.5-05** — EMPLOYEE future import remains excluded; only its historical SELF rows may persist in this phase.
 **D-P5.5-06** — Temporal consent is format-agnostic: after normalization, every supported source enters the same date split and consent component; import controls remain disabled with localized progress and a wait cursor while persistence is pending.
 
-These decisions are approved for P5.5 and do not implement Shift Swap. The deferred intention and
-open questions remain under P5.6 in the roadmap and `docs/product/EMPLOYEE_SHIFT_SWAP_DEFERRED.md`.
+These decisions were approved for P5.5 and do not implement Shift Swap. An addendum dated
+2026-10-15 supersedes D-P5.5-01–04 only for explicitly consented Safe Import by OWNER/ADMIN/PLANNER
+with valid scope: the transaction invokes canonical publication and rolls back all weeks if any
+publication fails. D-P5.5-05 and the rest of the original decision remain in force. See
+`docs/product/FUTURE_IMPORT_DRAFT_CONTRACT.md`. The deferred intention and open questions remain
+under P5.6 in the roadmap and `docs/product/EMPLOYEE_SHIFT_SWAP_DEFERRED.md`.
 
 ## 42. KNOWN GAPS
 

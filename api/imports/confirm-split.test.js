@@ -12,7 +12,7 @@ function request(date) {
   return {
     fileName: 'm14.csv', sourceFormat: 'CSV', fileFingerprint: 'a'.repeat(64),
     employeeId: EMPLOYEE, periodYear: 2026, periodMonth: 9,
-    futureConsent: 'draft',
+    futureConsent: 'publish',
     shifts: [{ ...base, date }],
   };
 }
@@ -37,6 +37,18 @@ describe('R3-M14 future import contract', () => {
     await expect(confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), futureConsent: undefined })).rejects.toMatchObject({
       status: 409,
       code: 'FUTURE_IMPORT_CONSENT_REQUIRED',
+    });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects the legacy draft consent so publication is always explicit', async () => {
+    const transaction = vi.fn();
+    const sql = () => Promise.resolve([]);
+    sql.transaction = transaction;
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', plannerScopeType: 'ORGANIZATION', plan: 'team' };
+
+    await expect(confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), futureConsent: 'draft' })).rejects.toMatchObject({
+      status: 409, code: 'FUTURE_IMPORT_CONSENT_REQUIRED',
     });
     expect(transaction).not.toHaveBeenCalled();
   });

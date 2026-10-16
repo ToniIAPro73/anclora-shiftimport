@@ -33,9 +33,9 @@ describe('deriveEffectiveTemporalSummary', () => {
   it('excludes every detected future row for a locked identity (EMPLOYEE)', () => {
     const summary = deriveEffectiveTemporalSummary(futureSplit, {
       identityLocked: true,
-      decision: 'draft',
+      decision: 'publish',
     });
-    expect(summary).toEqual({ detected: 3, includedAsDraft: 0, excludedByRole: 3 });
+    expect(summary).toEqual({ detected: 3, includedForPublication: 0, excludedByRole: 3 });
   });
 
   it('excludes every detected future row for a locked identity even with historical-only decision', () => {
@@ -43,7 +43,7 @@ describe('deriveEffectiveTemporalSummary', () => {
       identityLocked: true,
       decision: 'historical-only',
     });
-    expect(summary).toEqual({ detected: 3, includedAsDraft: 0, excludedByRole: 3 });
+    expect(summary).toEqual({ detected: 3, includedForPublication: 0, excludedByRole: 3 });
   });
 
   // AC-2 (UXR-F2-M03): ADMIN/PLANNER with historical-only decision also gets 0 drafts —
@@ -53,22 +53,22 @@ describe('deriveEffectiveTemporalSummary', () => {
       identityLocked: false,
       decision: 'historical-only',
     });
-    expect(summary).toEqual({ detected: 3, includedAsDraft: 0, excludedByRole: 3 });
+    expect(summary).toEqual({ detected: 3, includedForPublication: 0, excludedByRole: 3 });
   });
 
   it('includes every detected future row as draft for an unlocked identity choosing draft', () => {
     const summary = deriveEffectiveTemporalSummary(futureSplit, {
       identityLocked: false,
-      decision: 'draft',
+      decision: 'publish',
     });
-    expect(summary).toEqual({ detected: 3, includedAsDraft: 3, excludedByRole: 0 });
+    expect(summary).toEqual({ detected: 3, includedForPublication: 3, excludedByRole: 0 });
   });
 
   it('reports zero detected/included/excluded when there are no future rows', () => {
     const summary = deriveEffectiveTemporalSummary(noFutureSplit, {
       identityLocked: false,
-      decision: 'draft',
+      decision: 'publish',
     });
-    expect(summary).toEqual({ detected: 0, includedAsDraft: 0, excludedByRole: 0 });
+    expect(summary).toEqual({ detected: 0, includedForPublication: 0, excludedByRole: 0 });
   });
 });

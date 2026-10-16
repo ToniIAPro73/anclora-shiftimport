@@ -639,20 +639,12 @@ export async function createScheduleDraft(sql, ctx, input = {}) {
   };
 }
 
-/** Creates an independent DRAFT from a published or terminal version. */
-export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId) {
+export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, newVersionId, isAreaScoped = false, scopedAreaId = null) {
   requireRole(ctx, 'PLANNER');
-  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId) || !UUID_RE.test(newVersionId)) {
     throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
   }
-  const scope = await resolveEffectiveAccessScope(sql, ctx);
-  const newVersionId = randomUUID();
-  const isAreaScoped = scope.type === 'AREA';
-  const scopedAreaId = isAreaScoped ? scope.areaId : null;
-
-  let transactionResult;
-  try {
-    transactionResult = await sql.transaction((txn) => [txn`
+  return txn`
       WITH target AS MATERIALIZED (
         SELECT sv.id AS version_id, sv.schedule_id, sv.status,
                s.organization_id, s.area_id
@@ -708,7 +700,25 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
         (SELECT schedule_id FROM created LIMIT 1) AS schedule_id,
         (SELECT version_number FROM created LIMIT 1) AS version_number,
         (SELECT COUNT(*)::integer FROM copied) AS copied_assignment_count
-    `]);
+    `;
+}
+
+/** Creates an independent DRAFT from a published or terminal version. */
+export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  }
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
+  const newVersionId = randomUUID();
+  const isAreaScoped = scope.type === 'AREA';
+  const scopedAreaId = isAreaScoped ? scope.areaId : null;
+
+  let transactionResult;
+  try {
+    transactionResult = await sql.transaction((txn) => [createNewDraftFromVersionTx(
+      txn, ctx, scheduleId, versionId, newVersionId, isAreaScoped, scopedAreaId,
+    )]);
   } catch (error) {
     if (error?.code === '23505') {
       const conflict = new HttpError(409, 'A draft already exists for this schedule');
@@ -756,13 +766,12 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
  * the database either returns a published result with every insert, or makes
  * no write at all.
  */
-export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
+export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
   requireRole(ctx, 'PLANNER');
   if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
     throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
   }
-
-  const transactionResult = await sql.transaction((txn) => [txn`
+  return txn`
     WITH target AS MATERIALIZED (
       SELECT sv.id AS version_id, sv.schedule_id, sv.status,
              s.organization_id, s.area_id
@@ -867,6 +876,19 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
       FROM active_assignments a
       JOIN target t ON TRUE
       JOIN updated u ON u.id = t.version_id
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM shifts existing
+        WHERE existing.organization_id = t.organization_id
+          AND existing.employee_id = a.employee_id
+          AND existing.date = a.date
+          AND existing.start_time IS NOT DISTINCT FROM TO_CHAR(a.start_time, 'HH24:MI')
+          AND existing.end_time IS NOT DISTINCT FROM TO_CHAR(a.end_time, 'HH24:MI')
+          AND lower(btrim(COALESCE(existing.shift_type, ''))) = lower(btrim(COALESCE(a.shift_type, '')))
+          AND existing.counts_as_work IS NOT DISTINCT FROM a.counts_as_work
+          AND existing.location IS NOT DISTINCT FROM COALESCE(a.location, '')
+          AND existing.area_id IS NOT DISTINCT FROM t.area_id
+      )
       RETURNING id
     )
     SELECT
@@ -881,7 +903,24 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
       excluded.excluded_assignments
     FROM validation
     CROSS JOIN excluded
-  `]);
+  `;
+}
+
+export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  }
+
+  const scope = await resolveEffectiveAccessScope(sql, ctx);
+  const scheduleRows = await sql`
+    SELECT area_id FROM schedules
+    WHERE id = ${scheduleId} AND organization_id = ${ctx.organizationId}
+  `;
+  if (scheduleRows.length === 0) throw new HttpError(404, 'Schedule version not found');
+  if (scope.type === 'AREA' && scheduleRows[0].area_id !== scope.areaId) throw scheduleScopeError();
+
+  const transactionResult = await sql.transaction((txn) => [publishScheduleVersionTx(txn, ctx, scheduleId, versionId)]);
 
   const outcome = transactionResult?.[0]?.[0];
   if (!outcome?.found) {

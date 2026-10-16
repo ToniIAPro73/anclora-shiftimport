@@ -16,8 +16,15 @@ export interface ImportOutcomeReport {
 export interface TemporalImportReport {
   status: 'COMPLETED';
   historical: { submittedCount: number; persistedCount: number; existingCount: number };
-  future: { submittedCount: number; createdAssignmentCount: number; existingAssignmentCount: number; draftCount: number };
-  firstDraftPeriodStart?: string;
+  future: {
+    submittedCount: number;
+    createdAssignmentCount: number;
+    existingAssignmentCount: number;
+    affectedWeekCount: number;
+    publishedWeekCount: number;
+    publishedShiftCount: number;
+    publicationResults: Array<{ periodStart: string; status: string; createdShiftCount: number }>;
+  };
 }
 
 interface ImportResultModalProps {
@@ -26,7 +33,6 @@ interface ImportResultModalProps {
   report: ReconciliationReport | ImportOutcomeReport | TemporalImportReport;
   onCompleteEmployee?: (employeeId: string) => void;
   onRetry?: () => void;
-  onViewPlanning?: () => void;
 }
 
 /**
@@ -35,7 +41,7 @@ interface ImportResultModalProps {
  * confirmation; a FAIL shows exactly which dates/shifts didn't make it,
  * instead of a generic "something went wrong" alert.
  */
-export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee, onRetry, onViewPlanning }: ImportResultModalProps) => {
+export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee, onRetry }: ImportResultModalProps) => {
   const { t } = useI18n();
   if (!isOpen) {
     return null;
@@ -51,18 +57,24 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
             {t('importResult.temporalCounts', {
               historical: report.historical.persistedCount,
               historicalExisting: report.historical.existingCount,
-              future: report.future.createdAssignmentCount,
-              drafts: report.future.draftCount,
+              future: report.future.publishedShiftCount,
+              weeks: report.future.publishedWeekCount,
             })}
           </p>
+          {report.future.publicationResults.length > 0 ? (
+            <ul style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
+              {report.future.publicationResults.map((publication) => (
+                <li key={publication.periodStart}>
+                  {t('importResult.publishedWeek', { periodStart: publication.periodStart })}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
             {t('importResult.temporalNotPublished')}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-          {report.future.draftCount > 0 && onViewPlanning ? (
-            <button className="btn-gold" type="button" onClick={onViewPlanning}>{t('importResult.viewPlanning')}</button>
-          ) : null}
           <button className="btn-outline" type="button" onClick={onClose}>{t('importResult.close')}</button>
         </div>
       </ModalShell>

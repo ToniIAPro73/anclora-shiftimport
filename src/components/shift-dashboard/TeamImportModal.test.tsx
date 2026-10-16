@@ -117,16 +117,10 @@ const futureImportResult = (createdAssignmentCount: number, existingAssignmentCo
     submittedCount: 14,
     createdAssignmentCount,
     existingAssignmentCount,
-    draftCount: 1,
-    createdDraftCount: createdAssignmentCount > 0 ? 1 : 0,
-    drafts: [{
-      scheduleId: 'schedule-future',
-      scheduleVersionId: 'version-future',
-      versionNumber: 1,
-      periodStart: '2099-03-01',
-      periodEnd: '2099-03-07',
-      areaId: null,
-    }],
+    affectedWeekCount: 1,
+    publishedWeekCount: 1,
+    publishedShiftCount: createdAssignmentCount,
+    publicationResults: [{ periodStart: '2099-03-01', status: 'PUBLISHED', createdShiftCount: createdAssignmentCount }],
   },
   import: { id: 'import-future', fileName: 'futuro.csv', sourceFormat: 'csv', periodYear: 2099, periodMonth: 2, status: 'completed' },
 });
@@ -155,7 +149,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
 
     const historicalOnly = screen.getByRole('radio', { name: /Importar solo los turnos históricos/ });
-    const draft = screen.getByRole('radio', { name: /Importar históricos y añadir los futuros/ });
+    const draft = screen.getByRole('radio', { name: /Importar históricos y publicar los turnos futuros/ });
     fireEvent.click(historicalOnly);
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
     await waitFor(() => expect(screen.getByText(/No hay turnos históricos que importar/)).toBeTruthy());
@@ -165,7 +159,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     expect(screen.queryByText(/No hay turnos históricos que importar/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
     await waitFor(() => expect(mockedConfirmRemoteFutureImport).toHaveBeenCalledTimes(1));
-    expect(mockedConfirmRemoteFutureImport.mock.calls[0][0]).toMatchObject({ futureConsent: 'draft', shifts: expect.any(Array) });
+    expect(mockedConfirmRemoteFutureImport.mock.calls[0][0]).toMatchObject({ futureConsent: 'publish', shifts: expect.any(Array) });
     expect(screen.queryByText('Importación completada')).toBeNull();
     expect(screen.getByText('No se pudieron guardar los turnos importados en la base de datos. Inténtalo de nuevo.')).toBeTruthy();
     expect(onImported).not.toHaveBeenCalled();

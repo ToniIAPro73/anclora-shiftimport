@@ -1349,7 +1349,7 @@ function App() {
       return false;
     }
 
-    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision === 'draft'
+    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision === 'publish'
       ? schedulingIncoming
       : [];
     const historicalUpserts = upserts;
@@ -1452,7 +1452,7 @@ function App() {
             importMode: 'individual',
             periodKind: targetPeriod.kind,
             periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
-            futureConsent: 'draft',
+            futureConsent: 'publish',
             weekStart: getPlannerWeekStartPreference(),
           });
           const persisted = historicalUpserts.length > 0
@@ -1483,9 +1483,11 @@ function App() {
               submittedCount: futureUpserts.length,
               createdAssignmentCount: futureResult.future.createdAssignmentCount,
               existingAssignmentCount: futureResult.future.existingAssignmentCount,
-              draftCount: futureResult.future.draftCount,
+              affectedWeekCount: futureResult.future.affectedWeekCount,
+              publishedWeekCount: futureResult.future.publishedWeekCount,
+              publishedShiftCount: futureResult.future.publishedShiftCount,
+              publicationResults: futureResult.future.publicationResults,
             },
-            firstDraftPeriodStart: futureResult.future.drafts[0]?.periodStart,
           });
           if (targetEmployeeId !== selectedEmployeeId) {
             setSelectedEmployeeId(targetEmployeeId);
@@ -1834,14 +1836,6 @@ function App() {
   const plannerInitialDate = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('date') ?? undefined
     : undefined;
-  const importPlanningTarget = importResult?.status === 'COMPLETED'
-    ? importResult.firstDraftPeriodStart
-    : undefined;
-  const openImportPlanning = () => {
-    if (!importPlanningTarget) return;
-    setImportResult(null);
-    navigate('/app/schedule', `date=${encodeURIComponent(importPlanningTarget)}`);
-  };
 
   const contextContent = session && !needsOrgChoice && !accountIncomplete ? (
     <div className="team-bar" data-testid="app-shell-context">
@@ -2366,7 +2360,6 @@ function App() {
             setEquipoRecoveryResult(null);
           }}
           report={importResult}
-          onViewPlanning={importPlanningTarget ? openImportPlanning : undefined}
           onCompleteEmployee={(employeeId) => {
             if (importResult && 'status' in importResult && importResult.status !== 'PASS' && importResult.status !== 'FAIL') {
               setEquipoRecoveryResult(importResult as ImportOutcomeReport);

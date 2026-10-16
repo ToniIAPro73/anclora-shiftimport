@@ -460,7 +460,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     const historicalCount = split.historical.length;
     const futureCount = split.future.length;
 
-    const canImportFuture = !identityLocked && futureImportDecision === 'draft';
+    const canImportFuture = !identityLocked && futureImportDecision === 'publish';
     const effectiveFuture = canImportFuture ? futureCount : 0;
 
     return historicalCount + effectiveFuture;
@@ -1847,12 +1847,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
                 {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
                 {temporalSummary.historical > 0 && <span data-testid="import-historical-count">{t('importModal.temporalHistorical', { count: temporalSummary.historical })}</span>}
-                {effectiveTemporalSummary.includedAsDraft > 0 && (
+                {effectiveTemporalSummary.includedForPublication > 0 && (
                   <span data-testid="import-future-count">
-                    {t('importModal.temporalFutureDraft', { count: effectiveTemporalSummary.includedAsDraft })}
+                    {t('importModal.temporalFutureDraft', { count: effectiveTemporalSummary.includedForPublication })}
                   </span>
                 )}
-                {effectiveTemporalSummary.includedAsDraft === 0 && effectiveTemporalSummary.excludedByRole > 0 && (
+                {effectiveTemporalSummary.includedForPublication === 0 && effectiveTemporalSummary.excludedByRole > 0 && (
                   <span data-testid="import-future-count">
                     {t('importModal.temporalFutureExcluded', { count: effectiveTemporalSummary.excludedByRole })}
                   </span>

@@ -193,21 +193,15 @@ export interface FutureImportResult {
     submittedCount: number;
     createdAssignmentCount: number;
     existingAssignmentCount: number;
-    draftCount: number;
-    createdDraftCount: number;
-    drafts: Array<{
-      scheduleId: string;
-      scheduleVersionId: string;
-      versionNumber: number;
-      periodStart: string;
-      periodEnd: string;
-      areaId: string | null;
-    }>;
+    affectedWeekCount: number;
+    publishedWeekCount: number;
+    publishedShiftCount: number;
+    publicationResults: Array<{ periodStart: string; status: 'PUBLISHED'; createdShiftCount: number }>;
   };
   import: RemoteImport;
 }
 
-export type FutureImportConsent = 'draft';
+export type FutureImportConsent = 'publish';
 
 export interface NewScheduleDraftResult {
   newVersionId: string;

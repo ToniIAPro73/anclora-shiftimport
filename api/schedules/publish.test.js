@@ -10,17 +10,23 @@ const ASSIGNMENT = '55555555-5555-4555-8555-555555555555';
 const ctx = {
   organizationId: ORG,
   role: 'PLANNER',
+  plannerScopeType: 'ORGANIZATION',
   scopedAreaId: null,
   user: { id: ACTOR },
 };
 
 function makeSql(outcome, { fail = false, failNotification = false } = {}) {
   const calls = [];
-  const sql = () => {
+  const transactionQueries = [];
+  const sql = (strings) => {
+    if (strings?.join(' ').includes('SELECT area_id FROM schedules')) return Promise.resolve([{ area_id: null }]);
     calls.push('notification');
     return failNotification ? Promise.reject(new Error('simulated notification failure')) : Promise.resolve([]);
   };
-  const txn = () => Promise.resolve([]);
+  const txn = (strings) => {
+    transactionQueries.push(strings.join(' '));
+    return Promise.resolve([]);
+  };
   sql.transaction = vi.fn(async (build) => {
     const queries = build(txn);
     expect(queries).toHaveLength(1);
@@ -28,6 +34,7 @@ function makeSql(outcome, { fail = false, failNotification = false } = {}) {
     return [[outcome]];
   });
   sql.calls = calls;
+  sql.transactionQueries = transactionQueries;
   return sql;
 }
 
@@ -55,6 +62,8 @@ describe('publishScheduleVersion', () => {
       excludedAssignmentCount: 1,
     });
     expect(sql.transaction).toHaveBeenCalledTimes(1);
+    expect(sql.transactionQueries[0]).toContain('FROM shifts existing');
+    expect(sql.transactionQueries[0]).toContain('existing.area_id IS NOT DISTINCT FROM t.area_id');
   });
 
   it('maps a revalidation overlap to a 422 without leaving the transaction', async () => {

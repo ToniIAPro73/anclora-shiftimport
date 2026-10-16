@@ -77,7 +77,7 @@ async function confirm(request: APIRequestContext, shifts: unknown[], fingerprin
       periodMonth: 9,
       periodKind: 'multi',
       periodLabel: 'M14 E2E',
-      futureConsent: 'draft',
+      futureConsent: 'publish',
       areaId: fixture.areaA,
       ...extra,
     },
@@ -85,7 +85,7 @@ async function confirm(request: APIRequestContext, shifts: unknown[], fingerprin
 }
 
 test.describe('R3-M14 future import integration', () => {
-  test('A/B/D/F/G/L: historical compatibility, future/mixed atomicity, multiweek drafts, idempotency and provenance', async ({ page }) => {
+  test('A/B/D/F/G/L: historical compatibility, future/mixed atomicity, multiweek auto-publication, idempotency and provenance', async ({ page }) => {
     await login(page.request, fixture.emails.planner, fixture.orgA);
 
     const missingConsent = await confirm(page.request, [shift(futureDate(19))], '6'.repeat(64), fixture.empA1, { futureConsent: undefined });
@@ -99,44 +99,28 @@ test.describe('R3-M14 future import integration', () => {
     expect(futureBody.classification).toBe('FUTURE');
     expect(futureBody.future.submittedCount).toBe(14);
     expect(futureBody.future.createdAssignmentCount).toBe(14);
-    expect(futureBody.future.draftCount).toBeGreaterThanOrEqual(1);
-    expect(futureBody.future.drafts.every((draft: { areaId: string }) => draft.areaId === fixture.areaA)).toBe(true);
-
-    const draftSnapshots = await Promise.all(futureBody.future.drafts.map(async (draft: { scheduleId: string; scheduleVersionId: string }) => (
-      page.request.get(`/api/schedules/${draft.scheduleId}/versions/${draft.scheduleVersionId}`, {
-        headers: { 'x-organization-id': fixture.orgA },
-      }).then((response) => response.json())
-    )));
-    expect(draftSnapshots.flatMap((snapshot) => snapshot.assignments)).toHaveLength(14);
-    expect(draftSnapshots.flatMap((snapshot) => snapshot.assignments)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ employeeId: fixture.empA1, importId: futureBody.importId }),
-    ]));
+    expect(futureBody.future.affectedWeekCount).toBeGreaterThanOrEqual(1);
+    expect(futureBody.future.publishedWeekCount).toBe(futureBody.future.affectedWeekCount);
+    expect(futureBody.future.publicationResults.every((week: { status: string }) => week.status === 'PUBLISHED')).toBe(true);
+    const calendarAfterPublish = await page.request.get(`/api/shifts?employeeId=${fixture.empA1}`, { headers: { 'x-organization-id': fixture.orgA } });
+    const materialized = (await calendarAfterPublish.json()).shifts.filter((item: { date: string; origin: string; scheduleVersionId?: string }) => (
+      fourteenFutureShifts.some((source) => source.date === String(item.date).slice(0, 10)) && item.origin === 'schedule' && Boolean(item.scheduleVersionId)
+    ));
+    expect(materialized).toHaveLength(14);
 
     const repeatFutureResponse = await confirm(page.request, fourteenFutureShifts, futureFingerprint);
     expect(repeatFutureResponse.status()).toBe(200);
     const repeatFutureBody = await repeatFutureResponse.json();
     expect(repeatFutureBody.future.createdAssignmentCount).toBe(0);
     expect(repeatFutureBody.future.existingAssignmentCount).toBe(14);
+    expect(repeatFutureBody.future.publishedWeekCount).toBe(futureBody.future.publishedWeekCount);
 
     const semanticResponse = await confirm(page.request, fourteenFutureShiftsWithNonWorking, '9'.repeat(64));
     expect(semanticResponse.status()).toBe(201);
     const semanticBody = await semanticResponse.json();
     expect(semanticBody.future.createdAssignmentCount).toBe(14);
-    const semanticDraftSnapshots = await Promise.all(semanticBody.future.drafts.map(async (draft: { scheduleId: string; scheduleVersionId: string }) => (
-      page.request.get(`/api/schedules/${draft.scheduleId}/versions/${draft.scheduleVersionId}`, {
-        headers: { 'x-organization-id': fixture.orgA },
-      }).then((response) => response.json())
-    )));
-    const semanticAssignments = semanticDraftSnapshots
-      .flatMap((snapshot) => snapshot.assignments)
-      .filter((assignment: { importId: string }) => assignment.importId === semanticBody.importId);
-    expect(semanticAssignments).toHaveLength(14);
-    expect(semanticAssignments.filter((assignment: { shiftType: string }) => assignment.shiftType === 'Libre')).toHaveLength(2);
-    expect(semanticAssignments.filter((assignment: { shiftType: string }) => assignment.shiftType === 'Vacaciones')).toHaveLength(2);
-    expect(semanticAssignments
-      .filter((assignment: { shiftType: string }) => ['Libre', 'Vacaciones'].includes(assignment.shiftType))
-      .every((assignment: { startTime: string | null; endTime: string | null }) => assignment.startTime === null && assignment.endTime === null))
-      .toBe(true);
+    expect(semanticBody.future.publishedShiftCount).toBe(14);
+    expect(semanticBody.future.publishedWeekCount).toBeGreaterThanOrEqual(1);
 
     const mixedFingerprint = 'b'.repeat(64);
     const mixedResponse = await confirm(page.request, [shift(pastDate()), shift(today), shift(futureDate(21))], mixedFingerprint);
@@ -152,7 +136,7 @@ test.describe('R3-M14 future import integration', () => {
     const multiweekResponse = await confirm(page.request, multiweekShifts, multiweekFingerprint);
     expect(multiweekResponse.status()).toBe(201);
     const multiweekBody = await multiweekResponse.json();
-    expect(multiweekBody.future.draftCount).toBe(2);
+    expect(multiweekBody.future.publishedWeekCount).toBe(2);
     expect(multiweekBody.future.createdAssignmentCount).toBe(2);
 
     const repeatResponse = await confirm(page.request, multiweekShifts, multiweekFingerprint);

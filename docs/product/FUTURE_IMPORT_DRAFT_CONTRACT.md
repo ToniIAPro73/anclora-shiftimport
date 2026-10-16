@@ -1,64 +1,35 @@
-# Future Import to Draft Scheduling Contract
+# Future Import and Automatic Publication Contract
 
-**Estado**: implementado en P5.5 · 2026-09-06
+**Estado**: vigente; supersede parcialmente la decisión P5.5 · 2026-10-15
 
-Este contrato separa el histórico operativo de la planificación futura. No introduce un modelo
-paralelo: utiliza `Shift` para histórico y `Schedule` → `ScheduleVersion` → `ShiftAssignment` para
-hoy/futuro.
+Este contrato separa el histórico operativo de la planificación futura y conserva el dominio
+canónico `Shift` → `Schedule` → `ScheduleVersion` → `ShiftAssignment`.
 
-## Frontera temporal
+## Frontera temporal y consentimiento
 
-La fecha operativa se calcula con el helper canónico de producto (`Europe/Madrid`):
+La fecha operativa se calcula con el helper canónico (`Europe/Madrid`): `date < today` es histórico
+y se persiste como `Shift`; `date >= today` es futuro. OWNER, ADMIN y PLANNER deben elegir entre
+importar solo históricos o importar históricos y publicar futuros. La segunda opción envía
+`futureConsent: "publish"`. Cerrar el flujo cancela sin escrituras. EMPLOYEE conserva SELF histórico
+y no puede crear planificación futura.
 
-- `date < today` → `HISTORICAL`; se persiste como `Shift`.
-- `date >= today` → `FUTURE_DRAFT`; se persiste como assignment dentro de una versión `DRAFT`.
+## Scheduling y publicación
 
-La frontera es la misma en frontend y backend. Un `Shift` histórico nunca representa una fila de
-hoy o futura proveniente de este flujo.
+El backend valida tenant, rol, scope de todas las áreas/empleados afectados y estado activo del
+empleado. Agrupa por semana y área. Reutiliza un DRAFT solo si no contiene assignments de otro
+import; el trabajo compartido provoca un conflicto explícito. Nunca modifica versiones PUBLISHED.
+La publicación usa el mismo CTE canónico que Planning y toda la operación es una transacción: una
+validación fallida en cualquier semana revierte import, historial, assignments y publicaciones.
+Los shifts aparecen en Calendario tras materializarse. El inicio de semana respeta la preferencia
+`monday`/`sunday`.
 
-## Aplicación independiente del formato
+## Resultado e idempotencia
 
-Una vez normalizado, todo registro fechado entra en este mismo flujo temporal, sin excepción por
-formato de origen. Esto incluye los adaptadores actualmente soportados para PDF, imagen, CSV y
-XLSX, y los formatos JSON/XML del flujo de equipo. El adaptador solo parsea y normaliza; no decide
-si una fila futura se excluye o se envía a borrador. La decisión compartida se presenta mediante
-el componente `FutureImportConsent`.
+El resultado informa shifts históricos persistidos/existentes, assignments futuros nuevos/existentes
+y semanas publicadas. Repetir el mismo archivo/contexto devuelve el resultado previo sin insertar
+assignments ni materializar shifts adicionales. EMPLOYEE y la modalidad guest/local-first no reciben
+auto-publicación.
 
-## Consentimiento
-
-Si el análisis contiene filas de hoy/futuras, OWNER, ADMIN y PLANNER deben elegir por importación:
-
-1. importar solo históricos; o
-2. importar históricos y añadir hoy/futuro a planificación en borrador.
-
-La opción segura por defecto es no confirmar la creación del borrador. Cerrar el flujo cancela sin
-escrituras. El backend exige `futureConsent: "draft"` para cualquier solicitud que contenga filas
-de hoy/futuras; la UI no es la autoridad de seguridad.
-
-EMPLOYEE conserva SELF import histórico y excluye hoy/futuro sin crear `ScheduleVersion` ni
-`ShiftAssignment`.
-
-Mientras una acción de importación está en curso, su control queda deshabilitado, anuncia el texto
-localizado de progreso y usa el cursor de espera hasta recibir el resultado.
-
-## Scheduling
-
-- Cada semana y área resuelve un `Schedule` único y reutiliza su `DRAFT` editable.
-- Si solo existe una versión publicada, nunca se modifica directamente; la resolución sigue el
-  mecanismo canónico de nueva versión editable.
-- El import no publica automáticamente.
-- La preferencia de inicio de semana (`monday`/`sunday`) se transmite como preferencia de agrupación;
-  el backend sigue validando organización, scope, Employee activo y estado `DRAFT`.
-
-## Resultado
-
-El resultado distingue históricos persistidos/existentes, assignments futuros creados/existentes,
-semanas afectadas y el enlace `Ver planificación`. El calendario operativo solo muestra turnos
-publicados; Planner muestra los borradores importados.
-
-## Seguridad e idempotencia
-
-El endpoint `/api/imports/confirm-split` resuelve autenticación, tenant, rol, scope y Employee
-activo en backend. EMPLOYEE no puede usarlo para futuro. Las claves existentes de importación y la
-deduplicación semántica de assignments se conservan; reimportar no duplica históricos, drafts ni
-assignments.
+La decisión P5.5 `Import ≠ Publish` se conserva en el historial y sigue aplicando al resto de flujos.
+Queda supersedida solo para Safe Import remoto, con rol efectivo OWNER/ADMIN/PLANNER, scope válido y
+consentimiento explícito `publish`.

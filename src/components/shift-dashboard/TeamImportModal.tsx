@@ -710,7 +710,7 @@ export const TeamImportModal = ({
     const temporalCounts = splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts), cutoff);
     const hasFutureData = temporalCounts.future.length > 0;
     const submitted = preview.flatMap((entry) => entry.newShifts
-      .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'draft', cutoff))
+      .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'publish', cutoff))
       .map((shift) => ({
         ...shift,
         employeeId: entry.row.resolvedEmployeeId as string,
@@ -720,7 +720,7 @@ export const TeamImportModal = ({
       setError(t('importModal.noHistoricalRows'));
       return;
     }
-    if (hasFutureData && futureImportDecision === 'draft') {
+    if (hasFutureData && futureImportDecision === 'publish') {
       // A team file containing any future row is one atomic import. The
       // backend classifies every row and rejects the whole request when the
       // effective planning capability/scope is insufficient.
@@ -745,7 +745,7 @@ export const TeamImportModal = ({
         periodLabel: periodKeys.size > 1
           ? t('importModal.multiPeriod')
           : `${monthNames[firstPeriod.month] ?? firstPeriod.month} ${firstPeriod.year}`,
-        futureConsent: 'draft',
+        futureConsent: 'publish',
         weekStart: getPlannerWeekStartPreference(),
       });
       const submittedFutureCount = submitted.filter((shift) => shift.date >= cutoff).length;
