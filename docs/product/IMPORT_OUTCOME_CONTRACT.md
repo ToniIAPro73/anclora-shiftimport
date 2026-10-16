@@ -50,6 +50,14 @@ organization + employee + file fingerprint + context fingerprint
 Blocked and failed attempts are recorded for traceability but do **not** consume
 that key. A later retry with the same file and context can therefore complete.
 
+### Effect idempotency (company plan)
+
+The file key above deduplicates the *file*, not the *effect*. A future/mixed import records its decision
+(`import_decision`), `temporal_class`, `document_class`, `document_fingerprint`, `plan_fingerprint` and, when
+nothing needed doing, `duplicate_kind` (`DUPLICATE_FILE` is reported in the response only):
+`DUPLICATE_DOCUMENT` / `DUPLICATE_PLAN` rows create no plan revision. Re-importing the same file with a
+different decision applies what is still pending. See `FUTURE_IMPORT_DRAFT_CONTRACT.md`.
+
 ## User-facing minimum
 
 Every non-success outcome states:

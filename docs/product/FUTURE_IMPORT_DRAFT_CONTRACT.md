@@ -1,35 +1,59 @@
-# Future Import and Automatic Publication Contract
+# Future Import and Company Plan Contract
 
-**Estado**: vigente; supersede parcialmente la decisión P5.5 · 2026-10-15
+**Estado**: vigente; 2026-10-16. Supersede la decisión «auto-publicación» del 2026-10-15: importar
+**crea o actualiza la planificación (borradores); nunca publica**.
 
-Este contrato separa el histórico operativo de la planificación futura y conserva el dominio
-canónico `Shift` → `Schedule` → `ScheduleVersion` → `ShiftAssignment`.
+Dominio canónico: `Shift` → `Schedule` → `ScheduleVersion` → `ShiftAssignment`, más el **Plan Empresa**
+versionado (`company_plan_revisions`). Capas: Plan Empresa → Cambios/incidencias → Calendario efectivo →
+Estadísticas → Auditoría.
 
-## Frontera temporal y consentimiento
+## Clasificación (después del parse, independiente del formato)
 
-La fecha operativa se calcula con el helper canónico (`Europe/Madrid`): `date < today` es histórico
-y se persiste como `Shift`; `date >= today` es futuro. OWNER, ADMIN y PLANNER deben elegir entre
-importar solo históricos o importar históricos y publicar futuros. La segunda opción envía
-`futureConsent: "publish"`. Cerrar el flujo cancela sin escrituras. EMPLOYEE conserva SELF histórico
-y no puede crear planificación futura.
+- Temporal: `HISTORICAL | FUTURE | MIXED` con el helper canónico `getOperationalDate()` (`date < today` es
+  histórico). Lógica compartida: `src/lib/company-plan.js`.
+- Documento (propuesta con evidencia, corregible por rol autorizado cuando es ambigua):
+  `COMPANY_PLAN | COMPANY_PLAN_UPDATE | HISTORICAL_CALENDAR | UNDETERMINED`.
 
-## Scheduling y publicación
+## Decisión del usuario y roles
 
-El backend valida tenant, rol, scope de todas las áreas/empleados afectados y estado activo del
-empleado. Agrupa por semana y área. Reutiliza un DRAFT solo si no contiene assignments de otro
-import; el trabajo compartido provoca un conflicto explícito. Nunca modifica versiones PUBLISHED.
-La publicación usa el mismo CTE canónico que Planning y toda la operación es una transacción: una
-validación fallida en cualquier semana revierte import, historial, assignments y publicaciones.
-Los shifts aparecen en Calendario tras materializarse. El inicio de semana respeta la preferencia
-`monday`/`sunday`.
+- Valores: `historical-only` (por defecto, seguro) y `historical-and-plan`. El valor legado `publish`
+  se acepta en el cable como `historical-and-plan`; **nunca significó** «publicar automáticamente».
+- OWNER/ADMIN/PLANNER (scope efectivo) deciden sobre las filas futuras. En `MIXED` eligen entre solo
+  históricos o históricos + planificación; en `FUTURE` solo pueden crear/actualizar la planificación.
+- EMPLOYEE: sin opción de planificación (validado en servidor). En `MIXED` solo importa su histórico
+  autorizado y se le informa de las filas futuras excluidas; en `FUTURE` no se escribe nada.
+- `POST /api/imports/plan-preview` (solo lectura, mismo permiso) devuelve clasificación y reconciliación
+  contra el Plan Empresa sin escribir.
 
-## Resultado e idempotencia
+## Plan Empresa versionado
 
-El resultado informa shifts históricos persistidos/existentes, assignments futuros nuevos/existentes
-y semanas publicadas. Repetir el mismo archivo/contexto devuelve el resultado previo sin insertar
-assignments ni materializar shifts adicionales. EMPLOYEE y la modalidad guest/local-first no reciben
-auto-publicación.
+- Cada importación que cambia el plan crea la revisión `N+1` (`company_plan_revisions`: documento, fecha,
+  autor, cobertura, filas normalizadas por clave de negocio, resumen de cambios). Las revisiones
+  anteriores **nunca** se reescriben ni se borran.
+- Baseline `B` de una fecha = la revisión más nueva que cubre ese empleado/día.
+- `UNIQUE(org, scope, revision_number)`: dos confirmaciones concurrentes desde el mismo baseline no pueden
+  crear dos revisiones; la perdedora reevalúa y queda como duplicado.
 
-La decisión P5.5 `Import ≠ Publish` se conserva en el historial y sigue aplicando al resto de flujos.
-Queda supersedida solo para Safe Import remoto, con rol efectivo OWNER/ADMIN/PLANNER, scope válido y
-consentimiento explícito `publish`.
+## Reconciliación a tres bandas (empleado + fecha)
+
+`B` baseline anterior · `N` plan nuevo · `E` calendario efectivo (borrador del planner o turnos efectivos).
+`B=N,E=B` sin cambios · `B=N,E≠B` se conserva el cambio local · `B≠N,E=B` (futuro) se actualiza el plan ·
+`B≠N,E=N` la empresa adoptó el cambio local (auto-resuelto) · `B≠N,E≠B,E≠N` discrepancia →
+`REQUIRES_REVIEW` · cambio retrospectivo que contradice el histórico efectivo → `REQUIRES_REVIEW`.
+Primera importación (sin `B`): día igual a `E` = sin cambios; distinto = revisión. Un día ya pendiente de
+reconciliación no se resuelve por importación. Cada día se evalúa de forma independiente: una discrepancia
+no bloquea el resto del documento. La comparación ignora el reparto Regular/Extras (unión de intervalos).
+
+## Planificación (borradores) e idempotencia del EFECTO
+
+El backend valida tenant, rol y scope, agrupa por semana/área y crea/actualiza el `DRAFT` (un borrador
+existente se actualiza in situ; el plan anterior queda en su revisión). Nunca modifica versiones
+`PUBLISHED`, nunca publica y no envía notificaciones de publicación. Todo es una transacción.
+
+Fingerprints (ninguno depende de UUIDs de tenant): **FILE** (bytes), **DOCUMENT** (parse normalizado +
+contexto), **PLAN** (contenido de negocio por `external_employee_id`). Resultado: `DUPLICATE_FILE`
+(mismo fichero con el plan ya aplicado), `DUPLICATE_DOCUMENT` (bytes distintos, documento equivalente),
+`DUPLICATE_PLAN` (plan semánticamente igual) → sin nueva revisión. Reimportar el mismo fichero con otra
+decisión **no** queda bloqueado: se procesa lo pendiente.
+
+La decisión P5.5 `Import ≠ Publish` se restablece sin excepciones.

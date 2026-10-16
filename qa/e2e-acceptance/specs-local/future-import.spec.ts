@@ -77,7 +77,7 @@ async function confirm(request: APIRequestContext, shifts: unknown[], fingerprin
       periodMonth: 9,
       periodKind: 'multi',
       periodLabel: 'M14 E2E',
-      futureConsent: 'publish',
+      futureConsent: 'historical-and-plan',
       areaId: fixture.areaA,
       ...extra,
     },
@@ -85,7 +85,7 @@ async function confirm(request: APIRequestContext, shifts: unknown[], fingerprin
 }
 
 test.describe('R3-M14 future import integration', () => {
-  test('A/B/D/F/G/L: historical compatibility, future/mixed atomicity, multiweek auto-publication, idempotency and provenance', async ({ page }) => {
+  test('A/B/D/F/G/L: historical compatibility, future/mixed atomicity, multiweek draft planning (never auto-published), idempotency and provenance', async ({ page }) => {
     await login(page.request, fixture.emails.planner, fixture.orgA);
 
     const missingConsent = await confirm(page.request, [shift(futureDate(19))], '6'.repeat(64), fixture.empA1, { futureConsent: undefined });
@@ -100,27 +100,29 @@ test.describe('R3-M14 future import integration', () => {
     expect(futureBody.future.submittedCount).toBe(14);
     expect(futureBody.future.createdAssignmentCount).toBe(14);
     expect(futureBody.future.affectedWeekCount).toBeGreaterThanOrEqual(1);
-    expect(futureBody.future.publishedWeekCount).toBe(futureBody.future.affectedWeekCount);
-    expect(futureBody.future.publicationResults.every((week: { status: string }) => week.status === 'PUBLISHED')).toBe(true);
+    // Importing creates the PLAN (drafts); publication is a separate explicit Scheduling action.
+    expect(futureBody.future.publishedWeekCount).toBe(0);
+    expect(futureBody.future.draftWeekCount).toBe(futureBody.future.affectedWeekCount);
+    expect(futureBody.plan.autoPublished).toBe(false);
     const calendarAfterPublish = await page.request.get(`/api/shifts?employeeId=${fixture.empA1}`, { headers: { 'x-organization-id': fixture.orgA } });
     const materialized = (await calendarAfterPublish.json()).shifts.filter((item: { date: string; origin: string; scheduleVersionId?: string }) => (
       fourteenFutureShifts.some((source) => source.date === String(item.date).slice(0, 10)) && item.origin === 'schedule' && Boolean(item.scheduleVersionId)
     ));
-    expect(materialized).toHaveLength(14);
+    expect(materialized).toHaveLength(0); // drafts are not materialised into the calendar until published
 
     const repeatFutureResponse = await confirm(page.request, fourteenFutureShifts, futureFingerprint);
     expect(repeatFutureResponse.status()).toBe(200);
     const repeatFutureBody = await repeatFutureResponse.json();
     expect(repeatFutureBody.future.createdAssignmentCount).toBe(0);
     expect(repeatFutureBody.future.existingAssignmentCount).toBe(14);
-    expect(repeatFutureBody.future.publishedWeekCount).toBe(futureBody.future.publishedWeekCount);
+    expect(repeatFutureBody.duplicate).toBe('DUPLICATE_FILE');
 
     const semanticResponse = await confirm(page.request, fourteenFutureShiftsWithNonWorking, '9'.repeat(64));
     expect(semanticResponse.status()).toBe(201);
     const semanticBody = await semanticResponse.json();
     expect(semanticBody.future.createdAssignmentCount).toBe(14);
-    expect(semanticBody.future.publishedShiftCount).toBe(14);
-    expect(semanticBody.future.publishedWeekCount).toBeGreaterThanOrEqual(1);
+    expect(semanticBody.future.publishedShiftCount).toBe(0);
+    expect(semanticBody.future.draftWeekCount).toBeGreaterThanOrEqual(1);
 
     const mixedFingerprint = 'b'.repeat(64);
     const mixedResponse = await confirm(page.request, [shift(pastDate()), shift(today), shift(futureDate(21))], mixedFingerprint);
@@ -136,7 +138,8 @@ test.describe('R3-M14 future import integration', () => {
     const multiweekResponse = await confirm(page.request, multiweekShifts, multiweekFingerprint);
     expect(multiweekResponse.status()).toBe(201);
     const multiweekBody = await multiweekResponse.json();
-    expect(multiweekBody.future.publishedWeekCount).toBe(2);
+    expect(multiweekBody.future.publishedWeekCount).toBe(0);
+    expect(multiweekBody.future.draftWeekCount).toBe(2);
     expect(multiweekBody.future.createdAssignmentCount).toBe(2);
 
     const repeatResponse = await confirm(page.request, multiweekShifts, multiweekFingerprint);

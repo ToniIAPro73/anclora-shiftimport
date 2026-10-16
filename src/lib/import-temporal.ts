@@ -4,7 +4,11 @@ import { getOperationalDate } from './operational-date';
  * The temporal decision is applied after every source adapter has produced
  * normalized records. It deliberately knows nothing about file formats.
  */
-export type FutureImportDecision = 'publish' | 'historical-only';
+/**
+ * `historical-and-plan` = also CREATE / UPDATE the planning (schedule drafts) from the future rows.
+ * It never means "publish": publication is a separate, explicit Scheduling action.
+ */
+export type FutureImportDecision = 'historical-only' | 'historical-and-plan';
 
 export interface TemporalImportSplit<T> {
   historical: T[];
@@ -23,14 +27,14 @@ export function splitImportByOperationalDate<T extends { date: string }>(
 
 /**
  * The detected future count is not the effective destination: role and the
- * user's publish/historical-only decision can exclude every future row from
+ * user's decision can exclude every future row from
  * ever becoming a schedule assignment (D-P5.5-05, PD-2026-09-06-D03). Badges and summaries
  * must render this, never the raw detected count, to avoid promising drafts
  * that will not be created.
  */
 export interface TemporalEffectiveSummary {
   detected: number;
-  includedForPublication: number;
+  includedForPlanning: number;
   excludedByRole: number;
 }
 
@@ -40,7 +44,7 @@ export function deriveEffectiveTemporalSummary(
 ): TemporalEffectiveSummary {
   const detected = split.future.length;
   if (context.identityLocked || context.decision === 'historical-only') {
-    return { detected, includedForPublication: 0, excludedByRole: detected };
+    return { detected, includedForPlanning: 0, excludedByRole: detected };
   }
-  return { detected, includedForPublication: detected, excludedByRole: 0 };
+  return { detected, includedForPlanning: detected, excludedByRole: 0 };
 }

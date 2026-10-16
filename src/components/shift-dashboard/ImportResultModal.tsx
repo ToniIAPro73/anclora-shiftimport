@@ -24,6 +24,14 @@ export interface TemporalImportReport {
     publishedWeekCount: number;
     publishedShiftCount: number;
     publicationResults: Array<{ periodStart: string; status: string; createdShiftCount: number }>;
+    /** Weeks whose draft plan was created/updated (import never publishes). */
+    draftWeekCount?: number;
+  };
+  duplicate?: 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN' | null;
+  plan?: {
+    revisionNumber: number | null;
+    revisionCreated: boolean;
+    changes: { new: number; unchanged: number; modified: number; keptLocal: number; companyAdoptedLocal: number; requiresReview: number };
   };
 }
 
@@ -57,19 +65,30 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
             {t('importResult.temporalCounts', {
               historical: report.historical.persistedCount,
               historicalExisting: report.historical.existingCount,
-              future: report.future.publishedShiftCount,
-              weeks: report.future.publishedWeekCount,
+              future: report.future.createdAssignmentCount,
+              weeks: report.future.draftWeekCount ?? report.future.affectedWeekCount,
             })}
           </p>
-          {report.future.publicationResults.length > 0 ? (
-            <ul style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
-              {report.future.publicationResults.map((publication) => (
-                <li key={publication.periodStart}>
-                  {t('importResult.publishedWeek', { periodStart: publication.periodStart })}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          {report.duplicate && (
+            <p data-testid="import-result-duplicate" style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
+              {t(report.duplicate === 'DUPLICATE_FILE' ? 'importResult.planDuplicateFile' : report.duplicate === 'DUPLICATE_DOCUMENT' ? 'importResult.planDuplicateDocument' : 'importResult.planDuplicatePlan')}
+            </p>
+          )}
+          {report.plan?.revisionCreated && report.plan.revisionNumber !== null && (
+            <p data-testid="import-result-revision" style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
+              {t('importResult.planRevisionCreated', { revision: report.plan.revisionNumber })}
+            </p>
+          )}
+          {report.plan && (report.plan.changes.modified + report.plan.changes.companyAdoptedLocal + report.plan.changes.keptLocal + report.plan.changes.requiresReview) > 0 && (
+            <p data-testid="import-result-changes" style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
+              {t('importResult.planChangesLine', {
+                modified: report.plan.changes.modified,
+                adopted: report.plan.changes.companyAdoptedLocal,
+                kept: report.plan.changes.keptLocal,
+                review: report.plan.changes.requiresReview,
+              })}
+            </p>
+          )}
           <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
             {t('importResult.temporalNotPublished')}
           </p>

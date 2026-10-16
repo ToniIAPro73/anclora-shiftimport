@@ -272,12 +272,13 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     renderImportModal('es', () => {}, { onConfirmImport, initialFile: csvFile() });
 
     await waitFor(() => expect(screen.getByTestId('import-future-consent')).toBeTruthy());
-    expect(screen.getByTestId('import-future-consent').textContent).toContain('Importar solo los turnos históricos');
-    fireEvent.click(screen.getByRole('radio', { name: /Importar históricos y publicar los turnos futuros/ }));
+    expect(screen.getByTestId('import-future-consent').textContent).toContain('Este documento contiene planificación futura');
+    expect(screen.queryByRole('radio', { name: /Importar solo históricos/ })).toBeNull(); // future-only: nothing historical to choose
+    fireEvent.click(screen.getByRole('radio', { name: /Crear \/ actualizar planificación futura/ }));
     fireEvent.click(screen.getByRole('button', { name: /Confirmar Importación/ }));
 
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
-    expect(receivedDecisions).toEqual(['publish']);
+    expect(receivedDecisions).toEqual(['historical-and-plan']);
   });
 
   it('locks confirmation with a busy cursor and stays open when persistence returns false', async () => {
@@ -1048,18 +1049,12 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       expect(screen.getByText('Este archivo no contiene turnos anteriores a hoy.')).toBeTruthy();
 
       // Switch to draft -> actionableCount > 0 -> enabled
-      const draftOption = screen.getByLabelText(/Importar históricos y publicar los turnos futuros/i);
+      const draftOption = screen.getByLabelText(/Crear \/ actualizar planificación futura/i);
       fireEvent.click(draftOption);
 
       expect(confirmBtn.disabled).toBe(false);
-
-      // Switch back to historical-only -> disabled again
-      const histOption = screen.getByLabelText(/Importar solo los turnos históricos/i);
-      fireEvent.click(histOption);
-
-      expect(confirmBtn.disabled).toBe(true);
-      fireEvent.click(confirmBtn);
-      expect(onConfirmImport).not.toHaveBeenCalled();
+      // A future-only document offers no "historical only" effect: there is nothing historical to import.
+      expect(screen.queryByLabelText(/Importar solo históricos/i)).toBeNull();
     });
 
     // CX-F04 / UXR-F2-M04 AC-2: the badge must never claim drafts will be
@@ -1084,11 +1079,11 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
         '1 turnos futuros detectados; no se añadirán con la opción actual',
       );
 
-      const draftOption = screen.getByLabelText(/Importar históricos y publicar los turnos futuros/i);
+      const draftOption = screen.getByLabelText(/Crear \/ actualizar planificación futura/i);
       fireEvent.click(draftOption);
 
       expect(screen.getByTestId('import-future-count').textContent).toBe(
-        'Se publicarán 1 turnos futuros en Calendario',
+        'Se incluirán 1 turnos futuros en la planificación (borrador)',
       );
     });
 
@@ -1116,8 +1111,9 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       expect(confirmBtn.disabled).toBe(false);
       expect(confirmBtn.textContent).toContain('1/2');
 
-      // Switch to draft: 2 actionable shifts -> enabled
-      const draftOption = screen.getByLabelText(/Importar históricos y publicar los turnos futuros/i);
+      // MIXED: both effects are offered; the safe default is historical-only.
+      expect((screen.getByLabelText(/Importar solo históricos/i) as HTMLInputElement).checked).toBe(true);
+      const draftOption = screen.getByLabelText(/Importar históricos y crear\/actualizar planificación futura/i);
       fireEvent.click(draftOption);
 
       expect(confirmBtn.disabled).toBe(false);

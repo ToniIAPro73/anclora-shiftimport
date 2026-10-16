@@ -229,6 +229,10 @@ export function mapImportRow(row) {
     outcomeDetail,
     blockingEmployeeId: row.blocking_employee_id ?? null,
     blockingEmployeeName: row.blocking_employee_name ?? null,
+    importDecision: row.import_decision ?? null,
+    documentClass: row.document_class ?? null,
+    temporalClass: row.temporal_class ?? null,
+    duplicateKind: row.duplicate_kind ?? null,
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
   };

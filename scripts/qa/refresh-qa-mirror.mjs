@@ -16,13 +16,13 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  PROTECTED_SOURCE_ORG_ID, QA_DOMAIN, QA_IDENTITY, assertNotProtectedSource, assertQaOrganization, connect, deterministicUuid, findQaUser,
+  PROTECTED_SOURCE_ORG_ID, QA_DOMAIN, QA_EMPLOYEE_IDENTITY, QA_IDENTITY, assertNotProtectedSource, assertQaOrganization, connect, deterministicUuid, findQaUser,
   resolveSourceOrganization, sha256, targetNameFor,
 } from './qa-lib.mjs';
 
 const COPIED = ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'shift_assignments', 'calendar_changes', 'shifts', 'employee_annual_targets', 'format_profiles'];
 
-async function sourceFingerprint(client, sourceId) {
+export async function sourceFingerprint(client, sourceId) {
   const queries = {
     employees: 'SELECT id, name, external_employee_id, user_id, status, area_id FROM employees WHERE organization_id = $1 ORDER BY id',
     shifts: 'SELECT id, employee_id, date, start_time, end_time, shift_type, effective_state, layer, plan_revision, change_id, import_id, updated_at FROM shifts WHERE organization_id = $1 ORDER BY id',
@@ -105,7 +105,7 @@ export function scopeToYear(source, year = MIRROR_YEAR) {
 }
 
 /** Pure transformation: source rows -> mirror rows (remapped ids, pseudonymised people, no auth links). */
-export function buildMirror(rawSource, { targetId, qaUserId }) {
+export function buildMirror(rawSource, { targetId, qaUserId, qaEmployeeUserId = null }) {
   const source = scopeToYear(rawSource);
   const ns = targetId;
   const map = (kind) => {
@@ -131,10 +131,19 @@ export function buildMirror(rawSource, { targetId, qaUserId }) {
     organization_id: targetId,
     // The pilot employee stays recognisable (operational id kept, never linked to a real user).
     name: r.external_employee_id === PILOT_EXTERNAL_ID ? 'Sebastián Pozo Mendoza — QA' : `Empleado QA ${pad(employeeIndex.get(r.id), 3)}`,
-    external_employee_id: r.external_employee_id === PILOT_EXTERNAL_ID ? PILOT_EXTERNAL_ID : (r.external_employee_id ? `QA-${pad(employeeIndex.get(r.id), 4)}` : null),
+    // The payroll number is the stable BUSINESS KEY the importers match on: it is preserved for every
+    // employee so real team documents can be imported into the mirror. Names stay pseudonymised and
+    // no employee is ever linked to a user.
+    external_employee_id: r.external_employee_id ?? null,
     user_id: null,
     area_id: area(r.area_id),
   }));
+  // One synthetic employee (never the pilot) is linked to the synthetic EMPLOYEE-role QA user, so the
+  // "employees can never plan" rules can be proven end to end. Real users are never linked.
+  if (qaEmployeeUserId) {
+    const candidate = out.employees.find((e) => e.external_employee_id && e.external_employee_id !== PILOT_EXTERNAL_ID && e.status === 'active');
+    if (candidate) candidate.user_id = qaEmployeeUserId;
+  }
   out.imports = source.imports.map((r) => {
     const ext = /\.[A-Za-z0-9]{2,5}$/.exec(r.file_name ?? '')?.[0] ?? '';
     return {
@@ -207,6 +216,7 @@ async function insertRows(client, table, rows) {
 }
 
 const WIPE_ORDER = [
+  ['company_plan_revisions', 'organization_id = $1'],
   ['shift_acknowledgements', '(shift_id, employee_id) IN (SELECT id, employee_id FROM shifts WHERE organization_id = $1)'],
   ['shift_comments', '(shift_id, employee_id) IN (SELECT id, employee_id FROM shifts WHERE organization_id = $1)'],
   ['approval_requests', 'organization_id = $1'],
@@ -240,7 +250,8 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
   const sourceQaMembership = (await client.query(
     'SELECT COUNT(*)::int AS n FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.organization_id = $1 AND lower(u.email) = lower($2)', [source.id, QA_IDENTITY],
   )).rows[0].n > 0;
-  const planned = buildMirror(data, { targetId: existing?.id ?? '00000000-0000-4000-8000-000000000000', qaUserId: qaUser.id });
+  const qaEmployeeUser = (await client.query('SELECT id FROM users WHERE lower(email) = lower($1)', [QA_EMPLOYEE_IDENTITY])).rows[0] ?? null;
+  const planned = buildMirror(data, { targetId: existing?.id ?? '00000000-0000-4000-8000-000000000000', qaUserId: qaUser.id, qaEmployeeUserId: qaEmployeeUser?.id ?? null });
   const plannedCounts = Object.fromEntries(COPIED.map((t) => [t, planned[t].length]));
   const report = {
     source, targetName, targetExisted: Boolean(existing), targetCreated: false, mode: apply ? 'APPLY' : 'DRY_RUN',
@@ -265,12 +276,15 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
        ON CONFLICT (user_id, organization_id) DO UPDATE SET role = 'ADMIN'`, [qaUser.id, targetId],
     );
     assertNotProtectedSource(targetId);
+    if (qaEmployeeUser) {
+      await client.query(`INSERT INTO memberships (user_id, organization_id, role) VALUES ($1, $2, 'EMPLOYEE') ON CONFLICT (user_id, organization_id) DO UPDATE SET role = 'EMPLOYEE'`, [qaEmployeeUser.id, targetId]);
+    }
     await assertQaOrganization(client, targetId); // fail-closed BEFORE any DELETE
     for (const [table, where] of WIPE_ORDER) {
       if (!where.includes('$1')) throw new Error('unscoped delete refused');
       await client.query(`DELETE FROM ${table} WHERE ${where}`, [targetId]);
     }
-    const mirror = buildMirror(data, { targetId, qaUserId: qaUser.id });
+    const mirror = buildMirror(data, { targetId, qaUserId: qaUser.id, qaEmployeeUserId: qaEmployeeUser?.id ?? null });
     const inserted = {};
     for (const table of ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'calendar_changes', 'shifts', 'shift_assignments', 'employee_annual_targets', 'format_profiles']) {
       inserted[table] = await insertRows(client, table, mirror[table]);
@@ -292,7 +306,7 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
     if (Object.values(stray).some((n) => n > 0)) throw new Error(`Out-of-scope rows present in the mirror: ${JSON.stringify(stray)}`);
     // No real identity may have leaked into the mirror.
     const leaks = (await client.query(
-      `SELECT (SELECT COUNT(*) FROM employees WHERE organization_id = $1 AND user_id IS NOT NULL)::int AS linked,
+      `SELECT (SELECT COUNT(*) FROM employees e LEFT JOIN users u ON u.id = e.user_id WHERE e.organization_id = $1 AND e.user_id IS NOT NULL AND u.email NOT ILIKE $2)::int AS linked,
               (SELECT COUNT(*) FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.organization_id = $1 AND u.email NOT ILIKE $2)::int AS real_members`,
       [targetId, `%${QA_DOMAIN}`],
     )).rows[0];

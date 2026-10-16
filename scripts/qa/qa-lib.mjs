@@ -13,6 +13,8 @@ import pg from 'pg';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const QA_IDENTITY = 'qa.shiftimport@anclora.test';
 export const QA_DOMAIN = '@anclora.test';
+/** Synthetic EMPLOYEE-role identity used only to prove that employees can never plan (lives in the QA mirror). */
+export const QA_EMPLOYEE_IDENTITY = 'qa.employee@anclora.test';
 /** The real tenant. READ ONLY for every QA/dev tool: SELECT is the only statement ever allowed against it. */
 export const PROTECTED_SOURCE_ORG_ID = 'a4cf0768-f08d-49e6-bb81-0d3635d58028';
 /** Product naming drifted ("Safe Import" in briefs, "ShiftImport" in the database): accept both, require exactly one match. */

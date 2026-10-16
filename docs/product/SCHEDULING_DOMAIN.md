@@ -129,3 +129,9 @@ The following are intentionally left to their scheduled microphases:
 - planner UI and accessible table alternative (`R3-M08`/`R3-M09`);
 - publication materialization columns and transaction (`R3-M10`);
 - future-import routing into drafts (`R3-M14`).
+
+## Importing the company plan (2026-10-16)
+
+Importing future rows creates or updates the **plan**: weekly `DRAFT` versions with `ShiftAssignment`s,
+versioned as company-plan revisions. It never publishes; publication stays an explicit Planning action that
+materialises assignments into `shifts`. See [`FUTURE_IMPORT_DRAFT_CONTRACT.md`](FUTURE_IMPORT_DRAFT_CONTRACT.md).

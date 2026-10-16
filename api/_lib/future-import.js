@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   importContextFingerprint,
   mapImportRow,
@@ -8,7 +8,20 @@ import {
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
 import { getOperationalDate } from './operational-date.js';
-import { createNewDraftFromVersionTx, publishScheduleVersionTx } from './scheduling.js';
+import { createNewDraftFromVersionTx } from './scheduling.js';
+import { documentFingerprint, planFingerprint } from './import-fingerprints.js';
+import {
+  IMPORT_DECISION,
+  RECONCILIATION_OUTCOME as OUTCOME,
+  WRITES_TO_PLAN,
+  classifyDocument,
+  employeeBusinessKey,
+  normalizeImportDecision,
+  normalizePlanRow,
+  reconcileThreeWay,
+  resolveBaseline,
+  summarizeOutcomes,
+} from '../../src/lib/company-plan.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -65,41 +78,35 @@ function distinct(values) {
   return [...new Set(values)].sort();
 }
 
-function importLookup(sql, {
-  organizationId, employeeId, fileFingerprint, contextFingerprint,
-}) {
-  return sql`
-    SELECT id, deleted_at
-    FROM imports
-    WHERE organization_id = ${organizationId}
-      AND employee_id = ${employeeId}
-      AND file_fingerprint = ${fileFingerprint}
-      AND context_fingerprint = ${contextFingerprint}
-    ORDER BY created_at ASC
-    LIMIT 1
-  `;
-}
-
-function assignmentIdentity(shift) {
-  return [shift.employeeId, shift.date, shift.shiftType ?? '', shift.countsAsWork ?? '', shift.startTime, shift.endTime, shift.location].join('\u001f');
-}
-
-function semanticFingerprint(shift) {
-  return createHash('sha256').update(assignmentIdentity(shift)).digest('hex');
-}
+const assignmentIdentity = (shift) => [shift.employeeId, shift.date, shift.shiftType ?? '', shift.countsAsWork ?? '', shift.startTime, shift.endTime, shift.location].join('\u001f');
 
 function validateUuid(value, field) {
   if (!UUID_RE.test(value)) throw requestError(400, `${field} must be a valid UUID`);
 }
 
+const toPlanRow = (shift) => ({
+  date: shift.date,
+  shiftType: shift.shiftType ?? shift.location,
+  startTime: shift.startTime || null,
+  endTime: shift.endTime || null,
+  countsAsWork: shift.countsAsWork,
+  dutyRole: shift.dutyRole ?? null,
+});
+
+function fromStoredRow(stored) {
+  return { date: stored.d, shiftType: stored.t, startTime: stored.s || null, endTime: stored.e || null, dutyRole: stored.duty || null };
+}
+
+function toStoredRow(row) {
+  const n = normalizePlanRow(row);
+  return { d: n.date, t: n.type, s: n.start, e: n.end, duty: n.duty };
+}
+
 /**
- * Confirm a FUTURE or MIXED import as one database transaction. Historical
- * imports continue through the established /api/shifts path. All reads and
- * authorization checks happen before the transaction; every mutation below
- * is a single Neon transaction, so a later constraint/error rolls back the
- * import, history rows, drafts and assignments together.
+ * Everything that must be validated and resolved BEFORE any write: role, tenant, scope, employees,
+ * temporal split. Shared by the read-only preview and the confirmation.
  */
-export async function confirmFutureImport(sql, ctx, input = {}) {
+async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
   const rawShifts = Array.isArray(input.shifts) ? input.shifts : [];
   if (rawShifts.length === 0) throw requestError(400, 'At least one imported shift is required');
   const fileFingerprint = String(input.fileFingerprint ?? '').trim().toLowerCase();
@@ -116,30 +123,30 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   if (ctx.role === 'EMPLOYEE') {
     throw requestError(
       403,
-      'Employees cannot create future planning drafts through self-import',
+      'Employees cannot create or update planning through self-import',
       'SELF_IMPORT_FUTURE_FORBIDDEN',
     );
   }
 
-  if (input.futureConsent !== 'publish') {
+  // "publish" is the pre-rename wire value; both mean: include the future rows in the PLAN (drafts).
+  const decision = normalizeImportDecision(input.futureConsent ?? input.importDecision);
+  if (requireDecision && decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN) {
     throw requestError(
       409,
-      'Future rows require explicit consent before they can be published',
+      'Future rows need the explicit decision to create or update the planning',
       'FUTURE_IMPORT_CONSENT_REQUIRED',
     );
   }
   const weekStart = input.weekStart === 'sunday' ? 'sunday' : 'monday';
 
-  // This is the canonical R2 capability mapping. It intentionally asks the
-  // effective authorization model for the minimum PLANNER capability rather
-  // than checking role === 'PLANNER'; OWNER/ADMIN behavior therefore remains
-  // exactly whatever R2's requireRole contract defines.
+  // Canonical R2 capability mapping: ask the effective authorization model for the minimum PLANNER
+  // capability instead of checking role === 'PLANNER'.
   try {
     requireRole(ctx, 'PLANNER');
   } catch {
     throw requestError(
       403,
-      'This file contains future planning data, but your account cannot create schedule drafts in this scope',
+      'This file contains future planning data, but your account cannot create or update the planning in this scope',
       'FUTURE_IMPORT_REQUIRES_PLANNING',
     );
   }
@@ -168,7 +175,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   const employees = new Map();
   for (const employeeId of employeeIds) {
     const rows = await sql`
-      SELECT id, status, area_id
+      SELECT id, status, area_id, external_employee_id, name
       FROM employees
       WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
     `;
@@ -200,12 +207,159 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     ...shift,
     employeeId: shift.employeeId,
     areaId: requestedAreaId ?? employees.get(shift.employeeId)?.area_id ?? null,
+    employeeKey: employeeBusinessKey({ externalEmployeeId: employees.get(shift.employeeId)?.external_employee_id, name: employees.get(shift.employeeId)?.name }) ?? `uuid:${shift.employeeId}`,
   }));
-  const future = normalized.filter((shift) => shift.temporalClass === 'FUTURE');
-  const historical = normalized.filter((shift) => shift.temporalClass === 'HISTORICAL');
+
+  return {
+    dated, decision, weekStart, scope, requestedAreaId, areaNameSnapshot, employeeIds, employees,
+    normalized, fileFingerprint,
+    future: normalized.filter((shift) => shift.temporalClass === 'FUTURE'),
+    historical: normalized.filter((shift) => shift.temporalClass === 'HISTORICAL'),
+    importMode: input.importMode === 'team' ? 'team' : 'individual',
+    periodKind: input.periodKind === 'multi' ? 'multi' : 'single',
+  };
+}
+
+/** Baseline (previous company plan revisions), effective state and the three-way outcomes. Read-only. */
+async function evaluatePlan(sql, ctx, prepared, deleteIds) {
+  const { normalized, requestedAreaId, employeeIds, dated } = prepared;
+  const scopeKey = requestedAreaId ?? 'global';
+  const dates = normalized.map((shift) => shift.date).sort();
+  const from = dates[0];
+  const to = dates[dates.length - 1];
+
+  const revisionRows = await sql`
+    SELECT revision_number, TO_CHAR(coverage_from, 'YYYY-MM-DD') AS coverage_from,
+           TO_CHAR(coverage_to, 'YYYY-MM-DD') AS coverage_to, rows
+    FROM company_plan_revisions
+    WHERE organization_id = ${ctx.organizationId} AND scope_key = ${scopeKey}
+      AND coverage_to >= ${from} AND coverage_from <= ${to}
+    ORDER BY revision_number DESC
+  `;
+  const latest = await sql`
+    SELECT COALESCE(MAX(revision_number), 0)::integer AS latest
+    FROM company_plan_revisions WHERE organization_id = ${ctx.organizationId} AND scope_key = ${scopeKey}
+  `;
+  const revisions = revisionRows.map((revision) => ({
+    revisionNumber: revision.revision_number,
+    coverageFrom: revision.coverage_from,
+    coverageTo: revision.coverage_to,
+    rows: (Array.isArray(revision.rows) ? revision.rows : []).map((stored) => ({ employeeKey: stored.k, row: fromStoredRow(stored) })),
+  }));
+  const baseline = resolveBaseline(revisions, { from, to });
+
+  // Effective = what the operation currently has: draft assignments (incl. planner edits) win over published shifts.
+  const keyByEmployee = new Map(normalized.map((shift) => [shift.employeeId, shift.employeeKey]));
+  const shiftRows = await sql`
+    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ANY(${employeeIds}::uuid[])
+      AND date BETWEEN ${from} AND ${to} AND effective_state = 'EFFECTIVE'
+      AND NOT (id = ANY(${deleteIds}::uuid[]))
+  `;
+  const draftRows = await sql`
+    SELECT sa.employee_id, TO_CHAR(sa.date, 'YYYY-MM-DD') AS date, sa.start_time, sa.end_time, sa.shift_type, sa.location, sa.counts_as_work
+    FROM shift_assignments sa
+    JOIN schedule_versions sv ON sv.id = sa.schedule_version_id AND sv.status = 'DRAFT'
+    JOIN schedules s ON s.id = sv.schedule_id
+    WHERE s.organization_id = ${ctx.organizationId} AND sa.employee_id = ANY(${employeeIds}::uuid[])
+      AND sa.date BETWEEN ${from} AND ${to}
+  `;
+  const effectiveByDay = new Map();
+  const put = (map, employeeId, date, row) => {
+    const key = `${employeeId}|${date}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(row);
+  };
+  const draftByDay = new Map();
+  for (const row of draftRows) put(draftByDay, row.employee_id, row.date, toPlanRow({ ...row, shiftType: row.shift_type, startTime: row.start_time, endTime: row.end_time, countsAsWork: row.counts_as_work }));
+  for (const row of shiftRows) put(effectiveByDay, row.employee_id, row.date, toPlanRow({ ...row, shiftType: row.shift_type, startTime: row.start_time, endTime: row.end_time, countsAsWork: row.counts_as_work, dutyRole: row.duty_role }));
+  const effective = [];
+  for (const [key, rows] of new Map([...effectiveByDay, ...draftByDay])) {
+    const [employeeId] = key.split('|');
+    for (const row of rows) effective.push({ employeeKey: keyByEmployee.get(employeeId), row });
+  }
+
+  const next = normalized.map((shift) => ({ employeeKey: shift.employeeKey, row: toPlanRow(shift) }));
+  // Days already awaiting reconciliation are never resolved by an import.
+  const pending = await sql`
+    SELECT DISTINCT employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ANY(${employeeIds}::uuid[])
+      AND date BETWEEN ${from} AND ${to} AND effective_state = 'REQUIRES_REVIEW'
+  `;
+  const reviewDays = new Set(pending.map((row) => `${keyByEmployee.get(row.employee_id)}\u001f${row.date}`));
+  const outcomes = reconcileThreeWay({ baseline, next, effective, today: dated.cutoff, reviewDays });
+  const summary = summarizeOutcomes(outcomes);
+  const nextPlanEntries = normalized.filter((shift) => shift.temporalClass === 'FUTURE').map((shift) => ({ employeeKey: shift.employeeKey, row: toPlanRow(shift) }));
+  return {
+    scopeKey, from, to, revisions, baseline, outcomes, summary,
+    latestRevision: latest[0]?.latest ?? 0,
+    hasExistingPlan: baseline.length > 0,
+    planFingerprint: planFingerprint(nextPlanEntries),
+    documentFingerprint: documentFingerprint(next, { importMode: prepared.importMode, periodKind: prepared.periodKind, periodYear: null, periodMonth: null }),
+  };
+}
+
+const outcomeCounts = (summary) => ({
+  new: summary.new, unchanged: summary.unchanged, modified: summary.modified,
+  keptLocal: summary.keptLocal, companyAdoptedLocal: summary.companyAdoptedLocal, requiresReview: summary.requiresReview,
+});
+
+/**
+ * Read-only preview of what confirming this document would do: classification, counts and the
+ * company-plan reconciliation. Performs ZERO writes.
+ */
+export async function previewFutureImport(sql, ctx, input = {}) {
+  const prepared = await prepareImport(sql, ctx, input, { requireDecision: false });
+  const deleteIds = distinct((Array.isArray(input.deleteIds) ? input.deleteIds : []).map((id) => String(id ?? '').trim()).filter(Boolean));
+  for (const id of deleteIds) validateUuid(id, 'deleteIds');
+  const evaluation = await evaluatePlan(sql, ctx, prepared, deleteIds);
+  const document = classifyDocument({
+    temporal: prepared.dated.classification, employeeCount: prepared.employeeIds.length,
+    hasExistingPlan: evaluation.hasExistingPlan, rowCount: prepared.normalized.length,
+  });
+  const weeks = distinct(prepared.future.map((shift) => startOfSchedulingWeek(shift.date, prepared.weekStart)));
+  return {
+    classification: prepared.dated.classification,
+    cutoff: prepared.dated.cutoff,
+    document,
+    historicalCount: prepared.historical.length,
+    futureCount: prepared.future.length,
+    employeeCount: prepared.employeeIds.length,
+    plan: {
+      baselineRevision: evaluation.latestRevision || null,
+      changes: outcomeCounts(evaluation.summary),
+      wouldCreateRevision: !evaluation.hasExistingPlan || evaluation.outcomes.some((item) => !item.retrospective && [OUTCOME.NEW, OUTCOME.MODIFIED, OUTCOME.COMPANY_ADOPTED_LOCAL, OUTCOME.REQUIRES_REVIEW].includes(item.outcome)),
+      weeksAffected: weeks,
+    },
+    autoPublish: false,
+  };
+}
+
+function isUniqueViolation(error) {
+  return error?.code === '23505' || /company_plan_revisions_unique|duplicate key/i.test(String(error?.message ?? ''));
+}
+
+/**
+ * Confirm a FUTURE or MIXED import that includes the planning decision, as one database transaction.
+ *
+ * - Creates / updates the PLAN: schedule DRAFT versions + assignments. It NEVER publishes; publication is
+ *   an explicit, separate Scheduling action.
+ * - The company plan is a versioned baseline (company_plan_revisions): a new revision is recorded only when the
+ *   plan really changed, and previous revisions are never rewritten.
+ * - Rows are reconciled three-way (baseline / new plan / effective): safe rows are applied, ambiguous ones
+ *   become REQUIRES_REVIEW; one discrepancy never blocks the rest of the document.
+ * - Idempotency of the EFFECT: the same file with a DIFFERENT decision still applies what is pending.
+ */
+export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
+  const prepared = await prepareImport(sql, ctx, input);
+  const {
+    dated, decision, weekStart, scope, requestedAreaId, areaNameSnapshot, employeeIds, normalized, future, historical, fileFingerprint,
+    importMode, periodKind,
+  } = prepared;
+
   const effectiveImportEmployeeId = employeeIds[0];
-  const importMode = input.importMode === 'team' ? 'team' : 'individual';
-  const periodKind = input.periodKind === 'multi' ? 'multi' : 'single';
   const contextFingerprint = importContextFingerprint({
     sourceFormat: String(input.sourceFormat ?? ''),
     periodYear: input.periodYear ?? null,
@@ -215,53 +369,24 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     areaId: requestedAreaId,
     employeeIds,
   });
-  const existingImport = await importLookup(sql, {
-    organizationId: ctx.organizationId,
-    employeeId: effectiveImportEmployeeId,
-    fileFingerprint,
-    contextFingerprint,
-  });
-  if (existingImport[0]?.deleted_at) {
+  const existingImport = (await sql`
+    SELECT id, deleted_at, import_decision
+    FROM imports
+    WHERE organization_id = ${ctx.organizationId}
+      AND employee_id = ${effectiveImportEmployeeId}
+      AND file_fingerprint = ${fileFingerprint}
+      AND context_fingerprint = ${contextFingerprint}
+    ORDER BY created_at ASC LIMIT 1
+  `)[0] ?? null;
+  if (existingImport?.deleted_at) {
     throw requestError(409, 'This import was already deleted and cannot be replayed', 'IMPORT_ALREADY_DELETED');
-  }
-  if (existingImport[0]?.id) {
-    const prior = await sql`
-      SELECT COALESCE(SUM(assignment_count), 0)::integer AS assignments,
-             COUNT(*)::integer AS weeks,
-             COUNT(*) FILTER (WHERE status = 'PUBLISHED')::integer AS published_weeks,
-             COALESCE(jsonb_agg(jsonb_build_object(
-               'periodStart', period_start, 'status', status, 'createdShiftCount', 0
-             ) ORDER BY period_start), '[]'::jsonb) AS publication_results
-      FROM (
-        SELECT s.period_start, sv.status, COUNT(sa.id)::integer AS assignment_count
-        FROM shift_assignments sa
-        JOIN schedule_versions sv ON sv.id = sa.schedule_version_id
-        JOIN schedules s ON s.id = sv.schedule_id
-        WHERE sa.import_id = ${existingImport[0].id}
-        GROUP BY s.period_start, sv.status
-      ) prior_weeks
-    `;
-    const historicalRows = await sql`SELECT COUNT(*)::integer AS count FROM shifts WHERE import_id = ${existingImport[0].id}`;
-    const assignmentCount = Number(prior[0]?.assignments ?? 0);
-    const historicalCount = Number(historicalRows[0]?.count ?? 0);
-    if (assignmentCount || historicalCount) {
-      return {
-        classification: dated.classification, cutoff: dated.cutoff, importId: existingImport[0].id, deduplicated: true,
-        historical: { submittedCount: historical.length, persistedCount: historicalCount, deletedCount: 0 },
-        future: { submittedCount: future.length, createdAssignmentCount: 0, existingAssignmentCount: assignmentCount,
-          affectedWeekCount: Number(prior[0]?.weeks ?? 0), publishedWeekCount: Number(prior[0]?.published_weeks ?? 0),
-          publishedShiftCount: Number(prior[0]?.assignments ?? 0),
-          publicationResults: Array.isArray(prior[0]?.publication_results) ? prior[0].publication_results : [] },
-      };
-    }
   }
 
   const deleteIds = distinct((Array.isArray(input.deleteIds) ? input.deleteIds : []).map((id) => String(id ?? '').trim()).filter(Boolean));
   for (const id of deleteIds) validateUuid(id, 'deleteIds');
   if (deleteIds.length > 0) {
     const existingDeletes = await sql`
-      SELECT id, date
-      FROM shifts
+      SELECT id, date FROM shifts
       WHERE organization_id = ${ctx.organizationId} AND id = ANY(${deleteIds}::uuid[])
     `;
     if (existingDeletes.some((row) => String(row.date).slice(0, 10) > dated.cutoff)) {
@@ -269,60 +394,86 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     }
   }
 
-  const groups = new Map();
+  const evaluation = await evaluatePlan(sql, ctx, prepared, deleteIds);
+  const document = classifyDocument({
+    temporal: dated.classification, employeeCount: employeeIds.length, hasExistingPlan: evaluation.hasExistingPlan, rowCount: normalized.length,
+  });
+
+  // --- idempotency of the EFFECT (never of the file alone) -------------------------------------------------
+  const planApplied = existingImport
+    ? Number((await sql`SELECT COUNT(*)::integer AS n FROM company_plan_revisions WHERE import_id = ${existingImport.id}`)[0]?.n ?? 0) > 0
+      || Number((await sql`SELECT COUNT(*)::integer AS n FROM shift_assignments WHERE import_id = ${existingImport.id}`)[0]?.n ?? 0) > 0
+    : false;
+  // The exact same file may have been imported before with another effect (e.g. historical-only through the
+  // Safe Import path, which uses a different context key): that must never block the plan decision.
+  const priorSameFile = existingImport ?? (await sql`
+    SELECT id, import_decision FROM imports
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${effectiveImportEmployeeId}
+      AND file_fingerprint = ${fileFingerprint} AND deleted_at IS NULL
+    ORDER BY created_at ASC LIMIT 1
+  `)[0] ?? null;
+  const sameFileDifferentDecision = Boolean(priorSameFile) && !planApplied && priorSameFile.import_decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN;
+  const futureOutcomes = evaluation.outcomes.filter((item) => !item.retrospective);
+  const planChanged = !evaluation.hasExistingPlan || futureOutcomes.some((item) => [OUTCOME.NEW, OUTCOME.MODIFIED, OUTCOME.COMPANY_ADOPTED_LOCAL, OUTCOME.REQUIRES_REVIEW].includes(item.outcome));
+  let duplicateKind = null;
+  if (existingImport && planApplied) duplicateKind = 'DUPLICATE_FILE';
+  else if (!planChanged) {
+    const sameDocument = (await sql`
+      SELECT 1 AS found FROM imports
+      WHERE organization_id = ${ctx.organizationId} AND document_fingerprint = ${evaluation.documentFingerprint}
+        AND import_decision = ${IMPORT_DECISION.HISTORICAL_AND_PLAN} AND deleted_at IS NULL LIMIT 1
+    `).length > 0;
+    duplicateKind = sameDocument ? 'DUPLICATE_DOCUMENT' : 'DUPLICATE_PLAN';
+  }
+  const createsRevision = !duplicateKind;
+  const revisionNumber = createsRevision ? evaluation.latestRevision + 1 : null;
+
+  const weeks = new Map();
   for (const shift of future) {
     const periodStart = startOfSchedulingWeek(shift.date, weekStart);
     const key = `${periodStart}:${shift.areaId ?? 'global'}`;
-    if (!groups.has(key)) groups.set(key, { periodStart, areaId: shift.areaId ?? null, shifts: [] });
-    groups.get(key).shifts.push(shift);
+    if (!weeks.has(key)) weeks.set(key, { periodStart, areaId: shift.areaId ?? null });
   }
 
-  const importInput = {
-    organizationId: ctx.organizationId,
-    employeeId: effectiveImportEmployeeId,
-    fileName: String(input.fileName ?? ''),
-    sourceFormat: String(input.sourceFormat ?? ''),
-    periodYear: input.periodYear ?? null,
-    periodMonth: input.periodMonth ?? null,
-    importMode,
-    periodKind,
-    periodLabel: String(input.periodLabel ?? '').trim(),
-    scopeType: requestedAreaId ? 'area' : 'global',
-    areaNameSnapshot,
-    employeeCount: employeeIds.length,
-    shiftCount: normalized.length,
-    fileFingerprint,
-    contextFingerprint,
-  };
-  const importId = randomUUID();
-  const groupList = [...groups.values()];
+  // Which rows are written: only the safe outcomes become plan / effective rows.
+  const outcomeByDay = new Map(evaluation.outcomes.map((item) => [`${item.employeeKey}\u001f${item.date}`, item.outcome]));
+  const outcomeOf = (shift) => outcomeByDay.get(`${shift.employeeKey}\u001f${shift.date}`);
+  const futureToDraft = duplicateKind === 'DUPLICATE_FILE' ? [] : future.filter((shift) => WRITES_TO_PLAN.has(outcomeOf(shift)));
+  const replaceDays = duplicateKind === 'DUPLICATE_FILE' ? [] : evaluation.outcomes.filter((item) => item.outcome === OUTCOME.MODIFIED || item.outcome === OUTCOME.COMPANY_ADOPTED_LOCAL);
+  const reviewRows = duplicateKind === 'DUPLICATE_FILE' ? [] : normalized.filter((shift) => outcomeOf(shift) === OUTCOME.REQUIRES_REVIEW);
+  const historicalToWrite = duplicateKind === 'DUPLICATE_FILE' ? [] : historical.filter((shift) => outcomeOf(shift) === OUTCOME.NEW);
+
+  const groupsToWrite = new Map();
+  for (const shift of futureToDraft) {
+    const periodStart = startOfSchedulingWeek(shift.date, weekStart);
+    const key = `${periodStart}:${shift.areaId ?? 'global'}`;
+    if (!groupsToWrite.has(key)) groupsToWrite.set(key, { periodStart, areaId: shift.areaId ?? null, shifts: [] });
+    groupsToWrite.get(key).shifts.push(shift);
+  }
+  const groupList = [...groupsToWrite.values()];
   const scheduleIds = new Map();
   for (const group of groupList) {
     const key = `${group.periodStart}:${group.areaId ?? 'global'}`;
     const current = await sql`
-      SELECT s.id AS schedule_id, sv.id AS version_id, sv.status,
-             COUNT(sa.id)::integer AS assignment_count,
-             COUNT(sa.id) FILTER (WHERE sa.import_id IS DISTINCT FROM ${existingImport[0]?.id ?? null})::integer AS foreign_assignment_count
+      SELECT s.id AS schedule_id, sv.id AS version_id, sv.status
       FROM schedules s
       LEFT JOIN schedule_versions sv ON sv.schedule_id = s.id AND sv.status IN ('DRAFT', 'PUBLISHED', 'LOCKED', 'COMPLETED')
-      LEFT JOIN shift_assignments sa ON sa.schedule_version_id = sv.id
       WHERE s.organization_id = ${ctx.organizationId} AND s.area_id IS NOT DISTINCT FROM ${group.areaId}
         AND s.period_start = ${group.periodStart}
-      GROUP BY s.id, sv.id, sv.status, sv.version_number
       ORDER BY (sv.status = 'DRAFT') DESC NULLS LAST, sv.version_number DESC NULLS LAST LIMIT 1
     `;
     const row = current[0];
-    if (row?.status === 'DRAFT' && Number(row.foreign_assignment_count) > 0) {
-      throw requestError(409, `The planning week ${group.periodStart} contains assignments from another import`, 'AUTO_PUBLISH_SHARED_DRAFT_CONFLICT');
-    }
     scheduleIds.set(key, {
       scheduleId: row?.schedule_id ?? randomUUID(),
+      // An existing DRAFT is updated in place (the previous company revision is preserved in company_plan_revisions).
       versionId: row?.status === 'DRAFT' ? row.version_id : randomUUID(),
       existingDraft: row?.status === 'DRAFT',
       sourceVersionId: row && row.status !== 'DRAFT' ? row.version_id : null,
     });
   }
 
+  const importId = randomUUID();
+  const importDecisionToStore = IMPORT_DECISION.HISTORICAL_AND_PLAN;
   const labels = [];
   const queries = [];
   labels.push('import');
@@ -332,14 +483,17 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
         id, organization_id, imported_by_user_id, employee_id, file_name, source_format,
         period_year, period_month, status, area_id, import_mode, period_kind,
         period_label, scope_type, area_name_snapshot, employee_count, shift_count,
-        created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint
+        created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint,
+        document_fingerprint, plan_fingerprint, import_decision, document_class, temporal_class, duplicate_kind
       ) VALUES (
-        ${importId}, ${importInput.organizationId}, ${ctx.user.id}, ${importInput.employeeId},
-        ${importInput.fileName}, ${importInput.sourceFormat}, ${importInput.periodYear},
-        ${importInput.periodMonth}, 'completed', ${requestedAreaId}, ${importInput.importMode},
-        ${importInput.periodKind}, ${importInput.periodLabel}, ${importInput.scopeType},
-        ${importInput.areaNameSnapshot}, ${importInput.employeeCount}, ${importInput.shiftCount},
-        0, 0, ${importInput.fileFingerprint}, ${importInput.contextFingerprint}
+        ${importId}, ${ctx.organizationId}, ${ctx.user.id}, ${effectiveImportEmployeeId},
+        ${String(input.fileName ?? '')}, ${String(input.sourceFormat ?? '')}, ${input.periodYear ?? null},
+        ${input.periodMonth ?? null}, 'completed', ${requestedAreaId}, ${importMode},
+        ${periodKind}, ${String(input.periodLabel ?? '').trim()}, ${requestedAreaId ? 'area' : 'global'},
+        ${areaNameSnapshot}, ${employeeIds.length}, ${normalized.length},
+        0, 0, ${fileFingerprint}, ${contextFingerprint},
+        ${evaluation.documentFingerprint}, ${evaluation.planFingerprint}, ${importDecisionToStore},
+        ${document.documentClass}, ${dated.classification}, ${duplicateKind === 'DUPLICATE_FILE' ? null : duplicateKind}
       )
       ON CONFLICT (organization_id, employee_id, file_fingerprint, context_fingerprint)
       WHERE employee_id IS NOT NULL AND file_fingerprint IS NOT NULL AND context_fingerprint IS NOT NULL
@@ -349,10 +503,10 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     SELECT id, inserted FROM inserted
     UNION ALL
     SELECT id, FALSE FROM imports
-    WHERE organization_id = ${importInput.organizationId}
-      AND employee_id = ${importInput.employeeId}
-      AND file_fingerprint = ${importInput.fileFingerprint}
-      AND context_fingerprint = ${importInput.contextFingerprint}
+    WHERE organization_id = ${ctx.organizationId}
+      AND employee_id = ${effectiveImportEmployeeId}
+      AND file_fingerprint = ${fileFingerprint}
+      AND context_fingerprint = ${contextFingerprint}
       AND NOT EXISTS (SELECT 1 FROM inserted)
     ORDER BY inserted DESC
     LIMIT 1
@@ -406,13 +560,9 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     `);
   }
 
-  const importIdSql = {
-    organizationId: importInput.organizationId,
-    employeeId: importInput.employeeId,
-    fileFingerprint: importInput.fileFingerprint,
-    contextFingerprint: importInput.contextFingerprint,
-  };
-  for (const shift of historical) {
+  // HISTORICAL rows: only genuinely new days become effective shifts (existing ones are already the truth).
+  const historicalOffset = queries.length;
+  for (const shift of historicalToWrite) {
     const id = UUID_RE.test(shift.id ?? '') ? shift.id : randomUUID();
     labels.push(`historical:${assignmentIdentity(shift)}`);
     queries.push((txn) => txn`
@@ -422,14 +572,14 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
         semantic_fingerprint, updated_at
       )
       SELECT ${id}, ${ctx.organizationId}, ${shift.employeeId},
-             (SELECT id FROM imports WHERE organization_id = ${importIdSql.organizationId}
-               AND employee_id = ${importIdSql.employeeId}
-               AND file_fingerprint = ${importIdSql.fileFingerprint}
-               AND context_fingerprint = ${importIdSql.contextFingerprint}
+             (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
+               AND employee_id = ${effectiveImportEmployeeId}
+               AND file_fingerprint = ${fileFingerprint}
+               AND context_fingerprint = ${contextFingerprint}
                ORDER BY created_at ASC LIMIT 1),
              ${shift.areaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null}, ${shift.location}, 'IMP',
              ${shift.shiftType}, ${shift.countsAsWork},
-             ${semanticFingerprint(shift)}, NOW()
+             ${[shift.employeeKey, shift.date, shift.shiftType ?? '', shift.startTime, shift.endTime].join('\u001f')}, NOW()
       ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
       WHERE semantic_fingerprint IS NOT NULL
       DO UPDATE SET updated_at = NOW()
@@ -437,15 +587,40 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     `);
   }
 
+  const deleteOffset = queries.length;
   for (const id of deleteIds) {
     labels.push(`delete:${id}`);
     queries.push((txn) => txn`
       DELETE FROM shifts
-      WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND date <= CURRENT_DATE
+      WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND date < ${dated.cutoff}
       RETURNING id
     `);
   }
 
+  // Draft plan: replace the days whose company plan changed, then insert the new content.
+  const replaceByGroup = new Map();
+  for (const day of replaceDays) {
+    const sample = future.find((shift) => shift.employeeKey === day.employeeKey && shift.date === day.date);
+    if (!sample) continue;
+    const key = `${startOfSchedulingWeek(day.date, weekStart)}:${sample.areaId ?? 'global'}`;
+    if (!replaceByGroup.has(key)) replaceByGroup.set(key, []);
+    replaceByGroup.get(key).push({ employeeId: sample.employeeId, date: day.date });
+  }
+  for (const [key, days] of replaceByGroup) {
+    const ids = scheduleIds.get(key);
+    if (!ids) continue;
+    for (const day of days) {
+      labels.push(`plan-replace:${day.employeeId}:${day.date}`);
+      queries.push((txn) => txn`
+        DELETE FROM shift_assignments
+        WHERE schedule_version_id = ${ids.versionId} AND employee_id = ${day.employeeId} AND date = ${day.date}
+          AND EXISTS (SELECT 1 FROM schedule_versions sv WHERE sv.id = ${ids.versionId} AND sv.status = 'DRAFT')
+        RETURNING id
+      `);
+    }
+  }
+
+  const futureOffset = queries.length;
   for (const group of groupList) {
     const ids = scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`);
     for (const shift of group.shifts) {
@@ -456,10 +631,10 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
           shift_type, counts_as_work, updated_at
         )
         SELECT sv.id,
-               (SELECT id FROM imports WHERE organization_id = ${importIdSql.organizationId}
-                 AND employee_id = ${importIdSql.employeeId}
-                 AND file_fingerprint = ${importIdSql.fileFingerprint}
-                 AND context_fingerprint = ${importIdSql.contextFingerprint}
+               (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
+                 AND employee_id = ${effectiveImportEmployeeId}
+                 AND file_fingerprint = ${fileFingerprint}
+                 AND context_fingerprint = ${contextFingerprint}
                  ORDER BY created_at ASC LIMIT 1),
                ${shift.employeeId}, ${shift.date}, ${shift.startTime}, ${shift.endTime}, ${shift.location},
                ${shift.shiftType}, ${shift.countsAsWork}, NOW()
@@ -484,11 +659,72 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     }
   }
 
+  // Discrepancies become company-plan rows awaiting review (they never overwrite the effective calendar).
+  for (const shift of reviewRows) {
+    labels.push(`review:${assignmentIdentity(shift)}`);
+    queries.push((txn) => txn`
+      INSERT INTO shifts (
+        id, organization_id, employee_id, import_id, area_id, date, start_time, end_time, location, origin,
+        shift_type, counts_as_work, layer, provenance, effective_state, plan_revision, updated_at
+      )
+      SELECT ${randomUUID()}, ${ctx.organizationId}, ${shift.employeeId},
+             (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
+               AND employee_id = ${effectiveImportEmployeeId}
+               AND file_fingerprint = ${fileFingerprint}
+               AND context_fingerprint = ${contextFingerprint}
+               ORDER BY created_at ASC LIMIT 1),
+             ${shift.areaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null}, ${shift.location}, 'IMP',
+             ${shift.shiftType}, ${shift.countsAsWork}, 'COMPANY_PLAN', 'COMPANY_IMPORT', 'REQUIRES_REVIEW',
+             ${revisionNumber ?? Math.max(1, evaluation.latestRevision)}, NOW()
+      WHERE NOT EXISTS (
+        SELECT 1 FROM shifts r
+        WHERE r.organization_id = ${ctx.organizationId} AND r.employee_id = ${shift.employeeId} AND r.date = ${shift.date}
+          AND r.effective_state = 'REQUIRES_REVIEW' AND r.start_time IS NOT DISTINCT FROM ${shift.startTime || null}
+          AND r.end_time IS NOT DISTINCT FROM ${shift.endTime || null} AND r.shift_type IS NOT DISTINCT FROM ${shift.shiftType}
+      )
+      RETURNING id
+    `);
+  }
+
+  // Versioned company plan: one new revision only when the plan really changed.
+  const revisionOffset = queries.length;
+  if (createsRevision) {
+    const rows = normalized.map((shift) => ({ k: shift.employeeKey, ...toStoredRow(toPlanRow(shift)) }));
+    const summaryJson = JSON.stringify({
+      baselineRevision: evaluation.latestRevision || null,
+      changes: outcomeCounts(evaluation.summary),
+      days: evaluation.outcomes.filter((item) => item.outcome !== OUTCOME.UNCHANGED).map((item) => ({ k: item.employeeKey, d: item.date, o: item.outcome })),
+    });
+    labels.push('plan-revision');
+    queries.push((txn) => txn`
+      INSERT INTO company_plan_revisions (
+        organization_id, scope_key, revision_number, import_id, plan_fingerprint, document_fingerprint, document_class,
+        coverage_from, coverage_to, row_count, rows, summary, created_by_user_id
+      ) VALUES (
+        ${ctx.organizationId}, ${evaluation.scopeKey}, ${revisionNumber},
+        (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
+          AND employee_id = ${effectiveImportEmployeeId}
+          AND file_fingerprint = ${fileFingerprint} AND context_fingerprint = ${contextFingerprint}
+          ORDER BY created_at ASC LIMIT 1),
+        ${evaluation.planFingerprint}, ${evaluation.documentFingerprint}, ${document.documentClass},
+        ${evaluation.from}, ${evaluation.to}, ${rows.length}, ${JSON.stringify(rows)}::jsonb, ${summaryJson}::jsonb, ${ctx.user.id}
+      )
+      RETURNING id, revision_number
+    `);
+  }
+
   labels.push('import-metadata');
+  const metadataOffset = queries.length;
   queries.push((txn) => txn`
     UPDATE imports i
     SET employee_count = ${employeeIds.length},
         shift_count = ${normalized.length},
+        import_decision = ${importDecisionToStore},
+        plan_fingerprint = ${evaluation.planFingerprint},
+        document_fingerprint = ${evaluation.documentFingerprint},
+        document_class = ${document.documentClass},
+        temporal_class = ${dated.classification},
+        duplicate_kind = ${duplicateKind === 'DUPLICATE_FILE' ? null : duplicateKind},
         created_shift_count = (
           SELECT COUNT(*)::integer FROM shifts s WHERE s.import_id = i.id
         ) + (
@@ -501,71 +737,62 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
         )),
         updated_at = NOW()
     WHERE i.organization_id = ${ctx.organizationId}
-      AND i.employee_id = ${importInput.employeeId}
-      AND i.file_fingerprint = ${importInput.fileFingerprint}
-      AND i.context_fingerprint = ${importInput.contextFingerprint}
+      AND i.employee_id = ${effectiveImportEmployeeId}
+      AND i.file_fingerprint = ${fileFingerprint}
+      AND i.context_fingerprint = ${contextFingerprint}
     RETURNING *
   `);
 
-  const publishOffset = queries.length;
-  for (const group of groupList) {
-    const ids = scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`);
-    labels.push(`publish:${group.periodStart}`);
-    queries.push((txn) => publishScheduleVersionTx(txn, ctx, ids.scheduleId, ids.versionId));
+  let transactionResult;
+  try {
+    transactionResult = await sql.transaction((txn) => queries.map((query) => query(txn)));
+  } catch (error) {
+    // Two confirmations raced from the same baseline: the loser re-evaluates and becomes a duplicate.
+    if (createsRevision && attempt === 0 && isUniqueViolation(error)) return confirmFutureImport(sql, ctx, input, attempt + 1);
+    throw error;
   }
-  if (groupList.length > 0) {
-    const versionIds = groupList.map((group) => scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`).versionId);
-    labels.push('assert-published');
-    queries.push((txn) => txn`
-      SELECT 1 / CASE WHEN COUNT(*) = ${groupList.length} THEN 1 ELSE 0 END AS publication_guard
-      FROM schedule_versions WHERE id = ANY(${versionIds}::uuid[]) AND status = 'PUBLISHED'
-    `);
-  }
-
-  const transactionResult = await sql.transaction((txn) => queries.map((query) => query(txn)));
   const importRow = transactionResult[0]?.[0];
   if (!importRow?.id) throw requestError(500, 'Import transaction did not return an import id');
-  const deduplicated = importRow.inserted === false;
-  const scheduleOffset = 1;
-  const historicalOffset = scheduleOffset + groupList.length * 2;
-  const historicalResults = transactionResult.slice(historicalOffset, historicalOffset + historical.length);
-  const deleteOffset = historicalOffset + historical.length;
-  const deletedCount = transactionResult.slice(deleteOffset, deleteOffset + deleteIds.length)
-    .reduce((count, rows) => count + rows.length, 0);
-  const futureOffset = deleteOffset + deleteIds.length;
-  const futureResults = transactionResult.slice(futureOffset, futureOffset + future.length);
+  const slice = (offset, length) => transactionResult.slice(offset, offset + length);
+  const historicalResults = slice(historicalOffset, historicalToWrite.length);
+  const deletedCount = slice(deleteOffset, deleteIds.length).reduce((count, rows) => count + rows.length, 0);
+  const futureResults = slice(futureOffset, futureToDraft.length);
   const assignmentCount = futureResults.reduce((count, rows) => count + rows.length, 0);
-  const updatedImport = transactionResult[publishOffset - 1]?.[0];
-  const publicationResults = transactionResult.slice(publishOffset, publishOffset + groupList.length).map((rows, index) => ({
-    periodStart: groupList[index].periodStart,
-    status: 'PUBLISHED',
-    createdShiftCount: Number(rows[0]?.created_shift_count ?? 0),
-  }));
-  const { createShiftPublishedNotifications } = await import('./data.js');
-  for (const group of groupList) {
-    const versionId = scheduleIds.get(`${group.periodStart}:${group.areaId ?? 'global'}`).versionId;
-    try { await createShiftPublishedNotifications(sql, ctx, versionId); } catch (error) {
-      console.error('[notifications] SHIFT_PUBLISHED generation failed', { organizationId: ctx.organizationId, scheduleVersionId: versionId, error: error instanceof Error ? error.message : 'unknown' });
-    }
-  }
+  const updatedImport = transactionResult[metadataOffset]?.[0];
+  const revisionResult = createsRevision ? transactionResult[revisionOffset]?.[0] : null;
+
   return {
     classification: dated.classification,
     cutoff: dated.cutoff,
+    decision,
     importId: importRow.id,
-    deduplicated,
+    deduplicated: duplicateKind === 'DUPLICATE_FILE',
+    duplicate: duplicateKind,
+    sameFileDifferentDecision,
+    document,
     historical: {
       submittedCount: historical.length,
       persistedCount: historicalResults.reduce((count, rows) => count + rows.length, 0),
       deletedCount,
+      requiresReviewDays: evaluation.outcomes.filter((item) => item.retrospective && item.outcome === OUTCOME.REQUIRES_REVIEW).length,
     },
     future: {
       submittedCount: future.length,
       createdAssignmentCount: assignmentCount,
-      existingAssignmentCount: future.length - assignmentCount,
-      affectedWeekCount: groups.size,
-      publishedWeekCount: publicationResults.length,
-      publishedShiftCount: publicationResults.reduce((count, item) => count + item.createdShiftCount, 0),
-    publicationResults,
+      existingAssignmentCount: Math.max(0, future.length - assignmentCount),
+      affectedWeekCount: weeks.size,
+      draftWeekCount: groupList.length,
+      // Import never publishes. The keys below are kept (always 0) for older clients.
+      publishedWeekCount: 0,
+      publishedShiftCount: 0,
+      publicationResults: [],
+    },
+    plan: {
+      autoPublished: false,
+      revisionNumber: revisionResult?.revision_number ?? null,
+      baselineRevision: evaluation.latestRevision || null,
+      revisionCreated: Boolean(revisionResult),
+      changes: outcomeCounts(evaluation.summary),
     },
     import: updatedImport ? mapImportRow(updatedImport) : { id: importRow.id },
     transactionQueryCount: labels.length,

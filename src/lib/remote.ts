@@ -46,6 +46,10 @@ export interface RemoteImport {
   createdAt?: string;
   deletedAt?: string | null;
   deduplicated?: boolean;
+  importDecision?: 'historical-only' | 'historical-and-plan' | null;
+  documentClass?: 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED' | null;
+  temporalClass?: 'HISTORICAL' | 'FUTURE' | 'MIXED' | null;
+  duplicateKind?: 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN' | null;
 }
 
 export interface ScheduleVersion {
@@ -184,25 +188,62 @@ export interface SchedulePublicationResult {
   excludedAssignmentCount: number;
 }
 
+export type ImportDuplicateKind = 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN';
+export type ImportDocumentClass = 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED';
+
+export interface PlanChangeCounts {
+  new: number;
+  unchanged: number;
+  modified: number;
+  keptLocal: number;
+  companyAdoptedLocal: number;
+  requiresReview: number;
+}
+
 export interface FutureImportResult {
   classification: 'FUTURE' | 'MIXED';
   cutoff: string;
+  decision?: FutureImportConsent;
   importId: string;
   deduplicated: boolean;
-  historical: { submittedCount: number; persistedCount: number; deletedCount: number };
+  duplicate?: ImportDuplicateKind | null;
+  sameFileDifferentDecision?: boolean;
+  document?: { documentClass: ImportDocumentClass; confidence: string; evidence: string[] };
+  historical: { submittedCount: number; persistedCount: number; deletedCount: number; requiresReviewDays?: number };
   future: {
     submittedCount: number;
     createdAssignmentCount: number;
     existingAssignmentCount: number;
     affectedWeekCount: number;
+    /** Weeks whose DRAFT plan was created/updated. Import never publishes. */
+    draftWeekCount?: number;
     publishedWeekCount: number;
     publishedShiftCount: number;
-    publicationResults: Array<{ periodStart: string; status: 'PUBLISHED'; createdShiftCount: number }>;
+    publicationResults: Array<{ periodStart: string; status: string; createdShiftCount: number }>;
+  };
+  plan?: {
+    autoPublished: false;
+    revisionNumber: number | null;
+    baselineRevision: number | null;
+    revisionCreated: boolean;
+    changes: PlanChangeCounts;
   };
   import: RemoteImport;
 }
 
-export type FutureImportConsent = 'publish';
+/** `historical-and-plan` = also create/update the planning from the future rows (never publishes). */
+export type FutureImportConsent = 'historical-and-plan';
+
+export interface PlanImportPreview {
+  classification: 'HISTORICAL' | 'FUTURE' | 'MIXED';
+  cutoff: string;
+  document: { documentClass: ImportDocumentClass; confidence: string; evidence: string[] };
+  historicalCount: number;
+  futureCount: number;
+  employeeCount: number;
+  plan: { baselineRevision: number | null; changes: PlanChangeCounts; wouldCreateRevision: boolean; weeksAffected: string[] };
+  autoPublish: false;
+}
 
 export interface NewScheduleDraftResult {
   newVersionId: string;
@@ -800,6 +841,19 @@ export async function confirmRemoteFutureImport(input: {
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+/** Read-only reconciliation of a parsed document against the company plan (no writes). PLANNER+ only. */
+export async function previewPlanImport(input: {
+  fileFingerprint: string;
+  employeeId?: string;
+  shifts: Array<Pick<Shift, 'id' | 'date' | 'startTime' | 'endTime' | 'location' | 'origin' | 'sourceFormat'> & { employeeId?: string; areaId?: string | null }>;
+  areaId?: string | null;
+  importMode?: 'individual' | 'team';
+  periodKind?: 'single' | 'multi';
+  deleteIds?: string[];
+}): Promise<PlanImportPreview> {
+  return apiFetch<PlanImportPreview>('/api/imports/plan-preview', { method: 'POST', body: JSON.stringify(input) });
 }
 
 /** Org-scoped import history, paginated. Read access follows the same

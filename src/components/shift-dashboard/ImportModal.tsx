@@ -460,7 +460,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     const historicalCount = split.historical.length;
     const futureCount = split.future.length;
 
-    const canImportFuture = !identityLocked && futureImportDecision === 'publish';
+    const canImportFuture = !identityLocked && futureImportDecision === 'historical-and-plan';
     const effectiveFuture = canImportFuture ? futureCount : 0;
 
     return historicalCount + effectiveFuture;
@@ -1847,12 +1847,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
                 {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
                 {temporalSummary.historical > 0 && <span data-testid="import-historical-count">{t('importModal.temporalHistorical', { count: temporalSummary.historical })}</span>}
-                {effectiveTemporalSummary.includedForPublication > 0 && (
+                {effectiveTemporalSummary.includedForPlanning > 0 && (
                   <span data-testid="import-future-count">
-                    {t('importModal.temporalFutureDraft', { count: effectiveTemporalSummary.includedForPublication })}
+                    {t('importModal.temporalFutureDraft', { count: effectiveTemporalSummary.includedForPlanning })}
                   </span>
                 )}
-                {effectiveTemporalSummary.includedForPublication === 0 && effectiveTemporalSummary.excludedByRole > 0 && (
+                {effectiveTemporalSummary.includedForPlanning === 0 && effectiveTemporalSummary.excludedByRole > 0 && (
                   <span data-testid="import-future-count">
                     {t('importModal.temporalFutureExcluded', { count: effectiveTemporalSummary.excludedByRole })}
                   </span>
@@ -1874,6 +1874,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   decision={futureImportDecision}
                   onChange={setFutureImportDecision}
                   testId="import-future-consent"
+                  historicalCount={temporalSummary.historical}
+                  futureCount={temporalSummary.future}
                 />
               )
             )}

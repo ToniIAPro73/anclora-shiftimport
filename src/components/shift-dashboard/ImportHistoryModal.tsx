@@ -151,6 +151,17 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
     return t('imports.statusCompleted');
   };
 
+  /** Business meaning of the import (never fingerprints): what effect it had. */
+  const kindLabel = (row: RemoteImport): string | null => {
+    if (row.status === 'deleted') return null;
+    if (row.duplicateKind === 'DUPLICATE_DOCUMENT') return t('imports.kindDuplicateDocument');
+    if (row.duplicateKind === 'DUPLICATE_PLAN') return t('imports.kindDuplicatePlan');
+    if (row.documentClass === 'COMPANY_PLAN_UPDATE') return t('imports.kindPlanUpdate');
+    if (row.importDecision === 'historical-and-plan') return t('imports.kindHistoricalAndPlan');
+    if (row.importDecision === 'historical-only' || row.temporalClass === 'HISTORICAL') return t('imports.kindHistoricalOnly');
+    return null;
+  };
+
   const handleDelete = (row: RemoteImport) => {
     if (!canDelete || deletingId) {
       return;
@@ -291,6 +302,9 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
                   <span className={`status-badge ${isDeleted || isNonTerminal ? 'status-badge--inactive' : 'status-badge--active'}`}>
                     {statusLabel(row)}
                   </span>
+                  {kindLabel(row) && (
+                    <span data-testid="import-kind" style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{kindLabel(row)}</span>
+                  )}
                   <span style={{ marginLeft: 'auto' }}>
                     {canDelete && !isDeleted && (
                       <button

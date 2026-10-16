@@ -445,6 +445,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'user_preferences',
           'calendar_changes',
           'employee_annual_targets',
+          'company_plan_revisions',
         ],
         columns: [
           'organizations.plan',
@@ -467,6 +468,9 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'shifts.layer',
           'shifts.provenance',
           'shifts.duty_role',
+          'imports.plan_fingerprint',
+          'imports.document_fingerprint',
+          'imports.import_decision',
         ],
         routines: [
           'transfer_organization_ownership_temporal',
@@ -491,6 +495,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           { conname: 'user_access_invitations_token_hash_key', def: 'UNIQUE (token_hash)' },
           { conname: 'user_access_invitations_person_org_fkey', def: 'FOREIGN KEY (organization_person_id, organization_id)' },
           { conname: 'employee_annual_targets_unique', def: 'UNIQUE (organization_id, employee_id, year)' },
+          { conname: 'company_plan_revisions_unique', def: 'UNIQUE (organization_id, scope_key, revision_number)' },
         ],
       });
 

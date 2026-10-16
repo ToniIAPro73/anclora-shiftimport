@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifyImportDates, confirmFutureImport } from '../_lib/future-import.js';
+import { classifyImportDates, confirmFutureImport, previewFutureImport } from '../_lib/future-import.js';
 
 const ORG = '11111111-1111-4111-8111-111111111111';
 const EMPLOYEE = '22222222-2222-4222-8222-222222222222';
@@ -12,7 +12,7 @@ function request(date) {
   return {
     fileName: 'm14.csv', sourceFormat: 'CSV', fileFingerprint: 'a'.repeat(64),
     employeeId: EMPLOYEE, periodYear: 2026, periodMonth: 9,
-    futureConsent: 'publish',
+    futureConsent: 'historical-and-plan',
     shifts: [{ ...base, date }],
   };
 }
@@ -41,7 +41,7 @@ describe('R3-M14 future import contract', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it('rejects the legacy draft consent so publication is always explicit', async () => {
+  it('rejects any other consent value: the plan decision must be explicit', async () => {
     const transaction = vi.fn();
     const sql = () => Promise.resolve([]);
     sql.transaction = transaction;
@@ -97,5 +97,65 @@ describe('R3-M14 future import contract', () => {
 
     await expect(confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), areaId: AREA })).rejects.toThrow('induced intermediate failure');
     expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('importing never publishes: the transaction contains no publication statement and notifications are not sent', async () => {
+    const executed = [];
+    const transaction = vi.fn(async (callback) => {
+      const txn = (strings) => { executed.push(strings.join(' ').replace(/\s+/g, ' ')); return Promise.resolve([{ id: 'x', inserted: true, revision_number: 1 }]); };
+      const results = await Promise.all(callback(txn));
+      return results;
+    });
+    const sql = (strings) => {
+      const text = strings.join(' ').replace(/\s+/g, ' ');
+      if (text.includes('FROM areas')) return Promise.resolve([{ id: AREA, name: 'Area' }]);
+      if (text.includes('FROM employees')) return Promise.resolve([{ id: EMPLOYEE, status: 'active', area_id: AREA, external_employee_id: '84881', name: 'QA' }]);
+      return Promise.resolve([]);
+    };
+    sql.transaction = transaction;
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', scopedAreaId: AREA, employeeId: null, plan: 'team' };
+
+    const result = await confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), areaId: AREA });
+    expect(result.plan.autoPublished).toBe(false);
+    expect(result.future.publishedWeekCount).toBe(0);
+    expect(executed.some((text) => /publish_|PUBLISHED'.*UPDATE|SET status = 'PUBLISHED'|publishScheduleVersion/i.test(text))).toBe(false);
+    expect(executed.some((text) => text.includes('company_plan_revisions'))).toBe(true); // the first import establishes the baseline revision
+  });
+
+  it('accepts the legacy wire value "publish" as the plan decision (it never meant auto-publication)', async () => {
+    const transaction = vi.fn(async (callback) => Promise.all(callback(() => Promise.resolve([{ id: 'x', inserted: true, revision_number: 1 }]))));
+    const sql = (strings) => {
+      const text = strings.join(' ');
+      if (text.includes('FROM areas')) return Promise.resolve([{ id: AREA, name: 'Area' }]);
+      if (text.includes('FROM employees')) return Promise.resolve([{ id: EMPLOYEE, status: 'active', area_id: AREA, external_employee_id: '1', name: 'QA' }]);
+      return Promise.resolve([]);
+    };
+    sql.transaction = transaction;
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', scopedAreaId: AREA, employeeId: null, plan: 'team' };
+    await expect(confirmFutureImport(sql, ctx, { ...request(FUTURE_DATE), areaId: AREA, futureConsent: 'publish' })).resolves.toMatchObject({ decision: 'historical-and-plan' });
+  });
+
+  it('preview is read-only (no transaction) and works before any decision is made', async () => {
+    const transaction = vi.fn();
+    const sql = (strings) => {
+      const text = strings.join(' ');
+      if (text.includes('FROM areas')) return Promise.resolve([{ id: AREA, name: 'Area' }]);
+      if (text.includes('FROM employees')) return Promise.resolve([{ id: EMPLOYEE, status: 'active', area_id: AREA, external_employee_id: '84881', name: 'QA' }]);
+      return Promise.resolve([]);
+    };
+    sql.transaction = transaction;
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'PLANNER', scopedAreaId: AREA, employeeId: null, plan: 'team' };
+    const preview = await previewFutureImport(sql, ctx, { ...request(FUTURE_DATE), areaId: AREA, futureConsent: undefined });
+    expect(preview.autoPublish).toBe(false);
+    expect(preview.classification).toBe('FUTURE');
+    expect(preview.plan.changes.new).toBe(1);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('EMPLOYEE can neither preview nor confirm planning', async () => {
+    const sql = () => Promise.resolve([]);
+    sql.transaction = vi.fn();
+    const ctx = { user: { id: USER }, organizationId: ORG, role: 'EMPLOYEE', employeeId: EMPLOYEE, plan: 'team' };
+    await expect(previewFutureImport(sql, ctx, request(FUTURE_DATE))).rejects.toMatchObject({ status: 403, code: 'SELF_IMPORT_FUTURE_FORBIDDEN' });
   });
 });

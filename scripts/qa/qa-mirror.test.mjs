@@ -38,10 +38,11 @@ describe('buildMirror', () => {
   it('copies no real identity: no user links, pseudonymised people and file names', () => {
     expect(mirror.employees.every((e) => e.user_id === null)).toBe(true);
     expect(mirror.employees.map((e) => e.name)).toEqual(['Sebastián Pozo Mendoza — QA', 'Empleado QA 002']);
-    expect(mirror.employees[0].external_employee_id).toBe('84881');
+    expect(mirror.employees[0].external_employee_id).toBe('84881'); // business key preserved
     expect(mirror.employee_annual_targets).toHaveLength(1);
     expect(mirror.employee_annual_targets[0]).toMatchObject({ year: 2026, minimum_annual_minutes: 91740, maximum_annual_minutes: 92400, employee_id: mirror.employees[0].id });
     expect(mirror.employees[1].external_employee_id).toBeNull();
+    expect(mirror.employees.every((e) => e.user_id === null)).toBe(true);
     expect(mirror.imports[0].file_name).toBe('qa-import-001.xlsx');
     expect(JSON.stringify(mirror)).not.toMatch(/real-user|Persona Real Dos|Persona Real Uno|Juan/);
     expect(mirror.imports[0].imported_by_user_id).toBe(QA_USER);
@@ -150,5 +151,20 @@ describe('pilot annual target', () => {
   it('is 1529–1540 h (91740–92400 min), margin 11 h', () => {
     expect(PILOT_TARGET_MINUTES).toEqual({ minimum: 1529 * 60, maximum: 1540 * 60 });
     expect(PILOT_TARGET_MINUTES.maximum - PILOT_TARGET_MINUTES.minimum).toBe(11 * 60);
+  });
+});
+
+describe('synthetic EMPLOYEE QA link', () => {
+  const src = {
+    areas: [], imports: [], schedules: [], schedule_versions: [], shift_assignments: [], calendar_changes: [], shifts: [], employee_annual_targets: [], format_profiles: [],
+    employees: [
+      { id: 'a', organization_id: SRC, name: 'Pilot', external_employee_id: '84881', status: 'active', created_at: 1 },
+      { id: 'b', organization_id: SRC, name: 'Other', external_employee_id: '11111', status: 'active', created_at: 2 },
+    ],
+  };
+  it('links exactly one non-pilot employee to the synthetic employee user, never the pilot', () => {
+    const mirror = buildMirror(src, { targetId: TARGET, qaUserId: QA_USER, qaEmployeeUserId: 'emp-user' });
+    expect(mirror.employees.filter((e) => e.user_id).map((e) => e.external_employee_id)).toEqual(['11111']);
+    expect(buildMirror(src, { targetId: TARGET, qaUserId: QA_USER }).employees.every((e) => e.user_id === null)).toBe(true);
   });
 });

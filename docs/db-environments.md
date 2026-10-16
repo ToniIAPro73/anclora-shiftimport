@@ -5,7 +5,7 @@ para todas las ramas Git y todos los entornos de ejecución:
 
 - Proyecto: `holy-cake-85660318`
 - Rama: `main`
-- Branch ID: `br-solitary-thunder-b1hm9low`
+- Branch ID: `br-shy-smoke-b1lyvv58`
 - Endpoint fingerprint: `ep-lingering-dew-...`
 - Dominio de aceptación: `https://shiftimport.anclora.com`
 
@@ -47,3 +47,4 @@ el teardown; nunca usa `DELETE ... LIKE` sobre datos ajenos al run.
 - `scripts/qa/*` resuelven siempre la BD canónica (o `QA_DATABASE_URL`) y abortan si el destino no es el endpoint canónico.
 - La organización real `ShiftImport` (`a4cf0768-f08d-49e6-bb81-0d3635d58028`) es **READ ONLY** para cualquier agente: toda escritura
   QA va a `ShiftImport — QA Mirror` (clon pseudonimizado, solo 2026).
+- Migración `0042_company_plan_revisions_and_import_semantics.sql` aplicada en Neon `main` (aditiva: columnas de `imports` y tabla `company_plan_revisions`).

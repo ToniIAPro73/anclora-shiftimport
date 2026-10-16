@@ -71,6 +71,12 @@ inventan horas). Los imports nuevos no deben crear un `Shift` horario solo por d
 - Un día `REQUIRES_REVIEW` se resuelve con `POST /api/calendar/changes {action:'RECONCILE',
   keepShiftIds, reason}`; la decisión queda registrada (`RECONCILIATION`).
 
+**Revisiones de plan por importación (2026-10-16).** El Plan Empresa futuro se versiona en
+`company_plan_revisions` (baseline `B`); la reconciliación a tres bandas `B/N/E` está en
+`FUTURE_IMPORT_DRAFT_CONTRACT.md`. Una discrepancia genera filas `layer='COMPANY_PLAN'`,
+`effective_state='REQUIRES_REVIEW'`, `plan_revision` = revisión vigente, que aparecen en la reconciliación
+sin tocar el calendario efectivo. Las horas planificadas (borradores) no se suman como realizadas.
+
 ## 5. Permisos
 
 | Acción | OWNER | ADMIN | PLANNER | EMPLOYEE |

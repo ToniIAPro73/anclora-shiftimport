@@ -580,6 +580,12 @@ export const MIGRATION_SENTINELS = {
     cat.columns.has('shifts.provenance') &&
     cat.columns.has('shifts.duty_role') &&
     cat.constraints.has('employee_annual_targets_unique'),
+  '0042_company_plan_revisions_and_import_semantics.sql': (cat) =>
+    cat.tables.has('company_plan_revisions') &&
+    cat.columns.has('imports.plan_fingerprint') &&
+    cat.columns.has('imports.document_fingerprint') &&
+    cat.columns.has('imports.import_decision') &&
+    cat.constraints.has('company_plan_revisions_unique'),
 };
 
 /**

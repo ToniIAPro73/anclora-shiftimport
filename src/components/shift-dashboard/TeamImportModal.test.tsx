@@ -148,9 +148,8 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
 
-    const historicalOnly = screen.getByRole('radio', { name: /Importar solo los turnos históricos/ });
-    const draft = screen.getByRole('radio', { name: /Importar históricos y publicar los turnos futuros/ });
-    fireEvent.click(historicalOnly);
+    expect(screen.queryByRole('radio', { name: /Importar solo históricos/ })).toBeNull(); // future-only document
+    const draft = screen.getByRole('radio', { name: /Crear \/ actualizar planificación futura/ });
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
     await waitFor(() => expect(screen.getByText(/No hay turnos históricos que importar/)).toBeTruthy());
     expect(mockedConfirmRemoteFutureImport).not.toHaveBeenCalled();
@@ -159,7 +158,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     expect(screen.queryByText(/No hay turnos históricos que importar/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
     await waitFor(() => expect(mockedConfirmRemoteFutureImport).toHaveBeenCalledTimes(1));
-    expect(mockedConfirmRemoteFutureImport.mock.calls[0][0]).toMatchObject({ futureConsent: 'publish', shifts: expect.any(Array) });
+    expect(mockedConfirmRemoteFutureImport.mock.calls[0][0]).toMatchObject({ futureConsent: 'historical-and-plan', shifts: expect.any(Array) });
     expect(screen.queryByText('Importación completada')).toBeNull();
     expect(screen.getByText('No se pudieron guardar los turnos importados en la base de datos. Inténtalo de nuevo.')).toBeTruthy();
     expect(onImported).not.toHaveBeenCalled();

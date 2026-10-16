@@ -18,6 +18,8 @@ import {
   updateRemoteEmployee,
   bulkCreateRemoteEmployees,
   confirmRemoteFutureImport,
+  previewPlanImport,
+  type PlanImportPreview,
   BulkCreateResult,
   createRemoteImport,
   syncRemoteShifts,
@@ -187,6 +189,8 @@ export const TeamImportModal = ({
     ambiguous: rows.filter((row) => row.status === 'ambiguous').length,
   }), [rows]);
   const [preview, setPreview] = useState<PreviewEntry[]>([]);
+  const [planPreview, setPlanPreview] = useState<PlanImportPreview | null>(null);
+  const [planPreviewLoading, setPlanPreviewLoading] = useState(false);
   const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
   const [outcomes, setOutcomes] = useState<ImportOutcome[]>([]);
   const [importing, setImporting] = useState(false);
@@ -224,6 +228,36 @@ export const TeamImportModal = ({
   const [fallbackAssistantSession, setFallbackAssistantSession] = useState<{ items: PdfTextItem[]; itemAnalysis: ItemAnalysis } | null>(null);
   const fallbackFileRef = useRef<File | null>(null);
   const interactionLocked = importing || isImporting;
+
+  // Read-only reconciliation against the company plan, shown next to the temporal decision (planners only).
+  useEffect(() => {
+    let cancelled = false;
+    const today = getOperationalDate();
+    const rows = preview.flatMap((entry) => entry.newShifts.map((shift) => ({
+      ...shift,
+      employeeId: entry.row.resolvedEmployeeId as string,
+      areaId: importAreaId ?? null,
+    })));
+    if (!sourceFile || rows.length === 0 || !rows.some((row) => row.date >= today) || rows.some((row) => !row.employeeId)) {
+      setPlanPreview(null);
+      return undefined;
+    }
+    setPlanPreviewLoading(true);
+    void (async () => {
+      try {
+        const fileFingerprint = await fingerprintFile(sourceFile);
+        const result = await previewPlanImport({
+          fileFingerprint, employeeId: rows[0].employeeId, shifts: rows, areaId: importAreaId ?? null, importMode: 'team',
+        });
+        if (!cancelled) setPlanPreview(result);
+      } catch {
+        if (!cancelled) setPlanPreview(null); // role without planning capability, or preview unavailable
+      } finally {
+        if (!cancelled) setPlanPreviewLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [preview, sourceFile, importAreaId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -710,7 +744,7 @@ export const TeamImportModal = ({
     const temporalCounts = splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts), cutoff);
     const hasFutureData = temporalCounts.future.length > 0;
     const submitted = preview.flatMap((entry) => entry.newShifts
-      .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'publish', cutoff))
+      .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'historical-and-plan', cutoff))
       .map((shift) => ({
         ...shift,
         employeeId: entry.row.resolvedEmployeeId as string,
@@ -720,7 +754,7 @@ export const TeamImportModal = ({
       setError(t('importModal.noHistoricalRows'));
       return;
     }
-    if (hasFutureData && futureImportDecision === 'publish') {
+    if (hasFutureData && futureImportDecision === 'historical-and-plan') {
       // A team file containing any future row is one atomic import. The
       // backend classifies every row and rejects the whole request when the
       // effective planning capability/scope is insufficient.
@@ -745,7 +779,7 @@ export const TeamImportModal = ({
         periodLabel: periodKeys.size > 1
           ? t('importModal.multiPeriod')
           : `${monthNames[firstPeriod.month] ?? firstPeriod.month} ${firstPeriod.year}`,
-        futureConsent: 'publish',
+        futureConsent: 'historical-and-plan',
         weekStart: getPlannerWeekStartPreference(),
       });
       const submittedFutureCount = submitted.filter((shift) => shift.date >= cutoff).length;
@@ -1221,6 +1255,10 @@ export const TeamImportModal = ({
                 decision={futureImportDecision}
                 onChange={(decision) => { setError(''); setFutureImportDecision(decision); }}
                 testId="team-import-future-consent"
+                historicalCount={splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).historical.length}
+                futureCount={splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).future.length}
+                preview={planPreview}
+                previewLoading={planPreviewLoading}
               />
             )}
             <div style={{ overflowY: 'auto', display: 'grid', gap: '6px', paddingRight: '4px', flex: 1, minHeight: 0 }}>

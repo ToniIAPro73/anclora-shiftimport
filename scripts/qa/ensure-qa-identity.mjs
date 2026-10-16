@@ -11,7 +11,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashPassword, verifyPassword } from '../../api/_lib/passwords.js';
-import { QA_IDENTITY, ROOT, connect, describeDatabase, findQaUser, loadEnv } from './qa-lib.mjs';
+import { QA_EMPLOYEE_IDENTITY, QA_IDENTITY, ROOT, connect, describeDatabase, findQaUser, loadEnv } from './qa-lib.mjs';
 
 const LOCAL_ENV = path.join(ROOT, '.env.development.local');
 
@@ -63,10 +63,32 @@ export async function ensureQaIdentity(client, { rotate = false, log = () => und
   return { ...result, userId: user.id };
 }
 
+/** Synthetic EMPLOYEE-role QA identity (same password hygiene: generated, stored locally, never printed). */
+export async function ensureQaEmployeeIdentity(client, { log = () => undefined } = {}) {
+  const { verifyPassword: verify } = await import('../../api/_lib/passwords.js');
+  const env = loadEnv(['.env.development.local']);
+  let password = env.MANUAL_QA_EMPLOYEE_PASSWORD;
+  const found = (await client.query('SELECT id, password_hash FROM users WHERE lower(email) = lower($1)', [QA_EMPLOYEE_IDENTITY])).rows[0];
+  let created = false; let synced = false;
+  if (!found) {
+    password = password || randomBytes(24).toString('base64url');
+    await client.query(`INSERT INTO users (email, password_hash, display_name) VALUES ($1, $2, 'QA Employee')`, [QA_EMPLOYEE_IDENTITY, hashPassword(password)]);
+    created = true;
+  } else if (!password || !verify(password, found.password_hash)) {
+    password = password || randomBytes(24).toString('base64url');
+    await client.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND lower(email) = lower($3)', [hashPassword(password), found.id, QA_EMPLOYEE_IDENTITY]);
+    synced = true;
+  }
+  upsertLocalEnv({ MANUAL_QA_EMPLOYEE_EMAIL: QA_EMPLOYEE_IDENTITY, MANUAL_QA_EMPLOYEE_PASSWORD: password });
+  log(`[qa-identity] employee identity created=${created} hashSynced=${synced}`);
+  return { created, synced };
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const client = await connect();
   try {
     const out = await ensureQaIdentity(client, { rotate: process.argv.includes('--rotate'), log: console.log });
+    if (process.argv.includes('--employee')) await ensureQaEmployeeIdentity(client, { log: console.log });
     if (!out.passwordConfigured) { console.error('QA password could not be verified'); process.exitCode = 1; }
   } finally { await client.end(); }
 }

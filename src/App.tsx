@@ -1415,7 +1415,7 @@ function App() {
       return false;
     }
 
-    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision === 'publish'
+    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision === 'historical-and-plan'
       ? schedulingIncoming
       : [];
     const historicalUpserts = upserts;
@@ -1518,7 +1518,7 @@ function App() {
             importMode: 'individual',
             periodKind: targetPeriod.kind,
             periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
-            futureConsent: 'publish',
+            futureConsent: 'historical-and-plan',
             weekStart: getPlannerWeekStartPreference(),
           });
           const persisted = historicalUpserts.length > 0
@@ -1553,7 +1553,10 @@ function App() {
               publishedWeekCount: futureResult.future.publishedWeekCount,
               publishedShiftCount: futureResult.future.publishedShiftCount,
               publicationResults: futureResult.future.publicationResults,
+              draftWeekCount: futureResult.future.draftWeekCount,
             },
+            duplicate: futureResult.duplicate ?? null,
+            plan: futureResult.plan,
           });
           if (targetEmployeeId !== selectedEmployeeId) {
             setSelectedEmployeeId(targetEmployeeId);
