@@ -44,7 +44,8 @@ No asumir infraestructura compartida entre productos. Validar siempre hosting, b
 - Modo invitado local-first intacto: sin sesión, todo sigue en `localStorage`. Con sesión, persistencia remota por empleado; migración one-shot local→remoto (sin borrar la copia local).
 
 ## Comandos útiles
-- `npm run dev`: desarrollo local.
+- `npm run dev`: desarrollo local sobre Neon canónica (sin Docker). `npm run dev:docker`: fallback explícito con Postgres local.
+- `npm run qa:mirror:refresh [-- --dry-run]`: reconstruye `ShiftImport — QA Mirror` (solo 2026) desde `ShiftImport` (READ ONLY). Nunca escribir en `ShiftImport`.
 - `npm run build`: validación principal (tsc + vite build).
 - `npm run lint`: linting estricto (`--max-warnings 0`).
 - `npm test`: Vitest (src + api).

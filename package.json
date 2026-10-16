@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/start-local.mjs",
+    "dev": "node scripts/qa/dev-runtime.mjs",
     "dev:frontend": "vite",
     "proxy": "node proxy-server.mjs",
     "dev:full": "concurrently \"npm run proxy\" \"npm run dev\"",
@@ -23,7 +23,10 @@
     "db:migrate:status": "node --env-file=.env.local db/migrate.mjs --status",
     "qa:dev-runtime": "node scripts/qa/dev-runtime.mjs",
     "qa:local:smoke": "node scripts/qa/qa-smoke.mjs --local",
-    "qa:preview:smoke": "node scripts/qa/qa-smoke.mjs --preview"
+    "qa:preview:smoke": "node scripts/qa/qa-smoke.mjs --preview",
+    "dev:docker": "node scripts/start-local.mjs",
+    "qa:mirror:refresh": "node scripts/qa/refresh-qa-mirror.mjs",
+    "qa:identity:ensure": "node scripts/qa/ensure-qa-identity.mjs"
   },
   "dependencies": {
     "@anclora/design-system": "github:ToniIAPro73/anclora-design-system#87655c449e3bda41787e82d00aa8a8e17473b616",

@@ -16,7 +16,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  QA_DOMAIN, QA_IDENTITY, assertQaOrganization, connect, deterministicUuid, findQaUser,
+  PROTECTED_SOURCE_ORG_ID, QA_DOMAIN, QA_IDENTITY, assertNotProtectedSource, assertQaOrganization, connect, deterministicUuid, findQaUser,
   resolveSourceOrganization, sha256, targetNameFor,
 } from './qa-lib.mjs';
 
@@ -59,8 +59,54 @@ async function readSource(client, sourceId) {
 
 const pad = (n, width) => String(n).padStart(width, '0');
 
+export const MIRROR_YEAR = 2026;
+export const PILOT_EXTERNAL_ID = '84881';
+export const PILOT_TARGET_MINUTES = Object.freeze({ minimum: 91740, maximum: 92400 }); // 1529 h – 1540 h
+
+const isoDate = (value) => {
+  if (value instanceof Date) return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  return String(value ?? '').slice(0, 10);
+};
+const inYear = (value, year) => isoDate(value).startsWith(`${year}-`);
+
+/**
+ * Keeps ONLY the operational data of one calendar year, dropping everything else while the
+ * mirror is built (nothing is copied and deleted afterwards). Referential integrity is preserved:
+ * references to excluded parents are nulled or the child is dropped.
+ */
+export function scopeToYear(source, year = MIRROR_YEAR) {
+  const shifts = source.shifts.filter((r) => inYear(r.date, year));
+  const calendar_changes = source.calendar_changes.filter((r) => inYear(r.date, year));
+  const schedules = source.schedules.filter((r) => isoDate(r.period_end) >= `${year}-01-01` && isoDate(r.period_start) < `${year + 1}-01-01`);
+  const scheduleIds = new Set(schedules.map((r) => r.id));
+  const schedule_versions = source.schedule_versions.filter((r) => scheduleIds.has(r.schedule_id));
+  const versionIds = new Set(schedule_versions.map((r) => r.id));
+  const shift_assignments = source.shift_assignments.filter((r) => versionIds.has(r.schedule_version_id) && inYear(r.date, year));
+  const usedImports = new Set([...shifts.map((r) => r.import_id), ...shift_assignments.map((r) => r.import_id)].filter(Boolean));
+  const imports = source.imports.filter((r) => r.period_year === year || usedImports.has(r.id));
+  const importIds = new Set(imports.map((r) => r.id));
+  const changeIds = new Set(calendar_changes.map((r) => r.id));
+  const shiftIds = new Set(shifts.map((r) => r.id));
+  return {
+    ...source,
+    imports,
+    schedules,
+    schedule_versions,
+    shift_assignments: shift_assignments.map((r) => ({ ...r, import_id: importIds.has(r.import_id) ? r.import_id : null })),
+    calendar_changes: calendar_changes.map((r) => ({ ...r, original_shift_id: shiftIds.has(r.original_shift_id) ? r.original_shift_id : null })),
+    shifts: shifts.map((r) => ({
+      ...r,
+      import_id: importIds.has(r.import_id) ? r.import_id : null,
+      schedule_version_id: versionIds.has(r.schedule_version_id) ? r.schedule_version_id : null,
+      change_id: changeIds.has(r.change_id) ? r.change_id : null,
+    })),
+    employee_annual_targets: source.employee_annual_targets.filter((r) => r.year === year),
+  };
+}
+
 /** Pure transformation: source rows -> mirror rows (remapped ids, pseudonymised people, no auth links). */
-export function buildMirror(source, { targetId, qaUserId }) {
+export function buildMirror(rawSource, { targetId, qaUserId }) {
+  const source = scopeToYear(rawSource);
   const ns = targetId;
   const map = (kind) => {
     const cache = new Map();
@@ -83,8 +129,9 @@ export function buildMirror(source, { targetId, qaUserId }) {
     ...r,
     id: employee(r.id),
     organization_id: targetId,
-    name: `Empleado QA ${pad(employeeIndex.get(r.id), 3)}`,
-    external_employee_id: r.external_employee_id ? `QA-${pad(employeeIndex.get(r.id), 4)}` : null,
+    // The pilot employee stays recognisable (operational id kept, never linked to a real user).
+    name: r.external_employee_id === PILOT_EXTERNAL_ID ? 'Sebastián Pozo Mendoza — QA' : `Empleado QA ${pad(employeeIndex.get(r.id), 3)}`,
+    external_employee_id: r.external_employee_id === PILOT_EXTERNAL_ID ? PILOT_EXTERNAL_ID : (r.external_employee_id ? `QA-${pad(employeeIndex.get(r.id), 4)}` : null),
     user_id: null,
     area_id: area(r.area_id),
   }));
@@ -134,6 +181,18 @@ export function buildMirror(source, { targetId, qaUserId }) {
   out.employee_annual_targets = source.employee_annual_targets.map((r) => ({
     ...r, id: target(r.id), organization_id: targetId, employee_id: employee(r.employee_id), created_by_user_id: null, updated_by_user_id: null,
   }));
+  // The pilot employee must have exactly one 2026 target (1529–1540 h); created in the mirror only if the source lacks it.
+  const pilot = source.employees.find((r) => r.external_employee_id === PILOT_EXTERNAL_ID);
+  if (pilot) {
+    const pilotId = employee(pilot.id);
+    out.employee_annual_targets = out.employee_annual_targets.filter((t) => t.employee_id !== pilotId);
+    out.employee_annual_targets.push({
+      id: target(`pilot-${MIRROR_YEAR}`), organization_id: targetId, employee_id: pilotId, year: MIRROR_YEAR,
+      minimum_annual_minutes: PILOT_TARGET_MINUTES.minimum, maximum_annual_minutes: PILOT_TARGET_MINUTES.maximum,
+      notes: 'QA mirror target', source: 'QA_MIRROR', created_by_user_id: null, updated_by_user_id: null,
+      created_at: new Date('2026-01-01T00:00:00Z').toISOString(), updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    });
+  }
   out.format_profiles = source.format_profiles.map((r) => ({
     ...r, id: profile(r.id), organization_id: targetId, logical_profile_id: profile(r.logical_profile_id),
     supersedes_profile_id: profile(r.supersedes_profile_id), created_by_user_id: null,
@@ -175,12 +234,20 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
   const existing = targets[0] ?? null;
   if (existing && existing.id === source.id) throw new Error('target == source: abort');
 
+  if (source.id !== PROTECTED_SOURCE_ORG_ID) throw new Error('Source organization is not the protected ShiftImport tenant; refusing to continue');
   const before = await sourceFingerprint(client, source.id);
   const data = await readSource(client, source.id);
+  const sourceQaMembership = (await client.query(
+    'SELECT COUNT(*)::int AS n FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.organization_id = $1 AND lower(u.email) = lower($2)', [source.id, QA_IDENTITY],
+  )).rows[0].n > 0;
+  const planned = buildMirror(data, { targetId: existing?.id ?? '00000000-0000-4000-8000-000000000000', qaUserId: qaUser.id });
+  const plannedCounts = Object.fromEntries(COPIED.map((t) => [t, planned[t].length]));
   const report = {
     source, targetName, targetExisted: Boolean(existing), targetCreated: false, mode: apply ? 'APPLY' : 'DRY_RUN',
     sourceCounts: Object.fromEntries(COPIED.map((t) => [t, data[t].length])),
     sourceHashBefore: before.overall,
+    plannedMirrorCounts: plannedCounts,
+    sourceQaMembershipPresent: sourceQaMembership,
     sourceContainsRealPii: data.employees.length > 0 ? 'YES' : 'NO',
   };
   log(`[mirror] source=${source.name} target="${targetName}" mode=${report.mode} counts=${JSON.stringify(report.sourceCounts)}`);
@@ -197,6 +264,7 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
       `INSERT INTO memberships (user_id, organization_id, role) VALUES ($1, $2, 'ADMIN')
        ON CONFLICT (user_id, organization_id) DO UPDATE SET role = 'ADMIN'`, [qaUser.id, targetId],
     );
+    assertNotProtectedSource(targetId);
     await assertQaOrganization(client, targetId); // fail-closed BEFORE any DELETE
     for (const [table, where] of WIPE_ORDER) {
       if (!where.includes('$1')) throw new Error('unscoped delete refused');
@@ -211,8 +279,17 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
       await client.query('UPDATE calendar_changes SET original_shift_id = $1 WHERE id = $2 AND organization_id = $3', [link.original_shift_id, link.id, targetId]);
     }
     for (const table of COPIED) {
-      if (inserted[table] !== data[table].length) throw new Error(`Row count mismatch for ${table}: ${inserted[table]} != ${data[table].length}`);
+      if (inserted[table] !== mirror[table].length) throw new Error(`Row count mismatch for ${table}: ${inserted[table]} != ${mirror[table].length}`);
     }
+    // 2026-only mirror: no operational row of any other year may exist.
+    const stray = (await client.query(
+      `SELECT (SELECT COUNT(*) FROM shifts WHERE organization_id = $1 AND date NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS shifts,
+              (SELECT COUNT(*) FROM calendar_changes WHERE organization_id = $1 AND date NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS changes,
+              (SELECT COUNT(*) FROM employee_annual_targets WHERE organization_id = $1 AND year <> 2026)::int AS targets,
+              (SELECT COUNT(*) FROM shift_assignments a JOIN schedule_versions sv ON sv.id = a.schedule_version_id JOIN schedules s ON s.id = sv.schedule_id
+                 WHERE s.organization_id = $1 AND a.date NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS assignments`, [targetId],
+    )).rows[0];
+    if (Object.values(stray).some((n) => n > 0)) throw new Error(`Out-of-scope rows present in the mirror: ${JSON.stringify(stray)}`);
     // No real identity may have leaked into the mirror.
     const leaks = (await client.query(
       `SELECT (SELECT COUNT(*) FROM employees WHERE organization_id = $1 AND user_id IS NOT NULL)::int AS linked,

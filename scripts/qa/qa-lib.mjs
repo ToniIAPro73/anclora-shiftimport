@@ -13,6 +13,8 @@ import pg from 'pg';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const QA_IDENTITY = 'qa.shiftimport@anclora.test';
 export const QA_DOMAIN = '@anclora.test';
+/** The real tenant. READ ONLY for every QA/dev tool: SELECT is the only statement ever allowed against it. */
+export const PROTECTED_SOURCE_ORG_ID = 'a4cf0768-f08d-49e6-bb81-0d3635d58028';
 /** Product naming drifted ("Safe Import" in briefs, "ShiftImport" in the database): accept both, require exactly one match. */
 export const SOURCE_ORG_NAMES = Object.freeze(['Safe Import', 'ShiftImport']);
 export const QA_TARGET_NAME_SUFFIX = ' — QA Mirror';
@@ -91,6 +93,10 @@ export function describeDatabase(url = databaseUrl()) {
   return { host, database: parsed.pathname.slice(1), fingerprint: createHash('sha256').update(`${host}/${parsed.pathname.slice(1)}`).digest('hex').slice(0, 12) };
 }
 
+// DATE columns must stay calendar strings: pg would otherwise build a local-midnight Date and a JSON
+// round-trip (UTC) would move every date one day back in zones ahead of UTC.
+pg.types.setTypeParser(1082, (value) => value);
+
 export async function connect() {
   const url = databaseUrl();
   const local = /localhost|127\.0\.0\.1/.test(url);
@@ -133,8 +139,15 @@ export async function findQaUser(client) {
  * and every member is a synthetic `@anclora.test` account (so a real person
  * can never be inside a QA-writable tenant).
  */
+export function assertNotProtectedSource(organizationId) {
+  if (!organizationId || String(organizationId).toLowerCase() === PROTECTED_SOURCE_ORG_ID) {
+    throw new Error('QA GUARD: the protected source organization is read-only');
+  }
+}
+
 export async function assertQaOrganization(client, organizationId) {
   if (!organizationId) throw new Error('assertQaOrganization: organization id required');
+  assertNotProtectedSource(organizationId);
   const source = await resolveSourceOrganization(client);
   if (source.id === organizationId) throw new Error('QA GUARD: organization is the source organization');
   const org = (await client.query('SELECT id, name FROM organizations WHERE id = $1', [organizationId])).rows[0];

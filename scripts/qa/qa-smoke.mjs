@@ -45,20 +45,22 @@ export async function runSmoke(baseUrl) {
 
   const employees = (await json(await call('/api/employees', mirror.organizationId))).employees ?? [];
   result.employees = employees.length;
-  result.pseudonymised = employees.every((e) => /^Empleado QA \d{3}$/.test(e.name)) ? 'PASS' : 'FAIL';
-  const busiest = employees.find((e) => e.externalEmployeeId === 'QA-0001') ?? employees[0];
-  const year = new Date().getUTCFullYear();
-  const stats = await json(await call(`/api/calendar/stats?employeeId=${busiest.id}&year=${year}`, mirror.organizationId));
-  result.statisticsPopulated = (stats.calendarRows ?? 0) > 0 ? 'PASS' : 'FAIL';
-  // reconciliation lives on whichever employee carries the review days: scan until found
-  let pending = 0;
-  for (const e of employees) {
-    const recon = await json(await call(`/api/calendar/reconciliation?employeeId=${e.id}&year=${year}`, mirror.organizationId));
-    pending += recon.pendingCount ?? 0;
-    if (pending) break;
-  }
-  result.reconciliationPending = pending;
-  result.reconciliationVisible = pending > 0 ? 'PASS' : 'NOT_APPLICABLE';
+  const synthetic = (e) => /^Empleado QA \d{3}$/.test(e.name) || e.name === 'Sebastián Pozo Mendoza — QA';
+  result.pseudonymised = employees.every(synthetic) ? 'PASS' : 'FAIL';
+  const pilot = employees.find((e) => e.externalEmployeeId === '84881');
+  result.pilotEmployee = pilot ? 'PASS' : 'FAIL';
+  result.pilotUnlinkedFromUser = pilot && !pilot.userId ? 'PASS' : 'FAIL';
+  if (!pilot) return result;
+  const stats = (year) => call(`/api/calendar/stats?employeeId=${pilot.id}&year=${year}`, mirror.organizationId).then(json);
+  const s2026 = await stats(2026);
+  result.statisticsPopulated = (s2026.calendarRows ?? 0) > 0 ? 'PASS' : 'FAIL';
+  result.effectiveMinutes2026 = s2026.realized?.effectiveMinutes;
+  result.target2026 = s2026.target?.minimumAnnualMinutes === 91740 && s2026.target?.maximumAnnualMinutes === 92400 ? 'PASS' : 'FAIL';
+  const s2025 = await stats(2025);
+  result.calendar2025Empty = (s2025.calendarRows ?? -1) === 0 && !s2025.target ? 'PASS' : 'FAIL';
+  const recon = await json(await call(`/api/calendar/reconciliation?employeeId=${pilot.id}&year=2026`, mirror.organizationId));
+  result.reconciliationPending = recon.pendingCount ?? 0;
+  result.reconciliationVisible = result.reconciliationPending > 0 ? 'PASS' : 'NOT_APPLICABLE';
   return result;
 }
 

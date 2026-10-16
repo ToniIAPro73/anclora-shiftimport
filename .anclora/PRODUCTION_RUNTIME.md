@@ -310,6 +310,13 @@ QA_SOURCE_READ_ONLY=true
 QA_TARGET_MUTABLE=true
 QA_LOCAL_RUNTIME_USES_PRODUCTION_DATABASE=true
 QA_CREDENTIALS_FILE=.env.development.local (MANUAL_QA_EMAIL / MANUAL_QA_PASSWORD, gitignored, 0600)
+QA_PROTECTED_SOURCE_ORG_ID=a4cf0768-f08d-49e6-bb81-0d3635d58028 (ShiftImport real tenant: SELECT only, never INSERT/UPDATE/DELETE/import/seed)
+QA_MIRROR_SCOPE_YEAR=2026 (the mirror never contains operational data of other years; filtered while building)
+QA_MIRROR_PILOT_EXTERNAL_ID=84881 (target 2026: 91740–92400 min = 1529–1540 h; created in the mirror only if the source lacks it)
+QA_WRITE_GUARD=targetOrganizationId != protected source AND == QA mirror (scripts/qa/qa-lib.mjs assertQaOrganization)
+LOCAL_DEV_COMMAND=npm run dev (Neon canonical via scripts/qa/dev-runtime.mjs; DOCKER_AUTO_START=false)
+LOCAL_DOCKER_FALLBACK=npm run dev:docker (explicit opt-in only)
+QA_MIRROR_REFRESH=npm run qa:mirror:refresh [-- --dry-run|--apply]
 QA_LOCAL_LOGIN_REQUIRED=true
 QA_DEVELOPMENT_PREVIEW_LOGIN_REQUIRED=true
 QA_DATABASE_TARGET_SAME_FOR_LOCAL_AND_PREVIEW=true
@@ -317,7 +324,6 @@ QA_CANONICAL_DATABASE=Neon holy-cake-85660318 / branch main / neondb (endpoint e
 QA_DATABASE_RESOLUTION=QA_DATABASE_URL or the Vercel Development environment; NEVER the repo .env*.local files (they point at the local Docker Postgres)
 QA_PLAINTEXT_PASSWORD_IN_VERCEL=false (Vercel only needs the password_hash stored in PostgreSQL)
 QA_SMOKE=npm run qa:local:smoke / npm run qa:preview:smoke (login, session, mirror, stats, reconciliation)
-QA_LOCAL_RUNTIME=npm run qa:dev-runtime (vercel dev on the canonical database via a throw-away overlay)
 QA_BOOTSTRAP=node scripts/qa/ensure-qa-identity.mjs && node scripts/qa/refresh-qa-mirror.mjs --apply
 QA_E2E=npm --prefix qa/e2e-acceptance run test:qa-mirror (needs `npm run qa:dev-runtime` on :5173)
 

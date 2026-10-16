@@ -94,12 +94,15 @@ npm install
 npm run dev
 ```
 
-`npm run dev` levanta el PostgreSQL exclusivo de ShiftImport definido en
-`docker-compose.local.yml`, espera su healthcheck, aplica las migraciones
-pendientes mediante el runner canónico y arranca `vercel dev` en `:5173`.
-Usa `.env.local` para la aplicación y `.env.docker.local` para Docker; ambos
-ficheros están fuera de Git. Para arrancar únicamente Vite, usa
-`npm run dev:frontend`.
+`npm run dev` arranca `vercel dev` en `http://localhost:5173` con el código de `development` sobre la base
+**Neon canónica de producción** (`main`), resuelta desde el entorno Development de Vercel
+(`scripts/qa/dev-runtime.mjs`; requiere `vercel` con sesión iniciada). **No arranca Docker.**
+Para QA entra con `qa.shiftimport@anclora.test` (contraseña en `MANUAL_QA_PASSWORD` de
+`.env.development.local`) y trabaja en la organización `ShiftImport — QA Mirror`; la organización real
+`ShiftImport` es de solo lectura (`npm run qa:mirror:refresh` reconstruye el mirror).
+
+Fallback opcional: `npm run dev:docker` levanta el PostgreSQL de `docker-compose.local.yml`, aplica migraciones y
+arranca `vercel dev` (usa `.env.local` + `.env.docker.local`). Para arrancar únicamente Vite: `npm run dev:frontend`.
 
 Validación: `npm run lint && npm run build`. El desarrollo local usa el
 PostgreSQL Docker dedicado de ShiftImport mediante `.env.local`; `npm run

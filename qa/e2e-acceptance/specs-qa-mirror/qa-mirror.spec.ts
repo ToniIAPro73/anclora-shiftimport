@@ -1,31 +1,21 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { CONTEXT_FILE, assertQaOrganization, qaLib, type QaContext } from '../helpers/qa-mirror';
 
 const ctx = (): QaContext => JSON.parse(readFileSync(CONTEXT_FILE, 'utf8'));
 
-/** Admins see an employee picker: choose the employee with the most calendar rows in the mirror. */
-async function selectBusiestEmployee(page: import('@playwright/test').Page) {
-  const c = ctx();
-  const lib = await qaLib();
-  const db = await lib.connect();
-  let employeeId: string;
-  let employeeName: string;
-  try {
-    const row = (await db.query(
-      `SELECT s.employee_id, e.name FROM shifts s JOIN employees e ON e.id = s.employee_id
-       WHERE s.organization_id = $1 GROUP BY s.employee_id, e.name ORDER BY COUNT(*) DESC LIMIT 1`, [c.organizationId],
-    )).rows[0];
-    employeeId = row.employee_id;
-    employeeName = row.name;
-  } finally { await db.end(); }
+const SHOTS = join(__dirname, '..', 'test-results-qa-mirror', 'screenshots');
+const shot = (name: string) => { mkdirSync(SHOTS, { recursive: true }); return join(SHOTS, `${test.info().project.name}-${name}.png`); };
+
+/** Admins see an employee picker: select the pilot employee (external id 84881) of the mirror. */
+async function selectPilot(page: import('@playwright/test').Page) {
   await page.goto('/app');
   const filter = page.getByTestId('calendar-employee-filter');
   await filter.getByRole('combobox').or(filter.getByRole('button')).first().click();
-  await page.getByRole('option', { name: new RegExp(employeeName) }).first().click();
+  await page.getByRole('option', { name: /Sebastián Pozo Mendoza — QA/ }).first().click();
   await expect(page.getByTestId('calendar-stats-button')).toBeVisible();
-  return employeeId;
 }
 
 test.describe('QA mirror — read flows', () => {
@@ -44,7 +34,7 @@ test.describe('QA mirror — read flows', () => {
   });
 
   test('statistics modal renders effective data with shift colour tokens', async ({ page }) => {
-    await selectBusiestEmployee(page);
+    await selectPilot(page);
     // navigate to a month known to hold data in the mirror (Feb 2026 from the source baseline)
     await page.getByTestId('calendar-stats-button').click();
     const dialog = page.getByRole('dialog', { name: 'Estadísticas' });
@@ -59,7 +49,7 @@ test.describe('QA mirror — read flows', () => {
   });
 
   test('reconciliation modal lists pending days when present', async ({ page }) => {
-    await selectBusiestEmployee(page);
+    await selectPilot(page);
     const button = page.getByTestId('calendar-reconciliation-button');
     const shown = await button.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true, () => false);
     if (!shown) test.skip(true, 'no pending reconciliation in the mirror');
@@ -69,6 +59,45 @@ test.describe('QA mirror — read flows', () => {
     await expect(dialog.getByTestId('recon-range')).toBeVisible();
     await expect(dialog.getByText(/\[run |[0-9a-f]{8}-[0-9a-f]{4}-/)).toHaveCount(0);
     await dialog.screenshot({ path: test.info().outputPath('recon.png') });
+  });
+});
+
+test.describe('QA mirror — review scenarios (2026 only, pilot employee)', () => {
+  test('calendar 2026, statistics, annual target and reconciliation show the mirror data', async ({ page }) => {
+    await selectPilot(page);
+    await page.screenshot({ path: shot('calendar-2026') });
+
+    await page.getByTestId('calendar-stats-button').click();
+    const stats = page.getByRole('dialog', { name: 'Estadísticas' });
+    await stats.getByRole('tab', { name: /Año/ }).click();
+    await expect(stats.getByTestId('eff-year-effective')).not.toHaveText(/^0 h$/);
+    await stats.screenshot({ path: shot('statistics-2026') });
+    await stats.getByRole('tab', { name: /Objetivo|Target/ }).click();
+    await expect(stats.getByTestId('eff-contract-minimum')).toContainText('1529');
+    await expect(stats.getByTestId('eff-contract-maximum')).toContainText('1540');
+    await expect(stats.getByTestId('eff-contract-unconfigured')).toHaveCount(0);
+    await stats.screenshot({ path: shot('annual-target') });
+    await page.keyboard.press('Escape');
+
+    await page.getByTestId('calendar-reconciliation-button').click();
+    const recon = page.getByRole('dialog', { name: 'Reconciliación de días' });
+    await expect(recon.getByTestId('recon-range')).toBeVisible();
+    expect(await recon.innerText()).not.toMatch(/\[run |[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i);
+    await recon.screenshot({ path: shot('reconciliation') });
+    await page.keyboard.press('Escape');
+  });
+
+  test('calendar 2025 has no operational data in the mirror', async ({ page }) => {
+    await selectPilot(page);
+    // Oct 2026 -> Dec 2025
+    for (let i = 0; i < 10; i += 1) await page.getByRole('button', { name: /Mes anterior|Previous month/ }).click();
+    await expect(page.locator('.month-nav-label')).toContainText('Diciembre 2025');
+    await expect(page.locator('.month-shift-badge')).toHaveCount(0);
+    await page.screenshot({ path: shot('calendar-2025-empty') });
+    await page.getByTestId('calendar-stats-button').click();
+    const stats = page.getByRole('dialog', { name: 'Estadísticas' });
+    await stats.getByRole('tab', { name: /Año 2025/ }).click();
+    await expect(stats.getByTestId('eff-year-no-data')).toBeVisible();
   });
 });
 

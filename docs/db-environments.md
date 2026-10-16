@@ -37,10 +37,13 @@ El runner Playwright crea una organización `E2E-SHIFT-<runId>`, usuarios
 Guarda el inventario de UUIDs creados y elimina exactamente esos registros en
 el teardown; nunca usa `DELETE ... LIKE` sobre datos ajenos al run.
 
-## Aviso: ficheros `.env*.local` del repositorio
+## Runtime local por defecto y fallback Docker
 
-`.env`, `.env.local` y `.env.development.local` apuntan al PostgreSQL local de Docker (`127.0.0.1:5433`), no a Neon.
-Cualquier script que lea esos ficheros opera sobre Docker. La BD canónica (Neon `main`, `neondb`, endpoint
-`ep-lingering-dew-b1atfd0w`) se obtiene del entorno **Development** de Vercel (`vercel env pull --environment=development`);
-las variables de Preview/Production son sensibles y no se pueden leer. Los scripts `scripts/qa/*` aplican esta resolución y
-fallan si el destino no es el endpoint canónico.
+- **Por defecto** (`npm run dev`): código de `development` + Neon `main` (`neondb`, endpoint `ep-lingering-dew-b1atfd0w`).
+  La conexión se obtiene del entorno **Development** de Vercel (`vercel env pull --environment=development`) y se inyecta en un
+  directorio temporal; no se usa Docker. Las variables de Preview/Production son sensibles y no se pueden leer.
+- **Fallback explícito** (`npm run dev:docker`): PostgreSQL local de Docker (`127.0.0.1:5433`). Los ficheros `.env`,
+  `.env.local` y `.env.development.local` del repo apuntan a ese Docker; cualquier script que los lea opera sobre Docker, no sobre Neon.
+- `scripts/qa/*` resuelven siempre la BD canónica (o `QA_DATABASE_URL`) y abortan si el destino no es el endpoint canónico.
+- La organización real `ShiftImport` (`a4cf0768-f08d-49e6-bb81-0d3635d58028`) es **READ ONLY** para cualquier agente: toda escritura
+  QA va a `ShiftImport — QA Mirror` (clon pseudonimizado, solo 2026).
