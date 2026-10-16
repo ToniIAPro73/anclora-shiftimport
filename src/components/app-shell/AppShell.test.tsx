@@ -332,3 +332,41 @@ describe('CalendarToolbar', () => {
     expect(icon).toBeInTheDocument();
   });
 });
+
+describe('CalendarToolbar — calendar-first tools', () => {
+  const renderToolbar = (props: Partial<React.ComponentProps<typeof CalendarToolbar>> = {}) => {
+    window.localStorage.setItem('anclora_shiftimport_locale_v1', 'es');
+    return render(
+      <I18nProvider>
+        <CalendarToolbar year={2026} month={9} shiftCount={31} onNavigate={vi.fn()} {...props} />
+      </I18nProvider>,
+    );
+  };
+
+  it('exposes a compact statistics button with an accessible name', () => {
+    const onOpenStats = vi.fn();
+    renderToolbar({ onOpenStats });
+    const button = screen.getByTestId('calendar-stats-button');
+    expect(button).toHaveAttribute('aria-label', 'Ver estadísticas de turnos');
+    fireEvent.click(button);
+    expect(onOpenStats).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the reconciliation button with count only when something is pending', () => {
+    const onOpenReconciliation = vi.fn();
+    const { rerender } = renderToolbar({ reconciliationCount: 35, onOpenReconciliation });
+    const button = screen.getByTestId('calendar-reconciliation-button');
+    expect(button).toHaveAttribute('aria-label', 'Revisar 35 días pendientes de reconciliación');
+    expect(button).toHaveAttribute('title', '35 días pendientes de reconciliación');
+    expect(button).toHaveTextContent('35');
+    fireEvent.click(button);
+    expect(onOpenReconciliation).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <I18nProvider>
+        <CalendarToolbar year={2026} month={9} shiftCount={31} onNavigate={vi.fn()} reconciliationCount={0} onOpenReconciliation={onOpenReconciliation} />
+      </I18nProvider>,
+    );
+    expect(screen.queryByTestId('calendar-reconciliation-button')).toBeNull();
+  });
+});

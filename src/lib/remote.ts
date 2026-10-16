@@ -1,5 +1,5 @@
 import { Shift } from './types';
-import type { DayProvenance } from './effective-calendar.js';
+import type { ContractEvaluation, DayProvenance, StatsBucket } from './effective-calendar.js';
 import { apiFetch } from './session';
 import { getShiftType } from './shifts';
 import { shiftTypeCountsAsWork } from './shift-types';
@@ -1310,4 +1310,52 @@ export async function reconcileCalendarDayRemote(input: {
     method: 'POST',
     body: JSON.stringify({ action: 'RECONCILE', ...input }),
   });
+}
+
+export interface RemoteCalendarStats {
+  employeeId: string;
+  year: number;
+  today: string;
+  calendarRows: number;
+  total: StatsBucket;
+  realized: StatsBucket;
+  planned: StatsBucket;
+  unresolvedDays: number;
+  monthStats: { month: number; realized: StatsBucket; planned: StatsBucket } | null;
+  target: RemoteAnnualTarget | null;
+  contract: ContractEvaluation;
+  projection: { realizedMinutes: number; plannedMinutes: number; projectedMinutes: number };
+}
+
+export async function loadCalendarStats(employeeId: string, year: number, month?: number): Promise<RemoteCalendarStats> {
+  const monthParam = month ? `&month=${month}` : '';
+  return apiFetch<RemoteCalendarStats>(
+    `/api/calendar/stats?employeeId=${encodeURIComponent(employeeId)}&year=${year}${monthParam}`,
+  );
+}
+
+export interface ReconciliationShiftLabel { type: string; startTime: string | null; endTime: string | null }
+
+export interface ReconciliationItem {
+  date: string;
+  status: 'PENDING' | 'RESOLVED';
+  company: ReconciliationShiftLabel[];
+  current: ReconciliationShiftLabel[];
+  resolvedAt: string | null;
+  resolvedReason: string | null;
+  selfChange: boolean | null;
+}
+
+export interface ReconciliationWorklist {
+  employeeId: string;
+  year: number;
+  pendingCount: number;
+  resolvedCount: number;
+  items: ReconciliationItem[];
+}
+
+export async function loadReconciliation(employeeId: string, year: number): Promise<ReconciliationWorklist> {
+  return apiFetch<ReconciliationWorklist>(
+    `/api/calendar/reconciliation?employeeId=${encodeURIComponent(employeeId)}&year=${year}`,
+  );
 }

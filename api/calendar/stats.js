@@ -3,7 +3,7 @@ import { getEffectiveStats } from '../_lib/calendar.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * GET /api/calendar/stats?employeeId=&year= — effective-calendar statistics
+ * GET /api/calendar/stats?employeeId=&year=[&month=] — effective-calendar statistics
  * (realized vs planned), unresolved days and the annual contract evaluation.
  */
 export default async function handler(req, res) {
@@ -17,6 +17,7 @@ export default async function handler(req, res) {
         ctx,
         String(req.query?.employeeId ?? '').trim(),
         req.query?.year,
+        { month: req.query?.month ?? null },
       );
       return sendJson(res, 200, stats);
     }

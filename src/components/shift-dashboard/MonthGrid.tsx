@@ -30,6 +30,8 @@ interface MonthGridProps {
   canReconcile?: boolean;
   /** Opens the day detail from outside (e.g. unresolved-day links). */
   requestedDetailDate?: string | null;
+  /** Changes on every request so the same date can be opened again. */
+  requestedDetailNonce?: number;
   onDayChanged?: () => void;
 }
 
@@ -46,6 +48,7 @@ export const MonthGrid = ({
   provenanceEnabled = false,
   canReconcile = false,
   requestedDetailDate = null,
+  requestedDetailNonce = 0,
   onDayChanged,
 }: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
@@ -60,7 +63,7 @@ export const MonthGrid = ({
     if (requestedDetailDate) {
       setSelectedDayDetailDate(requestedDetailDate);
     }
-  }, [requestedDetailDate]);
+  }, [requestedDetailDate, requestedDetailNonce]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -233,8 +236,8 @@ export const MonthGrid = ({
                         dayDetailTriggerRef.current = event.currentTarget;
                         setSelectedDayDetailDate(iso);
                       }}
-                      aria-label={`${needsReview ? t('dayHistory.reviewBadge') : t('dayHistory.changedBadge')} — ${t('dayHistory.open')}`}
-                      title={needsReview ? t('dayHistory.reviewBadge') : t('dayHistory.changedBadge')}
+                      aria-label={needsReview ? t('calendarTools.dayWarning') : `${t('dayHistory.changedBadge')} — ${t('dayHistory.open')}`}
+                      title={needsReview ? t('calendarTools.dayWarning') : t('dayHistory.changedBadge')}
                       data-testid={`day-history-btn-${iso}`}
                       data-review={needsReview || undefined}
                     >

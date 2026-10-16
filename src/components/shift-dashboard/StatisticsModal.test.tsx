@@ -1,0 +1,145 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/vitest';
+import { I18nProvider } from '../../lib/i18n-react';
+import type { Shift } from '../../lib/types';
+import { StatisticsModal } from './StatisticsModal';
+
+afterEach(cleanup);
+beforeEach(() => window.localStorage?.setItem?.('anclora_shiftimport_locale_v1', 'es'));
+
+const shift = (id: string, date: string, shiftType: string, startTime = '', endTime = ''): Shift => ({
+  id, date, startTime, endTime, shiftType, location: shiftType, origin: 'IMP',
+});
+
+const feb = [
+  shift('a', '2026-02-06', 'Regular', '13:00', '20:00'),
+  shift('b', '2026-02-06', 'Extras', '20:00', '21:00'),
+  shift('c', '2026-02-06', 'JT', '13:00', '21:00'),
+  shift('g', '2026-02-10', 'Libre'),
+];
+
+function renderModal(overrides: Partial<React.ComponentProps<typeof StatisticsModal>> = {}) {
+  const onClose = vi.fn();
+  const utils = render(
+    <I18nProvider>
+      <StatisticsModal
+        isOpen
+        onClose={onClose}
+        employeeId={null}
+        year={2026}
+        month={1}
+        monthLabel="Febrero 2026"
+        today="2026-10-16"
+        target={null}
+        canConfigureTarget
+        showContract
+        localMonthShifts={feb}
+        localYearShifts={feb}
+        onConfigureTarget={vi.fn()}
+        {...overrides}
+      />
+    </I18nProvider>,
+  );
+  return { onClose, ...utils };
+}
+
+describe('StatisticsModal', () => {
+  it('is a labelled dialog with month / year / target tabs', () => {
+    renderModal();
+    expect(screen.getByRole('dialog', { name: 'Estadísticas' })).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('tab', { name: 'Mes actual' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Año 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Objetivo anual' })).toBeInTheDocument();
+  });
+
+  it('month tab computes effective hours with JT adding nothing (union, not sum)', () => {
+    renderModal();
+    expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('8 h');
+    expect(screen.getByTestId('eff-month-regular')).toHaveTextContent('7 h');
+    expect(screen.getByTestId('eff-month-extras')).toHaveTextContent('1 h');
+    expect(screen.getByTestId('eff-month-free-days')).toHaveTextContent('1 d');
+  });
+
+  it('year tab switches panel and keeps realised apart from planned', () => {
+    renderModal({ today: '2026-02-01' });
+    fireEvent.click(screen.getByRole('tab', { name: 'Año 2026' }));
+    expect(screen.getByTestId('eff-year-effective')).toHaveTextContent('0 h');
+    expect(screen.getByTestId('eff-year-planned')).toHaveTextContent('8 h');
+  });
+
+  it('arrow keys move between tabs', () => {
+    renderModal();
+    const month = screen.getByRole('tab', { name: 'Mes actual' });
+    month.focus();
+    fireEvent.keyDown(month, { key: 'ArrowRight' });
+    expect(screen.getByRole('tab', { name: 'Año 2026' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('unconfigured target offers configuration instead of a verdict', () => {
+    const onConfigureTarget = vi.fn();
+    renderModal({ onConfigureTarget });
+    fireEvent.click(screen.getByRole('tab', { name: 'Objetivo anual' }));
+    expect(screen.getByTestId('eff-contract-unconfigured')).toHaveTextContent('Sin configurar');
+    fireEvent.click(screen.getByTestId('eff-contract-configure'));
+    expect(onConfigureTarget).toHaveBeenCalled();
+  });
+
+  it('configured target shows an accessible progress bar and margins', () => {
+    renderModal({ target: { minimumAnnualMinutes: 100 * 60, maximumAnnualMinutes: 110 * 60 } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Objetivo anual' }));
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '480');
+    expect(screen.getByTestId('eff-contract-status')).toHaveAttribute('data-status', 'BELOW_MINIMUM');
+    expect(screen.getByTestId('eff-contract-margin-remaining')).toBeInTheDocument();
+  });
+
+  it('a configured year with no calendar rows is NO_DATA, never "0 h = below minimum"', () => {
+    renderModal({
+      year: 2025, month: 0, monthLabel: 'Enero 2025', localMonthShifts: [], localYearShifts: [],
+      target: { minimumAnnualMinutes: 1529 * 60, maximumAnnualMinutes: 1540 * 60 },
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Año 2025' }));
+    expect(screen.getByTestId('eff-year-no-data')).toHaveTextContent('Sin datos de calendario');
+    fireEvent.click(screen.getByRole('tab', { name: 'Objetivo anual' }));
+    expect(screen.getByTestId('eff-contract-range')).toHaveTextContent('1529–1540 h');
+    expect(screen.getByTestId('eff-contract-status')).toHaveAttribute('data-status', 'NO_DATA');
+    expect(screen.getByTestId('eff-contract-status')).toHaveTextContent('No evaluable');
+    expect(screen.queryByText(/Faltan/)).toBeNull();
+  });
+
+  it('Escape and the close button dismiss it', () => {
+    const { onClose } = renderModal();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('stats-modal-close'));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not render the legacy Propios / Empresa accumulators', () => {
+    renderModal();
+    expect(screen.queryByText(/Propios/)).toBeNull();
+    expect(screen.queryByText(/^Empresa$/)).toBeNull();
+  });
+
+  it('loads from the effective-calendar API for backend sessions', async () => {
+    const remote = await import('../../lib/remote');
+    const bucket = {
+      effectiveMinutes: 4320, regularMinutes: 4320, extrasMinutes: 0, otherWorkMinutes: 0, unclassifiedWorkMinutes: 0,
+      absenceMinutes: 0, dutyMinutes: 0, dutyDays: 0, workedDays: 9, freeDays: 6, vacationDays: 0, sickLeaveDays: 0,
+    };
+    const spy = vi.spyOn(remote, 'loadCalendarStats').mockResolvedValue({
+      employeeId: 'e1', year: 2026, today: '2026-10-16', calendarRows: 50,
+      total: bucket, realized: bucket, planned: { ...bucket, effectiveMinutes: 5760 },
+      unresolvedDays: 0,
+      monthStats: { month: 10, realized: bucket, planned: { ...bucket, effectiveMinutes: 5760 } },
+      target: null, contract: { status: 'UNCONFIGURED', effectiveMinutes: 4320 },
+      projection: { realizedMinutes: 4320, plannedMinutes: 5760, projectedMinutes: 10080 },
+    } as never);
+    renderModal({ employeeId: 'e1', month: 9, monthLabel: 'Octubre 2026' });
+    await waitFor(() => expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('72 h'));
+    expect(spy).toHaveBeenCalledWith('e1', 2026, 10);
+    expect(screen.getByTestId('eff-month-planned')).toHaveTextContent('96 h');
+    spy.mockRestore();
+  });
+});

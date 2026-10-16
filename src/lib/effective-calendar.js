@@ -41,6 +41,8 @@ export const CHANGE_TYPES = Object.freeze([
 ]);
 
 export const CONTRACT_STATUS = Object.freeze({
+  NO_DATA: 'NO_DATA',
+  INSUFFICIENT_DATA: 'INSUFFICIENT_DATA',
   UNCONFIGURED: 'UNCONFIGURED',
   BELOW_MINIMUM: 'BELOW_MINIMUM',
   WITHIN_RANGE: 'WITHIN_RANGE',
@@ -48,10 +50,17 @@ export const CONTRACT_STATUS = Object.freeze({
 });
 
 /**
- * Legacy company summary type ("Jefe de Turno"). It is a duty role, never
- * additional work: JT_COUNTS_AS_ADDITIONAL_WORK=false.
+ * Legacy company summary type ("Jefe de Turno"). Two dimensions:
+ *   A. a work interval (start/end) -> JT_COUNTS_AS_WORK_INTERVAL
+ *   B. the duty `shift_lead`        -> tracked separately (duty minutes/days)
+ * Effective hours are the UNION of all work intervals, so a JT that coincides
+ * with confirmed Regular/Extras never adds hours (JT_COUNTS_AS_ADDITIONAL_WORK
+ * stays false). A JT with no other confirmed interval is legacy work that has
+ * no classification: it counts as LEGACY_UNCLASSIFIED_WORK, never as Regular.
  */
+export const JT_COUNTS_AS_WORK_INTERVAL = true;
 export const JT_COUNTS_AS_ADDITIONAL_WORK = false;
+export const LEGACY_UNCLASSIFIED_WORK = 'LEGACY_UNCLASSIFIED_WORK';
 export const DUTY_ROLE_SHIFT_LEAD = 'shift_lead';
 
 const FULL_DAY_KINDS = Object.freeze({ libre: 'Libre', vacaciones: 'Vacaciones', baja: 'Baja' });
@@ -131,6 +140,7 @@ function mergeIntervals(intervals) {
 }
 
 const overlaps = (a, b) => a.start < b.end && b.start < a.end;
+const overlapMinutes = (a, b) => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
 const sumMinutes = (intervals) => intervals.reduce((total, i) => total + (i.end - i.start), 0);
 
 /**
@@ -147,7 +157,7 @@ export function resolveDay(date, inputRows) {
     fullDayType: null,
     workIntervals: [],
     absenceIntervals: [],
-    minutes: { regular: 0, extras: 0, other: 0, work: 0, absence: 0 },
+    minutes: { regular: 0, extras: 0, other: 0, unclassified: 0, work: 0, absence: 0, duty: 0 },
     byType: {},
     issues,
     requiresReview: false,
@@ -162,14 +172,19 @@ export function resolveDay(date, inputRows) {
     issues.push({ code: 'REQUIRES_REVIEW', blocking: true, rows: reviewRows.length });
   }
 
-  const active = rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.EFFECTIVE);
+  // Legacy JT rows parked as METADATA_ONLY still carry their interval.
+  const active = rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.EFFECTIVE
+    || (row.effectiveState === EFFECTIVE_STATES.METADATA_ONLY && classifyKind(row).kind === 'LEGACY_DUTY_ROLE'));
   const seen = new Set();
   const entries = [];
+  const dutyIntervals = [];
   for (const row of active) {
     const classified = classifyKind(row);
     if (classified.kind === 'LEGACY_DUTY_ROLE') {
       result.legacyDutyRows += 1;
       result.dutyRole = DUTY_ROLE_SHIFT_LEAD;
+      const jtInterval = rowInterval(row);
+      if (jtInterval) dutyIntervals.push(jtInterval);
       continue;
     }
     if (row.dutyRole) result.dutyRole = row.dutyRole;
@@ -222,12 +237,30 @@ export function resolveDay(date, inputRows) {
     result.minutes[entry.bucket] += minutes;
     result.byType[entry.type] = (result.byType[entry.type] ?? 0) + minutes;
   }
-  result.minutes.work = result.minutes.regular + result.minutes.extras + result.minutes.other;
+  // JT: union with confirmed work. Only the part of a JT interval that no
+  // classified interval already covers is (unclassified) legacy work.
+  const dutyUnion = mergeIntervals(dutyIntervals);
+  result.minutes.duty = sumMinutes(dutyUnion);
+  if (dutyUnion.length && !result.fullDayType) {
+    const covered = mergeIntervals(work.map((entry) => entry.interval));
+    const uncovered = result.minutes.duty - dutyUnion.reduce(
+      (total, jt) => total + covered.reduce((sum, w) => sum + overlapMinutes(jt, w), 0), 0,
+    );
+    if (uncovered > 0) {
+      result.minutes.unclassified = uncovered;
+      result.byType[LEGACY_UNCLASSIFIED_WORK] = uncovered;
+      if (work.length) issues.push({ code: 'DUTY_INTERVAL_PARTIAL_OVERLAP', blocking: false, uncoveredMinutes: uncovered });
+    }
+  } else if (dutyUnion.length && result.fullDayType) {
+    issues.push({ code: 'DUTY_INTERVAL_ON_NON_WORK_DAY', blocking: false });
+    result.minutes.duty = 0;
+  }
+  result.minutes.work = result.minutes.regular + result.minutes.extras + result.minutes.other + result.minutes.unclassified;
   result.minutes.absence = sumMinutes(mergeIntervals(absences.map((entry) => entry.interval)));
   if (result.minutes.absence) result.byType.Ausencia = result.minutes.absence;
 
   if (result.fullDayType) result.status = result.fullDayType.toUpperCase();
-  else if (work.length) result.status = 'WORK';
+  else if (work.length || result.minutes.unclassified > 0) result.status = 'WORK';
   else if (absences.length) result.status = 'ABSENCE_ONLY';
   else result.status = result.legacyDutyRows ? 'DUTY_ONLY' : 'EMPTY';
   if (result.status === 'DUTY_ONLY') issues.push({ code: 'DUTY_ROLE_WITHOUT_WORK', blocking: false });
@@ -256,8 +289,8 @@ export function findOvernightSpillConflicts(days) {
 }
 
 const emptyBucket = () => ({
-  effectiveMinutes: 0, regularMinutes: 0, extrasMinutes: 0, otherWorkMinutes: 0, absenceMinutes: 0,
-  workedDays: 0, freeDays: 0, vacationDays: 0, sickLeaveDays: 0,
+  effectiveMinutes: 0, regularMinutes: 0, extrasMinutes: 0, otherWorkMinutes: 0, unclassifiedWorkMinutes: 0,
+  absenceMinutes: 0, dutyMinutes: 0, dutyDays: 0, workedDays: 0, freeDays: 0, vacationDays: 0, sickLeaveDays: 0,
 });
 
 function addDay(bucket, day) {
@@ -265,7 +298,10 @@ function addDay(bucket, day) {
   bucket.regularMinutes += day.minutes.regular;
   bucket.extrasMinutes += day.minutes.extras;
   bucket.otherWorkMinutes += day.minutes.other;
+  bucket.unclassifiedWorkMinutes += day.minutes.unclassified;
   bucket.absenceMinutes += day.minutes.absence;
+  bucket.dutyMinutes += day.minutes.duty;
+  if (day.minutes.duty > 0) bucket.dutyDays += 1;
   if (day.minutes.work > 0) bucket.workedDays += 1;
   if (day.status === 'LIBRE') bucket.freeDays += 1;
   if (day.status === 'VACACIONES') bucket.vacationDays += 1;
@@ -279,11 +315,13 @@ function addDay(bucket, day) {
  */
 export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
   const byDate = new Map();
+  let calendarRows = 0;
   for (const row of inputRows) {
     const normalized = normalizeCalendarRow(row);
     if (!normalized.date) continue;
     if (from && normalized.date < from) continue;
     if (to && normalized.date > to) continue;
+    calendarRows += 1;
     if (!byDate.has(normalized.date)) byDate.set(normalized.date, []);
     byDate.get(normalized.date).push(normalized);
   }
@@ -302,8 +340,8 @@ export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
       continue;
     }
     if (day.status === 'DUTY_ONLY') {
-      // A legacy JT row with no work beside it is the only trace of that day:
-      // never invent hours from it, never hide it either.
+      // A JT row without usable times is the only trace of that day: never
+      // invent hours from it, never hide it either.
       unresolved.push({ date: day.date, status: 'REQUIRES_REVIEW', issues: ['DUTY_ROLE_WITHOUT_WORK'] });
       continue;
     }
@@ -318,6 +356,7 @@ export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
     for (const [type, minutes] of Object.entries(day.byType)) byType[type] = (byType[type] ?? 0) + minutes;
   }
   return {
+    calendarRows,
     total,
     realized: today ? realized : total,
     planned: today ? planned : emptyBucket(),
@@ -331,11 +370,15 @@ export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
 }
 
 /** Annual contract evaluation in integer minutes. Informational only. */
-export function evaluateAnnualTarget(effectiveMinutes, target) {
+export function evaluateAnnualTarget(effectiveMinutes, target, { calendarRows = null } = {}) {
   const minimum = target?.minimumAnnualMinutes ?? null;
   const maximum = target?.maximumAnnualMinutes ?? null;
   if (!Number.isInteger(minimum) || !Number.isInteger(maximum)) {
     return { status: CONTRACT_STATUS.UNCONFIGURED, effectiveMinutes };
+  }
+  // No calendar rows at all is "not evaluable", never "0 h = non-compliant".
+  if (calendarRows === 0) {
+    return { status: CONTRACT_STATUS.NO_DATA, effectiveMinutes, minimumMinutes: minimum, maximumMinutes: maximum, marginMinutes: maximum - minimum };
   }
   const margin = maximum - minimum;
   const status = effectiveMinutes < minimum

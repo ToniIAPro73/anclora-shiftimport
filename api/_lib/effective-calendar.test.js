@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   JT_COUNTS_AS_ADDITIONAL_WORK,
+  JT_COUNTS_AS_WORK_INTERVAL,
   buildDayProvenance,
   computeEffectiveStats,
   evaluateAnnualTarget,
@@ -129,23 +130,72 @@ describe('legacy JT', () => {
     expect(s.total.effectiveMinutes).toBe(615);
   });
 
-  it('flags a JT-only day instead of inventing hours', () => {
-    const day = resolveDay('2026-04-01', [row('2026-04-01', 'JT', '13:00', '21:00')]);
-    expect(day.minutes.work).toBe(0);
-    expect(day.status).toBe('DUTY_ONLY');
-    expect(day.issues.some((i) => i.code === 'DUTY_ROLE_WITHOUT_WORK')).toBe(true);
-    const s = stats([row('2026-04-01', 'JT', '13:00', '21:00')]);
-    expect(s.total.effectiveMinutes).toBe(0);
-    expect(s.unresolvedDays).toBe(1);
-    expect(s.unresolved[0].issues).toEqual(['DUTY_ROLE_WITHOUT_WORK']);
+  it('JT counts as a work interval but never double counts', () => {
+    expect(JT_COUNTS_AS_WORK_INTERVAL).toBe(true);
   });
 
-  it('metadata-only JT rows are ignored by the accounting', () => {
+  it('standalone JT 08-15 is 7h of LEGACY_UNCLASSIFIED_WORK with shift_lead duty (not Regular)', () => {
+    const day = resolveDay('2026-04-01', [row('2026-04-01', 'JT', '08:00', '15:00')]);
+    expect(day.status).toBe('WORK');
+    expect(day.minutes.work).toBe(420);
+    expect(day.minutes.unclassified).toBe(420);
+    expect(day.minutes.regular).toBe(0);
+    expect(day.minutes.duty).toBe(420);
+    expect(day.dutyRole).toBe('shift_lead');
+    const s = stats([row('2026-04-01', 'JT', '08:00', '15:00')]);
+    expect(s.total.effectiveMinutes).toBe(420);
+    expect(s.total.unclassifiedWorkMinutes).toBe(420);
+    expect(s.total.dutyMinutes).toBe(420);
+    expect(s.total.dutyDays).toBe(1);
+    expect(s.total.regularMinutes).toBe(0);
+    expect(s.unresolvedDays).toBe(0);
+  });
+
+  it('Regular 17-01 + identical JT = 8h effective, not 16h', () => {
+    const s = stats([
+      row('2026-03-03', 'Regular', '17:00', '01:00'),
+      row('2026-03-03', 'JT', '17:00', '01:00'),
+    ]);
+    expect(s.total.effectiveMinutes).toBe(480);
+    expect(s.total.regularMinutes).toBe(480);
+    expect(s.total.unclassifiedWorkMinutes).toBe(0);
+    expect(s.total.dutyMinutes).toBe(480);
+  });
+
+  it('keeps the JT duty envelope (8h) over Regular 7h + Extras 1h', () => {
     const s = stats([
       row('2026-02-06', 'Regular', '13:00', '20:00'),
+      row('2026-02-06', 'Extras', '20:00', '21:00'),
       row('2026-02-06', 'JT', '13:00', '21:00', { effectiveState: 'METADATA_ONLY' }),
     ]);
-    expect(s.total.effectiveMinutes).toBe(420);
+    expect(s.total.effectiveMinutes).toBe(480);
+    expect(s.total.dutyMinutes).toBe(480);
+  });
+
+  it('partial overlap: union duration plus a non-blocking warning', () => {
+    const day = resolveDay('2026-03-20', [
+      row('2026-03-20', 'Regular', '13:00', '20:00'),
+      row('2026-03-20', 'JT', '13:00', '21:00', { effectiveState: 'METADATA_ONLY' }),
+    ]);
+    expect(day.minutes.work).toBe(480);
+    expect(day.minutes.regular).toBe(420);
+    expect(day.minutes.unclassified).toBe(60);
+    expect(day.issues.find((i) => i.code === 'DUTY_INTERVAL_PARTIAL_OVERLAP')?.blocking).toBe(false);
+  });
+
+  it('JT on a Libre day adds no hours', () => {
+    const day = resolveDay('2026-04-02', [
+      row('2026-04-02', 'Libre', null, null),
+      row('2026-04-02', 'JT', '13:00', '21:00', { effectiveState: 'METADATA_ONLY' }),
+    ]);
+    expect(day.minutes.work).toBe(0);
+    expect(day.status).toBe('LIBRE');
+  });
+
+  it('a JT without usable times stays flagged instead of inventing hours', () => {
+    const s = stats([row('2026-04-03', 'JT', null, null)]);
+    expect(s.total.effectiveMinutes).toBe(0);
+    expect(s.unresolved[0].issues).toEqual(['DUTY_ROLE_WITHOUT_WORK']);
   });
 });
 
@@ -239,5 +289,24 @@ describe('annual target', () => {
   it('supports distinct per-employee contracts', () => {
     expect(evaluateAnnualTarget(hoursToMinutes(1680), { minimumAnnualMinutes: hoursToMinutes(1680), maximumAnnualMinutes: hoursToMinutes(1680) }).marginMinutes).toBe(0);
     expect(evaluateAnnualTarget(hoursToMinutes(1210), { minimumAnnualMinutes: hoursToMinutes(1200), maximumAnnualMinutes: hoursToMinutes(1250) }).marginRemainingMinutes).toBe(2400);
+  });
+});
+
+describe('annual target without calendar data', () => {
+  const target = { minimumAnnualMinutes: hoursToMinutes(1529), maximumAnnualMinutes: hoursToMinutes(1540) };
+
+  it('zero calendar rows is NO_DATA, not BELOW_MINIMUM', () => {
+    const empty = stats([], { from: '2025-01-01', to: '2025-12-31', today: '2026-10-16' });
+    expect(empty.calendarRows).toBe(0);
+    const evaluation = evaluateAnnualTarget(empty.realized.effectiveMinutes, target, { calendarRows: empty.calendarRows });
+    expect(evaluation.status).toBe('NO_DATA');
+    expect(evaluation.minimumMinutes).toBe(hoursToMinutes(1529));
+    expect(evaluation.missingToMinimumMinutes).toBeUndefined();
+  });
+
+  it('rows present keep the normal evaluation; unconfigured stays UNCONFIGURED', () => {
+    const some = stats([row('2026-03-02', 'Regular', '08:00', '16:00')]);
+    expect(evaluateAnnualTarget(some.total.effectiveMinutes, target, { calendarRows: some.calendarRows }).status).toBe('BELOW_MINIMUM');
+    expect(evaluateAnnualTarget(0, null, { calendarRows: 0 }).status).toBe('UNCONFIGURED');
   });
 });

@@ -333,9 +333,14 @@ export async function reconcileCalendarDay(sql, ctx, input) {
   const unknown = [...keepIds].filter((id) => !candidates.some((row) => row.id === id));
   if (unknown.length) throw badRequest('keepShiftIds must reference rows pending on that day', 'SHIFT_NOT_PENDING');
 
-  const kept = candidates.filter((row) => keepIds.has(row.id));
-  const dropped = candidates.filter((row) => !keepIds.has(row.id));
-  const resolved = resolveDay(date, kept.map((row) => ({ ...normalizeCalendarRow(row), effectiveState: 'EFFECTIVE' })));
+  // Legacy JT rows are the Jefe-de-Turno duty + interval; they are preserved
+  // as METADATA_ONLY (still counted via the interval union), never dropped.
+  const isDuty = (row) => classifyKind(normalizeCalendarRow(row)).kind === 'LEGACY_DUTY_ROLE';
+  const dutyRows = candidates.filter(isDuty);
+  const decidable = candidates.filter((row) => !isDuty(row));
+  const kept = decidable.filter((row) => keepIds.has(row.id));
+  const dropped = decidable.filter((row) => !keepIds.has(row.id));
+  const resolved = resolveDay(date, [...kept, ...dutyRows].map((row) => ({ ...normalizeCalendarRow(row), effectiveState: 'EFFECTIVE' })));
   const blocking = resolved.issues.filter((issue) => issue.blocking);
   if (blocking.length) {
     const error = new HttpError(422, 'The chosen resolution would still be inconsistent');
@@ -362,6 +367,10 @@ export async function reconcileCalendarDay(sql, ctx, input) {
     `),
     ...dropped.map((row) => txn`
       UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), change_id = ${changeId}, updated_at = NOW()
+      WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+    `),
+    ...dutyRows.map((row) => txn`
+      UPDATE shifts SET effective_state = 'METADATA_ONLY', duty_role = 'shift_lead', change_id = ${changeId}, updated_at = NOW()
       WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
     `),
   ]);
@@ -414,7 +423,7 @@ export async function getDayHistory(sql, ctx, employeeId, date) {
 }
 
 /** Server-side effective statistics + contract evaluation for one year. */
-export async function getEffectiveStats(sql, ctx, employeeId, year, { today = getOperationalDate() } = {}) {
+export async function getEffectiveStats(sql, ctx, employeeId, year, { today = getOperationalDate(), month = null } = {}) {
   const targetEmployeeId = ctx.role === 'EMPLOYEE' ? ctx.employeeId : employeeId;
   if (!targetEmployeeId) throw badRequest('employeeId is required', 'EMPLOYEE_REQUIRED');
   const numericYear = Number(year);
@@ -428,10 +437,23 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
       AND date BETWEEN ${from} AND ${to}
-      AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
+      AND (effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
+           OR (effective_state = 'METADATA_ONLY' AND shift_type = 'JT'))
     ORDER BY date ASC, start_time ASC NULLS FIRST, id ASC
   `;
   const stats = computeEffectiveStats(rows, { from, to, today });
+  const monthNumber = month === undefined || month === null || month === '' ? null : Number(month);
+  if (monthNumber !== null && (!Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) {
+    throw badRequest('month is invalid', 'INVALID_MONTH');
+  }
+  const monthPrefix = monthNumber === null ? null : `${numericYear}-${String(monthNumber).padStart(2, '0')}`;
+  const monthStats = monthPrefix
+    ? computeEffectiveStats(rows, {
+      from: `${monthPrefix}-01`,
+      to: `${monthPrefix}-31`,
+      today,
+    })
+    : null;
   const targetRows = await sql`
     SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
            notes, source, updated_at, updated_by_user_id
@@ -441,18 +463,94 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   const target = mapTargetRow(targetRows[0]);
   const summary = { ...stats };
   delete summary.days;
+  let monthSummary = null;
+  if (monthStats) {
+    monthSummary = { month: monthNumber, ...monthStats };
+    delete monthSummary.days;
+  }
   return {
     employeeId: targetEmployeeId,
     year: numericYear,
     today,
     ...summary,
+    monthStats: monthSummary,
     target,
-    contract: evaluateAnnualTarget(stats.realized.effectiveMinutes, target),
+    contract: evaluateAnnualTarget(stats.realized.effectiveMinutes, target, { calendarRows: stats.calendarRows }),
     projection: {
       realizedMinutes: stats.realized.effectiveMinutes,
       plannedMinutes: stats.planned.effectiveMinutes,
       projectedMinutes: stats.total.effectiveMinutes,
-      contract: evaluateAnnualTarget(stats.total.effectiveMinutes, target),
+      contract: evaluateAnnualTarget(stats.total.effectiveMinutes, target, { calendarRows: stats.calendarRows }),
     },
+  };
+}
+
+/**
+ * Reconciliation worklist for one employee-year: every day that is (or was)
+ * REQUIRES_REVIEW. PENDING = rows still awaiting review; RESOLVED = days
+ * closed by a RECONCILIATION change. Read-only; resolving goes through
+ * reconcileCalendarDay so audit/provenance stay in one place.
+ */
+export async function listReconciliationDays(sql, ctx, employeeId, year) {
+  const targetEmployeeId = ctx.role === 'EMPLOYEE' ? ctx.employeeId : employeeId;
+  if (!targetEmployeeId) throw badRequest('employeeId is required', 'EMPLOYEE_REQUIRED');
+  const numericYear = Number(year);
+  if (!Number.isInteger(numericYear) || numericYear < 2000 || numericYear > 2200) throw badRequest('year is invalid', 'INVALID_YEAR');
+  await assertEmployeeInScope(sql, ctx, targetEmployeeId);
+  const from = `${numericYear}-01-01`;
+  const to = `${numericYear}-12-31`;
+  const changes = await sql`
+    SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date, reason, created_at, actor_role, self_change
+    FROM calendar_changes
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+      AND change_type = 'RECONCILIATION' AND date BETWEEN ${from} AND ${to}
+    ORDER BY created_at ASC
+  `;
+  const resolvedByDate = new Map(changes.map((change) => [change.date, change]));
+  const pendingDates = new Set((await sql`
+    SELECT DISTINCT TO_CHAR(date, 'YYYY-MM-DD') AS date
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+      AND date BETWEEN ${from} AND ${to} AND effective_state = 'REQUIRES_REVIEW'
+  `).map((row) => row.date));
+  const dates = [...new Set([...pendingDates, ...resolvedByDate.keys()])].sort();
+  if (!dates.length) return { employeeId: targetEmployeeId, year: numericYear, pendingCount: 0, resolvedCount: 0, items: [] };
+  const rows = await sql`
+    SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, location,
+           shift_type, counts_as_work, layer, provenance, legacy_origin, duty_role,
+           effective_state, plan_revision
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+      AND TO_CHAR(date, 'YYYY-MM-DD') = ANY(${dates})
+  `;
+  const byDate = new Map(dates.map((date) => [date, []]));
+  for (const row of rows) byDate.get(row.date)?.push(row);
+  const unwrap = (date) => byDate.get(date) ?? [];
+  const label = (row) => {
+    const normalized = normalizeCalendarRow(row);
+    return { type: classifyKind(normalized).type, startTime: normalized.startTime, endTime: normalized.endTime };
+  };
+  const items = dates.map((date) => {
+    const provenance = buildDayProvenance(unwrap(date));
+    const resolution = resolvedByDate.get(date);
+    const isPending = pendingDates.has(date);
+    return {
+      date,
+      status: isPending ? 'PENDING' : 'RESOLVED',
+      company: provenance.companyCurrent.map(label),
+      current: (isPending
+        ? unwrap(date).map(normalizeCalendarRow).filter((row) => row.effectiveState === 'REQUIRES_REVIEW')
+        : provenance.effective).map(label),
+      resolvedAt: !isPending && resolution ? resolution.created_at : null,
+      resolvedReason: !isPending && resolution ? resolution.reason : null,
+      selfChange: !isPending && resolution ? Boolean(resolution.self_change) : null,
+    };
+  });
+  return {
+    employeeId: targetEmployeeId,
+    year: numericYear,
+    pendingCount: items.filter((item) => item.status === 'PENDING').length,
+    resolvedCount: items.filter((item) => item.status === 'RESOLVED').length,
+    items,
   };
 }

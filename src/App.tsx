@@ -35,6 +35,8 @@ import {
   listRemoteEmployees,
   listRemoteScheduleVersions,
   loadAnnualTargets,
+  loadReconciliation,
+  type ReconciliationWorklist,
   loadRemoteShifts,
   matchRemoteEmployee,
   RemoteAnnualTarget,
@@ -45,7 +47,8 @@ import {
 import { findAreaMismatch } from './lib/areas';
 import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
 import { setVlmFallbackSessionActive } from './ingestion/vlm-client';
-import { EffectiveStatsPanel } from './components/shift-dashboard/EffectiveStatsPanel';
+import { StatisticsModal } from './components/shift-dashboard/StatisticsModal';
+import { ReconciliationModal } from './components/shift-dashboard/ReconciliationModal';
 import { AnnualTargetModal } from './components/shift-dashboard/AnnualTargetModal';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
@@ -731,10 +734,6 @@ function App() {
     () => shifts.filter((shift) => shift.date.startsWith(`${currentYear}-`)),
     [shifts, currentYear],
   );
-  const monthRange = useMemo(
-    () => ({ from: monthDays[0], to: monthDays[monthDays.length - 1] }),
-    [monthDays],
-  );
   const monthLabel = useMemo(() => `${tl('calendar.months')[currentMonth]} ${currentYear}`, [tl, currentMonth, currentYear]);
   const todayOperational = getOperationalDate();
 
@@ -746,6 +745,40 @@ function App() {
   const [annualTargets, setAnnualTargets] = useState<RemoteAnnualTarget[]>([]);
   const [targetModalOpen, setTargetModalOpen] = useState(false);
   const [requestedDetailDate, setRequestedDetailDate] = useState<string | null>(null);
+  const [requestedDetailNonce, setRequestedDetailNonce] = useState(0);
+  const openDayDetail = useCallback((date: string) => {
+    setRequestedDetailDate(date);
+    setRequestedDetailNonce((value) => value + 1);
+  }, []);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [reconciliationOpen, setReconciliationOpen] = useState(false);
+  const [reconciliation, setReconciliation] = useState<ReconciliationWorklist | null>(null);
+  const [reconciliationLoading, setReconciliationLoading] = useState(false);
+  const [reconciliationFailed, setReconciliationFailed] = useState(false);
+  const [reconciliationAttempt, setReconciliationAttempt] = useState(0);
+  const [calendarDataVersion, setCalendarDataVersion] = useState(0);
+  useEffect(() => { setCalendarDataVersion((value) => value + 1); }, [shifts]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!session || !activeEmployeeId || needsOrgChoice) {
+      setReconciliation(null);
+      return undefined;
+    }
+    setReconciliationLoading(true);
+    setReconciliationFailed(false);
+    loadReconciliation(activeEmployeeId, currentYear)
+      .then((worklist) => { if (!cancelled) setReconciliation(worklist); })
+      .catch(() => { if (!cancelled) { setReconciliation(null); setReconciliationFailed(true); } })
+      .finally(() => { if (!cancelled) setReconciliationLoading(false); });
+    return () => { cancelled = true; };
+  }, [session, activeEmployeeId, currentYear, needsOrgChoice, calendarDataVersion, reconciliationAttempt]);
+  const pendingReconciliationCount = reconciliation?.pendingCount ?? 0;
+  useEffect(() => {
+    // Nothing left to reconcile: the modal has nothing to show.
+    if (reconciliationOpen && reconciliation && reconciliation.pendingCount === 0 && reconciliation.resolvedCount === 0) {
+      setReconciliationOpen(false);
+    }
+  }, [reconciliationOpen, reconciliation]);
   useEffect(() => {
     let cancelled = false;
     if (!session || !activeEmployeeId || needsOrgChoice) {
@@ -2073,6 +2106,9 @@ function App() {
     >
       <div className={`dashboard-body${isImporting || isSavingShift ? ' app--busy' : ''}`} aria-busy={isImporting || isSavingShift}>
         <CalendarToolbar
+          onOpenStats={!accountIncomplete && !needsOrgChoice ? () => setStatsOpen(true) : undefined}
+          reconciliationCount={session && activeEmployeeId ? pendingReconciliationCount : 0}
+          onOpenReconciliation={session && activeEmployeeId ? () => setReconciliationOpen(true) : undefined}
           year={currentYear}
           month={currentMonth}
           shiftCount={currentMonthShifts.length}
@@ -2125,25 +2161,6 @@ function App() {
 
         {!accountIncomplete && !needsOrgChoice && (
           <>
-        <EffectiveStatsPanel
-          monthShifts={currentMonthShifts}
-          yearShifts={currentYearShifts}
-          year={currentYear}
-          monthLabel={monthLabel}
-          monthRange={monthRange}
-          today={todayOperational}
-          target={currentYearTarget
-            ? {
-              minimumAnnualMinutes: currentYearTarget.minimumAnnualMinutes,
-              maximumAnnualMinutes: currentYearTarget.maximumAnnualMinutes,
-            }
-            : null}
-          showContract={Boolean(session && activeEmployeeId)}
-          canConfigureTarget={Boolean(canConfigureTarget)}
-          onConfigureTarget={() => setTargetModalOpen(true)}
-          onOpenDay={(date) => setRequestedDetailDate(date)}
-        />
-
         <section className="calendar-stage">
           <MonthGrid
             year={currentYear}
@@ -2158,9 +2175,50 @@ function App() {
             provenanceEnabled={Boolean(session && activeEmployeeId)}
             canReconcile={Boolean(canConfigureTarget)}
             requestedDetailDate={requestedDetailDate}
+            requestedDetailNonce={requestedDetailNonce}
             onDayChanged={() => { void refreshCalendarData(); }}
           />
         </section>
+        <StatisticsModal
+          isOpen={statsOpen}
+          onClose={() => setStatsOpen(false)}
+          employeeId={session ? activeEmployeeId : null}
+          year={currentYear}
+          month={currentMonth}
+          monthLabel={monthLabel}
+          today={todayOperational}
+          target={currentYearTarget
+            ? {
+              minimumAnnualMinutes: currentYearTarget.minimumAnnualMinutes,
+              maximumAnnualMinutes: currentYearTarget.maximumAnnualMinutes,
+            }
+            : null}
+          showContract={Boolean(session && activeEmployeeId)}
+          canConfigureTarget={Boolean(canConfigureTarget)}
+          refreshKey={calendarDataVersion + (currentYearTarget?.updatedAt ? currentYearTarget.updatedAt.length : 0)}
+          localMonthShifts={currentMonthShifts}
+          localYearShifts={currentYearShifts}
+          onConfigureTarget={() => { setStatsOpen(false); setTargetModalOpen(true); }}
+        />
+        <ReconciliationModal
+          isOpen={reconciliationOpen}
+          onClose={() => setReconciliationOpen(false)}
+          worklist={reconciliation}
+          loading={reconciliationLoading}
+          failed={reconciliationFailed}
+          onRetry={() => setReconciliationAttempt((value) => value + 1)}
+          onReview={(date) => {
+            setReconciliationOpen(false);
+            setCurrentYear(Number(date.slice(0, 4)));
+            setCurrentMonth(Number(date.slice(5, 7)) - 1);
+            openDayDetail(date);
+          }}
+          onViewDay={(date) => {
+            setReconciliationOpen(false);
+            setCurrentYear(Number(date.slice(0, 4)));
+            setCurrentMonth(Number(date.slice(5, 7)) - 1);
+          }}
+        />
         {session && activeEmployeeId && (
           <AnnualTargetModal
             isOpen={targetModalOpen}

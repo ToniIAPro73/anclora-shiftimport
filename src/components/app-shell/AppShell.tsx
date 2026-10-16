@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import {
+  AlertTriangle,
   AreaChart,
+  BarChart3,
   CalendarDays,
   ChevronDown,
   FileCog,
@@ -35,6 +37,9 @@ export function CalendarToolbar({
   onNavigate,
   onRefresh,
   isRefreshing = false,
+  onOpenStats,
+  reconciliationCount = 0,
+  onOpenReconciliation,
 }: {
   year: number;
   month: number;
@@ -44,6 +49,11 @@ export function CalendarToolbar({
   onNavigate: (delta: number) => void;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  /** Opens the statistics modal (the calendar stays the main surface). */
+  onOpenStats?: () => void;
+  /** The reconciliation shortcut only exists while something is pending. */
+  reconciliationCount?: number;
+  onOpenReconciliation?: () => void;
 }) {
   const { t, tl } = useI18n();
   const monthNames = tl('calendar.months');
@@ -56,6 +66,32 @@ export function CalendarToolbar({
       <div className="calendar-toolbar__controls">
         {areaControl}
         {employeeControl}
+        {onOpenStats && (
+          <button
+            type="button"
+            className="calendar-toolbar__tool-button"
+            onClick={onOpenStats}
+            aria-label={t('calendarTools.statsAria')}
+            title={t('calendarTools.statsAria')}
+            data-testid="calendar-stats-button"
+          >
+            <BarChart3 size={16} aria-hidden="true" />
+            <span className="calendar-toolbar__tool-label">{t('calendarTools.statsButton')}</span>
+          </button>
+        )}
+        {onOpenReconciliation && reconciliationCount > 0 && (
+          <button
+            type="button"
+            className="calendar-toolbar__tool-button calendar-toolbar__tool-button--warning"
+            onClick={onOpenReconciliation}
+            aria-label={t('calendarTools.reconAria', { count: reconciliationCount })}
+            title={t('calendarTools.reconTitle', { count: reconciliationCount })}
+            data-testid="calendar-reconciliation-button"
+          >
+            <AlertTriangle size={16} aria-hidden="true" />
+            <span className="calendar-toolbar__tool-badge">{reconciliationCount}</span>
+          </button>
+        )}
         {typeof shiftCount === 'number' && (
           <span className="calendar-toolbar__count" role="status" aria-live="polite">
             {t('calendar.shiftCount', { count: shiftCount })}

@@ -1,7 +1,7 @@
 export type EffectiveState = 'EFFECTIVE' | 'SUPERSEDED' | 'ABSORBED' | 'METADATA_ONLY' | 'REQUIRES_REVIEW';
 export type CalendarLayer = 'COMPANY_PLAN' | 'CHANGE';
 export type Provenance = 'COMPANY_IMPORT' | 'MANUAL_ADMIN_CHANGE' | 'EMPLOYEE_REQUEST' | 'SCHEDULE_PUBLICATION' | 'MIGRATION' | 'SYSTEM';
-export type ContractStatus = 'UNCONFIGURED' | 'BELOW_MINIMUM' | 'WITHIN_RANGE' | 'ABOVE_MAXIMUM';
+export type ContractStatus = 'NO_DATA' | 'INSUFFICIENT_DATA' | 'UNCONFIGURED' | 'BELOW_MINIMUM' | 'WITHIN_RANGE' | 'ABOVE_MAXIMUM';
 
 export interface CalendarRowInput {
   id?: string | null;
@@ -49,7 +49,7 @@ export interface ResolvedDay {
   fullDayType: string | null;
   workIntervals: Array<{ start: number; end: number; type: string }>;
   absenceIntervals: Array<{ start: number; end: number; type: string }>;
-  minutes: { regular: number; extras: number; other: number; work: number; absence: number };
+  minutes: { regular: number; extras: number; other: number; unclassified: number; work: number; absence: number; duty: number };
   byType: Record<string, number>;
   issues: DayIssue[];
   requiresReview: boolean;
@@ -63,7 +63,10 @@ export interface StatsBucket {
   regularMinutes: number;
   extrasMinutes: number;
   otherWorkMinutes: number;
+  unclassifiedWorkMinutes: number;
   absenceMinutes: number;
+  dutyMinutes: number;
+  dutyDays: number;
   workedDays: number;
   freeDays: number;
   vacationDays: number;
@@ -71,6 +74,7 @@ export interface StatsBucket {
 }
 
 export interface EffectiveStats {
+  calendarRows: number;
   total: StatsBucket;
   realized: StatsBucket;
   planned: StatsBucket;
@@ -113,7 +117,9 @@ export const CALENDAR_LAYERS: Readonly<Record<CalendarLayer, CalendarLayer>>;
 export const PROVENANCE: Readonly<Record<Provenance, Provenance>>;
 export const CHANGE_TYPES: readonly string[];
 export const CONTRACT_STATUS: Readonly<Record<ContractStatus, ContractStatus>>;
+export const JT_COUNTS_AS_WORK_INTERVAL: true;
 export const JT_COUNTS_AS_ADDITIONAL_WORK: false;
+export const LEGACY_UNCLASSIFIED_WORK: 'LEGACY_UNCLASSIFIED_WORK';
 export const DUTY_ROLE_SHIFT_LEAD: 'shift_lead';
 
 export function toMinutes(value: string | null | undefined): number | null;
@@ -123,7 +129,7 @@ export function classifyKind(row: NormalizedCalendarRow): { kind: string; type: 
 export function resolveDay(date: string, rows: CalendarRowInput[]): ResolvedDay;
 export function findOvernightSpillConflicts(days: ResolvedDay[]): Array<{ date: string; nextDate: string; code: string }>;
 export function computeEffectiveStats(rows: CalendarRowInput[], options?: { from?: string; to?: string; today?: string }): EffectiveStats;
-export function evaluateAnnualTarget(effectiveMinutes: number, target?: AnnualTargetInput | null): ContractEvaluation;
+export function evaluateAnnualTarget(effectiveMinutes: number, target?: AnnualTargetInput | null, options?: { calendarRows?: number | null }): ContractEvaluation;
 export function hoursToMinutes(hours: number): number;
 export function splitMinutes(totalMinutes: number): { sign: 1 | -1; hours: number; minutes: number };
 export function buildDayProvenance(rows: CalendarRowInput[], changes?: Array<Record<string, unknown>>): DayProvenance;
