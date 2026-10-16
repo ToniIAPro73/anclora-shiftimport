@@ -157,6 +157,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
     if (row.duplicateKind === 'DUPLICATE_DOCUMENT') return t('imports.kindDuplicateDocument');
     if (row.duplicateKind === 'DUPLICATE_PLAN') return t('imports.kindDuplicatePlan');
     if (row.documentClass === 'COMPANY_PLAN_UPDATE') return t('imports.kindPlanUpdate');
+    if (row.documentClass === 'COMPANY_PLAN' && row.importDecision === 'historical-and-plan') return t('imports.kindPlanInitial');
     if (row.importDecision === 'historical-and-plan') return t('imports.kindHistoricalAndPlan');
     if (row.importDecision === 'historical-only' || row.temporalClass === 'HISTORICAL') return t('imports.kindHistoricalOnly');
     return null;

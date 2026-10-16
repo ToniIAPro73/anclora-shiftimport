@@ -350,6 +350,24 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
   };
 }
 
+const BASELINE_SOURCES = new Set(['PUBLISHED_CALENDAR_EXPORT', 'TEAM_SCHEDULE_EXPORT']);
+
+/** Plain-language-ready counts for the "create the initial Plan Empresa" action (no ids, no revision numbers). */
+function planBaselineSummary(evaluation, prepared) {
+  const planOutcomes = evaluation.outcomes.filter((item) => !item.evidence);
+  const count = (...kinds) => planOutcomes.filter((item) => kinds.includes(item.outcome)).length;
+  const missing = !evaluation.hasExistingPlan;
+  return {
+    status: missing ? 'MISSING' : 'EXISTS',
+    canCreate: missing && evaluation.planEntryCount > 0 && BASELINE_SOURCES.has(prepared.sourceKind),
+    existingEquivalentRows: count(OUTCOME.UNCHANGED),
+    newRows: count(OUTCOME.NEW),
+    modifiedRows: count(OUTCOME.MODIFIED, OUTCOME.COMPANY_ADOPTED_LOCAL),
+    reviewRows: count(OUTCOME.REQUIRES_REVIEW, OUTCOME.KEPT_LOCAL),
+    sourceKind: prepared.sourceKind,
+  };
+}
+
 const outcomeCounts = (summary) => ({
   new: summary.new, unchanged: summary.unchanged, modified: summary.modified,
   keptLocal: summary.keptLocal, companyAdoptedLocal: summary.companyAdoptedLocal, requiresReview: summary.requiresReview,
@@ -377,6 +395,9 @@ export async function previewFutureImport(sql, ctx, input = {}) {
     historicalCount: prepared.historical.length,
     futureCount: prepared.future.length,
     employeeCount: prepared.employeeIds.length,
+    // Legacy bootstrap: data already exists in the calendar but no versioned Plan Empresa was ever recorded. Only
+    // company-plan sources (published calendar, team schedule) may establish the first baseline; an employee calendar never does.
+    planBaseline: planBaselineSummary(evaluation, prepared),
     plan: {
       baselineRevision: evaluation.latestRevision || null,
       changes: outcomeCounts(evaluation.summary),
@@ -832,6 +853,9 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     const rows = normalized.filter((shift) => shift.role === 'PLAN').map((shift) => ({ k: shift.employeeKey, ...toStoredRow(toPlanRow(shift)) }));
     const summaryJson = JSON.stringify({
       baselineRevision: evaluation.latestRevision || null,
+      // audit: who/what established this revision (user and import are columns; the source kind lives here)
+      sourceKind: prepared.sourceKind,
+      initialBaseline: !evaluation.hasExistingPlan,
       changes: outcomeCounts(evaluation.summary),
       days: evaluation.outcomes.filter((item) => item.outcome !== OUTCOME.UNCHANGED).map((item) => ({ k: item.employeeKey, d: item.date, o: item.outcome })),
     });

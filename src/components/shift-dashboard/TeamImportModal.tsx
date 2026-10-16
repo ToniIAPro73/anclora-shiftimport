@@ -47,6 +47,7 @@ import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference } from '../../lib/week';
 import { FutureImportConsent } from './FutureImportConsent';
+import { PlanBaselineCard } from './PlanBaselineCard';
 import { splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
 
@@ -95,6 +96,8 @@ interface TeamRow {
 
 interface PreviewEntry {
   row: TeamRow;
+  /** Every row of the document for this employee (new + already existing): the company plan is the whole document. */
+  allShifts: Shift[];
   newShifts: Shift[];
   newCount: number;
   conflictCount: number;
@@ -233,7 +236,7 @@ export const TeamImportModal = ({
   useEffect(() => {
     let cancelled = false;
     const today = getOperationalDate();
-    const rows = preview.flatMap((entry) => entry.newShifts.map((shift) => ({
+    const rows = preview.flatMap((entry) => entry.allShifts.map((shift) => ({
       ...shift,
       employeeId: entry.row.resolvedEmployeeId as string,
       areaId: importAreaId ?? null,
@@ -247,7 +250,7 @@ export const TeamImportModal = ({
       try {
         const fileFingerprint = await fingerprintFile(sourceFile);
         const result = await previewPlanImport({
-          fileFingerprint, employeeId: rows[0].employeeId, shifts: rows, areaId: importAreaId ?? null, importMode: 'team',
+          fileFingerprint, employeeId: rows[0].employeeId, shifts: rows, areaId: importAreaId ?? null, importMode: 'team', sourceKind: 'TEAM_SCHEDULE_EXPORT',
         });
         if (!cancelled) setPlanPreview(result);
       } catch {
@@ -707,6 +710,7 @@ export const TeamImportModal = ({
         const report = classifyImportChanges(existing, incoming);
         return {
           row,
+          allShifts: incoming,
           newShifts: report.new.map((change) => change.shift),
           newCount: report.new.length,
           conflictCount: report.changed.length,
@@ -724,10 +728,14 @@ export const TeamImportModal = ({
     }
   };
 
-  const handleConfirmImport = async () => {
+  const handleConfirmImport = async (decisionOverride?: FutureImportDecision) => {
     if (importing || isImporting) {
       return;
     }
+    const decision = decisionOverride ?? futureImportDecision;
+    const planMode = decision === 'historical-and-plan';
+    // Plan decision: the plan is the WHOLE document (existing rows are recognised server-side, never duplicated).
+    const rowsOf = (entry: PreviewEntry) => (planMode ? entry.allShifts : entry.newShifts);
     onImportStateChange?.(true);
     setImporting(true);
     const results: ImportOutcome[] = [];
@@ -741,10 +749,10 @@ export const TeamImportModal = ({
     const fileFingerprint = sourceFile ? await fingerprintFile(sourceFile) : undefined;
 
     const cutoff = getOperationalDate();
-    const temporalCounts = splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts), cutoff);
+    const temporalCounts = splitImportByOperationalDate(preview.flatMap(rowsOf), cutoff);
     const hasFutureData = temporalCounts.future.length > 0;
-    const submitted = preview.flatMap((entry) => entry.newShifts
-      .filter((shift) => isImportableTeamShift(shift, futureImportDecision === 'historical-and-plan', cutoff))
+    const submitted = preview.flatMap((entry) => rowsOf(entry)
+      .filter((shift) => isImportableTeamShift(shift, planMode, cutoff))
       .map((shift) => ({
         ...shift,
         employeeId: entry.row.resolvedEmployeeId as string,
@@ -754,7 +762,7 @@ export const TeamImportModal = ({
       setError(t('importModal.noHistoricalRows'));
       return;
     }
-    if (hasFutureData && futureImportDecision === 'historical-and-plan') {
+    if (hasFutureData && planMode) {
       // A team file containing any future row is one atomic import. The
       // backend classifies every row and rejects the whole request when the
       // effective planning capability/scope is insufficient.
@@ -782,10 +790,12 @@ export const TeamImportModal = ({
         futureConsent: 'historical-and-plan',
         weekStart: getPlannerWeekStartPreference(),
       });
-      const submittedFutureCount = submitted.filter((shift) => shift.date >= cutoff).length;
+      // Only rows that are NEW for the calendar get planning drafts; rows that already exist are recognised, not duplicated.
+      const newKeys = new Set(preview.flatMap((entry) => entry.newShifts.map((shift) => `${entry.row.resolvedEmployeeId}|${shift.date}`)));
+      const submittedFutureCount = submitted.filter((shift) => shift.date >= cutoff && newKeys.has(`${shift.employeeId}|${shift.date}`)).length;
       const persistedFutureCount = futureResult.future.createdAssignmentCount
         + futureResult.future.existingAssignmentCount;
-      if (persistedFutureCount !== submittedFutureCount) {
+      if (persistedFutureCount < submittedFutureCount) {
         setError(t('importConflict.importSaveFailed'));
         return;
       }
@@ -1250,6 +1260,14 @@ export const TeamImportModal = ({
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewErrors')}</div>
               </div>
             </div>
+            {planPreview?.planBaseline?.canCreate && (
+              <PlanBaselineCard
+                baseline={planPreview.planBaseline}
+                busy={interactionLocked}
+                onCreate={() => { setFutureImportDecision('historical-and-plan'); void handleConfirmImport('historical-and-plan'); }}
+                testId="team-plan-baseline-card"
+              />
+            )}
             {(splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).future.length) > 0 && (
               <FutureImportConsent
                 decision={futureImportDecision}

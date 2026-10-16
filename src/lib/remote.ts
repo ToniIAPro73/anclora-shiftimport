@@ -238,6 +238,16 @@ export interface FutureImportResult {
 /** `historical-and-plan` = also create/update the planning from the future rows (never publishes). */
 export type FutureImportConsent = 'historical-and-plan';
 
+export interface PlanBaselineInfo {
+  status: 'MISSING' | 'EXISTS';
+  canCreate: boolean;
+  existingEquivalentRows: number;
+  newRows: number;
+  modifiedRows: number;
+  reviewRows: number;
+  sourceKind: string;
+}
+
 export interface PlanImportPreview {
   classification: 'HISTORICAL' | 'FUTURE' | 'MIXED';
   cutoff: string;
@@ -245,6 +255,8 @@ export interface PlanImportPreview {
   historicalCount: number;
   futureCount: number;
   employeeCount: number;
+  /** Legacy bootstrap: calendar data exists but no versioned company plan was ever recorded. */
+  planBaseline?: PlanBaselineInfo;
   plan: { baselineRevision: number | null; changes: PlanChangeCounts; wouldCreateRevision: boolean; weeksAffected: string[] };
   autoPublish: false;
 }
@@ -862,6 +874,7 @@ export async function previewPlanImport(input: {
   importMode?: 'individual' | 'team';
   periodKind?: 'single' | 'multi';
   deleteIds?: string[];
+  sourceKind?: 'EMPLOYEE_CALENDAR_EXPORT' | 'PUBLISHED_CALENDAR_EXPORT' | 'TEAM_SCHEDULE_EXPORT' | 'UNKNOWN';
 }): Promise<PlanImportPreview> {
   return apiFetch<PlanImportPreview>('/api/imports/plan-preview', { method: 'POST', body: JSON.stringify(input) });
 }

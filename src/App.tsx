@@ -1363,6 +1363,7 @@ function App() {
     const upserts: Shift[] = [];
     const deleteIds: string[] = [];
     let identicalCount = 0;
+    const identicalIncoming: Shift[] = []; // rows the calendar already holds: still part of the company plan
 
     for (const shift of eligibleIncoming) {
       const existingImportedShifts = pendingImportedByDate.get(shift.date)
@@ -1386,6 +1387,7 @@ function App() {
       );
       if (identicalExisting) {
         identicalCount += 1;
+        identicalIncoming.push(shift);
         continue;
       }
       const existingShift = matchingExisting ?? existingImportedShifts[0];
@@ -1428,7 +1430,11 @@ function App() {
     // and do not create another Import record or send an empty write request.
     // This also protects the flow when a second import is started after the
     // first one has already finished.
-    if (upserts.length === 0 && (identicalCount > 0 || excludedSchedulingCount > 0)) {
+    // Legacy bootstrap: every row already exists but the user explicitly asked to establish the company plan from this
+    // document (planners only). The server records the plan without duplicating shifts or touching the effective calendar.
+    const planBootstrap = session.role !== 'EMPLOYEE' && futureImportDecision === 'historical-and-plan'
+      && upserts.length === 0 && identicalCount > 0 && excludedSchedulingCount === 0;
+    if (upserts.length === 0 && (identicalCount > 0 || excludedSchedulingCount > 0) && !planBootstrap) {
       if (excludedSchedulingCount > 0) {
         const reason = session.role === 'EMPLOYEE' ? 'SELF_FUTURE_ROWS_EXCLUDED' : 'FUTURE_ROWS_NOT_CONFIRMED';
         const outcome: ImportOutcomeReport = {
@@ -1554,7 +1560,7 @@ function App() {
             sourceFormat: newShifts[0]?.sourceFormat ?? '',
             fileFingerprint: fileFingerprint ?? '',
             employeeId: targetEmployeeId,
-            shifts: [...historicalUpserts, ...futureUpserts].map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
+            shifts: [...historicalUpserts, ...identicalIncoming, ...futureUpserts].map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
             deleteIds,
             periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
             periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
@@ -1579,7 +1585,9 @@ function App() {
           }
           const persistedFutureCount = futureResult.future.createdAssignmentCount
             + futureResult.future.existingAssignmentCount;
-          if (persistedFutureCount !== futureUpserts.length) {
+          // Future rows the calendar already held are recognised, not re-created: only genuinely new ones get drafts.
+          const expectedNewFuture = futureUpserts.filter((shift) => !snapshot.some((existing) => existing.date === shift.date && fingerprintShift(existing).full === fingerprintShift(shift).full)).length;
+          if (persistedFutureCount < expectedNewFuture) {
             setAppFeedback({ kind: 'alert', message: t('importConflict.importSaveFailed') });
             return false;
           }

@@ -90,3 +90,19 @@ La misma persona tiene números distintos por sistema (`TRYP_EMPLOYEE_CALENDAR`/
 resolución: mapeo explícito por organización → identificador canónico → ambigüedad (bloqueo). Nunca por nombre ni por
 semejanza. El mapeo lo crea solo un ADMIN+ de forma explícita; un EMPLEADO solo puede importar si el número está asociado a su
 propio empleado. El servidor lo exige (`409 SOURCE_IDENTIFIER_MISMATCH` / `SOURCE_IDENTIFIER_UNMAPPED`).
+
+## Plan Empresa inicial sobre datos existentes (bootstrap)
+
+Si el documento es una fuente de Plan Empresa (`PUBLISHED_CALENDAR_EXPORT` o `TEAM_SCHEDULE_EXPORT`), el calendario ya contiene
+total o parcialmente sus turnos y no existe baseline versionado para el ámbito, `plan-preview` devuelve
+`planBaseline = { status: MISSING, canCreate: true, existingEquivalentRows, newRows, modifiedRows, reviewRows }` y la UI ofrece
+«Crear Plan Empresa inicial» (OWNER/ADMIN/PLANNER en su ámbito; EMPLOYEE no, también en servidor).
+
+- El plan es el documento **completo**: el cliente envía también las filas ya existentes; el servidor las reconoce
+  (`UNCHANGED`), no las duplica, y solo crea borradores para las `NEW`. Las discrepantes siguen la regla de primera importación
+  (pasado → `KEPT_LOCAL`, futuro → `REQUIRES_REVIEW`).
+- El calendario efectivo no se modifica y las reconciliaciones pendientes no se resuelven.
+- Un `EMPLOYEE_CALENDAR_EXPORT` nunca puede establecer el baseline.
+- La revisión guarda autor, import, cobertura, huellas y, en `summary`, `sourceKind` e `initialBaseline` (auditoría).
+- Reimportar el mismo documento/plan es `DUPLICATE_FILE` / `DUPLICATE_DOCUMENT` / `DUPLICATE_PLAN`; dos confirmaciones
+  simultáneas crean exactamente una revisión. El historial lo muestra como «Plan Empresa inicial».

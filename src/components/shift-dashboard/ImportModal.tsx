@@ -34,7 +34,8 @@ import { classifyImportChanges, fingerprintShift } from '../../lib/import-dedup'
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 import { AssistantAnswers, buildProfileFromTokenMeanings, buildCodeOverridesFromAnswers } from '../../ingestion/assistant';
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
-import { RemoteArea } from '../../lib/remote';
+import { RemoteArea, previewPlanImport, type PlanImportPreview } from '../../lib/remote';
+import { PlanBaselineCard } from './PlanBaselineCard';
 import { fingerprintFile } from '../../lib/file-fingerprint';
 import { deriveEffectiveTemporalSummary, splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
@@ -451,6 +452,27 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   }, [parsedShifts]);
   // A TRYP export carries a source-system number: the target employee must be resolved explicitly (never by name).
   const sourceIdentityBlocking = Boolean(analysis?.source?.system && analysis.source.identifier && !sourceEmployee);
+
+  // Legacy bootstrap: a company-plan document (published calendar) whose shifts already exist but whose plan was never recorded.
+  const [planPreview, setPlanPreview] = useState<PlanImportPreview | null>(null);
+  const planSourceKind = analysis?.source?.kind;
+  const bootstrapCandidate = !identityLocked && Boolean(sourceEmployee) && (planSourceKind === 'PUBLISHED_CALENDAR_EXPORT') && temporalSummary.future > 0;
+  useEffect(() => {
+    let cancelled = false;
+    if (!bootstrapCandidate || !sourceEmployee || !file) { setPlanPreview(null); return undefined; }
+    void (async () => {
+      try {
+        const rows = parsedShifts.filter(hasImportableShiftData).map(toDomainShift).map((shift) => ({ ...shift, employeeId: sourceEmployee.id, areaId: null }));
+        const result = await previewPlanImport({
+          fileFingerprint: await fingerprintFile(file), employeeId: sourceEmployee.id, shifts: rows, importMode: 'individual', sourceKind: 'PUBLISHED_CALENDAR_EXPORT',
+        });
+        if (!cancelled) setPlanPreview(result);
+      } catch {
+        if (!cancelled) setPlanPreview(null); // role without planning capability, or preview unavailable
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [bootstrapCandidate, sourceEmployee, file, parsedShifts]);
 
   const actionableCount = useMemo(() => {
     if (parsedShifts.length === 0) {
@@ -1014,8 +1036,9 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setPeriodConflictResolved(false);
   };
 
-  const handleConfirm = async () => {
-    if (interactionLocked || diagnosisBlocking || hasUnresolvedColors || (actionableCount === 0 && !selfNotFound && !selfAmbiguous)) {
+  const handleConfirm = async (options: { createInitialPlan?: boolean } = {}) => {
+    const createInitialPlan = options.createInitialPlan === true;
+    if (interactionLocked || diagnosisBlocking || hasUnresolvedColors || sourceIdentityBlocking || (actionableCount === 0 && !createInitialPlan && !selfNotFound && !selfAmbiguous)) {
       return;
     }
     onImportStateChange?.(true);
@@ -1120,7 +1143,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
         file?.name,
         file ? await fingerprintFile(file) : undefined,
         selfImportSummary ?? undefined,
-        futureImportDecision,
+        createInitialPlan ? 'historical-and-plan' : futureImportDecision,
         analysis?.source,
       );
       if (persisted) {
@@ -1911,6 +1934,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               />
             )}
 
+            {planPreview?.planBaseline?.canCreate && bootstrapCandidate && (
+              <PlanBaselineCard
+                baseline={planPreview.planBaseline}
+                busy={interactionLocked}
+                onCreate={() => { setFutureImportDecision('historical-and-plan'); void handleConfirm({ createInitialPlan: true }); }}
+              />
+            )}
             {temporalSummary.future > 0 && (
               identityLocked ? (
                 <div
