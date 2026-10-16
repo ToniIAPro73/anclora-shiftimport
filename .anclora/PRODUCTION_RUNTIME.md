@@ -310,8 +310,16 @@ QA_SOURCE_READ_ONLY=true
 QA_TARGET_MUTABLE=true
 QA_LOCAL_RUNTIME_USES_PRODUCTION_DATABASE=true
 QA_CREDENTIALS_FILE=.env.development.local (MANUAL_QA_EMAIL / MANUAL_QA_PASSWORD, gitignored, 0600)
+QA_LOCAL_LOGIN_REQUIRED=true
+QA_DEVELOPMENT_PREVIEW_LOGIN_REQUIRED=true
+QA_DATABASE_TARGET_SAME_FOR_LOCAL_AND_PREVIEW=true
+QA_CANONICAL_DATABASE=Neon holy-cake-85660318 / branch main / neondb (endpoint ep-lingering-dew-b1atfd0w)
+QA_DATABASE_RESOLUTION=QA_DATABASE_URL or the Vercel Development environment; NEVER the repo .env*.local files (they point at the local Docker Postgres)
+QA_PLAINTEXT_PASSWORD_IN_VERCEL=false (Vercel only needs the password_hash stored in PostgreSQL)
+QA_SMOKE=npm run qa:local:smoke / npm run qa:preview:smoke (login, session, mirror, stats, reconciliation)
+QA_LOCAL_RUNTIME=npm run qa:dev-runtime (vercel dev on the canonical database via a throw-away overlay)
 QA_BOOTSTRAP=node scripts/qa/ensure-qa-identity.mjs && node scripts/qa/refresh-qa-mirror.mjs --apply
-QA_E2E=npm --prefix qa/e2e-acceptance run test:qa-mirror (needs `vercel dev --local --listen 5173`)
+QA_E2E=npm --prefix qa/e2e-acceptance run test:qa-mirror (needs `npm run qa:dev-runtime` on :5173)
 
 WORK_BRANCH=development
 CREATE_FEATURE_BRANCH=false

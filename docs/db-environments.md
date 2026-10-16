@@ -36,3 +36,11 @@ El runner Playwright crea una organización `E2E-SHIFT-<runId>`, usuarios
 `@e2e.test`, membresías, empleados y turnos únicamente dentro de ese tenant.
 Guarda el inventario de UUIDs creados y elimina exactamente esos registros en
 el teardown; nunca usa `DELETE ... LIKE` sobre datos ajenos al run.
+
+## Aviso: ficheros `.env*.local` del repositorio
+
+`.env`, `.env.local` y `.env.development.local` apuntan al PostgreSQL local de Docker (`127.0.0.1:5433`), no a Neon.
+Cualquier script que lea esos ficheros opera sobre Docker. La BD canónica (Neon `main`, `neondb`, endpoint
+`ep-lingering-dew-b1atfd0w`) se obtiene del entorno **Development** de Vercel (`vercel env pull --environment=development`);
+las variables de Preview/Production son sensibles y no se pueden leer. Los scripts `scripts/qa/*` aplican esta resolución y
+fallan si el destino no es el endpoint canónico.

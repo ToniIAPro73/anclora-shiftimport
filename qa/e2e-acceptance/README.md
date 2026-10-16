@@ -37,11 +37,13 @@ Código `development` local + Neon producción + identidad QA dedicada (`qa.shif
 node scripts/qa/ensure-qa-identity.mjs          # crea/valida la identidad; rota y guarda la password en .env.development.local (nunca se imprime)
 node scripts/qa/refresh-qa-mirror.mjs --dry-run # inventario
 node scripts/qa/refresh-qa-mirror.mjs --apply   # reconstruye el baseline (idempotente, ids deterministas)
-vercel dev --local --listen 5173                # app local sobre la BD de producción
+npm run qa:dev-runtime                          # app local sobre la BD canónica (Neon) — NO `vercel dev` a secas: usaría el Postgres Docker de .env.local
+npm run qa:local:smoke && npm run qa:preview:smoke   # login QA en local y en el Preview de development
 npm --prefix qa/e2e-acceptance run test:qa-mirror
 ```
 
 El origen sólo se lee (huella SHA-256 idéntica antes/después). Toda escritura E2E pasa por
 `assertQaOrganization()`: aborta salvo que la organización sea exactamente el mirror, la identidad QA sea
 miembro y todos los miembros sean `@anclora.test`. Tras tests destructivos, vuelve a ejecutar `--apply`.
+Las rutas `.env*.local` del repo apuntan al Postgres Docker: los scripts QA resuelven la BD canónica desde el entorno Development de Vercel (o `QA_DATABASE_URL`) y abortan si el destino no es el endpoint canónico.
 El `storageState` de login es temporal (`.qa-state/`, ignorado por Git) y se destruye en el teardown.

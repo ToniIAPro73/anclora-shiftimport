@@ -83,3 +83,18 @@ describe('assertQaOrganization (write guard)', () => {
     await expect(assertQaOrganization(fakeDb({ orgName: okName, members: ['other@anclora.test'] }), TARGET)).rejects.toThrow(/not a member/);
   });
 });
+
+describe('canonical database resolution', () => {
+  it('refuses a local Docker connection string unless explicitly allowed', async () => {
+    const { databaseUrl } = await import('./qa-lib.mjs');
+    const previous = { url: process.env.QA_DATABASE_URL, allow: process.env.QA_ALLOW_LOCAL_DOCKER };
+    process.env.QA_DATABASE_URL = 'postgres://u:p@127.0.0.1:5433/anclora_shiftimport';
+    delete process.env.QA_ALLOW_LOCAL_DOCKER;
+    expect(() => databaseUrl()).toThrow(/local Docker/);
+    process.env.QA_DATABASE_URL = 'postgres://u:p@ep-other.c-5.eu-central-1.aws.neon.tech/neondb';
+    expect(() => databaseUrl()).toThrow(/not the canonical/);
+    process.env.QA_DATABASE_URL = 'postgres://u:p@ep-lingering-dew-b1atfd0w-pooler.c-5.eu-central-1.aws.neon.tech/neondb';
+    expect(databaseUrl()).toContain('ep-lingering-dew-b1atfd0w');
+    for (const [k, v] of [['QA_DATABASE_URL', previous.url], ['QA_ALLOW_LOCAL_DOCKER', previous.allow]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  });
+});

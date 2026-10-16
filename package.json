@@ -20,7 +20,10 @@
     "preview": "vite preview",
     "seed:dev": "node --env-file=.env.development.local db/seed-dev.mjs",
     "db:migrate": "node --env-file=.env.local db/migrate.mjs",
-    "db:migrate:status": "node --env-file=.env.local db/migrate.mjs --status"
+    "db:migrate:status": "node --env-file=.env.local db/migrate.mjs --status",
+    "qa:dev-runtime": "node scripts/qa/dev-runtime.mjs",
+    "qa:local:smoke": "node scripts/qa/qa-smoke.mjs --local",
+    "qa:preview:smoke": "node scripts/qa/qa-smoke.mjs --preview"
   },
   "dependencies": {
     "@anclora/design-system": "github:ToniIAPro73/anclora-design-system#87655c449e3bda41787e82d00aa8a8e17473b616",

@@ -3,7 +3,9 @@
  * Contract: .anclora/PRODUCTION_RUNTIME.md (QA_*). Nothing here prints secrets.
  */
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -31,15 +33,62 @@ export function loadEnv(files = ENV_FILES) {
   return { ...loaded, ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)) };
 }
 
+/** Canonical production database (contract: .anclora/PRODUCTION_RUNTIME.md §3). */
+export const CANONICAL_DB = Object.freeze({ endpointPrefix: 'ep-lingering-dew-b1atfd0w', database: 'neondb' });
+
+let cachedDevelopmentEnv = null;
+
 /**
- * Production Neon connection. `.env.development.local` is the local-Docker file
- * and must never provide the database URL, so DB variables come from .env.local.
+ * Pulls the Vercel *Development* environment (the contracted source of the
+ * production-backed runtime) into a temp file, parses it and deletes it.
+ * Nothing is persisted and nothing is printed.
+ */
+export function pullVercelDevelopmentEnv() {
+  if (cachedDevelopmentEnv) return cachedDevelopmentEnv;
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'qa-env-'));
+  const file = path.join(dir, 'development.env');
+  try {
+    execFileSync('vercel', ['env', 'pull', file, '--environment=development', '--yes'], { cwd: ROOT, stdio: 'ignore' });
+    const parsed = {};
+    for (const line of readFileSync(file, 'utf8').split('\n')) {
+      const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
+      if (match) parsed[match[1]] = match[2].replace(/^"(.*)"$/, '$1');
+    }
+    cachedDevelopmentEnv = parsed;
+    return parsed;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Connection string of the CANONICAL production Neon database.
+ * Resolution: QA_DATABASE_URL, else the Vercel Development environment. The local
+ * `.env*.local` files are NOT used: they point at the local Docker Postgres, and
+ * identities/mirrors provisioned there are invisible to Preview and Production.
+ * Fails closed if the target is not the canonical endpoint.
  */
 export function databaseUrl() {
-  const env = loadEnv(['.env.local']);
-  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL || env.DATABASE_URL_UNPOOLED || env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL not available (expected in .env.local)');
+  const fromEnv = process.env.QA_DATABASE_URL;
+  const dev = fromEnv ? null : pullVercelDevelopmentEnv();
+  const url = fromEnv || dev.DATABASE_URL_UNPOOLED || dev.DATABASE_URL;
+  if (!url || url === '[SENSITIVE]') throw new Error('Canonical database URL unavailable (set QA_DATABASE_URL or fix the Vercel Development env)');
+  const { hostname, pathname } = new URL(url);
+  const local = ['localhost', '127.0.0.1', '::1'].includes(hostname);
+  if (local && process.env.QA_ALLOW_LOCAL_DOCKER !== '1') {
+    throw new Error('QA GUARD: resolved database is local Docker, not the canonical Neon production database');
+  }
+  if (!local && (!hostname.startsWith(CANONICAL_DB.endpointPrefix) || pathname.slice(1) !== CANONICAL_DB.database)) {
+    throw new Error('QA GUARD: resolved database is not the canonical Neon production endpoint');
+  }
   return url;
+}
+
+/** Safe description of a connection target: no credentials, only host/db and a short fingerprint. */
+export function describeDatabase(url = databaseUrl()) {
+  const parsed = new URL(url);
+  const host = parsed.hostname.replace('-pooler', '');
+  return { host, database: parsed.pathname.slice(1), fingerprint: createHash('sha256').update(`${host}/${parsed.pathname.slice(1)}`).digest('hex').slice(0, 12) };
 }
 
 export async function connect() {

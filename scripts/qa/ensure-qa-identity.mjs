@@ -11,7 +11,7 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashPassword, verifyPassword } from '../../api/_lib/passwords.js';
-import { QA_IDENTITY, ROOT, connect, findQaUser, loadEnv } from './qa-lib.mjs';
+import { QA_IDENTITY, ROOT, connect, describeDatabase, findQaUser, loadEnv } from './qa-lib.mjs';
 
 const LOCAL_ENV = path.join(ROOT, '.env.development.local');
 
@@ -43,7 +43,12 @@ export async function ensureQaIdentity(client, { rotate = false, log = () => und
     upsertLocalEnv({ MANUAL_QA_EMAIL: QA_IDENTITY, MANUAL_QA_PASSWORD: password });
   } else {
     const works = Boolean(password) && verifyPassword(password, user.password_hash);
-    if (rotate || !works) {
+    if (!rotate && !works && password) {
+      // The local QA password is the source of truth: make this database's hash match it (no new secret).
+      const synced = await client.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND lower(email) = lower($3)', [hashPassword(password), user.id, QA_IDENTITY]);
+      if (synced.rowCount !== 1) throw new Error('Password hash sync touched an unexpected number of rows');
+      result.hashSynced = true;
+    } else if (rotate || !works) {
       password = randomBytes(24).toString('base64url');
       const updated = await client.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND lower(email) = lower($3)', [hashPassword(password), user.id, QA_IDENTITY]);
       if (updated.rowCount !== 1) throw new Error('Password rotation touched an unexpected number of rows');
@@ -54,7 +59,7 @@ export async function ensureQaIdentity(client, { rotate = false, log = () => und
   const after = loadEnv(['.env.development.local']);
   result.emailConfigured = after.MANUAL_QA_EMAIL === QA_IDENTITY;
   result.passwordConfigured = Boolean(after.MANUAL_QA_PASSWORD) && verifyPassword(after.MANUAL_QA_PASSWORD, (await findQaUser(client)).password_hash);
-  log(`[qa-identity] existed=${result.existed} created=${result.created} rotated=${result.rotated} configured=${result.passwordConfigured}`);
+  log(`[qa-identity] db=${describeDatabase().fingerprint} existed=${result.existed} created=${result.created} rotated=${result.rotated} hashSynced=${Boolean(result.hashSynced)} configured=${result.passwordConfigured}`);
   return { ...result, userId: user.id };
 }
 
