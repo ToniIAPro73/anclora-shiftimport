@@ -1,0 +1,244 @@
+#!/usr/bin/env node
+/**
+ * Rebuilds the persistent QA mirror of the source organization.
+ *   node scripts/qa/refresh-qa-mirror.mjs --dry-run      (default)
+ *   node scripts/qa/refresh-qa-mirror.mjs --apply
+ *
+ * SOURCE (production, READ ONLY template) --clone + remap--> TARGET (QA mirror, mutable)
+ *
+ * - The source is only ever SELECTed; its fingerprint must be identical before/after.
+ * - Every DELETE/INSERT is bound to the target organization id, which must pass
+ *   assertQaOrganization() (unique QA name, QA identity member, only synthetic members).
+ * - No users, sessions, password hashes or employee->user links are copied;
+ *   human identities are pseudonymised. Ids are deterministic, so a second run
+ *   yields exactly the same state.
+ */
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  QA_DOMAIN, QA_IDENTITY, assertQaOrganization, connect, deterministicUuid, findQaUser,
+  resolveSourceOrganization, sha256, targetNameFor,
+} from './qa-lib.mjs';
+
+const COPIED = ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'shift_assignments', 'calendar_changes', 'shifts', 'employee_annual_targets', 'format_profiles'];
+
+async function sourceFingerprint(client, sourceId) {
+  const queries = {
+    employees: 'SELECT id, name, external_employee_id, user_id, status, area_id FROM employees WHERE organization_id = $1 ORDER BY id',
+    shifts: 'SELECT id, employee_id, date, start_time, end_time, shift_type, effective_state, layer, plan_revision, change_id, import_id, updated_at FROM shifts WHERE organization_id = $1 ORDER BY id',
+    calendar_changes: 'SELECT id, employee_id, date, change_type, reason, before_state, after_state, created_at FROM calendar_changes WHERE organization_id = $1 ORDER BY id',
+    imports: 'SELECT id, file_name, status, shift_count, updated_at FROM imports WHERE organization_id = $1 ORDER BY id',
+    schedules: 'SELECT id, area_id, period_start, period_end FROM schedules WHERE organization_id = $1 ORDER BY id',
+    annual_targets: 'SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, updated_at FROM employee_annual_targets WHERE organization_id = $1 ORDER BY id',
+    memberships: 'SELECT user_id, role FROM memberships WHERE organization_id = $1 ORDER BY user_id',
+    areas: 'SELECT id, name, code, active FROM areas WHERE organization_id = $1 ORDER BY id',
+  };
+  const parts = {};
+  for (const [name, sql] of Object.entries(queries)) {
+    const rows = (await client.query(sql, [sourceId])).rows;
+    parts[name] = { rows: rows.length, sha256: sha256(JSON.stringify(rows)) };
+  }
+  return { parts, overall: sha256(JSON.stringify(parts)) };
+}
+
+async function readSource(client, sourceId) {
+  const q = async (sql) => (await client.query(sql, [sourceId])).rows;
+  return {
+    areas: await q('SELECT * FROM areas WHERE organization_id = $1 ORDER BY id'),
+    employees: await q('SELECT * FROM employees WHERE organization_id = $1 ORDER BY created_at, id'),
+    imports: await q('SELECT * FROM imports WHERE organization_id = $1 ORDER BY created_at, id'),
+    schedules: await q('SELECT * FROM schedules WHERE organization_id = $1 ORDER BY created_at, id'),
+    schedule_versions: await q('SELECT sv.* FROM schedule_versions sv JOIN schedules s ON s.id = sv.schedule_id WHERE s.organization_id = $1 ORDER BY sv.created_at, sv.id'),
+    shift_assignments: await q('SELECT a.* FROM shift_assignments a JOIN schedule_versions sv ON sv.id = a.schedule_version_id JOIN schedules s ON s.id = sv.schedule_id WHERE s.organization_id = $1 ORDER BY a.id'),
+    calendar_changes: await q('SELECT * FROM calendar_changes WHERE organization_id = $1 ORDER BY created_at, id'),
+    shifts: await q('SELECT * FROM shifts WHERE organization_id = $1 ORDER BY date, id'),
+    employee_annual_targets: await q('SELECT * FROM employee_annual_targets WHERE organization_id = $1 ORDER BY id'),
+    format_profiles: await q('SELECT * FROM format_profiles WHERE organization_id = $1 ORDER BY id'),
+  };
+}
+
+const pad = (n, width) => String(n).padStart(width, '0');
+
+/** Pure transformation: source rows -> mirror rows (remapped ids, pseudonymised people, no auth links). */
+export function buildMirror(source, { targetId, qaUserId }) {
+  const ns = targetId;
+  const map = (kind) => {
+    const cache = new Map();
+    return (id) => {
+      if (id === null || id === undefined) return null;
+      if (!cache.has(id)) cache.set(id, deterministicUuid(ns, `${kind}:${id}`));
+      return cache.get(id);
+    };
+  };
+  const area = map('area'); const employee = map('employee'); const imp = map('import'); const schedule = map('schedule');
+  const version = map('schedule_version'); const shift = map('shift'); const change = map('change');
+  const assignment = map('assignment'); const target = map('target'); const profile = map('format_profile');
+
+  const employeeIndex = new Map(source.employees.map((row, index) => [row.id, index + 1]));
+  const importIndex = new Map(source.imports.map((row, index) => [row.id, index + 1]));
+
+  const out = {};
+  out.areas = source.areas.map((r) => ({ ...r, id: area(r.id), organization_id: targetId }));
+  out.employees = source.employees.map((r) => ({
+    ...r,
+    id: employee(r.id),
+    organization_id: targetId,
+    name: `Empleado QA ${pad(employeeIndex.get(r.id), 3)}`,
+    external_employee_id: r.external_employee_id ? `QA-${pad(employeeIndex.get(r.id), 4)}` : null,
+    user_id: null,
+    area_id: area(r.area_id),
+  }));
+  out.imports = source.imports.map((r) => {
+    const ext = /\.[A-Za-z0-9]{2,5}$/.exec(r.file_name ?? '')?.[0] ?? '';
+    return {
+      ...r,
+      id: imp(r.id),
+      organization_id: targetId,
+      imported_by_user_id: qaUserId,
+      deleted_by_user_id: r.deleted_by_user_id ? qaUserId : null,
+      area_id: area(r.area_id),
+      employee_id: employee(r.employee_id),
+      blocking_employee_id: employee(r.blocking_employee_id),
+      file_name: `qa-import-${pad(importIndex.get(r.id), 3)}${ext}`,
+      context_fingerprint: null,
+    };
+  });
+  out.schedules = source.schedules.map((r) => ({ ...r, id: schedule(r.id), organization_id: targetId, area_id: area(r.area_id), created_by_user_id: qaUserId }));
+  out.schedule_versions = source.schedule_versions.map((r) => ({
+    ...r, id: version(r.id), schedule_id: schedule(r.schedule_id), created_by_user_id: qaUserId,
+    published_by_user_id: r.published_by_user_id ? qaUserId : null,
+  }));
+  out.shift_assignments = source.shift_assignments.map((r) => ({
+    ...r, id: assignment(r.id), schedule_version_id: version(r.schedule_version_id), employee_id: employee(r.employee_id), import_id: imp(r.import_id),
+  }));
+  out.calendar_changes = source.calendar_changes.map((r) => ({
+    ...r, id: change(r.id), organization_id: targetId, employee_id: employee(r.employee_id),
+    actor_user_id: null, approved_by_user_id: null, approval_request_id: null, change_request_id: null,
+    original_shift_id: null, // re-linked after shifts exist
+  }));
+  out.calendar_change_original_shift = source.calendar_changes
+    .filter((r) => r.original_shift_id)
+    .map((r) => ({ id: change(r.id), original_shift_id: shift(r.original_shift_id) }));
+  out.shifts = source.shifts.map((r) => {
+    const employeeId = employee(r.employee_id);
+    const row = {
+      ...r, id: shift(r.id), organization_id: targetId, employee_id: employeeId, import_id: imp(r.import_id),
+      area_id: area(r.area_id), schedule_version_id: version(r.schedule_version_id), change_id: change(r.change_id),
+    };
+    // The fingerprint embeds the (real) employee id; re-key it per mirror employee so it stays
+    // unique per row without carrying the source identity. (Not byte-equal to a fresh import's
+    // fingerprint: re-importing a pre-existing future week in the mirror may therefore not dedupe.)
+    row.semantic_fingerprint = r.semantic_fingerprint ? sha256(`${r.semantic_fingerprint}:${employeeId}`) : null;
+    return row;
+  });
+  out.employee_annual_targets = source.employee_annual_targets.map((r) => ({
+    ...r, id: target(r.id), organization_id: targetId, employee_id: employee(r.employee_id), created_by_user_id: null, updated_by_user_id: null,
+  }));
+  out.format_profiles = source.format_profiles.map((r) => ({
+    ...r, id: profile(r.id), organization_id: targetId, logical_profile_id: profile(r.logical_profile_id),
+    supersedes_profile_id: profile(r.supersedes_profile_id), created_by_user_id: null,
+  }));
+  return out;
+}
+
+async function insertRows(client, table, rows) {
+  if (!rows.length) return 0;
+  const result = await client.query(`INSERT INTO ${table} SELECT * FROM jsonb_populate_recordset(NULL::${table}, $1::jsonb)`, [JSON.stringify(rows)]);
+  return result.rowCount;
+}
+
+const WIPE_ORDER = [
+  ['shift_acknowledgements', '(shift_id, employee_id) IN (SELECT id, employee_id FROM shifts WHERE organization_id = $1)'],
+  ['shift_comments', '(shift_id, employee_id) IN (SELECT id, employee_id FROM shifts WHERE organization_id = $1)'],
+  ['approval_requests', 'organization_id = $1'],
+  ['change_requests', 'organization_id = $1'],
+  ['notifications', 'organization_id = $1'],
+  ['calendar_changes', 'organization_id = $1'],
+  ['shifts', 'organization_id = $1'],
+  ['shift_assignments', 'schedule_version_id IN (SELECT sv.id FROM schedule_versions sv JOIN schedules s ON s.id = sv.schedule_id WHERE s.organization_id = $1)'],
+  ['schedule_versions', 'schedule_id IN (SELECT id FROM schedules WHERE organization_id = $1)'],
+  ['schedules', 'organization_id = $1'],
+  ['imports', 'organization_id = $1'],
+  ['employee_annual_targets', 'organization_id = $1'],
+  ['employees', 'organization_id = $1'],
+  ['format_profiles', 'organization_id = $1'],
+  ['areas', 'organization_id = $1'],
+];
+
+export async function refreshQaMirror(client, { apply = false, log = console.log } = {}) {
+  const source = await resolveSourceOrganization(client);
+  const qaUser = await findQaUser(client);
+  if (!qaUser) throw new Error('QA identity missing: run scripts/qa/ensure-qa-identity.mjs first');
+  const targetName = targetNameFor(source);
+  const targets = (await client.query('SELECT id, name FROM organizations WHERE name = $1', [targetName])).rows;
+  if (targets.length > 1) throw new Error('Multiple QA mirror organizations found; refusing to continue');
+  const existing = targets[0] ?? null;
+  if (existing && existing.id === source.id) throw new Error('target == source: abort');
+
+  const before = await sourceFingerprint(client, source.id);
+  const data = await readSource(client, source.id);
+  const report = {
+    source, targetName, targetExisted: Boolean(existing), targetCreated: false, mode: apply ? 'APPLY' : 'DRY_RUN',
+    sourceCounts: Object.fromEntries(COPIED.map((t) => [t, data[t].length])),
+    sourceHashBefore: before.overall,
+    sourceContainsRealPii: data.employees.length > 0 ? 'YES' : 'NO',
+  };
+  log(`[mirror] source=${source.name} target="${targetName}" mode=${report.mode} counts=${JSON.stringify(report.sourceCounts)}`);
+  if (!apply) { report.dryRun = 'PASS'; if (existing) await assertQaOrganization(client, existing.id).catch((e) => { report.dryRunGuardNote = e.message; }); return report; }
+
+  let targetId = existing?.id;
+  await client.query('BEGIN');
+  try {
+    if (!targetId) {
+      targetId = (await client.query(`INSERT INTO organizations (name, type, plan) VALUES ($1, 'company', 'team') RETURNING id`, [targetName])).rows[0].id;
+      report.targetCreated = true;
+    }
+    await client.query(
+      `INSERT INTO memberships (user_id, organization_id, role) VALUES ($1, $2, 'ADMIN')
+       ON CONFLICT (user_id, organization_id) DO UPDATE SET role = 'ADMIN'`, [qaUser.id, targetId],
+    );
+    await assertQaOrganization(client, targetId); // fail-closed BEFORE any DELETE
+    for (const [table, where] of WIPE_ORDER) {
+      if (!where.includes('$1')) throw new Error('unscoped delete refused');
+      await client.query(`DELETE FROM ${table} WHERE ${where}`, [targetId]);
+    }
+    const mirror = buildMirror(data, { targetId, qaUserId: qaUser.id });
+    const inserted = {};
+    for (const table of ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'calendar_changes', 'shifts', 'shift_assignments', 'employee_annual_targets', 'format_profiles']) {
+      inserted[table] = await insertRows(client, table, mirror[table]);
+    }
+    for (const link of mirror.calendar_change_original_shift) {
+      await client.query('UPDATE calendar_changes SET original_shift_id = $1 WHERE id = $2 AND organization_id = $3', [link.original_shift_id, link.id, targetId]);
+    }
+    for (const table of COPIED) {
+      if (inserted[table] !== data[table].length) throw new Error(`Row count mismatch for ${table}: ${inserted[table]} != ${data[table].length}`);
+    }
+    // No real identity may have leaked into the mirror.
+    const leaks = (await client.query(
+      `SELECT (SELECT COUNT(*) FROM employees WHERE organization_id = $1 AND user_id IS NOT NULL)::int AS linked,
+              (SELECT COUNT(*) FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.organization_id = $1 AND u.email NOT ILIKE $2)::int AS real_members`,
+      [targetId, `%${QA_DOMAIN}`],
+    )).rows[0];
+    if (leaks.linked || leaks.real_members) throw new Error('Identity isolation check failed');
+    const after = await sourceFingerprint(client, source.id);
+    if (after.overall !== before.overall) throw new Error('SOURCE FINGERPRINT CHANGED; rolling back');
+    await client.query('COMMIT');
+    Object.assign(report, { targetId, inserted, sourceHashAfter: after.overall, sourceUnchanged: true, applied: true, qaMembership: QA_IDENTITY });
+    log(`[mirror] APPLIED target=${targetId} inserted=${JSON.stringify(inserted)} sourceUnchanged=true`);
+    return report;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    log(`[mirror] ROLLED BACK: ${error.message}`);
+    throw error;
+  }
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const apply = process.argv.includes('--apply');
+  if (apply && process.argv.includes('--dry-run')) throw new Error('Choose --apply or --dry-run, not both');
+  const client = await connect();
+  try {
+    const report = await refreshQaMirror(client, { apply });
+    console.log(JSON.stringify(report, null, 2));
+  } finally { await client.end(); }
+}

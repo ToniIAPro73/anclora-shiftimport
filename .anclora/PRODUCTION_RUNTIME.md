@@ -303,6 +303,15 @@ QA_MODEL=PERSISTENT_PRODUCTION_USER
 QA_REUSE=true
 QA_CREATE_IF_MISSING=true
 QA_DELETE_AFTER_TEST=false
+QA_DATA_MODEL=PERSISTENT_MIRROR
+QA_SOURCE_ORGANIZATION=ShiftImport
+QA_TARGET_ORGANIZATION=<source name> — QA Mirror
+QA_SOURCE_READ_ONLY=true
+QA_TARGET_MUTABLE=true
+QA_LOCAL_RUNTIME_USES_PRODUCTION_DATABASE=true
+QA_CREDENTIALS_FILE=.env.development.local (MANUAL_QA_EMAIL / MANUAL_QA_PASSWORD, gitignored, 0600)
+QA_BOOTSTRAP=node scripts/qa/ensure-qa-identity.mjs && node scripts/qa/refresh-qa-mirror.mjs --apply
+QA_E2E=npm --prefix qa/e2e-acceptance run test:qa-mirror (needs `vercel dev --local --listen 5173`)
 
 WORK_BRANCH=development
 CREATE_FEATURE_BRANCH=false

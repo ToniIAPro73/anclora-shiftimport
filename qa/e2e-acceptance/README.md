@@ -27,3 +27,21 @@ sintéticas. La batería histórica sigue disponible con:
 ```bash
 npx playwright test --config playwright.local.config.ts
 ```
+
+## QA persistente contra el mirror (sin intervención manual)
+
+Código `development` local + Neon producción + identidad QA dedicada (`qa.shiftimport@anclora.test`)
++ organización espejo persistente (`<origen> — QA Mirror`, clon pseudonimizado y de sólo lectura del origen).
+
+```bash
+node scripts/qa/ensure-qa-identity.mjs          # crea/valida la identidad; rota y guarda la password en .env.development.local (nunca se imprime)
+node scripts/qa/refresh-qa-mirror.mjs --dry-run # inventario
+node scripts/qa/refresh-qa-mirror.mjs --apply   # reconstruye el baseline (idempotente, ids deterministas)
+vercel dev --local --listen 5173                # app local sobre la BD de producción
+npm --prefix qa/e2e-acceptance run test:qa-mirror
+```
+
+El origen sólo se lee (huella SHA-256 idéntica antes/después). Toda escritura E2E pasa por
+`assertQaOrganization()`: aborta salvo que la organización sea exactamente el mirror, la identidad QA sea
+miembro y todos los miembros sean `@anclora.test`. Tras tests destructivos, vuelve a ejecutar `--apply`.
+El `storageState` de login es temporal (`.qa-state/`, ignorado por Git) y se destruye en el teardown.

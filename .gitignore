@@ -90,3 +90,6 @@ evidence/
 # Local Claude Code settings and agent worktrees (per-user, never versioned)
 .claude/settings.local.json
 .claude/worktrees/
+
+qa/e2e-acceptance/.qa-state/
+qa/e2e-acceptance/test-results-qa-mirror/
