@@ -517,7 +517,8 @@ export const TeamImportModal = ({
           // Reactivar action knows which employee to PATCH.
           candidates: match.kind === 'recognized' ? [] : match.employees,
           resolvedEmployeeId: match.kind === 'recognized' ? match.employees[0]?.id ?? null : null,
-          selected: false,
+          // Default scope = every employee of the DOCUMENT that is already resolved ("Todos los empleados").
+          selected: match.kind === 'recognized' && Boolean(match.employees[0]?.id),
           busy: false,
         };
       }));
@@ -541,6 +542,18 @@ export const TeamImportModal = ({
       return;
     }
     updateRow(row.key, { selected: !row.selected });
+  };
+
+  // Import scope = employees contained in the DOCUMENT: all resolved ones by default, or exactly one.
+  const eligibleRows = rows.filter((row) => row.status === 'recognized' && row.resolvedEmployeeId);
+  const scopeValue = eligibleRows.length > 0 && eligibleRows.every((row) => row.selected)
+    ? 'ALL'
+    : eligibleRows.filter((row) => row.selected).length === 1 ? eligibleRows.find((row) => row.selected)?.key ?? 'CUSTOM' : 'CUSTOM';
+  const handleScopeChange = (value: string) => {
+    setError('');
+    setRows((current) => current.map((row) => (
+      row.status === 'recognized' && row.resolvedEmployeeId ? { ...row, selected: value === 'ALL' || row.key === value } : row
+    )));
   };
 
   const handleSelectAll = () => {
@@ -1040,6 +1053,16 @@ export const TeamImportModal = ({
               <p data-testid="team-import-row-diagnostics" role="status" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-gold)' }}>
                 {t('teamImport.rowDiagnosticsSummary', { count: rowDiagnostics.length })}
               </p>
+            )}
+            {eligibleRows.length > 1 && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', fontSize: '0.8rem', fontWeight: 700 }}>
+                <span>{t('teamImport.scopeLabel')}</span>
+                <select className="modal-input" style={{ width: 'auto', minWidth: '220px' }} value={scopeValue} onChange={(event) => handleScopeChange(event.target.value)} data-testid="team-import-scope">
+                  <option value="ALL">{t('teamImport.scopeAll', { count: eligibleRows.length })}</option>
+                  {eligibleRows.map((row) => <option key={row.key} value={row.key}>{row.name}</option>)}
+                  {scopeValue === 'CUSTOM' && <option value="CUSTOM" disabled>{t('teamImport.scopeCustom')}</option>}
+                </select>
+              </label>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>

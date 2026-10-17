@@ -70,6 +70,8 @@ interface ImportModalProps {
   initialContext: CalendarImportContext;
   /** Current calendar shifts, used to preview the new/unchanged/changed/removed diff before confirming. */
   existingShifts?: Shift[];
+  /** Loads the calendar of the employee the DOCUMENT resolves to (the dashboard selection is not the import scope). */
+  loadEmployeeShifts?: (employeeId: string) => Promise<Shift[]>;
   /** File pre-selected by the onboarding wizard; analysis starts automatically on open. */
   initialFile?: File | null;
   /** Authenticated mode: employee selected in the team bar. Prefills the
@@ -322,7 +324,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, canAssociateIdentity = false, employeeTargetFixed = false, lockedEmployeeId = null, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts: dashboardShifts = [], loadEmployeeShifts, initialFile = null, employeePreset = null, identityLocked = false, canAssociateIdentity = false, employeeTargetFixed = false, lockedEmployeeId = null, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
   const { locale, t, tl } = useI18n();
   const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
@@ -417,6 +419,26 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     [areas, t],
   );
   const currentAreaName = areas.find((area) => area.id === currentAreaId)?.name ?? null;
+
+  // Existing shifts for the diff: those of the employee the document resolves to, never the employee selected in the dashboard.
+  const documentHasSourceIdentity = Boolean(analysis?.source?.system && analysis.source.identifier && loadEmployeeShifts);
+  const [scopedExisting, setScopedExisting] = useState<{ employeeId: string; status: 'ready' | 'error'; shifts: Shift[] } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!sourceEmployee || !loadEmployeeShifts) { setScopedExisting(null); return undefined; }
+    setScopedExisting(null);
+    loadEmployeeShifts(sourceEmployee.id)
+      .then((loaded) => { if (!cancelled) setScopedExisting({ employeeId: sourceEmployee.id, status: 'ready', shifts: loaded }); })
+      .catch(() => { if (!cancelled) setScopedExisting({ employeeId: sourceEmployee.id, status: 'error', shifts: [] }); });
+    return () => { cancelled = true; };
+  }, [sourceEmployee, loadEmployeeShifts]);
+  const scopedReady = Boolean(sourceEmployee && scopedExisting?.employeeId === sourceEmployee.id && scopedExisting.status === 'ready');
+  const existingShifts = useMemo(
+    () => (documentHasSourceIdentity ? (scopedReady ? (scopedExisting?.shifts ?? []) : []) : dashboardShifts),
+    [documentHasSourceIdentity, scopedReady, scopedExisting, dashboardShifts],
+  );
+  // While the document employee's calendar is loading (or failed to load) nothing can be confirmed against the wrong data.
+  const scopeNotReady = documentHasSourceIdentity && Boolean(sourceEmployee) && !scopedReady;
 
   const importDiff = useMemo(() => {
     const readyForDiff = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
@@ -1040,7 +1062,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
 
   const handleConfirm = async (options: { createInitialPlan?: boolean } = {}) => {
     const createInitialPlan = options.createInitialPlan === true;
-    if (interactionLocked || diagnosisBlocking || hasUnresolvedColors || sourceIdentityBlocking || (actionableCount === 0 && !createInitialPlan && !selfNotFound && !selfAmbiguous)) {
+    if (interactionLocked || diagnosisBlocking || hasUnresolvedColors || sourceIdentityBlocking || scopeNotReady || (actionableCount === 0 && !createInitialPlan && !selfNotFound && !selfAmbiguous)) {
       return;
     }
     onImportStateChange?.(true);
@@ -1994,13 +2016,13 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
           )}
           <button
             className="btn-gold import-process-button"
-            disabled={!isAuthenticated || sourceIdentityBlocking || (actionableCount === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || isImporting}
+            disabled={!isAuthenticated || sourceIdentityBlocking || scopeNotReady || (actionableCount === 0 && !selfNotFound && !selfAmbiguous) || loading || diagnosisBlocking || hasUnresolvedColors || confirming || isImporting}
             aria-busy={interactionLocked}
             onClick={() => void handleConfirm()}
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: interactionLocked ? 'wait' : undefined }}
           >
             <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
-              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: actionableCount > 0 ? actionableCount : readyShifts.length, total: parsedShifts.length }) : t('importModal.authRequired')}
+              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: actionableCount, total: parsedShifts.length }) : t('importModal.authRequired')}
             </span>
           </button>
           {(diagnosisBlocking || hasUnresolvedColors) && (

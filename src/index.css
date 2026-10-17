@@ -2869,18 +2869,6 @@ select:disabled {
   overflow-y: hidden;
 }
 
-.month-origin-section[data-shift-count='1'] {
-  grid-template-rows: minmax(0, 1fr);
-}
-
-.month-origin-section[data-shift-count='2'] {
-  grid-template-rows: repeat(2, minmax(0, 1fr));
-}
-
-.month-origin-section[data-shift-count='3'] {
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-}
-
 .month-shift-badge {
   min-height: 0;
   font-size: 0.56rem;
@@ -2895,7 +2883,9 @@ select:disabled {
   line-height: 1.18;
   transition: background 0.15s, transform 0.16s ease, box-shadow 0.16s ease;
   width: 100%;
-  height: 100%;
+  /* one shift = one compact band (never stretched to the height of the day) */
+  height: auto;
+  min-height: 20px;
   text-align: left;
   position: relative;
   z-index: 1;
@@ -5227,6 +5217,19 @@ button[aria-busy='true'] {
   .month-day-cell {
     min-height: 48px;
   }
+}
+
+/* Desktop-width windows that are short (e.g. a maximized browser at 125% scaling): the shell is bounded by the viewport and the
+   page does not scroll, so the month must be squeezed into the space instead of being sized to its content (which clipped the
+   last week). The unlocked page scroll above is meant for phone/tablet landscape only. */
+@media (max-height: 700px) and (min-width: 981px) {
+  html, body { height: 100%; overflow: hidden; }
+  .dashboard-body { flex: 1; min-height: 0; height: auto; }
+  .calendar-stage { flex: 1; min-height: 0; height: auto; }
+  .month-grid-shell { flex: 1; min-height: 0; overflow-y: hidden; }
+  .month-grid-root { flex: none; height: 100%; }
+  .month-grid-cells { flex: 1; min-height: 0; height: auto; }
+  .month-day-cell { min-height: 0; }
 }
 
 /* Keep the preview panel shrinkable on short screens so the footer remains in

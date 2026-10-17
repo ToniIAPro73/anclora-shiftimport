@@ -131,12 +131,12 @@ describe('ImportModal — area context', () => {
     const onConfirmImport = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
     renderImportModal({ areas: AREAS, allowAreaChoice: true, initialFile: csvFile(), onConfirmImport });
 
-    await waitFor(() => expect(screen.getByText('Confirmar Importación (2/2 listos)')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)')).toBeTruthy());
 
     fireEvent.click(screen.getByText('Toda la empresa'));
     fireEvent.click(screen.getByRole('option', { name: 'Sur' }));
 
-    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+    fireEvent.click(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)'));
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(onConfirmImport.mock.calls[0][3]).toBe('area-s');
   });
@@ -146,8 +146,8 @@ describe('ImportModal — area context', () => {
     const onConfirmImport = vi.fn<(...args: unknown[]) => Promise<boolean>>(async () => true);
     renderImportModal({ areas: AREAS, allowAreaChoice: true, currentAreaId: 'area-n', initialFile: csvFile(), onConfirmImport });
 
-    await waitFor(() => expect(screen.getByText('Confirmar Importación (2/2 listos)')).toBeTruthy());
-    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+    await waitFor(() => expect(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)')).toBeTruthy());
+    fireEvent.click(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)'));
 
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(onConfirmImport.mock.calls[0][3]).toBe('area-n');

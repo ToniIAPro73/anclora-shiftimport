@@ -133,6 +133,7 @@ function renderImportModal(
     existingShifts?: Shift[];
     isImporting?: boolean;
     employeeTargetFixed?: boolean;
+    loadEmployeeShifts?: (employeeId: string) => Promise<Shift[]>;
   } = {},
 ) {
   localStorage.setItem('anclora_shiftimport_locale_v1', locale);
@@ -150,6 +151,7 @@ function renderImportModal(
         existingShifts={options.existingShifts}
         isImporting={options.isImporting}
         employeeTargetFixed={options.employeeTargetFixed}
+        loadEmployeeShifts={options.loadEmployeeShifts}
       />
     </I18nProvider>,
   );
@@ -216,6 +218,49 @@ describe('ImportModal target (canonical ShiftImport identity)', () => {
   });
 });
 
+describe('ImportModal — the document employee (not the dashboard selection) defines the import scope', () => {
+  const doc = () => makeResult({
+    source: { kind: 'EMPLOYEE_CALENDAR_EXPORT', system: 'TRYP_EMPLOYEE_CALENDAR', identifier: '6888', employeeName: 'Sebastian Pozo Mendoza' },
+  });
+  const existing = (id: string, date: string): Shift => ({ id, date, startTime: '08:00', endTime: '16:00', shiftType: 'Regular', countsAsWork: true, location: 'Regular', origin: 'IMP' });
+  // Employee A (selected in the dashboard) already holds exactly the rows of the document: it must NOT make them look "existing".
+  const dashboardA = [existing('a1', '2026-03-04'), existing('a2', '2026-03-05')];
+
+  it('A: the diff uses the calendar of the document employee (Sebastián), loaded for him', async () => {
+    mockedDetectTeamRoster.mockReturnValue(null);
+    mockedAnalyzeDocumentFile.mockResolvedValue(doc());
+    const loadEmployeeShifts = vi.fn().mockResolvedValue([]);
+    renderImportModal('es', () => {}, { initialFile: csvFile(), existingShifts: dashboardA, loadEmployeeShifts });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación \(2 nuevos de 2 filas\)/ })).toBeTruthy());
+    expect(loadEmployeeShifts).toHaveBeenCalledWith('emp-1');
+  });
+
+  it('B: another dashboard selection gives exactly the same preview (the dashboard filter is irrelevant)', async () => {
+    mockedDetectTeamRoster.mockReturnValue(null);
+    mockedAnalyzeDocumentFile.mockResolvedValue(doc());
+    const dashboardB = [existing('b1', '2026-03-04'), existing('b2', '2026-03-06'), existing('b3', '2026-03-07')];
+    renderImportModal('es', () => {}, { initialFile: csvFile(), existingShifts: dashboardB, loadEmployeeShifts: vi.fn().mockResolvedValue([]) });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación \(2 nuevos de 2 filas\)/ })).toBeTruthy());
+  });
+
+  it('I: when the document employee already holds the rows they are existing, not new (compared against Sebastián only)', async () => {
+    mockedDetectTeamRoster.mockReturnValue(null);
+    mockedAnalyzeDocumentFile.mockResolvedValue(doc());
+    const sebastian = [existing('s1', '2026-03-04'), existing('s2', '2026-03-05')];
+    renderImportModal('es', () => {}, { initialFile: csvFile(), existingShifts: [], loadEmployeeShifts: vi.fn().mockResolvedValue(sebastian) });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Confirmar Importación \(0 nuevos de 2 filas\)/ })).toBeTruthy());
+    expect((screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('nothing can be confirmed while the document employee\'s calendar is still loading', async () => {
+    mockedDetectTeamRoster.mockReturnValue(null);
+    mockedAnalyzeDocumentFile.mockResolvedValue(doc());
+    renderImportModal('es', () => {}, { initialFile: csvFile(), existingShifts: dashboardA, loadEmployeeShifts: () => new Promise<Shift[]>(() => undefined) });
+    await waitFor(() => expect(screen.getByTestId('source-identity-resolved')).toBeTruthy());
+    expect((screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe('ImportModal (analysis-driven, Phase 1A)', () => {
   it('known-profile fast path: CORRECT chip + profile chip, no assistant, touch on confirm', async () => {
     const profile = saveFormatProfile(makeProfile());
@@ -242,7 +287,7 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     // TTFV: the preview with shifts was reached.
     expect(getTtfvEvents().some((event) => event.name === 'preview_ready')).toBe(true);
 
-    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+    fireEvent.click(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)'));
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(loadFormatProfiles()[0].useCount).toBe(1);
   });
@@ -411,7 +456,7 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
 
     apiFetchMock.mockResolvedValueOnce({ profile: { ...oldRemoteProfile, id: 'remote-new-1', version: 2, status: 'candidate', supersedesProfileId: 'remote-old-1' } }); // POST create-candidate
 
-    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+    fireEvent.click(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)'));
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
 
     await waitFor(() => expect(apiFetchMock).toHaveBeenCalledTimes(2));
@@ -574,7 +619,7 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     expect(screen.getByText(/tienen la hora incompleta/)).toBeTruthy();
     expect(screen.getByText(/Días afectados: 4/)).toBeTruthy();
     // Only the complete row is importable; the incomplete one is excluded.
-    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación \(1\/2 listos\)/ }) as HTMLButtonElement;
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación \(1 nuevos de 2 filas\)/ }) as HTMLButtonElement;
     expect(confirmButton.disabled).toBe(false);
   });
 
@@ -590,7 +635,7 @@ describe('ImportModal (analysis-driven, Phase 1A)', () => {
     renderImportModal('es', () => {}, { initialFile: csvFile() });
 
     await waitFor(() => expect(screen.getByTestId('import-quality-state').textContent).toBe('Parcial'));
-    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación \(0\/1 listos\)/ }) as HTMLButtonElement;
+    const confirmButton = screen.getByRole('button', { name: /Confirmar Importación \(0 nuevos de 1 filas\)/ }) as HTMLButtonElement;
     expect(confirmButton.disabled).toBe(true);
   });
 
@@ -727,8 +772,8 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
     });
     renderImportModal('es', () => {}, { employeePreset: SELF, identityLocked: true, onConfirmImport, initialFile: csvFile() });
 
-    await waitFor(() => expect(screen.getByText('Confirmar Importación (2/2 listos)')).toBeTruthy());
-    fireEvent.click(screen.getByText('Confirmar Importación (2/2 listos)'));
+    await waitFor(() => expect(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)')).toBeTruthy());
+    fireEvent.click(screen.getByText('Confirmar Importación (2 nuevos de 2 filas)'));
 
     await waitFor(() => expect(onConfirmImport).toHaveBeenCalledTimes(1));
     expect(receivedSelectors[0]).toEqual({ name: SELF.name, externalId: SELF.externalId });
@@ -1128,7 +1173,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
 
       // Historical only: 1 actionable shift out of 2 total -> enabled
       expect(confirmBtn.disabled).toBe(false);
-      expect(confirmBtn.textContent).toContain('1/2');
+      expect(confirmBtn.textContent).toContain('1 nuevos de 2 filas');
 
       // MIXED: both effects are offered; the safe default is historical-only.
       expect((screen.getByLabelText(/Importar solo históricos/i) as HTMLInputElement).checked).toBe(true);
@@ -1136,7 +1181,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
       fireEvent.click(draftOption);
 
       expect(confirmBtn.disabled).toBe(false);
-      expect(confirmBtn.textContent).toContain('2/2');
+      expect(confirmBtn.textContent).toContain('2 nuevos de 2 filas');
     });
 
     it('busy state: applies app--busy to modal overlay when isImporting is true', async () => {

@@ -144,7 +144,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     fireEvent.change(input, { target: { files: [csvFile()] } });
 
     await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    // recognized employees are in scope by default ("Todos los empleados")
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
 
@@ -232,7 +232,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     fireEvent.change(input, { target: { files: [csvFile()] } });
 
     await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    // recognized employees are in scope by default ("Todos los empleados")
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
 
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
@@ -272,7 +272,7 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     fireEvent.change(input, { target: { files: [csvFile()] } });
 
     await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    // recognized employees are in scope by default ("Todos los empleados")
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
 
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
@@ -502,7 +502,7 @@ describe('TeamImportModal ("Crear todos los nuevos" bulk create)', () => {
     fireEvent.change(input, { target: { files: [csvFile()] } });
 
     await waitFor(() => expect(screen.getByLabelText('Ana Martinez')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('Ana Martinez'));
+    // recognized employees are in scope by default ("Todos los empleados")
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
     fireEvent.click(screen.getByText('Importar'));

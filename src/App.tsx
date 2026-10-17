@@ -43,6 +43,7 @@ import {
   loadReconciliation,
   type ReconciliationWorklist,
   loadRemoteShifts,
+  resolveSourceIdentity,
   matchRemoteEmployee,
   RemoteAnnualTarget,
   RemoteArea,
@@ -2445,15 +2446,12 @@ function App() {
             if (!session) {
               return null;
             }
-            if (session.role !== 'EMPLOYEE') {
-              // ADMIN/OWNER/PLANNER: the employee selected in the calendar is the import target; ID = canonical id from the database.
-              const selected = employees.find((employee) => employee.id === selectedEmployeeId);
-              return selected ? { name: selected.name, externalId: selected.externalEmployeeId ?? '' } : null;
-            }
+            if (session.role !== 'EMPLOYEE') return null; // the dashboard selection is never the import target
             const self = employees.find((employee) => employee.id === session.employeeId);
             return self ? { name: self.name, externalId: self.externalEmployeeId ?? '' } : null;
           })()}
-          employeeTargetFixed={session?.role !== 'EMPLOYEE' && Boolean(adminIndividualImport?.employeeId ?? selectedEmployeeId) && employees.some((employee) => employee.id === (adminIndividualImport?.employeeId ?? selectedEmployeeId))}
+          employeeTargetFixed={session?.role !== 'EMPLOYEE' && Boolean(adminIndividualImport?.employeeId)}
+          loadEmployeeShifts={loadRemoteShifts}
           identityLocked={session?.role === 'EMPLOYEE'}
           canAssociateIdentity={session?.role === 'ADMIN' || session?.role === 'OWNER'}
           lockedEmployeeId={session?.employeeId ?? null}
@@ -2483,28 +2481,47 @@ function App() {
           currentAreaId={effectiveAreaId}
           allowAreaChoice={isAdminRole(session.role)}
           onSingleEmployeeDetected={async (file, employee) => {
-            // TRYP individual exports (Calendario empleado / publicado, sheet "Leyenda") carry the source system's payroll
-            // code, which is an ALIAS: never the canonical id. The employee selected in the calendar is the import target;
-            // the identity panel then resolves the document's alias against it (explicit association, never silent).
+            // The DOCUMENT defines who is imported; the employee selected in the dashboard only filters what is being viewed.
+            // TRYP individual exports carry the source system's payroll code (an ALIAS, never the canonical id): the server
+            // resolves it (alias -> canonical id -> unique exact name) and the identity panel confirms it explicitly.
             const trypExport = await parseTrypCalendarExport(file).catch(() => null);
-            const selectedTarget = trypExport ? employees.find((candidate) => candidate.id === selectedEmployeeId) ?? null : null;
+            if (trypExport?.sourceIdentifier) {
+              const verdict = await resolveSourceIdentity({
+                sourceSystem: trypExport.sourceSystem,
+                externalIdentifier: trypExport.sourceIdentifier,
+                documentName: trypExport.employeeName ?? employee.name,
+              }).catch(() => null);
+              const documentEmployee = verdict && (verdict.status === 'MAPPED' || verdict.status === 'CANONICAL' || verdict.status === 'CANDIDATE')
+                ? employees.find((candidate) => candidate.id === verdict.employee?.id) ?? null
+                : null;
+              setAdminIndividualImport({
+                file,
+                employee: {
+                  ...employee,
+                  name: documentEmployee?.name ?? employee.name,
+                  // Canonical id from the database; the document's payroll code is never shown as the employee id.
+                  externalEmployeeId: documentEmployee ? (documentEmployee.externalEmployeeId ?? '') : '',
+                },
+                employeeId: documentEmployee?.id ?? null,
+              });
+              return;
+            }
             const matching = employees.filter((candidate) => (
               employee.externalEmployeeId
                 ? candidate.externalEmployeeId === employee.externalEmployeeId
                 : normalizeText(candidate.name) === normalizeText(employee.name)
             ));
-            const resolved = trypExport ? selectedTarget : (matching.length === 1 ? matching[0] : null);
-            if (resolved && !trypExport) {
+            const resolved = matching.length === 1 ? matching[0] : null;
+            if (resolved) {
               setSelectedEmployeeId(resolved.id);
             }
             setAdminIndividualImport({
               file,
               employee: {
                 ...employee,
-                name: resolved?.name ?? employee.name,
-                // The application directory is authoritative. Never copy an identifier from an informational worksheet
-                // (nor a source-system alias such as a TRYP payroll code) into this path.
-                externalEmployeeId: resolved ? (resolved.externalEmployeeId ?? '') : (trypExport ? '' : employee.externalEmployeeId),
+                // The application directory is authoritative. Never copy an
+                // identifier from an informational worksheet into this path.
+                externalEmployeeId: resolved?.externalEmployeeId ?? employee.externalEmployeeId,
               },
               employeeId: resolved?.id ?? null,
             });

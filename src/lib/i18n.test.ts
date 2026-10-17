@@ -31,8 +31,8 @@ describe('i18n', () => {
   });
 
   it('interpolates variables into the translated string', () => {
-    expect(translate('es', 'importModal.confirmImport', { ready: 2, total: 3 })).toContain('2/3');
-    expect(translate('en', 'importModal.confirmImport', { ready: 2, total: 3 })).toContain('2/3');
+    expect(translate('es', 'importModal.confirmImport', { ready: 2, total: 3 })).toContain('2 nuevos de 3 filas');
+    expect(translate('en', 'importModal.confirmImport', { ready: 2, total: 3 })).toContain('2 new of 3 rows');
   });
 
   it('uses one daily date interpolation for the calendar empty state', () => {
