@@ -351,8 +351,14 @@ export async function confirmImportReversion(sql, ctx, input = {}) {
   if (already) return idempotentResult(already);
 
   const plan = await computeReversionPlan(sql, ctx, input.importIds);
-  if (plan.status === 'BLOCKED') throw conflict(409, 'The reversion is blocked', 'REVERSION_BLOCKED', { blockers: plan.blockers });
-  if (plan.planHash !== planHash) throw conflict(409, 'The state changed since the preview', 'REVERSION_PLAN_STALE');
+  if (plan.status === 'BLOCKED' || plan.planHash !== planHash) {
+    // A racing identical confirmation may have completed between the first lookup and the recomputation (the imports are then
+    // "already reverted"): that operation IS the answer, not an error.
+    const raced = await existingReversion(sql, ctx.organizationId, planHash);
+    if (raced) return idempotentResult(raced);
+    if (plan.status === 'BLOCKED') throw conflict(409, 'The reversion is blocked', 'REVERSION_BLOCKED', { blockers: plan.blockers });
+    throw conflict(409, 'The state changed since the preview', 'REVERSION_PLAN_STALE');
+  }
 
   const reversionId = randomUUID();
   const org = ctx.organizationId;

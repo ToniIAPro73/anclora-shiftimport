@@ -47,3 +47,24 @@ describe('authorization and validation come BEFORE any database access', () => {
     expect(sql.transaction).not.toHaveBeenCalled();
   });
 });
+
+describe('racing confirmation', () => {
+  it('when the first lookup misses but the operation completed meanwhile, the second caller gets the SAME operation (never a 409)', async () => {
+    let lookups = 0;
+    const sql = (strings) => {
+      const text = strings.join('?');
+      if (text.includes('FROM import_reversions')) {
+        lookups += 1;
+        return Promise.resolve(lookups === 1 ? [] : [{ id: 'r1', summary: { impact: {}, order: [IMPORT] }, requested_import_count: 1, effective_import_count: 1 }]);
+      }
+      if (text.includes('FROM imports i LEFT JOIN users')) {
+        return Promise.resolve([{ id: IMPORT, file_name: 'a.xlsx', status: 'completed', created_at: new Date(), deleted_at: null, reverted_at: new Date() }]);
+      }
+      return Promise.resolve([]);
+    };
+    sql.transaction = vi.fn();
+    const result = await confirmImportReversion(sql, ctxOf('ADMIN'), { importIds: [IMPORT], planHash: 'c'.repeat(64) });
+    expect(result).toMatchObject({ idempotent: true, reversionId: 'r1' });
+    expect(sql.transaction).not.toHaveBeenCalled();
+  });
+});
