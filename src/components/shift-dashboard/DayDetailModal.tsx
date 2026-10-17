@@ -215,10 +215,12 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
       title={formattedDate || t('calendar.dayDetailTitle')}
       closeAriaLabel={t('teamWorkspace.close')}
       closeTestId="close-day-detail-modal"
-      maxWidth="500px"
-      width="min(94vw, 500px)"
+      maxWidth="1040px"
+      width="min(96vw, 1040px)"
     >
       <div className="day-detail-dialog" data-testid="day-detail-dialog">
+        <div className={provenance ? 'day-detail-grid' : undefined}>
+        <div className="day-detail-col">
         <div className="day-detail-header-info">
           <span className="day-detail-count-badge" data-testid="day-detail-count-badge">
             {t('calendar.totalItems', { count: shifts.length })}
@@ -263,14 +265,19 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
           />
         )}
 
+        </div>
         {provenance && (
+          <div className="day-detail-col day-detail-col--aside">
           <DayProvenancePanel
             employeeId={provenance.employeeId}
             date={date}
             canReconcile={provenance.canReconcile}
             onChanged={provenance.onChanged}
           />
+          </div>
         )}
+        {!provenance && null}
+        </div>
       </div>
     </ModalShell>
   );

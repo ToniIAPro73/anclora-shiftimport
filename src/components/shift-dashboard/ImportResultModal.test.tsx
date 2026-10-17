@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(cleanup);
 import { ImportOutcomeReport, ImportResultModal } from './ImportResultModal';
 import { ReconciliationReport } from '../../lib/import-reconciliation';
 import { I18nProvider } from '../../lib/i18n-react';
@@ -99,5 +101,50 @@ describe('ImportResultModal', () => {
     expect(within(dialog).getByText(/8 filas detectadas: 8 propias/)).toBeTruthy();
     expect(within(dialog).getByText(/Las fechas futuras no se importan/)).toBeTruthy();
     expect(dialog.textContent).not.toContain('{{unidentifiedRows}}');
+  });
+
+  it('COMPLETED: structured summary (metrics, done, pending, next step) instead of running text', () => {
+    render(
+      <I18nProvider>
+        <ImportResultModal
+          isOpen
+          onClose={vi.fn()}
+          report={{
+            status: 'COMPLETED',
+            historical: { submittedCount: 289, persistedCount: 288, existingCount: 1 },
+            future: { submittedCount: 30, createdAssignmentCount: 30, existingAssignmentCount: 0, affectedWeekCount: 6, publishedWeekCount: 0, publishedShiftCount: 0, publicationResults: [], draftWeekCount: 6 },
+            plan: { revisionNumber: 3, revisionCreated: true, changes: { new: 30, unchanged: 280, modified: 2, keptLocal: 1, companyAdoptedLocal: 4, requiresReview: 1 } },
+          }}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(within(screen.getByTestId('import-result-metric-historical')).getByText('288')).toBeTruthy();
+    expect(within(screen.getByTestId('import-result-metric-future')).getByText('30')).toBeTruthy();
+    expect(within(screen.getByTestId('import-result-metric-weeks')).getByText('6')).toBeTruthy();
+    expect(screen.getByTestId('import-result-revision').textContent).toContain('versión 3');
+    expect(screen.getByTestId('import-result-changes').textContent).toMatch(/2.*Modificados/);
+    expect(screen.getByTestId('import-result-pending').textContent).toContain('1 día(s)');
+    expect(screen.getByText(/borrador y no se publica sola/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Entendido' })).toBeTruthy();
+  });
+
+  it('COMPLETED duplicate: says nothing was duplicated and nothing is pending', () => {
+    render(
+      <I18nProvider>
+        <ImportResultModal
+          isOpen
+          onClose={vi.fn()}
+          report={{
+            status: 'COMPLETED', duplicate: 'DUPLICATE_PLAN',
+            historical: { submittedCount: 0, persistedCount: 0, existingCount: 5 },
+            future: { submittedCount: 2, createdAssignmentCount: 0, existingAssignmentCount: 2, affectedWeekCount: 1, publishedWeekCount: 0, publishedShiftCount: 0, publicationResults: [] },
+          }}
+        />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('import-result-duplicate')).toBeTruthy();
+    expect(screen.queryByTestId('import-result-revision')).toBeNull();
+    expect(screen.getByTestId('import-result-pending').textContent).toContain('Nada pendiente');
   });
 });

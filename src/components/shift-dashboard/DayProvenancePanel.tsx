@@ -79,30 +79,54 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
     }
   };
 
+  const VISIBLE_CHANGES = 2;
+  const keepOptions = [...provenance.companyCurrent, ...pendingRows].filter((row) => row.id);
+  const lineOf = (row: { shiftType?: string | null; startTime: string | null; endTime: string | null }) => `${row.shiftType || '—'}${row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}`;
+  const showCurrent = provenance.revisions.length > 1;
+  const showOriginal = provenance.companyOriginal.length > 0;
+  const renderChange = (change: (typeof changes)[number]) => (
+    <li key={change.id} data-testid={`day-history-change-${change.id}`}>
+      <div className="day-history__change-head">
+        <strong>{t(`dayHistory.changeTypes.${change.changeType}`)}</strong>
+        <span>{formatWhen(change.createdAt)}</span>
+      </div>
+      <div className="day-history__change-who">
+        {change.actorRole === 'SYSTEM' ? t('dayHistory.systemActor') : t('dayHistory.byActor', { name: change.actorName ?? '—', role: change.actorRole })}
+        {change.selfChange ? ` · ${t('dayHistory.selfChange')}` : ''}
+      </div>
+      <div className="day-history__change-diff">{describe(change.before)} → {describe(change.after)}</div>
+      {change.reason && <div className="day-history__change-reason" title={change.reason}>{t('dayHistory.reason')}: {change.reason}</div>}
+    </li>
+  );
+
   return (
     <section className="day-history" aria-label={t('dayHistory.title')} data-testid="day-history">
       {provenance.requiresReview && (
         <div className="day-history__pending" role="status" data-testid="day-history-pending">
-          <strong>{t('dayHistory.pendingTitle')}</strong>
-          <p>{t('dayHistory.pendingBody')}</p>
+          <div className="day-history__pending-head">
+            <strong>{t('dayHistory.pendingTitle')}</strong>
+            <p>{t('dayHistory.pendingBody')}</p>
+          </div>
           {canReconcile && (
             <>
-              {[...provenance.companyCurrent, ...pendingRows].map((row) => row.id && (
-                <label key={row.id} className="day-history__keep">
-                  <input
-                    type="checkbox"
-                    checked={keepIds.includes(row.id)}
-                    onChange={(event) => setKeepIds((ids) => (event.target.checked ? [...ids, row.id as string] : ids.filter((id) => id !== row.id)))}
-                  />
-                  {t('dayHistory.keepLabel')}: {row.shiftType}{row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}
-                </label>
-              ))}
+              <div className="day-history__options" role="group" aria-label={t('dayHistory.keepLabel')}>
+                {keepOptions.map((row) => (
+                  <label key={row.id} className={`day-history__keep${keepIds.includes(row.id as string) ? ' is-selected' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={keepIds.includes(row.id as string)}
+                      onChange={(event) => setKeepIds((ids) => (event.target.checked ? [...ids, row.id as string] : ids.filter((id) => id !== row.id)))}
+                    />
+                    <span><small>{t('dayHistory.keepLabel')}</small>{lineOf(row)}</span>
+                  </label>
+                ))}
+              </div>
               <label className="day-history__reason">
                 <span>{t('dayHistory.reconcileReason')}</span>
                 <textarea value={reason} maxLength={2000} rows={2} onChange={(event) => setReason(event.target.value)} />
               </label>
               {reconcileError && <p role="alert">{t('dayHistory.reconcileError')}</p>}
-              <button type="button" className="eff-button eff-button--primary" disabled={saving || !reason.trim()} onClick={() => void submitReconcile()}>
+              <button type="button" className="eff-button eff-button--primary day-history__cta" disabled={saving || !reason.trim()} onClick={() => void submitReconcile()}>
                 {saving ? t('dayHistory.reconciling') : t('dayHistory.reconcile')}
               </button>
             </>
@@ -110,37 +134,41 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
         </div>
       )}
 
-      <h4>{t('dayHistory.effective')}</h4>
-      <RowList rows={provenance.effective} empty={t('dayHistory.noRows')} />
+      <div className={`day-history__compare day-history__compare--${1 + Number(showOriginal) + Number(showCurrent)}`} data-testid="day-history-compare">
+        <div className="day-history__card">
+          <h4>{t('dayHistory.effective')}</h4>
+          <RowList rows={provenance.effective} empty={t('dayHistory.noRows')} />
+        </div>
+        {showOriginal && (
+          <div className="day-history__card">
+            <h4>{t('dayHistory.companyOriginal')}{provenance.revisions[0] ? <em>{t('dayHistory.revision', { n: provenance.revisions[0] })}</em> : null}</h4>
+            <RowList rows={provenance.companyOriginal} empty={t('dayHistory.noRows')} />
+          </div>
+        )}
+        {showCurrent && (
+          <div className="day-history__card">
+            <h4>{t('dayHistory.companyCurrent')}<em>{t('dayHistory.revision', { n: provenance.revisions[provenance.revisions.length - 1] })}</em></h4>
+            <RowList rows={provenance.companyCurrent} empty={t('dayHistory.noRows')} />
+          </div>
+        )}
+      </div>
 
-      {provenance.companyOriginal.length > 0 && (
-        <>
-          <h4>{t('dayHistory.companyOriginal')}{provenance.revisions[0] ? ` · ${t('dayHistory.revision', { n: provenance.revisions[0] })}` : ''}</h4>
-          <RowList rows={provenance.companyOriginal} empty={t('dayHistory.noRows')} />
-        </>
-      )}
-      {provenance.revisions.length > 1 && (
-        <>
-          <h4>{t('dayHistory.companyCurrent')} · {t('dayHistory.revision', { n: provenance.revisions[provenance.revisions.length - 1] })}</h4>
-          <RowList rows={provenance.companyCurrent} empty={t('dayHistory.noRows')} />
-        </>
-      )}
-
-      <h4>{t('dayHistory.changes')}</h4>
-      {changes.length === 0 ? (
-        <p className="day-history__empty">{t('dayHistory.noChanges')}</p>
-      ) : (
-        <ol className="day-history__changes">
-          {changes.map((change) => (
-            <li key={change.id} data-testid={`day-history-change-${change.id}`}>
-              <strong>{t(`dayHistory.changeTypes.${change.changeType}`)}</strong> · {formatWhen(change.createdAt)}
-              <div>{change.actorRole === 'SYSTEM' ? t('dayHistory.systemActor') : t('dayHistory.byActor', { name: change.actorName ?? '—', role: change.actorRole })}{change.selfChange ? ` · ${t('dayHistory.selfChange')}` : ''}</div>
-              <div>{describe(change.before)} → {describe(change.after)}</div>
-              <div>{t('dayHistory.reason')}: {change.reason}</div>
-            </li>
-          ))}
-        </ol>
-      )}
+      <div className="day-history__trail">
+        <h4>{t('dayHistory.changes')}</h4>
+        {changes.length === 0 ? (
+          <p className="day-history__empty">{t('dayHistory.noChanges')}</p>
+        ) : (
+          <>
+            <ol className="day-history__changes">{changes.slice(0, VISIBLE_CHANGES).map(renderChange)}</ol>
+            {changes.length > VISIBLE_CHANGES && (
+              <details className="day-history__more">
+                <summary>{t('dayHistory.showMore', { count: changes.length - VISIBLE_CHANGES })}</summary>
+                <ol className="day-history__changes">{changes.slice(VISIBLE_CHANGES).map(renderChange)}</ol>
+              </details>
+            )}
+          </>
+        )}
+      </div>
       {provenance.legacyDutyRows.length > 0 && <p className="day-history__note">{t('dayHistory.dutyRole')}</p>}
     </section>
   );

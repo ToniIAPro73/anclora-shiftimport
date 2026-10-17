@@ -1,6 +1,7 @@
 import { ReconciliationReport } from '../../lib/import-reconciliation';
 import { ModalShell } from '../ui/ModalShell';
 import { useI18n } from '../../lib/use-i18n';
+import './ImportResultModal.css';
 
 export interface ImportOutcomeReport {
   status: 'partial' | 'blocked' | 'failed';
@@ -58,43 +59,66 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
   const isPass = report.status === 'PASS';
 
   if (report.status === 'COMPLETED') {
+    const changes = report.plan?.changes;
+    const review = changes?.requiresReview ?? 0;
+    const weeks = report.future.draftWeekCount ?? report.future.affectedWeekCount;
+    const metrics: Array<[string, number, string]> = [
+      ['historical', report.historical.persistedCount, 'importResult.metricHistorical'],
+      ['existing', report.historical.existingCount, 'importResult.metricExisting'],
+      ['future', report.future.createdAssignmentCount, 'importResult.metricFuture'],
+      ['weeks', weeks, 'importResult.metricWeeks'],
+    ];
+    const changeChips: Array<[string, number, string]> = changes ? [
+      ['modified', changes.modified, 'importResult.changeModified'],
+      ['adopted', changes.companyAdoptedLocal, 'importResult.changeAdopted'],
+      ['kept', changes.keptLocal, 'importResult.changeKept'],
+    ] : [];
     return (
-      <ModalShell isOpen onClose={onClose} title={t('importResult.titleTemporalComplete')} closeAriaLabel={t('importResult.close')}>
-        <div role="status" aria-live="polite">
-          <p style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
-            {t('importResult.temporalCounts', {
-              historical: report.historical.persistedCount,
-              historicalExisting: report.historical.existingCount,
-              future: report.future.createdAssignmentCount,
-              weeks: report.future.draftWeekCount ?? report.future.affectedWeekCount,
-            })}
-          </p>
-          {report.duplicate && (
-            <p data-testid="import-result-duplicate" style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
-              {t(report.duplicate === 'DUPLICATE_FILE' ? 'importResult.planDuplicateFile' : report.duplicate === 'DUPLICATE_DOCUMENT' ? 'importResult.planDuplicateDocument' : 'importResult.planDuplicatePlan')}
-            </p>
-          )}
-          {report.plan?.revisionCreated && report.plan.revisionNumber !== null && (
-            <p data-testid="import-result-revision" style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
-              {t('importResult.planRevisionCreated', { revision: report.plan.revisionNumber })}
-            </p>
-          )}
-          {report.plan && (report.plan.changes.modified + report.plan.changes.companyAdoptedLocal + report.plan.changes.keptLocal + report.plan.changes.requiresReview) > 0 && (
-            <p data-testid="import-result-changes" style={{ color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 0 }}>
-              {t('importResult.planChangesLine', {
-                modified: report.plan.changes.modified,
-                adopted: report.plan.changes.companyAdoptedLocal,
-                kept: report.plan.changes.keptLocal,
-                review: report.plan.changes.requiresReview,
-              })}
-            </p>
-          )}
-          <p style={{ color: 'var(--text-muted)', lineHeight: 1.5 }}>
-            {t('importResult.temporalNotPublished')}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-          <button className="btn-outline" type="button" onClick={onClose}>{t('importResult.close')}</button>
+      <ModalShell isOpen onClose={onClose} title={t('importResult.titleTemporalComplete')} closeAriaLabel={t('importResult.close')} maxWidth="780px" width="min(96vw, 780px)">
+        <div className="import-result" role="status" aria-live="polite" data-testid="import-result-complete">
+          <p className="import-result__subtitle">{t('importResult.temporalSubtitle')}</p>
+
+          <div className="import-result__metrics" data-testid="import-result-metrics">
+            {metrics.map(([key, value, label]) => (
+              <div key={key} className="import-result__metric" data-testid={`import-result-metric-${key}`}>
+                <strong>{value}</strong>
+                <span>{t(label)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="import-result__columns">
+            <section className="import-result__panel" aria-label={t('importResult.doneTitle')}>
+              <h4>{t('importResult.doneTitle')}</h4>
+              {report.duplicate ? (
+                <p data-testid="import-result-duplicate">
+                  {t(report.duplicate === 'DUPLICATE_FILE' ? 'importResult.planDuplicateFile' : report.duplicate === 'DUPLICATE_DOCUMENT' ? 'importResult.planDuplicateDocument' : 'importResult.planDuplicatePlan')}
+                </p>
+              ) : report.plan?.revisionCreated && report.plan.revisionNumber !== null ? (
+                <p data-testid="import-result-revision" className="import-result__plan">{t('importResult.planVersion', { revision: report.plan.revisionNumber })}</p>
+              ) : null}
+              {changeChips.some(([, value]) => value > 0) && (
+                <ul className="import-result__chips" data-testid="import-result-changes">
+                  {changeChips.filter(([, value]) => value > 0).map(([key, value, label]) => (
+                    <li key={key}><strong>{value}</strong> {t(label)}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section className={`import-result__panel${review > 0 ? ' import-result__panel--attention' : ''}`} aria-label={t('importResult.pendingTitle')}>
+              <h4>{t('importResult.pendingTitle')}</h4>
+              <p data-testid="import-result-pending">{review > 0 ? t('importResult.pendingSome', { count: review }) : t('importResult.pendingNone')}</p>
+            </section>
+          </div>
+
+          <div className="import-result__next">
+            <div>
+              <strong>{t('importResult.nextStepTitle')}</strong>
+              <p>{t('importResult.nextStepBody')}</p>
+            </div>
+            <button className="btn-gold" type="button" onClick={onClose}>{t('importResult.understood')}</button>
+          </div>
         </div>
       </ModalShell>
     );
