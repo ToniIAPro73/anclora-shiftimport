@@ -45,6 +45,18 @@ function requestError(status, message, code) {
   return error;
 }
 
+/**
+ * Same frontier as classifyImportDates: `date >= cutoff` is FUTURE, `date < cutoff` is HISTORICAL. Dates are ISO
+ * `YYYY-MM-DD` strings, so the lexical comparison is the calendar comparison.
+ */
+export function deleteTouchesFuture(rows, cutoff) {
+  return rows.some((row) => {
+    const date = String(row.date ?? '');
+    if (!ISO_DATE_RE.test(date)) throw requestError(400, 'Invalid shift date in deleteIds target');
+    return date >= cutoff;
+  });
+}
+
 export function classifyImportDates(rawShifts, now = new Date()) {
   const cutoff = getOperationalDate(now);
   const shifts = rawShifts.map((raw) => {
@@ -459,11 +471,12 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
   const deleteIds = distinct((Array.isArray(input.deleteIds) ? input.deleteIds : []).map((id) => String(id ?? '').trim()).filter(Boolean));
   for (const id of deleteIds) validateUuid(id, 'deleteIds');
   if (deleteIds.length > 0) {
+    // ISO text straight from PostgreSQL (never a runtime Date/stringified value), compared with the product's frontier.
     const existingDeletes = await sql`
-      SELECT id, date FROM shifts
+      SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date FROM shifts
       WHERE organization_id = ${ctx.organizationId} AND id = ANY(${deleteIds}::uuid[])
     `;
-    if (existingDeletes.some((row) => String(row.date).slice(0, 10) > dated.cutoff)) {
+    if (deleteTouchesFuture(existingDeletes, dated.cutoff)) {
       throw requestError(409, 'Future historical rows cannot be deleted through import confirmation', 'FUTURE_DELETE_FORBIDDEN');
     }
   }

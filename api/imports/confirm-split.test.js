@@ -159,3 +159,26 @@ describe('R3-M14 future import contract', () => {
     await expect(previewFutureImport(sql, ctx, request(FUTURE_DATE))).rejects.toMatchObject({ status: 403, code: 'SELF_IMPORT_FUTURE_FORBIDDEN' });
   });
 });
+
+import { deleteTouchesFuture } from '../_lib/future-import.js';
+
+describe('delete guard uses the product frontier on ISO dates (cutoff 2026-10-17)', () => {
+  const cutoff = '2026-10-17';
+  it('2026-10-15 is HISTORICAL: never a future delete', () => {
+    expect(deleteTouchesFuture([{ date: '2026-10-15' }], cutoff)).toBe(false);
+    expect(deleteTouchesFuture([{ date: '2026-10-16' }], cutoff)).toBe(false);
+  });
+  it('the cutoff day itself and later are FUTURE (date >= cutoff, same as classifyImportDates)', () => {
+    expect(deleteTouchesFuture([{ date: '2026-10-17' }], cutoff)).toBe(true);
+    expect(deleteTouchesFuture([{ date: '2026-10-18' }], cutoff)).toBe(true);
+    expect(deleteTouchesFuture([{ date: '2026-10-15' }, { date: '2026-10-18' }], cutoff)).toBe(true);
+  });
+  it('a stringified runtime Date (the old bug: "Thu Oct 15" > "2026-10-17") is rejected, not compared lexically', () => {
+    expect(() => deleteTouchesFuture([{ date: 'Thu Oct 15 2026 00:00:00 GMT+0200' }], cutoff)).toThrow(/Invalid shift date/);
+  });
+  it('agrees with classifyImportDates on both sides of the frontier, independent of the runner timezone', () => {
+    const now = new Date('2026-10-17T10:00:00Z');
+    expect(classifyImportDates([{ ...base, date: '2026-10-15' }], now).classification).toBe('HISTORICAL');
+    expect(classifyImportDates([{ ...base, date: '2026-10-17' }], now).classification).toBe('FUTURE');
+  });
+});

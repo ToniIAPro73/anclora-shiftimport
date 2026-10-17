@@ -6,6 +6,7 @@ import { clearAnonymousShiftDraft, loadShifts, normalizeShift, syncShiftChanges 
 import { findShiftConflict } from './lib/shift-conflicts';
 
 import { fingerprintShift } from './lib/import-dedup';
+import { classifyHistoricalIncoming } from './lib/import-historical-conflicts';
 import { reconcileImport, ReconciliationReport } from './lib/import-reconciliation';
 import type { ImportSourceInfo } from './ingestion/parsers/file';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from './lib/shifts';
@@ -1359,58 +1360,23 @@ function App() {
     const excludedSchedulingCount = schedulingIncoming.length > 0 && (
       session.role === 'EMPLOYEE' || futureImportDecision === 'historical-only'
     ) ? schedulingIncoming.length : 0;
-    let working = [...snapshot];
-    const pendingImportedByDate = new Map<string, Shift[]>();
-    const upserts: Shift[] = [];
-    const deleteIds: string[] = [];
-    let identicalCount = 0;
-    const identicalIncoming: Shift[] = []; // rows the calendar already holds: still part of the company plan
-
-    for (const shift of eligibleIncoming) {
-      const existingImportedShifts = pendingImportedByDate.get(shift.date)
-        ?? snapshot.filter((existing) => existing.date === shift.date && getShiftOrigin(existing) === 'IMP');
-
-      pendingImportedByDate.set(shift.date, existingImportedShifts);
-
-      if (existingImportedShifts.length === 0) {
-        working.push(shift);
-        upserts.push(shift);
-        pendingImportedByDate.set(shift.date, [...existingImportedShifts, shift]);
-        continue;
-      }
-
-      const matchingExisting = existingImportedShifts.find((existing) => getShiftType(existing) === getShiftType(shift));
-      // Idempotent re-import: an identical semantic shift is left untouched
-      // (no id churn, no replace/skip prompt). Identity is the deterministic
-      // fingerprint, never the random UUID.
-      const identicalExisting = existingImportedShifts.find(
-        (existing) => fingerprintShift(existing).full === fingerprintShift(shift).full,
-      );
-      if (identicalExisting) {
-        identicalCount += 1;
-        identicalIncoming.push(shift);
-        continue;
-      }
-      const existingShift = matchingExisting ?? existingImportedShifts[0];
-      const decision = await requestImportDecision(existingShift, shift);
-
-      if (decision === 'abort') {
-        setShifts(snapshot);
-        return false;
-      }
-
-      if (decision === 'skip') {
-        continue;
-      }
-
-      working = [...working.filter((existing) => existing.id !== existingShift.id), shift];
-      upserts.push(shift);
-      deleteIds.push(existingShift.id);
-      pendingImportedByDate.set(
-        shift.date,
-        [...existingImportedShifts.filter((existing) => existing.id !== existingShift.id), shift],
-      );
+    // MIXED + planner + "historical-and-plan" ends in /api/imports/confirm-split, whose server-side three-way reconciliation
+    // owns every historical difference: the legacy "replace = delete + insert" (deleteIds) must not run there.
+    const usesSmartServerReconciliation = session.role !== 'EMPLOYEE'
+      && futureImportDecision === 'historical-and-plan'
+      && schedulingIncoming.length > 0;
+    const classified = await classifyHistoricalIncoming({
+      incoming: eligibleIncoming,
+      snapshot,
+      smartServerReconciliation: usesSmartServerReconciliation,
+      requestDecision: requestImportDecision,
+    });
+    if (classified.aborted) {
+      setShifts(snapshot);
+      return false;
     }
+    const { upserts, deleteIds, identicalIncoming, serverReconciledHistorical, working } = classified;
+    const identicalCount = identicalIncoming.length;
 
     // DCF incidences / observations travel with the rows of the document (not only with the rows that were new).
     const annotationItems = normalizedIncoming.flatMap((shift) => (shift.annotations ?? []).map((annotation) => ({
@@ -1561,7 +1527,7 @@ function App() {
             sourceFormat: newShifts[0]?.sourceFormat ?? '',
             fileFingerprint: fileFingerprint ?? '',
             employeeId: targetEmployeeId,
-            shifts: [...historicalUpserts, ...identicalIncoming, ...futureUpserts].map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
+            shifts: [...historicalUpserts, ...identicalIncoming, ...serverReconciledHistorical, ...futureUpserts].map((shift) => ({ ...shift, employeeId: targetEmployeeId, areaId: areaId ?? null })),
             deleteIds,
             periodYear: targetPeriod.kind === 'single' ? targetPeriod.year : null,
             periodMonth: targetPeriod.kind === 'single' ? targetPeriod.month : null,
