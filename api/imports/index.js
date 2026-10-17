@@ -1,5 +1,6 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
-import { createImport, deleteImport, listImports, updateImportOutcome } from '../_lib/data.js';
+import { createImport, listImports, updateImportOutcome } from '../_lib/data.js';
+import { revertSingleImport } from '../_lib/import-reversion.js';
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
@@ -13,11 +14,10 @@ import { handleError, sendJson } from '../_lib/http.js';
  * POST   /api/imports                — register an import outcome;
  *                                       optional areaId makes it area-scoped
  *                                       (validated against the session org).
- * DELETE /api/imports  { id }        — delete exactly one import (ADMIN):
- *                                       hard-deletes only the shifts it
- *                                       created (by import_id), soft-deletes
- *                                       the import row. See deleteImport in
- *                                       _lib/data.js for the full contract.
+ * DELETE /api/imports  { id }        — LEGACY alias of a single-import reversion (ADMIN). It goes through the
+ *                                       Import Reversion Engine: an import that needs related imports, or that
+ *                                       is blocked, answers 409 USE_REVERSION_API instead of being half-deleted.
+ *                                       Preferred API: POST /api/imports/reversions/{preview,confirm}.
  */
 export default async function handler(req, res) {
   try {
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
-      const result = await deleteImport(sql, ctx, req.body?.id);
+      const result = await revertSingleImport(sql, ctx, req.body?.id);
       return sendJson(res, 200, result);
     }
 

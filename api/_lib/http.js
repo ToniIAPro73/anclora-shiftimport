@@ -28,5 +28,9 @@ export function handleError(res, error) {
       ? { minimumRestHours: error.minimumRestHours } : {}),
     ...(status < 500 && error?.draftVersionId
       ? { draftVersionId: error.draftVersionId } : {}),
+    ...(status < 500 && Array.isArray(error?.blockers)
+      ? { blockers: error.blockers } : {}),
+    ...(status < 500 && Number.isFinite(error?.relatedImports)
+      ? { relatedImports: error.relatedImports } : {}),
   });
 }

@@ -1,3 +1,5 @@
+> **Superseded.** Deleting an import is no longer a logical rollback: see `docs/product/IMPORT_REVERSION_CONTRACT.md` (Import Reversion Engine). This document is kept as history.
+
 # R1-M10 — Safe Delete / Logical Rollback
 
 ## 1. Objetivo

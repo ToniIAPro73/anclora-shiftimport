@@ -7,7 +7,6 @@ import {
   createEmployee,
   createImport,
   deleteEmployee,
-  deleteImport,
   deleteShiftsByIds,
   findEmployeeMatch,
   listImports,
@@ -1174,92 +1173,6 @@ describe('import persistence', () => {
       sourceFormat: 'csv',
       outcome: { status: 'completed' },
     })).rejects.toMatchObject({ status: 400 });
-  });
-});
-
-describe('import deletion (exact, import_id-scoped)', () => {
-  const IMPORT_1 = '33333333-3333-4333-8333-333333333333';
-  const IMPORT_2 = '44444444-4444-4444-8444-444444444444';
-  const IMPORT_MISSING = '55555555-5555-4555-8555-555555555555';
-
-  it('deletes only the shifts created by the targeted import; manual and other-import shifts survive', async () => {
-    const { sql, calls } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
-      shifts: [
-        shiftRow({ id: 'shift-imported', import_id: IMPORT_1, origin: 'IMP' }),
-        shiftRow({ id: 'shift-other-import', import_id: IMPORT_2, origin: 'IMP' }),
-        shiftRow({ id: 'shift-manual', import_id: null, origin: 'MAN' }),
-        shiftRow({ id: 'shift-untraceable', import_id: null, origin: 'IMP' }),
-      ],
-    });
-    const result = await deleteImport(sql, adminCtx, IMPORT_1);
-    expect(result).toMatchObject({ deleted: true, deletedShiftCount: 1 });
-
-    const deleteCall = calls.find((c) => c.text.startsWith('DELETE FROM shifts') && c.text.includes('import_id'));
-    expect(deleteCall.values).toEqual([IMPORT_1, ORG_A]);
-  });
-
-  it('marks the import row as deleted (soft delete) rather than removing it', async () => {
-    const { sql } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
-      shifts: [shiftRow({ id: 's1', import_id: IMPORT_1 })],
-    });
-    await deleteImport(sql, adminCtx, IMPORT_1);
-    const { imports: after } = await listImports(sql, adminCtx);
-    const row = after.find((i) => i.id === IMPORT_1);
-    expect(row.status).toBe('deleted');
-    expect(row.deletedAt).not.toBeNull();
-  });
-
-  it('rejects deleting an import belonging to another organization (404, no leak)', async () => {
-    const { sql } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_B, deleted_at: null }],
-      shifts: [shiftRow({ id: 's1', import_id: IMPORT_1, organization_id: ORG_B })],
-    });
-    await expect(deleteImport(sql, adminCtx, IMPORT_1)).rejects.toMatchObject({ status: 404 });
-  });
-
-  it('rejects a non-ADMIN caller', async () => {
-    const { sql } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
-    });
-    await expect(deleteImport(sql, employeeCtx, IMPORT_1)).rejects.toMatchObject({ status: 403 });
-  });
-
-  it('rejects a malformed import id', async () => {
-    const { sql } = makeFakeSql();
-    await expect(deleteImport(sql, adminCtx, 'not-a-uuid')).rejects.toMatchObject({ status: 400 });
-  });
-
-  it('rejects a well-formed but unknown import id', async () => {
-    const { sql } = makeFakeSql();
-    await expect(deleteImport(sql, adminCtx, IMPORT_MISSING)).rejects.toMatchObject({ status: 404 });
-  });
-
-  it('rejects deleting an already-deleted import (no double delete)', async () => {
-    const { sql } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: new Date('2026-01-01') }],
-    });
-    await expect(deleteImport(sql, adminCtx, IMPORT_1)).rejects.toMatchObject({ status: 409 });
-  });
-
-  it('runs the deletion inside a transaction', async () => {
-    const { sql, state } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
-      shifts: [shiftRow({ id: 's1', import_id: IMPORT_1 })],
-    });
-    await deleteImport(sql, adminCtx, IMPORT_1);
-    expect(state.transactionUsed).toBe(true);
-  });
-
-  it('reports zero deleted shifts for an import that created none (still marks it deleted)', async () => {
-    const { sql } = makeFakeSql({
-      imports: [{ id: IMPORT_1, organization_id: ORG_A, deleted_at: null }],
-      shifts: [],
-    });
-    const result = await deleteImport(sql, adminCtx, IMPORT_1);
-    expect(result.deletedShiftCount).toBe(0);
-    expect(result.deleted).toBe(true);
   });
 });
 

@@ -2660,16 +2660,12 @@ function App() {
         isOpen={isImportHistoryOpen && !isImporting}
         onClose={() => setIsImportHistoryOpen(false)}
         session={session}
-        onDeleted={() => {
-          // The client Shift model never carries import_id (it's a server-
-          // side/history concern, see lib/types.ts), and a deleted import
-          // may belong to an employee other than the one currently in view
-          // — so unlike the other mutations in this app (which compute the
-          // next array locally), the correct refresh here is to re-read the
-          // currently viewed employee's shifts from the server, the single
-          // source of truth for what the deletion actually removed.
+        onReverted={() => {
+          // A reversion can remove, restore or re-state rows (and annotations / plan) of ANY employee: re-read the currently viewed
+          // employee's calendar from the server, the single source of truth for what the reversion actually did.
           if (session && selectedEmployeeId) {
-            void loadRemoteShifts(selectedEmployeeId).then(setShifts).catch(() => {});
+            void refreshCalendarData(selectedEmployeeId);
+            setAnnotationsVersion((value) => value + 1);
           }
         }}
       />

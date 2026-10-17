@@ -448,6 +448,9 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'company_plan_revisions',
           'calendar_annotations',
           'employee_source_identifiers',
+          'import_reversions',
+          'import_reversion_items',
+          'import_effects',
         ],
         columns: [
           'organizations.plan',
@@ -471,6 +474,8 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'shifts.provenance',
           'shifts.duty_role',
           'imports.plan_fingerprint',
+          'imports.reverted_at',
+          'company_plan_revisions.reverted_at',
           'imports.document_fingerprint',
           'imports.import_decision',
         ],
@@ -482,6 +487,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'guard_user_access_invitation_delete',
         ],
         indexes: [
+          'import_effects_resource_idx',
           'format_profiles_org_structurehash_active_idx',
           'memberships_one_owner_per_org_idx',
           'shifts_id_employee_unique_idx',
@@ -500,6 +506,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           { conname: 'company_plan_revisions_unique', def: 'UNIQUE (organization_id, scope_key, revision_number)' },
           { conname: 'calendar_annotations_unique', def: 'UNIQUE (organization_id, employee_id, date, kind, origin)' },
           { conname: 'employee_source_identifiers_unique', def: 'UNIQUE (organization_id, source_system, external_identifier)' },
+          { conname: 'import_reversion_items_unique', def: 'UNIQUE (reversion_id, import_id)' },
         ],
       });
 

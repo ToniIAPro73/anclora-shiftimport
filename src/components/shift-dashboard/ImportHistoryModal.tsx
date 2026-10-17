@@ -1,21 +1,18 @@
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Undo2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../lib/use-i18n';
-import { deleteRemoteImport, listRemoteImports, RemoteImport } from '../../lib/remote';
+import { listRemoteImports, loadReversionDetail, RemoteImport, type ReversionDetail, type ReversionResult } from '../../lib/remote';
 import { isAdminRole, SessionInfo } from '../../lib/session';
 import { ModalShell } from '../ui/ModalShell';
-import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { ReversionPreviewModal } from './ReversionPreviewModal';
 
 interface ImportHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   session: SessionInfo | null;
-  /** Called after a successful delete so the calendar/App state can drop the
-   * shifts that carried this import_id — no server refetch mechanism exists
-   * anywhere in this app (see App.tsx's persistChanges), so this modal
-   * follows the same convention: report what happened, let the caller filter
-   * its own local state. */
-  onDeleted: (importId: string) => void;
+  /** Called after a reversion completed so the calendar/App state is re-read from the server (a reversion can restore, remove or
+   * re-state rows of any employee, so the server is the only source of truth). */
+  onReverted: (importIds: string[]) => void;
 }
 
 /** Rows per page. The modal now uses the fixed-height `workspace` shell:
@@ -62,9 +59,9 @@ const formatDateTime = (iso: string | undefined, locale: string): string => {
   return `${date.toLocaleDateString(dateLocale)} · ${date.toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })}`;
 };
 
-export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: ImportHistoryModalProps) => {
+export const ImportHistoryModal = ({ isOpen, onClose, session, onReverted }: ImportHistoryModalProps) => {
   const { t, locale } = useI18n();
-  const canDelete = isAdminRole(session?.role);
+  const canRevert = isAdminRole(session?.role);
   const pageSize = useResponsivePageSize();
 
   const [rows, setRows] = useState<RemoteImport[]>([]);
@@ -72,13 +69,15 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<{ description: string; onConfirm: () => void } | null>(null);
+  // Selection survives page changes; the ORDER of a reversion is never chosen here (the server computes it).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reverting, setReverting] = useState<string[] | null>(null);
+  const [details, setDetails] = useState<Record<string, ReversionDetail | 'loading' | 'error'>>({});
 
   const [scopeFilter, setScopeFilter] = useState<'' | 'global' | 'area'>('');
   const [typeFilter, setTypeFilter] = useState<'' | 'individual' | 'team'>('');
   const [formatFilter, setFormatFilter] = useState<SourceFormatFilter>('');
-  const [statusFilter, setStatusFilter] = useState<'' | 'completed' | 'partial' | 'blocked' | 'failed' | 'deleted'>('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'completed' | 'partial' | 'blocked' | 'failed' | 'deleted' | 'reverted'>('');
 
   // Filter/page changes can fire overlapping requests (e.g. two selects
   // changed in quick succession); a slower, now-stale response must never
@@ -111,7 +110,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
       if (requestIdRef.current !== requestId) {
         return;
       }
-      setError(t('imports.deleteError'));
+      setError(t('imports.loadError'));
       setRows([]);
       setTotal(0);
     } finally {
@@ -129,7 +128,8 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
       setTotal(0);
       setPage(1);
       setError('');
-      setDeletingId(null);
+      setSelected(new Set());
+      setReverting(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, scopeFilter, typeFilter, formatFilter, statusFilter, pageSize]);
@@ -144,6 +144,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
 
   const statusLabel = (row: RemoteImport): string => {
     if (row.status === 'deleted') return t('imports.statusDeleted');
+    if (row.status === 'reverted') return t('reversion.historyStatus');
     if (row.status === 'pending') return t('imports.statusPending');
     if (row.status === 'partial') return t('imports.statusPartial');
     if (row.status === 'blocked') return t('imports.statusBlocked');
@@ -153,7 +154,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
 
   /** Business meaning of the import (never fingerprints): what effect it had. */
   const kindLabel = (row: RemoteImport): string | null => {
-    if (row.status === 'deleted') return null;
+    if (row.status === 'deleted' || row.status === 'reverted') return null;
     if (row.duplicateKind === 'DUPLICATE_DOCUMENT') return t('imports.kindDuplicateDocument');
     if (row.duplicateKind === 'DUPLICATE_PLAN') return t('imports.kindDuplicatePlan');
     if (row.documentClass === 'COMPANY_PLAN_UPDATE') return t('imports.kindPlanUpdate');
@@ -163,51 +164,35 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
     return null;
   };
 
-  const handleDelete = (row: RemoteImport) => {
-    if (!canDelete || deletingId) {
-      return;
+  const isSelectable = (row: RemoteImport) => canRevert && (row.reversibility === 'REVERSIBLE' || row.reversibility === 'LEGACY_SAFE_CANDIDATE');
+  const toggle = (id: string) => setSelected((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const showDetails = async (row: RemoteImport) => {
+    if (details[row.id]) { setDetails(({ [row.id]: _omit, ...rest }) => { void _omit; return rest; }); return; }
+    setDetails((current) => ({ ...current, [row.id]: 'loading' }));
+    try {
+      const loaded = await loadReversionDetail(row.id);
+      setDetails((current) => ({ ...current, [row.id]: loaded }));
+    } catch {
+      setDetails((current) => ({ ...current, [row.id]: 'error' }));
     }
-    const confirmText = [
-      t('imports.deleteConfirmIntro'),
-      '',
-      `${t('imports.columnDate')}: ${formatDateTime(row.createdAt, locale)}`,
-      `${t('imports.columnUser')}: ${row.importedByUserName ?? t('imports.unknownUser')}`,
-      `${t('imports.columnEmployees')}: ${row.employeeCount ?? 0}`,
-      t('imports.deleteShiftsCount', { count: row.createdShiftCount ?? 0 }),
-      `${t('imports.columnPeriod')}: ${row.periodLabel || '—'}`,
-      `${t('imports.columnScope')}: ${scopeLabel(row)}`,
-      '',
-      t('imports.deleteConfirmProtected'),
-      t('imports.deleteConfirmIrreversible'),
-    ].join('\n');
-    setConfirmation({
-      description: confirmText,
-      onConfirm: () => {
-        setConfirmation(null);
-        setDeletingId(row.id);
-        setError('');
-        return deleteRemoteImport(row.id)
-      .then(() => {
-        onDeleted(row.id);
-        // A deletion can empty out the last row of the current page — step
-        // back a page rather than showing a stranded empty page.
-        const nextPage = rows.length === 1 && page > 1 ? page - 1 : page;
-        return load(nextPage);
-      })
-      .catch(() => {
-        setError(t('imports.deleteError'));
-      })
-      .finally(() => {
-        setDeletingId(null);
-      });
-      },
-    });
+  };
+  const handleReverted = (result: ReversionResult) => {
+    const ids = reverting ?? [];
+    setReverting(null);
+    setSelected(new Set());
+    onReverted(ids);
+    void load(page);
+    void result;
   };
 
   return (
     <>
     <ModalShell isOpen={isOpen} onClose={onClose} title={t('imports.historyTitle')} maxWidth="820px" workspace>
-      {!canDelete && (
+      {!canRevert && (
         <p style={{ margin: '0 0 12px', color: 'var(--text-subtle)', fontSize: '0.8rem', flexShrink: 0 }}>
           {t('imports.readOnlyNotice')}
         </p>
@@ -260,6 +245,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
           <option value="partial">{t('imports.statusPartial')}</option>
           <option value="blocked">{t('imports.statusBlocked')}</option>
           <option value="failed">{t('imports.statusFailed')}</option>
+          <option value="reverted">{t('reversion.historyStatus')}</option>
           <option value="deleted">{t('imports.statusDeleted')}</option>
         </select>
       </div>
@@ -282,44 +268,55 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
         {!loading && rows.length > 0 && (
           <div style={{ display: 'grid', gap: '6px', marginBottom: '8px', alignContent: 'start' }}>
           {rows.map((row) => {
-            const isDeleting = deletingId === row.id;
             const isDeleted = row.status === 'deleted';
+            const isReverted = row.status === 'reverted';
             const isNonTerminal = row.status === 'blocked' || row.status === 'failed' || row.status === 'partial';
+            const selectable = isSelectable(row);
+            const detail = details[row.id];
             return (
               <div
                 key={row.id}
-                aria-busy={isDeleting}
+                data-testid={`import-row-${row.id}`}
                 style={{
                   border: '1px solid var(--glass-border)',
                   borderRadius: '12px',
                   padding: '10px 12px',
                   background: 'var(--panel-muted-bg)',
                   fontSize: '0.82rem',
-                  opacity: isDeleting ? 0.6 : 1,
+                  opacity: isReverted || isDeleted ? 0.75 : 1,
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                  {canRevert && !isDeleted && !isReverted && (
+                    <input
+                      type="checkbox"
+                      aria-label={`${t('reversion.historySelect')} · ${formatDateTime(row.createdAt, locale)}`}
+                      data-testid={`import-select-${row.id}`}
+                      checked={selected.has(row.id)}
+                      disabled={!selectable}
+                      onChange={() => toggle(row.id)}
+                    />
+                  )}
                   <strong style={{ fontSize: '0.88rem' }}>{formatDateTime(row.createdAt, locale)}</strong>
-                  <span className={`status-badge ${isDeleted || isNonTerminal ? 'status-badge--inactive' : 'status-badge--active'}`}>
+                  <span className={`status-badge ${isDeleted || isReverted || isNonTerminal ? 'status-badge--inactive' : 'status-badge--active'}`}>
                     {statusLabel(row)}
                   </span>
                   {kindLabel(row) && (
                     <span data-testid="import-kind" style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>{kindLabel(row)}</span>
                   )}
                   <span style={{ marginLeft: 'auto' }}>
-                    {canDelete && !isDeleted && (
+                    {canRevert && selectable && (
                       <button
                         type="button"
-                        aria-label={t('imports.deleteAction')}
-                        aria-busy={isDeleting}
-                        disabled={isDeleting || Boolean(deletingId)}
-                        onClick={() => handleDelete(row)}
+                        aria-label={t('reversion.historyAction')}
+                        data-testid={`import-revert-${row.id}`}
+                        onClick={() => setReverting([row.id])}
                         style={{
                           padding: '6px 10px',
-                          color: 'var(--danger)',
-                          border: '1px solid var(--danger-border)',
+                          color: 'var(--color-gold)',
+                          border: '1px solid var(--color-gold)',
                           borderRadius: '10px',
-                          background: 'var(--danger-bg)',
+                          background: 'transparent',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -328,8 +325,13 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
                           fontWeight: 700,
                         }}
                       >
-                        <Trash2 size={14} />
-                        {isDeleting ? t('imports.deleting') : t('imports.deleteAction')}
+                        <Undo2 size={14} />
+                        {t('reversion.historyAction')}
+                      </button>
+                    )}
+                    {isReverted && canRevert && (
+                      <button type="button" className="btn-outline" style={{ padding: '4px 10px', fontSize: '0.74rem' }} onClick={() => void showDetails(row)} data-testid={`import-reversion-details-${row.id}`}>
+                        {t('reversion.historyDetails')}
                       </button>
                     )}
                   </span>
@@ -347,6 +349,20 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
                   <span>· {t('imports.columnFormat')}: {(row.sourceFormat || '—').toUpperCase()}</span>
                   <span>· {t('imports.columnScope')}: {scopeLabel(row)}</span>
                 </div>
+                {isReverted && (
+                  <div role="note" data-testid="import-reverted-note" style={{ color: 'var(--text-subtle)', marginTop: '2px' }}>
+                    {t('reversion.historyReverted', { date: formatDateTime(row.revertedAt ?? undefined, locale), user: row.revertedByUserName ?? t('imports.unknownUser') })}
+                  </div>
+                )}
+                {canRevert && row.reversibility === 'BLOCKED_LEGACY' && (
+                  <div role="note" data-testid="import-legacy-note" style={{ color: 'var(--text-subtle)', marginTop: '2px' }}>{t('reversion.historyLegacy')}</div>
+                )}
+                {detail && detail !== 'loading' && detail !== 'error' && (
+                  <div data-testid="import-reversion-detail" style={{ color: 'var(--text-subtle)', marginTop: '4px' }}>
+                    <div>{t('reversion.detailsIncluded', { count: detail.items.length })}</div>
+                    {detail.reason && <div>{t('reversion.detailsReason', { reason: detail.reason })}</div>}
+                  </div>
+                )}
                 {row.outcomeReason && (
                   <div role="note" style={{ color: 'var(--text-subtle)', marginTop: '2px', wordBreak: 'break-word' }}>
                     {t('imports.outcomeReason')}: {row.outcomeReason}
@@ -365,6 +381,13 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
         )}
       </div>
 
+      {canRevert && selected.size > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0, paddingTop: '8px' }}>
+          <button type="button" className="btn-gold" data-testid="import-revert-selected" onClick={() => setReverting([...selected])}>
+            {selected.size === 1 ? t('reversion.historyAction') : t('reversion.historyActionMany', { count: selected.size })}
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', flexShrink: 0, paddingTop: '10px', borderTop: '1px solid var(--glass-border)' }}>
         <button
           type="button"
@@ -389,14 +412,11 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onDeleted }: Impo
         </button>
       </div>
     </ModalShell>
-    <ConfirmDialog
-      isOpen={Boolean(confirmation)}
-      title={t('imports.deleteConfirmTitle')}
-      description={confirmation?.description ?? ''}
-      confirmLabel={t('imports.deleteAction')}
-      cancelLabel={t('common.cancel')}
-      onCancel={() => setConfirmation(null)}
-      onConfirm={() => confirmation?.onConfirm()}
+    <ReversionPreviewModal
+      isOpen={Boolean(reverting)}
+      importIds={reverting ?? []}
+      onClose={() => setReverting(null)}
+      onReverted={handleReverted}
     />
     </>
   );

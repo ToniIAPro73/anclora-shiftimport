@@ -536,7 +536,7 @@ export async function listReconciliationDays(sql, ctx, employeeId, year) {
   const employeeKey = employee ? employeeBusinessKey({ externalEmployeeId: employee.external_employee_id, name: employee.name }) : null;
   const revisionRows = employeeKey ? await sql`
     SELECT revision_number, rows FROM company_plan_revisions
-    WHERE organization_id = ${ctx.organizationId} AND scope_key = 'global' AND coverage_to >= ${from} AND coverage_from <= ${to}
+    WHERE organization_id = ${ctx.organizationId} AND scope_key = 'global' AND reverted_at IS NULL AND coverage_to >= ${from} AND coverage_from <= ${to}
     ORDER BY revision_number DESC
   ` : [];
   const planRowsFor = (date) => revisionRows

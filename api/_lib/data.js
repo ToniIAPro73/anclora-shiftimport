@@ -3,6 +3,8 @@ import { HttpError, requireRole, resolveAccessScope, resolveEffectiveAccessScope
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 import { getOperationalDate, isHistoricalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict } from './shift-compatibility.js';
+import { importReversibility } from './import-reversion.js';
+import { LEDGER_PREFIX_LENGTH, ledgerPrefix } from './import-ledger.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -224,7 +226,7 @@ export function mapImportRow(row) {
     shiftCount: row.shift_count ?? 0,
     createdShiftCount: row.created_shift_count ?? 0,
     existingShiftCount: row.existing_shift_count ?? 0,
-    status: row.deleted_at ? 'deleted' : row.status,
+    status: row.deleted_at ? 'deleted' : (row.reverted_at ? 'reverted' : row.status),
     outcomeReason: row.outcome_reason ?? null,
     outcomeDetail,
     blockingEmployeeId: row.blocking_employee_id ?? null,
@@ -234,6 +236,9 @@ export function mapImportRow(row) {
     temporalClass: row.temporal_class ?? null,
     duplicateKind: row.duplicate_kind ?? null,
     deletedAt: row.deleted_at ?? null,
+    revertedAt: row.reverted_at ?? null,
+    revertedByUserName: row.reverted_by_user_name ?? null,
+    reversionId: row.reversion_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -1818,9 +1823,11 @@ export async function listImports(sql, ctx, {
   const rows = scope.type === 'SELF'
     ? await sql`
         SELECT i.*, u.display_name AS imported_by_user_name,
+               ru.display_name AS reverted_by_user_name,
                be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN users ru ON ru.id = i.reverted_by_user_id
         LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
           AND i.employee_id = ${scope.employeeId}
@@ -1829,9 +1836,11 @@ export async function listImports(sql, ctx, {
     : scope.type === 'AREA'
       ? await sql`
         SELECT i.*, u.display_name AS imported_by_user_name,
+               ru.display_name AS reverted_by_user_name,
                be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN users ru ON ru.id = i.reverted_by_user_id
         LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
           AND i.area_id = ${scope.areaId}
@@ -1840,9 +1849,11 @@ export async function listImports(sql, ctx, {
       : areaId
         ? await sql`
         SELECT i.*, u.display_name AS imported_by_user_name,
+               ru.display_name AS reverted_by_user_name,
                be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN users ru ON ru.id = i.reverted_by_user_id
         LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
           AND i.area_id = ${areaId}
@@ -1850,9 +1861,11 @@ export async function listImports(sql, ctx, {
       `
         : await sql`
         SELECT i.*, u.display_name AS imported_by_user_name,
+               ru.display_name AS reverted_by_user_name,
                be.name AS blocking_employee_name
         FROM imports i
         LEFT JOIN users u ON u.id = i.imported_by_user_id
+        LEFT JOIN users ru ON ru.id = i.reverted_by_user_id
         LEFT JOIN employees be ON be.id = i.blocking_employee_id AND be.organization_id = i.organization_id
         WHERE i.organization_id = ${ctx.organizationId}
         ORDER BY i.created_at DESC
@@ -1871,8 +1884,14 @@ export async function listImports(sql, ctx, {
   const safePage = Math.max(Number(page) || 1, 1);
   const start = (safePage - 1) * safePageSize;
 
+  const pageRows = filtered.slice(start, start + safePageSize);
+  // Reversibility is only meaningful (and only computed) for the roles that may revert; the preview is the authoritative answer.
+  const reversibility = (ctx.role === 'OWNER' || ctx.role === 'ADMIN')
+    ? await importReversibility(sql, ctx.organizationId, pageRows.map((row) => ({ id: row.id, deleted_at: row.deletedAt, reverted_at: row.revertedAt })))
+    : new Map();
+
   return {
-    imports: filtered.slice(start, start + safePageSize),
+    imports: pageRows.map((row) => ({ ...row, reversibility: reversibility.get(row.id)?.state ?? null })),
     total: filtered.length,
     page: safePage,
     pageSize: safePageSize,
@@ -2137,62 +2156,10 @@ export async function updateImportOutcome(sql, ctx, rawImportId, input = {}) {
 }
 
 /**
- * Deletes exactly one import (ADMIN/OWNER only): the shifts it created are HARD
- * deleted, scoped strictly by `import_id` (never period/employee/area/origin
- * — see the feature spec's "Turnos importados" rules), so a manual shift
- * that happens to be identical in date/time/employee is never touched
- * (manual shifts always have import_id IS NULL, never equal to any import's
- * id). The import row itself is SOFT deleted (deleted_at/deleted_by_user_id)
- * so it keeps showing in the history as 'deleted', per the project's
- * soft-delete convention for historical/reference rows (see areas).
- *
- * Both writes run inside one transaction: either both land or neither does
- * — no state where the import shows completed but its shifts are gone, or
- * deleted but shifts remain. The real deleted-shift count comes back from
- * RETURNING, never trusted from the client.
+ * NOTE: there is no longer a `deleteImport` here. An import is not "the rows with its import_id" any more (it can touch plan revisions,
+ * drafts, assignments, annotations and effective-state transitions), so removing it is a REVERSION: see import-reversion.js and
+ * docs/product/IMPORT_REVERSION_CONTRACT.md. `DELETE /api/imports` is only an alias of a single-import reversion.
  */
-export async function deleteImport(sql, ctx, rawImportId) {
-  requireRole(ctx, 'ADMIN');
-  const id = String(rawImportId ?? '').trim();
-  if (!UUID_RE.test(id)) {
-    throw new HttpError(400, 'Import id is required');
-  }
-
-  const existingRows = await sql`
-    SELECT id, organization_id, deleted_at FROM imports
-    WHERE id = ${id} AND organization_id = ${ctx.organizationId}
-  `;
-  const existing = existingRows[0];
-  if (!existing) {
-    throw new HttpError(404, 'Import not found');
-  }
-  if (existing.deleted_at) {
-    throw new HttpError(409, 'Import already deleted');
-  }
-
-  const [deletedShifts, updatedImport] = await sql.transaction((txn) => [
-    txn`
-      DELETE FROM shifts
-      WHERE import_id = ${id} AND organization_id = ${ctx.organizationId}
-      RETURNING id
-    `,
-    txn`
-      UPDATE imports
-      SET deleted_at = NOW(), deleted_by_user_id = ${ctx.user.id}, updated_at = NOW()
-      WHERE id = ${id} AND organization_id = ${ctx.organizationId} AND deleted_at IS NULL
-      RETURNING id
-    `,
-  ]);
-
-  if (updatedImport.length === 0) {
-    // Raced with a concurrent delete of the same import between the check
-    // above and the transaction — surfaced as a conflict, never silently
-    // reported as success with a made-up count.
-    throw new HttpError(409, 'Import already deleted');
-  }
-
-  return { deleted: true, importId: id, deletedShiftCount: deletedShifts.length };
-}
 
 // ------------------------------------------------------------------- shifts
 
@@ -2807,7 +2774,7 @@ export async function markEmployeeNotificationRead(sql, ctx, rawNotificationId) 
  * imported shifts also carry a server-computed semantic key. This protects
  * retries and concurrent requests even when the client has no prior copy.
  */
-export async function upsertShifts(sql, ctx, rawShifts) {
+export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}) {
   const shifts = rawShifts.map(normalizeShiftInput);
   const scope = await resolveEffectiveAccessScope(sql, ctx);
   // R1-M08 atomicity: every shift is validated (and its write parameters
@@ -2980,7 +2947,12 @@ export async function upsertShifts(sql, ctx, rawShifts) {
     }
   }
 
-  const rowsPerShift = await sql.transaction((txn) => prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance }) => (
+  // Legacy (row-by-row) import path: the rows written for an import are attributed to it in the effect ledger.
+  const ledgerImportId = importId ?? prepared.find((item) => item.shift.importId)?.shift.importId ?? null;
+  const prefix = ledgerImportId ? LEDGER_PREFIX_LENGTH : 0;
+  const rowsPerShiftRaw = await sql.transaction((txn) => [
+    ...(ledgerImportId ? ledgerPrefix(txn, ctx.organizationId, ledgerImportId) : []),
+    ...prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance }) => (
     semanticFingerprint
       ? txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
@@ -3021,7 +2993,9 @@ export async function upsertShifts(sql, ctx, rawShifts) {
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
                 start_time, end_time, location, origin, shift_type, counts_as_work
     `
-  )));
+    )),
+  ]);
+  const rowsPerShift = rowsPerShiftRaw.slice(prefix);
 
   const saved = [];
   for (const rows of rowsPerShift) {
@@ -3033,7 +3007,7 @@ export async function upsertShifts(sql, ctx, rawShifts) {
   return saved;
 }
 
-export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId) {
+export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId, { importId = null } = {}) {
   const scope = await resolveEffectiveAccessScope(sql, ctx);
   const employeeId = scope.type === 'SELF'
     ? scope.employeeId
@@ -3042,6 +3016,10 @@ export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId) {
     await assertEmployeeInScope(sql, ctx, employeeId);
   }
   const ids = [...new Set(rawIds.map((value) => String(value ?? '').trim()).filter((id) => UUID_RE.test(id)))];
+  // Replace-style deletions performed by a legacy import are attributed to it in the effect ledger (BEFORE state kept in full).
+  const run = async (build) => (importId
+    ? (await sql.transaction((txn) => [...ledgerPrefix(txn, ctx.organizationId, importId), build(txn)]))[LEDGER_PREFIX_LENGTH]
+    : build(sql));
   let deleted = 0;
   for (const id of ids) {
     const existing = await sql`
@@ -3055,26 +3033,26 @@ export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId) {
       });
     }
     const rows = employeeId
-      ? await sql`
+      ? await run((q) => q`
           DELETE FROM shifts
           WHERE id = ${id}
             AND organization_id = ${ctx.organizationId}
             AND employee_id = ${employeeId}
           RETURNING id
-        `
+        `)
       : scope.type === 'AREA'
-        ? await sql`
+        ? await run((q) => q`
           DELETE FROM shifts
           WHERE id = ${id}
             AND organization_id = ${ctx.organizationId}
             AND area_id = ${scope.areaId}
           RETURNING id
-        `
-        : await sql`
+        `)
+        : await run((q) => q`
           DELETE FROM shifts
           WHERE id = ${id} AND organization_id = ${ctx.organizationId}
           RETURNING id
-        `;
+        `);
     deleted += rows.length;
   }
   return deleted;

@@ -33,9 +33,11 @@ export default async function handler(req, res) {
       const deleteIds = Array.isArray(payload.deleteIds) ? payload.deleteIds : [];
       const requestedEmployeeId = String(payload.employeeId ?? '');
 
+      // An import (legacy row-by-row path) declares itself so the effect ledger can attribute — and later revert — these writes.
+      const importId = String(payload.importId ?? upserts.find((shift) => shift?.importId)?.importId ?? '').trim() || null;
       const [saved, deleted] = await Promise.all([
-        upserts.length > 0 ? upsertShifts(sql, ctx, upserts) : Promise.resolve([]),
-        deleteIds.length > 0 ? deleteShiftsByIds(sql, ctx, deleteIds, requestedEmployeeId) : Promise.resolve(0),
+        upserts.length > 0 ? upsertShifts(sql, ctx, upserts, { importId }) : Promise.resolve([]),
+        deleteIds.length > 0 ? deleteShiftsByIds(sql, ctx, deleteIds, requestedEmployeeId, { importId }) : Promise.resolve(0),
       ]);
 
       return sendJson(res, 200, { saved, deleted });

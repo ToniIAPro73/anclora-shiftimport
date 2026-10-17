@@ -29,7 +29,7 @@ export interface RemoteImport {
   periodKind?: 'single' | 'multi';
   periodLabel?: string;
   importMode?: 'individual' | 'team';
-  status: 'pending' | 'completed' | 'partial' | 'blocked' | 'failed' | 'deleted' | string;
+  status: 'pending' | 'completed' | 'partial' | 'blocked' | 'failed' | 'deleted' | 'reverted' | string;
   outcomeReason?: string | null;
   outcomeDetail?: Record<string, unknown> | null;
   blockingEmployeeId?: string | null;
@@ -45,6 +45,10 @@ export interface RemoteImport {
   existingShiftCount?: number;
   createdAt?: string;
   deletedAt?: string | null;
+  revertedAt?: string | null;
+  revertedByUserName?: string | null;
+  /** Light, server-side hint for the history list (the preview is authoritative). */
+  reversibility?: 'REVERSIBLE' | 'LEGACY_SAFE_CANDIDATE' | 'BLOCKED_LEGACY' | 'NO_EFFECTS' | 'REVERTED' | 'DELETED' | null;
   deduplicated?: boolean;
   importDecision?: 'historical-only' | 'historical-and-plan' | null;
   documentClass?: 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED' | null;
@@ -570,6 +574,7 @@ export async function syncRemoteShifts(
     method: 'PATCH',
     body: JSON.stringify({
       employeeId,
+      importId: changes.importId ?? undefined,
       upserts: (changes.upserts ?? []).map((shift) => ({
         id: shift.id,
         employeeId,
@@ -896,14 +901,78 @@ export async function listRemoteImports(filters: ImportHistoryFilters = {}): Pro
   return apiFetch<ImportHistoryPage>(`/api/imports${query ? `?${query}` : ''}`);
 }
 
-/** ADMIN/OWNER only: deletes exactly this import's created shifts (by import_id)
- * and soft-deletes the import row. Manual shifts and shifts from other
- * imports are never touched — see deleteImport in api/_lib/data.js. */
-export async function deleteRemoteImport(id: string): Promise<{ deleted: boolean; importId: string; deletedShiftCount: number }> {
-  return apiFetch('/api/imports', {
-    method: 'DELETE',
-    body: JSON.stringify({ id }),
-  });
+// ------------------------------------------------------------ import reversions
+
+export type ReversionBlockerCode =
+  | 'LATER_MANUAL_CHANGE_UNSAFE' | 'PUBLISHED_DEPENDENCY' | 'LEGACY_PROVENANCE_INSUFFICIENT' | 'ALREADY_REVERTED'
+  | 'NO_REVERSIBLE_EFFECTS' | 'REVERSION_DEPENDENCY_CYCLE';
+
+export interface ReversionPlanImport {
+  id: string;
+  fileName: string;
+  sourceFormat: string;
+  importMode?: 'individual' | 'team';
+  createdAt: string;
+  importedByName: string | null;
+  requestedByUser: boolean;
+  autoIncluded: boolean;
+  executionOrder: number | null;
+  legacy: boolean;
+}
+
+export interface ReversionImpact {
+  shiftsRemoved: number; shiftsRestored: number; reviewCleared: number;
+  planRevisionsReverted: number;
+  assignmentsRemoved: number; assignmentsRestored: number; draftVersionsRemoved: number; draftVersionsRestored: number;
+  schedulesRemoved: number; schedulesRestored: number;
+  dcfRemoved: number; dcfPreserved: number; commentsRemoved: number;
+  changesRemoved: number; changesRestored: number;
+  employeesAffected: number; alreadyAbsent: number;
+}
+
+export interface ReversionPlan {
+  status: 'READY' | 'BLOCKED';
+  planHash: string;
+  requestedIds: string[];
+  imports: ReversionPlanImport[];
+  /** Import ids in the order the SERVER will execute them (dependents first). Informational: never user-controlled. */
+  order: string[];
+  impact: ReversionImpact;
+  blockers: Array<{ code: ReversionBlockerCode; importId: string | null; count: number; reason?: string }>;
+  warnings: Array<{ code: string; count: number }>;
+}
+
+export interface ReversionResult {
+  reversionId: string;
+  status: 'completed';
+  idempotent: boolean;
+  requestedImportCount: number;
+  effectiveImportCount: number;
+  impact: ReversionImpact | null;
+  executionOrder: string[];
+}
+
+export interface ReversionDetail {
+  id: string;
+  reason: string | null;
+  createdAt: string;
+  requestedByName: string | null;
+  impact: ReversionImpact | null;
+  items: Array<{ importId: string; fileName: string; requestedByUser: boolean; autoIncludedDependency: boolean; executionOrder: number; effectCount: number }>;
+}
+
+/** READ-ONLY: the server closes the dependency set and orders the execution; nothing is written. OWNER / ADMIN. */
+export async function previewImportReversion(importIds: string[]): Promise<ReversionPlan> {
+  return apiFetch<ReversionPlan>('/api/imports/reversions/preview', { method: 'POST', body: JSON.stringify({ importIds }) });
+}
+
+/** Executes the previewed plan atomically. A changed state answers 409 REVERSION_PLAN_STALE (preview again). */
+export async function confirmImportReversion(input: { importIds: string[]; planHash: string; reason?: string }): Promise<ReversionResult> {
+  return apiFetch<ReversionResult>('/api/imports/reversions/confirm', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export async function loadReversionDetail(importId: string): Promise<ReversionDetail> {
+  return apiFetch<ReversionDetail>(`/api/imports/reversions/detail?importId=${encodeURIComponent(importId)}`);
 }
 
 // ------------------------------------------------------------ areas

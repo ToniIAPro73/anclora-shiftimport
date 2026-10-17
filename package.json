@@ -24,6 +24,7 @@
     "qa:dev-runtime": "node scripts/qa/dev-runtime.mjs",
     "qa:plan-bootstrap": "node scripts/qa/plan-bootstrap-e2e.mjs",
     "qa:mixed-import": "node scripts/qa/mixed-import-e2e.mjs",
+    "qa:import-reversion": "node scripts/qa/import-reversion-e2e.mjs",
     "qa:local:smoke": "node scripts/qa/qa-smoke.mjs --local",
     "qa:preview:smoke": "node scripts/qa/qa-smoke.mjs --preview",
     "dev:docker": "node scripts/start-local.mjs",

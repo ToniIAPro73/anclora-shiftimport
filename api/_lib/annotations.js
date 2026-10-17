@@ -1,3 +1,4 @@
+import { ledgerPrefix } from './import-ledger.js';
 import { HttpError, requireRole } from './auth.js';
 import { assertEmployeeInScope } from './data.js';
 
@@ -113,7 +114,10 @@ export async function saveImportedAnnotations(sql, ctx, { employeeId, importId =
   await assertEmployeeInScope(sql, ctx, target);
   const normalized = normalizeAnnotationItems(items);
   if (normalized.length === 0) return { saved: 0 };
-  await sql.transaction((txn) => normalized.map((item) => importedAnnotationStatement(txn, ctx, { employeeId: target, importId, sourceKind }, item)));
+  await sql.transaction((txn) => [
+    ...(importId ? ledgerPrefix(txn, ctx.organizationId, importId) : []),
+    ...normalized.map((item) => importedAnnotationStatement(txn, ctx, { employeeId: target, importId, sourceKind }, item)),
+  ]);
   return { saved: normalized.length };
 }
 

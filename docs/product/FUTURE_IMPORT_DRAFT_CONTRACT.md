@@ -122,3 +122,8 @@ canónico ni se muestra como ID del empleado.
   bloqueo (`MISMATCH`).
 - EMPLOYEE: auto-asociación solo de su propio registro (XLSX individual validado, nombre que lo identifica sin ambigüedad);
   nunca a otro empleado; solo importa histórico (el futuro se excluye, sin escrituras de planificación).
+
+## Reversión de importaciones
+
+Eliminar una importación **ya no es** un rollback lógico. Revertir una importación (una o varias, orden calculado por el servidor, atómico,
+auditable) está definido en [IMPORT_REVERSION_CONTRACT.md](IMPORT_REVERSION_CONTRACT.md).

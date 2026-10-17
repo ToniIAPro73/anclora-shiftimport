@@ -591,6 +591,14 @@ export const MIGRATION_SENTINELS = {
     cat.tables.has('employee_source_identifiers') &&
     cat.constraints.has('calendar_annotations_unique') &&
     cat.constraints.has('employee_source_identifiers_unique'),
+  '0044_import_reversions_and_effects.sql': (cat) =>
+    cat.tables.has('import_reversions') &&
+    cat.tables.has('import_reversion_items') &&
+    cat.tables.has('import_effects') &&
+    cat.columns.has('imports.reverted_at') &&
+    cat.columns.has('company_plan_revisions.reverted_at') &&
+    cat.constraints.has('import_reversion_items_unique'),
+  '0045_import_effect_plan_revision_key.sql': (cat) => cat.indexes.has('import_effects_resource_idx'),
 };
 
 /**

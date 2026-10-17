@@ -276,7 +276,7 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
     SELECT revision_number, TO_CHAR(coverage_from, 'YYYY-MM-DD') AS coverage_from,
            TO_CHAR(coverage_to, 'YYYY-MM-DD') AS coverage_to, rows
     FROM company_plan_revisions
-    WHERE organization_id = ${ctx.organizationId} AND scope_key = ${scopeKey}
+    WHERE organization_id = ${ctx.organizationId} AND scope_key = ${scopeKey} AND reverted_at IS NULL
       AND coverage_to >= ${from} AND coverage_from <= ${to}
     ORDER BY revision_number DESC
   `;
@@ -496,7 +496,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
   const priorSameFile = existingImport ?? (await sql`
     SELECT id, import_decision FROM imports
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${effectiveImportEmployeeId}
-      AND file_fingerprint = ${fileFingerprint} AND deleted_at IS NULL
+      AND file_fingerprint = ${fileFingerprint} AND deleted_at IS NULL AND reverted_at IS NULL
     ORDER BY created_at ASC LIMIT 1
   `)[0] ?? null;
   const sameFileDifferentDecision = Boolean(priorSameFile) && !planApplied && priorSameFile.import_decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN;
@@ -510,7 +510,7 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
     const sameDocument = (await sql`
       SELECT 1 AS found FROM imports
       WHERE organization_id = ${ctx.organizationId} AND document_fingerprint = ${evaluation.documentFingerprint}
-        AND import_decision = ${IMPORT_DECISION.HISTORICAL_AND_PLAN} AND deleted_at IS NULL LIMIT 1
+        AND import_decision = ${IMPORT_DECISION.HISTORICAL_AND_PLAN} AND deleted_at IS NULL AND reverted_at IS NULL LIMIT 1
     `).length > 0;
     duplicateKind = sameDocument ? 'DUPLICATE_DOCUMENT' : 'DUPLICATE_PLAN';
   }
@@ -602,6 +602,18 @@ export async function confirmFutureImport(sql, ctx, input = {}, attempt = 0) {
       AND NOT EXISTS (SELECT 1 FROM inserted)
     ORDER BY inserted DESC
     LIMIT 1
+  `);
+  // From here on every row this transaction writes is attributed to the import by the effect-ledger triggers (BEFORE/AFTER in the
+  // SAME transaction), and the organization's ledger writers are serialized with reversions.
+  labels.push('ledger-lock');
+  queries.push((txn) => txn`SELECT pg_advisory_xact_lock(hashtextextended(${`import-ledger:${ctx.organizationId}`}, 0))`);
+  labels.push('ledger-context');
+  queries.push((txn) => txn`
+    SELECT set_config('app.import_id', (
+      SELECT id::text FROM imports
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${effectiveImportEmployeeId}
+        AND file_fingerprint = ${fileFingerprint} AND context_fingerprint = ${contextFingerprint}
+      ORDER BY created_at ASC LIMIT 1), true)
   `);
 
   // DCF / observations travel with the document: persisted in the same transaction, linked to this import.

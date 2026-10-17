@@ -218,6 +218,8 @@ async function insertRows(client, table, rows) {
 // Source-system mappings and annotations are QA-local state: never copied, always cleared, so the baseline has no
 // implicit 6888 -> 84881 association (the E2E associates it explicitly through the admin action).
 const WIPE_ORDER = [
+  ['import_reversion_items', 'organization_id = $1'],
+  ['import_effects', 'organization_id = $1'],
   ['calendar_annotations', 'organization_id = $1'],
   ['employee_source_identifiers', 'organization_id = $1'],
   ['company_plan_revisions', 'organization_id = $1'],
@@ -232,6 +234,7 @@ const WIPE_ORDER = [
   ['schedule_versions', 'schedule_id IN (SELECT id FROM schedules WHERE organization_id = $1)'],
   ['schedules', 'organization_id = $1'],
   ['imports', 'organization_id = $1'],
+  ['import_reversions', 'organization_id = $1'],
   ['employee_annual_targets', 'organization_id = $1'],
   ['employees', 'organization_id = $1'],
   ['format_profiles', 'organization_id = $1'],

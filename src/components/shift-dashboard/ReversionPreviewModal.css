@@ -1,0 +1,26 @@
+/* Reversion preview: scope (what / related / kept), never the execution order. */
+.reversion { display: grid; gap: 12px; color: var(--text-primary); }
+.reversion__subtitle { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
+.reversion__muted { margin: 0; color: var(--text-muted); font-size: 0.84rem; line-height: 1.4; }
+.reversion__notice { margin: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--color-gold) 60%, transparent); background: color-mix(in srgb, var(--color-gold) 10%, transparent); font-size: 0.84rem; }
+.reversion__notice--error { border-color: var(--danger-border, var(--danger)); background: var(--danger-bg, transparent); }
+.reversion__metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.reversion__metric { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-soft); background: var(--panel-muted-bg, rgba(255,255,255,0.03)); }
+.reversion__metric strong { font-size: 1.5rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.reversion__metric span { font-size: 0.7rem; color: var(--text-muted); }
+.reversion__columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 10px; }
+.reversion__panel { padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border-soft); display: grid; gap: 6px; align-content: start; }
+.reversion__panel h4 { margin: 0; font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); font-weight: 800; }
+.reversion__panel ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 0.84rem; }
+.reversion__panel--related { border-color: color-mix(in srgb, var(--color-gold) 55%, transparent); background: color-mix(in srgb, var(--color-gold) 8%, transparent); }
+.reversion__panel--blocked { border-color: var(--danger-border, var(--danger)); background: var(--danger-bg, transparent); }
+.reversion__details { font-size: 0.78rem; color: var(--text-muted); }
+.reversion__details summary { cursor: pointer; }
+.reversion__reason { display: grid; gap: 4px; font-size: 0.78rem; color: var(--text-muted); }
+.reversion__footer { display: flex; justify-content: flex-end; gap: 10px; padding-top: 4px; }
+.reversion__footer .btn-gold { min-height: 42px; padding-inline: 22px; }
+@media (max-width: 640px) {
+  .reversion__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reversion__columns { grid-template-columns: minmax(0, 1fr); }
+  .reversion__footer { flex-direction: column-reverse; }
+}
