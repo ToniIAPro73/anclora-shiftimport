@@ -80,7 +80,7 @@
 .eff-status--no_data::before { content: '○ '; }
 
 /* Reconciliation */
-.recon-modal__header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.recon-modal__header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
 .recon-modal__icon { color: var(--color-gold); flex: 0 0 auto; }
 .recon-modal__title { margin: 0; font-size: 1.25rem; font-weight: 800; }
 .recon-modal__badge { padding: 3px 10px; border: 1px solid color-mix(in srgb, var(--color-gold) 50%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--color-gold) 14%, transparent); color: var(--text-primary); font-size: 0.76rem; font-weight: 800; white-space: nowrap; }
@@ -90,7 +90,7 @@
 .recon-list__head,
 .recon-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr) 104px 128px; align-items: center; column-gap: 16px; padding: 0 8px; }
 .recon-list__head { padding-bottom: 8px; color: var(--text-subtle); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; border-bottom: 1px solid var(--glass-border); }
-.recon-row { min-height: 62px; border-bottom: 1px solid var(--border-soft); font-size: 0.88rem; }
+.recon-row { min-height: 54px; padding-block: 6px; border-bottom: 1px solid var(--border-soft); font-size: 0.88rem; }
 .recon-row:last-child { border-bottom: 0; }
 .recon-row__date { font-variant-numeric: tabular-nums; }
 .recon-row__cell { min-width: 0; overflow-wrap: anywhere; color: var(--text-muted); }
@@ -103,7 +103,7 @@
 .eff-button--icon { width: 36px; padding: 0; justify-content: center; color: var(--color-gold); }
 .eff-button:hover { background: var(--shift-badge-hover-bg); }
 .eff-button--primary:hover { background: color-mix(in srgb, var(--color-gold) 88%, white); }
-.recon-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--glass-border); }
+.recon-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border); }
 .recon-pager__range { color: var(--text-muted); font-size: 0.84rem; font-weight: 700; }
 .recon-pager__pages { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
 .recon-pager__pages .eff-button { align-self: center; width: 34px; min-height: 34px; padding: 0; justify-content: center; }

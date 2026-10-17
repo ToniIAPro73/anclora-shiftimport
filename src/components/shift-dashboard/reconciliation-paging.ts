@@ -1,4 +1,4 @@
-export const RECONCILIATION_PAGE_SIZE = 5;
+export const RECONCILIATION_PAGE_SIZE = 4;
 
 /** 1 … 4 5 6 … 9: stable, compact page list. */
 export function pageWindow(current: number, total: number): Array<number | 'gap'> {

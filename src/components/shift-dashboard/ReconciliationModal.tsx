@@ -72,7 +72,7 @@ export function ReconciliationModal({
       onClose={onClose}
       title={t('reconModal.title')}
       hideHeader
-      maxWidth="860px"
+      maxWidth="920px"
       width="100%"
       className="recon-modal"
       closeAriaLabel={t('common.close')}

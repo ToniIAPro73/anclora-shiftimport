@@ -1493,7 +1493,22 @@ export async function resolveSourceIdentifier(sourceSystem: string, externalIden
   return apiFetch(`/api/employees/identifiers?sourceSystem=${encodeURIComponent(sourceSystem)}&externalIdentifier=${encodeURIComponent(externalIdentifier)}`);
 }
 
-/** ADMIN+: explicit association of a source number with an employee. Never inferred. */
-export async function createSourceIdentifierMapping(input: { employeeId: string; sourceSystem: string; externalIdentifier: string }) {
+export type SourceIdentityStatus = 'MAPPED' | 'CANONICAL' | 'CANDIDATE' | 'AMBIGUOUS' | 'NONE' | 'MISMATCH' | 'NOT_YOURS';
+export interface SourceIdentityEmployee { id: string; name: string; externalEmployeeId: string | null; status: string }
+export interface SourceIdentityResolution {
+  status: SourceIdentityStatus;
+  employee: SourceIdentityEmployee | null;
+  /** AMBIGUOUS: every exact name match (with its canonical id to tell them apart). MISMATCH: the employee the name points to. */
+  candidates: SourceIdentityEmployee[];
+}
+
+/** Mapping -> canonical id -> unique exact name (deterministic, server side, role aware). */
+export async function resolveSourceIdentity(input: { sourceSystem: string; externalIdentifier: string; documentName: string }): Promise<SourceIdentityResolution> {
+  const query = `sourceSystem=${encodeURIComponent(input.sourceSystem)}&externalIdentifier=${encodeURIComponent(input.externalIdentifier)}&documentName=${encodeURIComponent(input.documentName)}`;
+  return apiFetch<SourceIdentityResolution>(`/api/employees/identifiers?${query}`);
+}
+
+/** Explicit association of a source number with an employee (ADMIN+; an EMPLOYEE may only bind their own record). */
+export async function createSourceIdentifierMapping(input: { employeeId: string; sourceSystem: string; externalIdentifier: string; documentName?: string }) {
   return apiFetch<{ created: boolean } & SourceIdentifierResolution>('/api/employees/identifiers', { method: 'POST', body: JSON.stringify(input) });
 }

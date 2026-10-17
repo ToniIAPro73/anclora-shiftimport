@@ -67,12 +67,16 @@ describe('ReconciliationModal', () => {
     expect(screen.getByRole('tab', { name: 'Todos' })).toBeInTheDocument();
   });
 
-  it('paginates long lists (1–5 de 35) instead of rendering every row', () => {
+  it('paginates long lists 4 per page (1–4 de 35) instead of rendering every row', () => {
     renderModal(worklist(35));
-    expect(screen.getByTestId('recon-range')).toHaveTextContent('1–5 de 35');
-    expect(within(screen.getByTestId('recon-list')).getAllByRole('listitem')).toHaveLength(5);
-    fireEvent.click(screen.getByRole('button', { name: 'Página 7' }));
-    expect(screen.getByTestId('recon-range')).toHaveTextContent('31–35 de 35');
+    expect(screen.getByTestId('recon-range')).toHaveTextContent('1–4 de 35');
+    expect(within(screen.getByTestId('recon-list')).getAllByRole('listitem')).toHaveLength(4);
+    expect(screen.queryByTestId('recon-row-2026-01-05')).toBeNull(); // the fifth row is on page 2
+    fireEvent.click(screen.getByRole('button', { name: 'Página siguiente' }));
+    expect(screen.getByTestId('recon-range')).toHaveTextContent('5–8 de 35');
+    expect(within(screen.getByTestId('recon-list')).getAllByRole('listitem')[0]).toHaveAttribute('data-testid', 'recon-row-2026-01-05');
+    fireEvent.click(screen.getByRole('button', { name: 'Página 9' }));
+    expect(screen.getByTestId('recon-range')).toHaveTextContent('33–35 de 35');
     expect(screen.getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
   });
 

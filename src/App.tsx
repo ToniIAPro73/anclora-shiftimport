@@ -90,6 +90,7 @@ import { LanguageToggle } from './components/ui/LanguageToggle';
 import { ImportPeriod } from './lib/import-types';
 import type { DetectedTeamEmployee } from './ingestion/team-roster';
 import { normalizeText } from './ingestion/core/normalize';
+import { parseTrypCalendarExport } from './ingestion/adapters/tryp-calendar-export';
 import { loadFormatProfiles } from './lib/format-profiles';
 import { getFormatProfileStore } from './lib/format-profile-store';
 import { translateShiftTypeLabel } from './lib/i18n';
@@ -2478,9 +2479,15 @@ function App() {
             if (!session) {
               return null;
             }
+            if (session.role !== 'EMPLOYEE') {
+              // ADMIN/OWNER/PLANNER: the employee selected in the calendar is the import target; ID = canonical id from the database.
+              const selected = employees.find((employee) => employee.id === selectedEmployeeId);
+              return selected ? { name: selected.name, externalId: selected.externalEmployeeId ?? '' } : null;
+            }
             const self = employees.find((employee) => employee.id === session.employeeId);
             return self ? { name: self.name, externalId: self.externalEmployeeId ?? '' } : null;
           })()}
+          employeeTargetFixed={session?.role !== 'EMPLOYEE' && Boolean(adminIndividualImport?.employeeId ?? selectedEmployeeId) && employees.some((employee) => employee.id === (adminIndividualImport?.employeeId ?? selectedEmployeeId))}
           identityLocked={session?.role === 'EMPLOYEE'}
           canAssociateIdentity={session?.role === 'ADMIN' || session?.role === 'OWNER'}
           lockedEmployeeId={session?.employeeId ?? null}
@@ -2509,23 +2516,29 @@ function App() {
           areas={activeAreas}
           currentAreaId={effectiveAreaId}
           allowAreaChoice={isAdminRole(session.role)}
-          onSingleEmployeeDetected={(file, employee) => {
+          onSingleEmployeeDetected={async (file, employee) => {
+            // TRYP individual exports (Calendario empleado / publicado, sheet "Leyenda") carry the source system's payroll
+            // code, which is an ALIAS: never the canonical id. The employee selected in the calendar is the import target;
+            // the identity panel then resolves the document's alias against it (explicit association, never silent).
+            const trypExport = await parseTrypCalendarExport(file).catch(() => null);
+            const selectedTarget = trypExport ? employees.find((candidate) => candidate.id === selectedEmployeeId) ?? null : null;
             const matching = employees.filter((candidate) => (
               employee.externalEmployeeId
                 ? candidate.externalEmployeeId === employee.externalEmployeeId
                 : normalizeText(candidate.name) === normalizeText(employee.name)
             ));
-            const resolved = matching.length === 1 ? matching[0] : null;
-            if (resolved) {
+            const resolved = trypExport ? selectedTarget : (matching.length === 1 ? matching[0] : null);
+            if (resolved && !trypExport) {
               setSelectedEmployeeId(resolved.id);
             }
             setAdminIndividualImport({
               file,
               employee: {
                 ...employee,
-                // The application directory is authoritative. Never copy an
-                // identifier from an informational worksheet into this path.
-                externalEmployeeId: resolved?.externalEmployeeId ?? employee.externalEmployeeId,
+                name: resolved?.name ?? employee.name,
+                // The application directory is authoritative. Never copy an identifier from an informational worksheet
+                // (nor a source-system alias such as a TRYP payroll code) into this path.
+                externalEmployeeId: resolved ? (resolved.externalEmployeeId ?? '') : (trypExport ? '' : employee.externalEmployeeId),
               },
               employeeId: resolved?.id ?? null,
             });

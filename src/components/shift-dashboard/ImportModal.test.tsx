@@ -35,7 +35,7 @@ const apiFetchMock = vi.fn();
 // The source-identity gate asks the API which employee a TRYP payroll number belongs to; here it is explicitly mapped.
 vi.mock('../../lib/remote', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/remote')>()),
-  resolveSourceIdentifier: vi.fn().mockResolvedValue({ mapped: true, employee: { id: 'emp-1', name: 'Sebastian Pozo Mendoza', externalEmployeeId: '84881', status: 'active' } }),
+  resolveSourceIdentity: vi.fn().mockResolvedValue({ status: 'MAPPED', employee: { id: 'emp-1', name: 'Sebastian Pozo Mendoza', externalEmployeeId: '84881', status: 'active' }, candidates: [] }),
 }));
 vi.mock('../../lib/session', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/session')>();
@@ -132,6 +132,7 @@ function renderImportModal(
     organizationId?: string | null;
     existingShifts?: Shift[];
     isImporting?: boolean;
+    employeeTargetFixed?: boolean;
   } = {},
 ) {
   localStorage.setItem('anclora_shiftimport_locale_v1', locale);
@@ -148,6 +149,7 @@ function renderImportModal(
         organizationId={options.organizationId ?? null}
         existingShifts={options.existingShifts}
         isImporting={options.isImporting}
+        employeeTargetFixed={options.employeeTargetFixed}
       />
     </I18nProvider>,
   );
@@ -198,6 +200,19 @@ describe('ImportModal', () => {
     renderImportModal('es', onClose);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ImportModal target (canonical ShiftImport identity)', () => {
+  it('8: the selected employee fills Nombre and the CANONICAL id (84881), read-only; the document alias never replaces it', () => {
+    renderImportModal('es', () => {}, { employeePreset: { name: 'Sebastián Pozo Mendoza — QA', externalId: '84881' }, employeeTargetFixed: true });
+    const name = screen.getByTestId('import-target-name') as HTMLInputElement;
+    const id = screen.getByTestId('import-target-id') as HTMLInputElement;
+    expect(name.value).toBe('Sebastián Pozo Mendoza — QA');
+    expect(id.value).toBe('84881');
+    expect(name.readOnly).toBe(true);
+    expect(id.readOnly).toBe(true);
+    expect(id.value).not.toBe('6888');
   });
 });
 

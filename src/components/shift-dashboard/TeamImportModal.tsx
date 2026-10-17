@@ -77,7 +77,7 @@ interface TeamImportModalProps {
   /** ADMIN with 2+ areas may choose import target. */
   allowAreaChoice?: boolean;
   /** Automatic dispatcher handoff for a workbook containing one employee. */
-  onSingleEmployeeDetected?: (file: File, employee: DetectedTeamEmployee) => void;
+  onSingleEmployeeDetected?: (file: File, employee: DetectedTeamEmployee) => void | Promise<void>;
   isImporting?: boolean;
   onImportStateChange?: (importing: boolean) => void;
 }
@@ -486,7 +486,7 @@ export const TeamImportModal = ({
       setRowDiagnostics(detection.diagnostics ?? []);
 
       if (detectImportFlow(detection.employees) === 'individual' && onSingleEmployeeDetected) {
-        onSingleEmployeeDetected(file, detection.employees[0]);
+        await onSingleEmployeeDetected(file, detection.employees[0]);
         return;
       }
 

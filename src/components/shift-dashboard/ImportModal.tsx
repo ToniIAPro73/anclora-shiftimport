@@ -81,6 +81,8 @@ interface ImportModalProps {
   identityLocked?: boolean;
   /** ADMIN/OWNER: may explicitly associate a source-system number with an employee. */
   canAssociateIdentity?: boolean;
+  /** Name/ID show the EMPLOYEE SELECTED in ShiftImport (canonical id from the database): informative, not editable. */
+  employeeTargetFixed?: boolean;
   /** Employee linked to the account (EMPLOYEE role): the only acceptable target. */
   lockedEmployeeId?: string | null;
   /** Current authenticated user ID for user-scoped profile loading. */
@@ -320,7 +322,7 @@ function ModalSelect({
   );
 }
 
-export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, canAssociateIdentity = false, lockedEmployeeId = null, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
+export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, existingShifts = [], initialFile = null, employeePreset = null, identityLocked = false, canAssociateIdentity = false, employeeTargetFixed = false, lockedEmployeeId = null, userId = null, organizationId = null, areas = [], currentAreaId = null, allowAreaChoice = false, isImporting = false, onImportStateChange, isAuthenticated = true }: ImportModalProps) => {
   const { locale, t, tl } = useI18n();
   const formatProfileStore = useMemo(() => getFormatProfileStore(organizationId), [organizationId]);
   const monthOptions = tl('calendar.months');
@@ -1289,14 +1291,14 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                     {employeeName}
                   </span>
                 ) : (
-                  <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder={t('importModal.namePlaceholder')} style={{ padding: '10px 12px' }} />
+                  <input className="modal-input" type="text" value={employeeName} onChange={(event) => setEmployeeName(event.target.value)} placeholder={t('importModal.namePlaceholder')} readOnly={employeeTargetFixed} data-testid="import-target-name" style={{ padding: '10px 12px' }} />
                 )}
               </label>
 
               {!identityLocked && (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                   <span>{t('importModal.idLabel')}</span>
-                  <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder={t('importModal.idPlaceholder')} style={{ padding: '10px 12px' }} />
+                  <input className="modal-input" type="text" value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} placeholder={t('importModal.idPlaceholder')} readOnly={employeeTargetFixed} data-testid="import-target-id" style={{ padding: '10px 12px' }} />
                 </label>
               )}
 
@@ -1927,9 +1929,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 sourceSystem={analysis.source.system}
                 identifier={analysis.source.identifier}
                 documentName={analysis.source.employeeName}
-                canAssociate={canAssociateIdentity && !identityLocked}
+                canPickManually={canAssociateIdentity && !identityLocked}
                 lockedEmployeeId={identityLocked ? lockedEmployeeId : null}
-                presetEmployeeId={null}
                 onResolved={setSourceEmployee}
               />
             )}

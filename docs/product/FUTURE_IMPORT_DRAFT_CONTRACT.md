@@ -106,3 +106,19 @@ total o parcialmente sus turnos y no existe baseline versionado para el ámbito,
 - La revisión guarda autor, import, cobertura, huellas y, en `summary`, `sourceKind` e `initialBaseline` (auditoría).
 - Reimportar el mismo documento/plan es `DUPLICATE_FILE` / `DUPLICATE_DOCUMENT` / `DUPLICATE_PLAN`; dos confirmaciones
   simultáneas crean exactamente una revisión. El historial lo muestra como «Plan Empresa inicial».
+
+### Identidad canónica vs alias de origen (XLSX individuales TRYP)
+
+Dos identidades que no se mezclan: la **canónica de ShiftImport** (nombre + `employees.external_employee_id`, p. ej. 84881) y el
+**alias de la fuente** (código de nómina de la hoja `Leyenda`, p. ej. 6888, en `employee_source_identifiers`, sistema
+`TRYP_EMPLOYEE_CALENDAR`, compartido por «Calendario empleado» y «Calendario publicado»). El alias nunca sustituye al ID
+canónico ni se muestra como ID del empleado.
+
+- El empleado seleccionado en el calendario es el destino inicial: el modal muestra su nombre y su ID canónico (solo lectura).
+- Resolución (servidor, determinista): alias asociado → ID canónico → nombre exacto único (normalizado: mayúsculas, acentos,
+  puntuación, espacios; sin fuzzy). En el QA Mirror se ignora únicamente el sufijo « — QA» propio del mirror.
+- Nombre único sin alias: se **propone** el empleado y se pide «Asociar y continuar»; solo tras persistir y releer la
+  asociación se abre la importación. Varios candidatos o ninguno → selección manual. Alias asociado a A pero nombre de B →
+  bloqueo (`MISMATCH`).
+- EMPLOYEE: auto-asociación solo de su propio registro (XLSX individual validado, nombre que lo identifica sin ambigüedad);
+  nunca a otro empleado; solo importa histórico (el futuro se excluye, sin escrituras de planificación).
