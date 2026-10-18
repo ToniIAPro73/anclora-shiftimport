@@ -50,6 +50,17 @@ export function humanizeReason(reason: string | null | undefined): string | null
   return kind === 'text' ? text : null;
 }
 
+type SnapshotRow = { shiftType?: string | null; startTime?: string | null; endTime?: string | null; type?: string | null; start?: string | null; end?: string | null };
+
+/** Audit snapshots may store a row as {type,start,end} (migration / system sources) or {shiftType,startTime,endTime}: read both. */
+export function normalizeChangeRows(rows: readonly SnapshotRow[] = []): Array<{ shiftType: string; startTime: string | null; endTime: string | null }> {
+  return rows.map((row) => ({
+    shiftType: String(row.shiftType ?? row.type ?? ''),
+    startTime: row.startTime ?? row.start ?? null,
+    endTime: row.endTime ?? row.end ?? null,
+  }));
+}
+
 type DayRow = { shiftType?: string | null; startTime?: string | null; endTime?: string | null; countsAsWork?: boolean | null };
 
 /** Visible business state of a day before / after a change: ids, imports, order and provenance never count. */

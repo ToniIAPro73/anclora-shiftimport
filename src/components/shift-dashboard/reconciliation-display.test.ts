@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyReason, cleanReason, hasSemanticDayChange, humanizeReason, summarizeReason } from './reconciliation-display';
+import { classifyReason, cleanReason, hasSemanticDayChange, humanizeReason, normalizeChangeRows, summarizeReason } from './reconciliation-display';
 import { reconciliationPageSize } from './reconciliation-paging';
 
 describe('reconciliation reason display', () => {
@@ -51,5 +51,14 @@ describe('one interpretation of legacy reasons (presentation only)', () => {
     expect(reconciliationPageSize(650)).toBe(3);
     expect(reconciliationPageSize(500)).toBe(2);
     expect(reconciliationPageSize(undefined)).toBe(4);
+  });
+});
+
+describe('audit snapshot rows', () => {
+  it('reads both stored shapes ({type,start,end} and {shiftType,startTime,endTime})', () => {
+    expect(normalizeChangeRows([{ type: 'Vacaciones', start: null, end: null }])).toEqual([{ shiftType: 'Vacaciones', startTime: null, endTime: null }]);
+    expect(normalizeChangeRows([{ shiftType: 'Regular', startTime: '05:00', endTime: '13:00' }])).toEqual([{ shiftType: 'Regular', startTime: '05:00', endTime: '13:00' }]);
+    expect(hasSemanticDayChange(normalizeChangeRows([{ type: 'Vacaciones' }]), normalizeChangeRows([{ type: 'Vacaciones' }]))).toBe(false);
+    expect(hasSemanticDayChange(normalizeChangeRows([{ type: 'Vacaciones' }]), normalizeChangeRows([{ type: 'Libre' }]))).toBe(true);
   });
 });

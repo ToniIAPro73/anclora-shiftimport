@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { loadDayHistory, reconcileCalendarDayRemote, type RemoteDayHistory } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import type { NormalizedCalendarRow } from '../../lib/effective-calendar.js';
-import { classifyReason, hasSemanticDayChange, uniqueKeepOptions } from './reconciliation-display';
+import { classifyReason, hasSemanticDayChange, normalizeChangeRows, uniqueKeepOptions } from './reconciliation-display';
 
 interface DayProvenancePanelProps {
   employeeId: string;
@@ -90,8 +90,9 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
     const { kind, text } = classifyReason(reason);
     return kind === 'matchesCalendar' ? t('dayHistory.reasonMatchesCalendar') : kind === 'automatic' ? t('dayHistory.reasonAutomatic') : text;
   };
-  const renderChange = (change: (typeof changes)[number]) => {
-    const rowsHaveData = [...change.before, ...change.after].every((row) => typeof row?.shiftType === 'string');
+  const renderChange = (source: (typeof changes)[number]) => {
+    const change = { ...source, before: normalizeChangeRows(source.before), after: normalizeChangeRows(source.after) };
+    const rowsHaveData = [...change.before, ...change.after].every((row) => row.shiftType !== '');
     // History is not the same as a change: before === after (ignoring ids / provenance) is a technical event only.
     const visibleChange = rowsHaveData ? hasSemanticDayChange(change.before, change.after) : true;
     if (!visibleChange && change.actorRole === 'SYSTEM') {
@@ -102,7 +103,6 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
             <strong>{t('dayHistory.automaticCheck')}</strong>
             <span>{formatWhen(change.createdAt)}</span>
           </div>
-          <div className="day-history__change-who">{t('dayHistory.systemCheck')}</div>
           <div className="day-history__change-reason">{t('dayHistory.noChange')} · {kind === 'text' ? reasonText(change.reason) : t('dayHistory.reasonMatchesCalendar')}</div>
         </li>
       );

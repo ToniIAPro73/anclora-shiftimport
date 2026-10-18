@@ -128,8 +128,11 @@ describe('pending difference choices (17/09 equivalent)', () => {
 describe('day history: a technical check is not a change (16/07 equivalent)', () => {
   const noChange = (reason: string) => ({
     id: 'sys1', changeType: 'RECONCILIATION', createdAt: '2026-10-16T15:50:40Z', actorRole: 'SYSTEM', actorName: null, selfChange: false, reason,
-    before: [{ shiftType: 'Vacaciones', startTime: null, endTime: null }], after: [{ shiftType: 'Vacaciones', startTime: null, endTime: null }],
+    // the stored audit snapshot shape of the real 16/07 row: {id,type,start,end} → {type,start,end}
+    before: [{ id: 'r1', type: 'Vacaciones', start: null, end: null }], after: [{ type: 'Vacaciones', start: null, end: null }],
   });
+  const textOf = (el: HTMLElement) => (el.textContent ?? '').toLowerCase();
+  const count = (el: HTMLElement, needle: string) => textOf(el).split(needle).length - 1;
   const dayOf = (changes: unknown[]) => ({
     provenance: { requiresReview: false, effective: [row('e', 'Vacaciones', null, null)], companyOriginal: [], companyCurrent: [], revisions: [], legacyDutyRows: [] },
     changes, rows: [],
@@ -142,7 +145,8 @@ describe('day history: a technical check is not a change (16/07 equivalent)', ()
     const item = await screen.findByTestId('day-history-change-sys1');
     expect(item.getAttribute('data-semantic-change')).toBe('false');
     expect(item).toHaveTextContent('Comprobación automática');
-    expect(item).toHaveTextContent('Sistema · comprobación automática');
+    expect(count(item, 'comprobación automática')).toBe(1); // not "Comprobación automática · Sistema · comprobación automática"
+    expect(textOf(item)).not.toContain('sistema');
     expect(item).toHaveTextContent('Sin cambios');
     expect(item).toHaveTextContent('La información ya coincidía con el calendario.');
     expect(container.textContent).not.toMatch(/Reconciled|HIGH|run |1acfbb93|company calendar|ajuste de datos|Vacaciones → Vacaciones/i);
@@ -155,13 +159,15 @@ describe('day history: a technical check is not a change (16/07 equivalent)', ()
     const { container } = renderPanel();
     const item = await screen.findByTestId('day-history-change-sys1');
     expect(item).toHaveTextContent('Automatic check');
-    expect(item).toHaveTextContent('System · automatic check');
+    expect(count(item, 'automatic check')).toBe(1);
+    expect(textOf(item)).not.toContain('system');
+    expect(item).toHaveTextContent('No changes');
     expect(item).toHaveTextContent('The information already matched the calendar.');
     expect(container.textContent).not.toMatch(/Reconciled|HIGH|1acfbb93|company calendar/);
   });
 
   it('a REAL change keeps its before → after diff and its (humanized) reason', async () => {
-    loadDayHistory.mockResolvedValue(dayOf([{ ...noChange('Marked REQUIRES_REVIEW (LOW): x'), id: 'real1', after: [{ shiftType: 'Libre', startTime: null, endTime: null }] }]));
+    loadDayHistory.mockResolvedValue(dayOf([{ ...noChange('Marked REQUIRES_REVIEW (LOW): x'), id: 'real1', after: [{ type: 'Libre', start: null, end: null }] }]));
     const { container } = renderPanel();
     const item = await screen.findByTestId('day-history-change-real1');
     expect(item.getAttribute('data-semantic-change')).toBe('true');
