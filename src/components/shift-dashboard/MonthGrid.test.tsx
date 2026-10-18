@@ -388,3 +388,22 @@ describe('MonthGrid cell capacity with a pending difference', () => {
     expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
   });
 });
+
+describe('MonthGrid planning drafts', () => {
+  it('shows a draft as a marked, read-only row: click opens the day, never the editor', async () => {
+    const onEditShift = vi.fn();
+    const draft = { id: 'draft:a1', date: '2026-11-25', startTime: '14:00', endTime: '22:00', location: 'Regular', origin: 'IMP', shiftType: 'Regular', isDraft: true } as Shift;
+    render(
+      <I18nProvider>
+        <MonthGrid year={2026} month={10} shifts={[draft]} onEditShift={onEditShift} onCreateShift={vi.fn()} />
+      </I18nProvider>,
+    );
+    const badge = document.querySelector('.month-shift-badge.is-draft') as HTMLElement;
+    expect(badge).not.toBeNull();
+    expect(badge.textContent).toContain('Borrador');
+    fireEvent.click(badge);
+    expect(onEditShift).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
+    expect(screen.queryByTestId('edit-shift-btn-draft:a1')).toBeNull();
+  });
+});

@@ -52,8 +52,11 @@ describe('user-facing vocabulary (ES + EN)', () => {
 
   it('T9: future shifts go to Planning as a draft and are never published automatically', () => {
     expect(translate('es', 'importModal.sourceUsageFuture')).toContain('No se publicarán automáticamente');
-    expect(translate('es', 'importModal.planDraftNote')).toContain('no se publican automáticamente');
-    expect(translate('es', 'importModal.planOptionHistoricalAndPlan')).toBe('Importar anteriores y añadir los futuros a Planificación');
+    expect(translate('es', 'importModal.planDraftNote')).toBe('Los turnos futuros se añadirán a Planificación como borrador. No se publicarán automáticamente.');
+    expect(translate('es', 'importModal.planDraftNoteFutureOnly')).toBe('Se crearán como borrador para que puedas revisarlos antes de publicarlos.');
+    expect(translate('es', 'importModal.selfFutureMixed')).toBe('Este archivo también contiene turnos futuros. Solo se importarán los turnos anteriores a hoy.');
+    expect(translate('es', 'importModal.selfFutureOnly')).toBe('Este archivo solo contiene turnos futuros. Los empleados solo pueden importar turnos históricos.');
+    expect(translate('es', 'importModal.planOptionHistoricalAndPlan')).toBe('Importar también los turnos futuros');
   });
 
   it('T10: history events are phrased as happenings, not revision numbers', () => {

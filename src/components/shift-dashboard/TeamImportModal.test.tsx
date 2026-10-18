@@ -148,8 +148,8 @@ describe('TeamImportModal (role-aware: ADMIN/MANAGER multi-employee import)', ()
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     await waitFor(() => expect(screen.getByText('Resumen antes de importar')).toBeTruthy());
 
-    expect(screen.queryByRole('radio', { name: /Importar solo anteriores/ })).toBeNull(); // future-only document
-    const draft = screen.getByRole('radio', { name: /Añadir los futuros a Planificación/ });
+    expect(screen.queryByRole('radio', { name: /Importar solo los turnos anteriores/ })).toBeNull(); // future-only document
+    const draft = screen.getByRole('radio', { name: /Añadir los turnos a Planificación/ });
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }));
     await waitFor(() => expect(screen.getByText(/No hay turnos históricos que importar/)).toBeTruthy());
     expect(mockedConfirmRemoteFutureImport).not.toHaveBeenCalled();

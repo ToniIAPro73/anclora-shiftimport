@@ -71,6 +71,17 @@ fichero), **clase temporal** (fechas que contiene) y **clase de negocio** (qué 
 | `PUBLISHED_CALENDAR_EXPORT` | `Calendario = Publicado` | **instantánea básica** del mismo calendario individual (clase `EMPLOYEE_CALENDAR_SNAPSHOT`); ya no es fuente de Plan Empresa ni de línea base |
 | `TEAM_SCHEDULE_EXPORT` | estructura de equipo (PDF/XLSX multiempleado con nómina) | clase `TEAM_PLANNING`: pasado = evidencia del calendario, futuro = Planificación como BORRADOR (nunca se publica solo); usa `company_plan_revisions` como detalle interno/legacy |
 
+**Regla temporal canónica (2026-10-18).** Las fechas históricas importadas alimentan el Calendario. Para OWNER, ADMIN y PLANNER
+autorizados (capacidad `PLANNER`, dentro de su ámbito), las fechas futuras de **cualquiera de los tres formatos** pueden añadirse
+opcionalmente a Planificación como borrador (`futureConsent = 'historical-and-plan'`; sin decisión → 0 escrituras futuras,
+`FUTURE_IMPORT_CONSENT_REQUIRED`). Importar nunca publica. EMPLOYEE solo importa datos históricos propios: el servidor rechaza
+cualquier intento de planificación futura (`SELF_IMPORT_FUTURE_FORBIDDEN`) aunque se fuerce la decisión; la UI solo informa
+(«Solo se importarán los turnos anteriores a hoy»). El **tipo de documento** (clase de negocio) y el **destino de una fecha**
+(ruteo temporal) son dimensiones independientes: que una fila futura de un XLSX vaya a Planificación no convierte el XLSX en
+Plan Empresa ni crea `company_plan_revisions`. El Calendario muestra los borradores del mes del empleado como filas de solo
+lectura marcadas «Borrador» (nunca como turnos publicados); se revisan y publican desde Planificación.
+Prueba dirigida: `scripts/qa/future-routing-e2e.mjs`.
+
 La clasificación vive en un único lugar: `api/_lib/source-class.js` (`getSourceBusinessClass`). Las dos instantáneas se tratan como el mismo modelo de calendario: si coinciden → sin cambios (no duplica); si una solo añade DCF/observaciones → enriquece el día; si hay diferencia real de turno/estado → política segura existente (`EVIDENCE_APPLIED` solo sobre días de plan puro, si no `REQUIRES_REVIEW`); un día ausente en una instantánea nunca se interpreta como orden de borrado. Las filas futuras de una instantánea, si las hay, entran como borrador de Planificación (no existe otra vía de escritura futura al calendario) y no crean revisión.
 
 - La evidencia de un calendario de empleado **no** cambia el `PLAN_FINGERPRINT` ni crea revisión; solo las filas de plan lo hacen.

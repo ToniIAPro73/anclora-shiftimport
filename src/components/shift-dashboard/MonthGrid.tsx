@@ -110,6 +110,11 @@ export const MonthGrid = ({
   };
 
   const handleShiftPress = (shift: Shift) => {
+    // Planning drafts are reviewed and published from Planning; from the Calendar they only open the day.
+    if (shift.isDraft) {
+      setSelectedDayDetailDate(shift.date);
+      return;
+    }
     if (!isTouchUi) {
       onEditShift(shift.id);
       return;
@@ -129,7 +134,7 @@ export const MonthGrid = ({
     const shiftType = translateShiftTypeLabel(shiftTypeId, locale, shiftTypeId);
     const shiftOrigin = getShiftOrigin(shift);
     const hasTimes = hasShiftTimes(shift);
-    const originPrefix = shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
+    const originPrefix = shift.isDraft ? t('calendar.draftBadge') : shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
     const isExpanded = expandedShiftId === shift.id;
 
     return (
@@ -138,7 +143,8 @@ export const MonthGrid = ({
         key={shift.id}
         data-shift-type={shiftTypeId}
         data-shift-visual={getShiftVisualTokenKey(shiftTypeId)}
-        className={isExpanded ? 'month-shift-badge is-expanded' : 'month-shift-badge'}
+        className={`month-shift-badge${isExpanded ? ' is-expanded' : ''}${shift.isDraft ? ' is-draft' : ''}`}
+        data-draft={shift.isDraft || undefined}
         onClick={(event) => {
           event.stopPropagation();
           handleShiftPress(shift);

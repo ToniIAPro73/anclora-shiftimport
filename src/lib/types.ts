@@ -36,6 +36,8 @@ export interface Shift {
   hasHistory?: boolean;
   /** Import-time annotations (DCF incidence, observations) that travel with the row; persisted separately. */
   annotations?: ImportAnnotation[];
+  /** Read-only planning DRAFT row shown in the Calendar (a shift_assignment, never a published shift). */
+  isDraft?: boolean;
 }
 
 export interface ShiftWithDerived extends Shift {

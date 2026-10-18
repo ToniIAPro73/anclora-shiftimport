@@ -62,7 +62,7 @@ test.describe('source-aware import UI, desktop + mobile (QA mirror, real TRYP em
     await expect(page.getByTestId('source-identity-panel')).toBeVisible();
     await expect(page.getByTestId('import-future-consent')).toBeAttached();
     await scrollIntoReach(page, 'import-future-consent');
-    const radio = page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ });
+    const radio = page.getByRole('radio', { name: /Importar también los turnos futuros/ });
     await expect(radio).toBeInViewport();
     await radio.check();
     await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publican automáticamente');
@@ -85,8 +85,8 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     await expect(consent).toContainText('turnos anteriores y futuros');
     await expect(page.getByTestId('import-future-consent-counts')).toContainText(/Turnos anteriores: \d+ · Turnos futuros: \d+/);
     // safe default: historical only; the plan option is explicit
-    await expect(page.getByRole('radio', { name: /Importar solo anteriores/ })).toBeChecked();
-    await page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ }).check();
+    await expect(page.getByRole('radio', { name: /Importar solo los turnos anteriores/ })).toBeChecked();
+    await page.getByRole('radio', { name: /Importar también los turnos futuros/ }).check();
     await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publican automáticamente');
     expect(await page.getByTestId('import-future-consent').innerText()).not.toMatch(/publicar|[0-9a-f]{8}-[0-9a-f]{4}/i);
     await consent.screenshot({ path: shot('import-xlsx-mixed-consent') });
@@ -106,7 +106,7 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     await expect(consent).toBeVisible({ timeout: 90_000 });
     await expect(consent).toContainText(/turnos futuros/i);
     // the PDF's earlier rows age into the past as time passes: the document may be FUTURE-only or MIXED
-    await page.getByRole('radio', { name: /añadir los futuros a Planificación/i }).first().check();
+    await page.getByRole('radio', { name: /Importar también los turnos futuros|Añadir los turnos a Planificación/i }).first().check();
     await expect(page.getByTestId('team-import-future-consent-document-class')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('team-import-future-consent-changes')).toBeVisible();
     await consent.screenshot({ path: shot('import-pdf-future-consent') }); // the decision block only: no employee names

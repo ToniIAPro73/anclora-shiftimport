@@ -63,7 +63,7 @@ export const FutureImportConsent = ({
       </label>
       {decision === 'historical-and-plan' && (
         <div data-testid={`${testId}-plan-summary`} style={{ display: 'grid', gap: '6px', padding: '10px', borderRadius: '8px', background: 'var(--panel-muted-bg)', fontSize: '0.82rem' }}>
-          <span>{t('importModal.planDraftNote')}</span>
+          <span>{t(mixed ? 'importModal.planDraftNote' : 'importModal.planDraftNoteFutureOnly')}</span>
           {previewLoading && <span role="status" style={{ color: 'var(--text-subtle)' }}>{t('importModal.planPreviewLoading')}</span>}
           {preview && (
             <>

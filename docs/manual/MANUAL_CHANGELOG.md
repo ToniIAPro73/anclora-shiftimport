@@ -1,5 +1,13 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-10-18 (c) · turnos futuros
+
+- Si el archivo (cualquiera de los tres tipos) contiene turnos futuros, OWNER, ADMIN y PLANNER eligen entre **Importar solo los turnos anteriores** e **Importar también los turnos futuros** (que se añaden a Planificación como borrador; no se publican). Si todo el archivo es futuro: **Añadir los turnos a Planificación**.
+- Los empleados solo importan turnos anteriores a hoy; el aviso lo explica.
+- El resultado distingue **turnos anteriores importados** y **turnos futuros añadidos a Planificación** (en borrador).
+- El Calendario muestra esos borradores con la etiqueta **Borrador** hasta que se publican desde Planificación.
+- Las capturas y el PDF del manual deben regenerarse.
+
 ## Actualización 2026-10-18 (b) · documentos y diferencias
 
 - **Mensual publicado** y **Calendario del empleado** se explican como el mismo calendario individual (el segundo con información adicional: incidencias, DCF, observaciones). Ya no existe «referencia inicial de la empresa»: se compara con el calendario actual y lo ambiguo va a **Diferencias**.

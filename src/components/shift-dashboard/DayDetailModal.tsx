@@ -114,7 +114,7 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
     const shiftOrigin = getShiftOrigin(shift);
     const hasTimes = hasShiftTimes(shift);
     const duration = formatDuration(shift.startTime, shift.endTime);
-    const originLabel = shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
+    const originLabel = shift.isDraft ? t('calendar.draftBadge') : shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
     const isConfirming = confirmDeleteId === shift.id;
 
     return (
@@ -124,6 +124,7 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
         data-shift-type={shiftTypeId}
         data-shift-visual={getShiftVisualTokenKey(shiftTypeId)}
         data-testid={`day-detail-item-${shift.id}`}
+        data-draft={shift.isDraft || undefined}
       >
         <div className="day-detail-item-info">
           <div className="day-detail-item-primary">
@@ -178,7 +179,7 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
           )}
         </div>
 
-        {!isConfirming && (
+        {!isConfirming && !shift.isDraft && (
           <div className="day-detail-item-actions">
             <button
               type="button"

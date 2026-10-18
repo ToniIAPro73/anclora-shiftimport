@@ -1941,7 +1941,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   data-testid="import-self-future-notice"
                   style={{ marginTop: '12px', padding: '12px', border: '1px solid var(--glass-border)', borderRadius: '10px', color: 'var(--text-muted)', lineHeight: 1.45 }}
                 >
-                  {t('importModal.selfFutureDraftExcluded', { count: temporalSummary.future })}
+                  {t(temporalSummary.historical > 0 ? 'importModal.selfFutureMixed' : 'importModal.selfFutureOnly')}
                 </div>
               ) : (
                 <FutureImportConsent

@@ -2899,6 +2899,10 @@ select:disabled {
   z-index: 1;
 }
 
+.month-shift-badge.is-draft {
+  border: 1px dashed color-mix(in srgb, currentColor 55%, transparent);
+}
+
 .month-shift-badge.is-expanded {
   white-space: normal;
   overflow: visible;

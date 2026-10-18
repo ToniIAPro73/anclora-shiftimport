@@ -372,8 +372,8 @@ La interfaz distingue el resultado del análisis y el resultado de guardar. «Li
 
 Si tienes permiso para planificar, un archivo con fechas de hoy o posteriores ofrece dos opciones:
 
-- **Importar solo los turnos históricos:** guarda los anteriores a hoy; los demás quedan fuera.
-- **Importar históricos y añadir los futuros a planificación en borrador:** separa las fechas; los futuros quedan pendientes de publicación.
+- **Importar solo los turnos anteriores:** guarda los anteriores a hoy; los demás quedan fuera.
+- **Importar también los turnos futuros:** separa las fechas; los futuros se añaden a Planificación como borrador y quedan pendientes de publicación (si el archivo solo trae futuros, la opción es **Añadir los turnos a Planificación**).
 
 ![Decisión sobre fechas futuras: crear borradores no publica los turnos automáticamente](screenshots/future-decision-dark.png)
 

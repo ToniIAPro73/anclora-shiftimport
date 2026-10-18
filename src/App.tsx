@@ -36,6 +36,7 @@ import {
   listRemoteApprovalRequests,
   listRemoteEmployees,
   listRemoteScheduleVersions,
+  loadRemoteScheduleSnapshot,
   loadAnnualTargets,
   loadCalendarAnnotations,
   saveImportAnnotations,
@@ -749,6 +750,53 @@ function App() {
   const activeEmployeeId = session
     ? (selectedEmployeeId ?? session.employeeId ?? null)
     : null;
+  // Planning DRAFT rows of the visible month for the working employee: read-only, never published shifts.
+  const [draftShifts, setDraftShifts] = useState<Shift[]>([]);
+  useEffect(() => {
+    if (!session || session.role === 'EMPLOYEE' || needsOrgChoice || !activeEmployeeId) {
+      setDraftShifts([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const firstDay = monthDays[0];
+    const lastDay = monthDays[monthDays.length - 1];
+    void (async () => {
+      try {
+        const versions = (await listRemoteScheduleVersions(effectiveAreaId))
+          .filter((version) => version.status === 'DRAFT' && version.periodEnd >= firstDay && version.periodStart <= lastDay);
+        const snapshots = await Promise.all(versions.map((version) => loadRemoteScheduleSnapshot(version.scheduleId, version.id)));
+        if (cancelled) return;
+        const rows: Shift[] = [];
+        for (const snapshot of snapshots) {
+          for (const assignment of snapshot.assignments) {
+            if (assignment.employeeId !== activeEmployeeId || assignment.date < firstDay || assignment.date > lastDay) continue;
+            rows.push({
+              id: `draft:${assignment.id}`,
+              date: assignment.date,
+              startTime: assignment.startTime ?? '',
+              endTime: assignment.endTime ?? '',
+              shiftType: assignment.shiftType ?? null,
+              countsAsWork: assignment.countsAsWork ?? null,
+              location: assignment.location ?? '',
+              origin: 'IMP',
+              employeeId: assignment.employeeId,
+              isDraft: true,
+            });
+          }
+        }
+        setDraftShifts(rows);
+      } catch {
+        if (!cancelled) setDraftShifts([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [session, needsOrgChoice, activeEmployeeId, effectiveAreaId, monthDays, shifts, editableScheduleDates]);
+  // A draft that equals a shift already in the calendar is not shown twice.
+  const calendarShifts = useMemo(() => {
+    const key = (shift: Shift) => `${shift.date}|${shift.shiftType ?? ''}|${shift.startTime}|${shift.endTime}`;
+    const existing = new Set(currentMonthShifts.map(key));
+    return [...currentMonthShifts, ...draftShifts.filter((draft) => !existing.has(key(draft)))];
+  }, [currentMonthShifts, draftShifts]);
   const [annualTargets, setAnnualTargets] = useState<RemoteAnnualTarget[]>([]);
   const [targetModalOpen, setTargetModalOpen] = useState(false);
   const [requestedDetailDate, setRequestedDetailDate] = useState<string | null>(null);
@@ -2190,7 +2238,7 @@ function App() {
           <MonthGrid
             year={currentYear}
             month={currentMonth}
-            shifts={currentMonthShifts}
+            shifts={calendarShifts}
             onEditShift={handleEditShift}
             onDeleteShift={handleDeleteShift}
             onCreateShift={handleCreateShiftForDate}

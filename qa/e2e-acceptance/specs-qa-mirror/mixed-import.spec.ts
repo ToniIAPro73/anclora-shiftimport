@@ -66,7 +66,7 @@ test('MIXED + historical-and-plan: no legacy conflict prompt, no deleteIds, exis
   await page.locator('input[type="file"]').first().setInputFiles(file);
   await page.getByRole('button', { name: 'Procesar archivo' }).click({ timeout: 8_000 }).catch(() => undefined);
   await expect(page.getByTestId('source-identity-resolved')).toBeVisible({ timeout: 60_000 });
-  await page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ }).check();
+  await page.getByRole('radio', { name: /Importar también los turnos futuros/ }).check();
   const confirm = page.getByRole('button', { name: /Confirmar Importación/ });
   await expect(confirm).toBeEnabled();
   await confirm.click();
