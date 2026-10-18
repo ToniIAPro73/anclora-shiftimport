@@ -11,6 +11,29 @@ PLAN EMPRESA → CAMBIOS / INCIDENCIAS → CALENDARIO EFECTIVO → CÓMPUTO HORA
                                     ↘ HISTORIAL / AUDITORÍA (nada se borra)
 ```
 
+## User-facing terminology (INTERNAL DOMAIN LANGUAGE != USER-FACING LANGUAGE)
+
+User-facing terminology intentionally differs from internal domain terminology. The internal names stay in code, DB, API,
+contracts, tests and technical logs; the UI shows the simplified model **Calendario · Planificación · Importar · Diferencias ·
+Historial**. This section is the single canonical mapping; the other product contracts only reference it.
+
+| Internal | Visible (ES / EN) |
+| --- | --- |
+| `company_plan_revisions`, Plan Empresa | Turnos comunicados por la empresa · Información de la empresa / Shifts communicated by the company |
+| first revision (baseline) | Primera referencia de la empresa / Initial company reference (CTA «Usar como referencia inicial») |
+| revision N | Actualización de la empresa / Company update (never the number as the primary datum) |
+| effective calendar | Calendario · Calendario actual / Calendar · Current calendar |
+| reconciliation, `REQUIRES_REVIEW` | Diferencias · Diferencia pendiente / Differences · Pending difference |
+| company before / now / effective | Antes comunicado por la empresa · Ahora comunicado por la empresa · Calendario actual |
+| `KEPT_LOCAL` | «Se mantiene el cambio que ya existe en el calendario» |
+| `COMPANY_ADOPTED_LOCAL` | «La empresa ha comunicado ahora el mismo turno que ya tienes en el calendario» |
+| `TEAM_SCHEDULE_EXPORT` | Cuadrante de empresa |
+| `PUBLISHED_CALENDAR_EXPORT` | Mensual publicado |
+| `EMPLOYEE_CALENDAR_EXPORT` | Calendario del empleado |
+| Schedule / ScheduleVersion | Planificación (Borrador · Publicada · Bloqueada · Completada) |
+
+Guard: `src/lib/visible-model-copy.test.ts` fails if an internal term appears in any visible i18n string.
+
 ## 1. Modelo de datos (EXTEND_EXISTING)
 
 `shifts` conserva cada fila histórica y añade:

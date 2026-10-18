@@ -54,13 +54,13 @@ describe('ReconciliationModal', () => {
     expect(screen.getByTestId('recon-before-2026-06-02')).toHaveTextContent('14:00–22:00');
     expect(screen.getByTestId('recon-now-2026-06-02')).toHaveTextContent('14:00–22:00');
     expect(screen.getByTestId('recon-effective-2026-06-02')).toHaveTextContent('Baja');
-    expect(screen.getByTestId('recon-why-2026-06-02')).toHaveTextContent('difiere del plan de empresa');
+    expect(screen.getByTestId('recon-why-2026-06-02')).toHaveTextContent('difiere de lo comunicado por la empresa');
     expect(screen.getByTestId('reconciliation-modal').textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
   });
 
   it('is a dialog with the pending badge and the three tabs', () => {
     renderModal(worklist(7));
-    expect(screen.getByRole('dialog', { name: 'Reconciliación de días' })).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('dialog', { name: 'Diferencias' })).toHaveAttribute('aria-modal', 'true');
     expect(screen.getByTestId('recon-modal-badge')).toHaveTextContent('7 pendientes');
     expect(screen.getByRole('tab', { name: 'Pendientes' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Resueltos' })).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe('ReconciliationModal — presentation', () => {
     renderModal({ employeeId: 'e1', year: 2026, pendingCount: 0, resolvedCount: 1, items: [technical] });
     fireEvent.click(screen.getByRole('tab', { name: 'Resueltos' }));
     const reason = screen.getByTestId('recon-reason-2026-02-02');
-    expect(reason).toHaveTextContent('Coincide con el plan de la empresa');
+    expect(reason).toHaveTextContent('Coincide con lo comunicado por la empresa');
     const row = screen.getByTestId('recon-row-2026-02-02');
     expect(row.textContent).not.toMatch(/run|1acfbb93|[0-9a-f]{8}-[0-9a-f]{4}/i);
     expect(reason.getAttribute('title') ?? '').not.toMatch(/1acfbb93/);

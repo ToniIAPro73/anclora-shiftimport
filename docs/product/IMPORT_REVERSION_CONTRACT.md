@@ -1,5 +1,7 @@
 # Import Reversion Contract
 
+> Terminología visible: esta documentación usa el lenguaje interno del dominio; la UI usa otro a propósito. Mapeo canónico en [`EFFECTIVE_CALENDAR_CONTRACT.md`](EFFECTIVE_CALENDAR_CONTRACT.md#user-facing-terminology-internal-domain-language--user-facing-language).
+
 Status: active (migrations 0044–0045). Supersedes the "delete = logical rollback" semantics of the legacy Safe Delete
 (`R1-M10`, kept as historical roadmap only).
 

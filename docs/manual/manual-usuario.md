@@ -145,7 +145,7 @@ El recorrido permite elegir el plan, nombrar la organización y decidir si tú t
 
 ## 4. Reconocer la navegación y elegir la tarea correcta
 
-La barra lateral reúne las tareas. **Calendario** sirve para consultar; **Importar turnos** abre un archivo; **Planificar** prepara semanas futuras. **Historial de importaciones** aparece a quien gestiona turnos. **Equipo**, **Formatos aprendidos** y **Ajustes** solo aparecen a propietarios y administradores. El empleado ve su propio menú: **Importar mis turnos**, **Añadir turno pasado** y **Solicitudes**.
+La barra lateral reúne las tareas. **Calendario** sirve para consultar; **Importar turnos** abre un archivo; **Planificar** prepara semanas futuras. **Historial** (importaciones y reversiones) aparece a quien gestiona turnos; las **Diferencias** pendientes se revisan desde el aviso del calendario. **Equipo**, **Formatos aprendidos** y **Ajustes** solo aparecen a propietarios y administradores. El empleado ve su propio menú: **Importar mis turnos**, **Añadir turno pasado** y **Solicitudes**.
 
 Encima del calendario verás el número de turnos del mes y el botón **Actualizar calendario**, que vuelve a cargar los datos sin salir de la página.
 
@@ -187,7 +187,7 @@ El calendario mensual empieza en lunes. Las letras y los colores identifican tip
 
 ### Entender los resúmenes (escritorio y móvil)
 
-Las estadísticas se calculan solo sobre el **calendario efectivo**: lo que actualmente se considera
+Las estadísticas se calculan solo sobre el **calendario**: lo que actualmente se considera
 vigente para cada día. Ya no se separan en «Propios» y «Empresa»; el origen de un dato se conserva
 como trazabilidad, pero no decide qué se suma.
 
@@ -201,13 +201,13 @@ como trazabilidad, pero no decide qué se suma.
   máximo»). Es información operativa: no calcula nóminas ni certifica la jornada legal. Si el año no
   tiene objetivo, verás **Objetivo anual no configurado**; los administradores y el propietario
   pueden pulsar **Configurar**. Los objetivos no se copian de un año a otro.
-- **Días pendientes de reconciliación:** si los datos de la empresa y el historial no coinciden, el día
+- **Días con diferencia pendiente:** si lo comunicado por la empresa y el historial no coinciden, el día
   se marca (⚠), sus horas no se suman y aparece un aviso con las fechas. Un administrador puede
   abrirlas y registrar una decisión con motivo.
 - **Móvil:** las tarjetas se apilan y el detalle se expande bajo demanda.
 
 Un día cuyo plan cambió respecto a lo que comunicó la empresa muestra un pequeño icono de historial.
-Ábrelo para ver lo **efectivo**, el **plan de empresa original** y vigente, la cronología de
+Ábrelo para ver el **calendario actual**, lo que la empresa **comunicó antes** y lo que comunica **ahora**, la cronología de
 **cambios** (quién, cuándo y por qué) y, si procede, que el antiguo código **JT** (jefe de turno) es
 solo una función y no añade horas.
 
@@ -481,7 +481,7 @@ Utiliza **Ver versiones anteriores** cuando aparezca. Dos entradas parecidas pue
 
 El historial te permite ver qué archivo se importó, cuándo, quién lo hizo y cuántos turnos se crearon. También te ayuda a distinguir una carga nueva de un intento que quedó bloqueado, parcial o fallido. Su alcance depende de tu sesión y permisos.
 
-1. Abre **Historial de importaciones**.
+1. Abre **Historial**.
 2. Busca el archivo y el periodo que necesitas.
 3. Lee modo, área o alcance, persona que importó y balance de turnos.
 4. Consulta el estado y el motivo disponible si no terminó correctamente.
@@ -501,7 +501,7 @@ Puedes acotar por ámbito, tipo, formato o estado. Si no aparece una carga, vuel
 
 **Quién puede hacerlo:** propietario o administrador. **Cuándo usarlo:** cuando un archivo equivocado ha creado turnos que deben retirarse. Comprueba primero el nombre, el periodo y el empleado o equipo afectado.
 
-1. Abre **Historial de importaciones**.
+1. Abre **Historial**.
 2. Localiza la importación exacta.
 3. Pulsa su acción **Eliminar importación**.
 4. Lee el diálogo y confirma solo si es la carga correcta.

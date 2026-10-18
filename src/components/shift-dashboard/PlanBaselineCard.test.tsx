@@ -15,12 +15,13 @@ describe('PlanBaselineCard', () => {
     const onCreate = vi.fn();
     render(<I18nProvider><PlanBaselineCard baseline={baseline} onCreate={onCreate} /></I18nProvider>);
     const card = screen.getByTestId('plan-baseline-card');
-    expect(card).toHaveTextContent('Todavía no existe un Plan Empresa');
+    expect(card).toHaveTextContent('Primera referencia de la empresa');
+    expect(card).toHaveTextContent('Aún no tenemos información previa de la empresa');
     expect(card).toHaveTextContent('15 turnos del documento ya existen');
     expect(card).toHaveTextContent('no se duplicarán');
-    expect(card).toHaveTextContent('calendario efectivo no se sobrescribirá');
-    expect(card.textContent).not.toMatch(/revisi[oó]n|bootstrap|fingerprint|company_plan|scope|[0-9a-f]{8}-[0-9a-f]{4}/i);
-    fireEvent.click(screen.getByRole('button', { name: 'Crear Plan Empresa inicial' }));
+    expect(card).toHaveTextContent('calendario actual no se sobrescribirá');
+    expect(card.textContent).not.toMatch(/plan empresa|baseline|calendario efectivo|reconciliaci|revisi[oó]n|bootstrap|fingerprint|company_plan|scope|[0-9a-f]{8}-[0-9a-f]{4}/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Usar como referencia inicial' }));
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 

@@ -1,5 +1,7 @@
 # Scheduling Domain — Anclora ShiftImport
 
+> Terminología visible: esta documentación usa el lenguaje interno del dominio; la UI usa otro a propósito. Mapeo canónico en [`EFFECTIVE_CALENDAR_CONTRACT.md`](EFFECTIVE_CALENDAR_CONTRACT.md#user-facing-terminology-internal-domain-language--user-facing-language).
+
 Status: **baseline approved for R3 implementation**
 
 This document is the canonical domain contract for future scheduling. It complements [`DOMAIN-GLOSSARY.md`](../roadmap/shiftimport-mvp-v2/R0/DOMAIN-GLOSSARY.md) and the state separation defined in [`STATE-MODEL.md`](../roadmap/shiftimport-mvp-v2/R0/STATE-MODEL.md).

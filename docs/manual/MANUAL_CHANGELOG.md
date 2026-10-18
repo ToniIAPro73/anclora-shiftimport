@@ -1,5 +1,12 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-10-18 · modelo visible simplificado
+
+- La aplicación se explica con cinco ideas: **Calendario** (lo que hay ahora), **Planificación** (lo que se prepara para el futuro; importar nunca publica), **Importar** (traer un PDF o Excel), **Diferencias** (lo que necesita una decisión) e **Historial** (qué cambió, cuándo y por qué).
+- Los documentos se nombran como **Cuadrante de empresa**, **Mensual publicado** y **Calendario del empleado**. La primera vez que la empresa comunica un periodo se ofrece **Usar como referencia inicial**.
+- Desaparece de la interfaz el vocabulario interno (Plan Empresa, revisión, baseline, calendario efectivo, reconciliación). No cambia el modelo de datos ni ninguna regla: solo la representación.
+- Contrato: mapeo interno↔visible en `docs/product/EFFECTIVE_CALENDAR_CONTRACT.md`. Las capturas del manual que muestren textos antiguos deben regenerarse (`scripts/capture-manual-screenshots.mjs`).
+
 ## Actualización 2026-10-16 · calendario efectivo
 
 - Cap. 5 («Entender los resúmenes»): se sustituyen las tarjetas **Propios** / **Empresa** por las tarjetas del calendario efectivo (mes, año y objetivo anual), el aviso de días pendientes de reconciliación y el historial del día. Se retira la captura móvil que mostraba las tarjetas antiguas; la captura nueva y el PDF (`public/manuals/…`) deben regenerarse con `scripts/capture-manual-screenshots.mjs` y `scripts/generate-manual-pdf.mjs` sobre datos de demostración (no con datos reales).

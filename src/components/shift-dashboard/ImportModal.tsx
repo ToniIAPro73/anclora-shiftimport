@@ -1941,8 +1941,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   <span>{t('importModal.sourcePeriod', { period: `${[...parsedShifts].map((shift) => shift.date).sort()[0]} → ${[...parsedShifts].map((shift) => shift.date).sort().slice(-1)[0]}` })}</span>
                 )}
                 <span>{t(temporalSummary.historical > 0 && temporalSummary.future > 0 ? 'importModal.sourceContent.MIXED' : temporalSummary.future > 0 ? 'importModal.sourceContent.FUTURE' : 'importModal.sourceContent.HISTORICAL')}</span>
-                {temporalSummary.historical > 0 && <span>{t(analysis.source.kind === 'EMPLOYEE_CALENDAR_EXPORT' ? 'importModal.sourceUsageHistoricalEvidence' : 'importModal.sourceUsageHistoricalPlan')}</span>}
-                {temporalSummary.future > 0 && <span>{t('importModal.sourceUsageFuture')}</span>}
+                <span data-testid="import-source-description">{t(`importModal.sourceDescription.${analysis.source.kind}`)}</span>
+                {temporalSummary.future > 0 && !identityLocked && <span>{t('importModal.sourceUsageFuture')}</span>}
                 {sourceAnnotationCounts.dcf + sourceAnnotationCounts.comments > 0 && <span>{t('importModal.sourceAnnotations', { dcf: sourceAnnotationCounts.dcf, comments: sourceAnnotationCounts.comments })}</span>}
               </div>
             )}
@@ -1961,6 +1961,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               <PlanBaselineCard
                 baseline={planPreview.planBaseline}
                 busy={interactionLocked}
+                ownCalendar={identityLocked}
                 onCreate={() => { setFutureImportDecision('historical-and-plan'); void handleConfirm({ createInitialPlan: true }); }}
               />
             )}

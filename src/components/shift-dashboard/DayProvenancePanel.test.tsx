@@ -36,10 +36,10 @@ describe('DayProvenancePanel (compact two-column layout pieces)', () => {
   it('shows the decision panel, the effective / original / current comparison and a compact trail', async () => {
     loadDayHistory.mockResolvedValue(history());
     renderPanel();
-    expect(await screen.findByTestId('day-history-pending')).toHaveTextContent('Pendiente de reconciliación');
+    expect(await screen.findByTestId('day-history-pending')).toHaveTextContent('Diferencia pendiente');
     expect(screen.getByTestId('day-history-compare').children).toHaveLength(3);
-    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Plan empresa original');
-    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Plan empresa vigente');
+    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Antes comunicado por la empresa');
+    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Ahora comunicado por la empresa');
     // only the latest two changes are inline; the rest sit behind "Ver 1 más"
     expect(screen.getByTestId('day-history-change-c1')).toBeInTheDocument();
     expect(screen.getByText('Ver 1 más')).toBeInTheDocument();

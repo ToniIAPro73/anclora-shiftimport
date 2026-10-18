@@ -1,5 +1,7 @@
 # Future Import and Company Plan Contract
 
+> Terminología visible: esta documentación usa el lenguaje interno del dominio; la UI usa otro a propósito. Mapeo canónico en [`EFFECTIVE_CALENDAR_CONTRACT.md`](EFFECTIVE_CALENDAR_CONTRACT.md#user-facing-terminology-internal-domain-language--user-facing-language).
+
 **Estado**: vigente; 2026-10-16. Supersede la decisión «auto-publicación» del 2026-10-15: importar
 **crea o actualiza la planificación (borradores); nunca publica**.
 

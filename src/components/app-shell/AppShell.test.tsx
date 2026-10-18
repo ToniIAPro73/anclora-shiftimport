@@ -356,8 +356,8 @@ describe('CalendarToolbar — calendar-first tools', () => {
     const onOpenReconciliation = vi.fn();
     const { rerender } = renderToolbar({ reconciliationCount: 35, onOpenReconciliation });
     const button = screen.getByTestId('calendar-reconciliation-button');
-    expect(button).toHaveAttribute('aria-label', 'Revisar 35 días pendientes de reconciliación');
-    expect(button).toHaveAttribute('title', '35 días pendientes de reconciliación');
+    expect(button).toHaveAttribute('aria-label', 'Revisar 35 días con diferencia pendiente');
+    expect(button).toHaveAttribute('title', '35 días con diferencia pendiente');
     expect(button).toHaveTextContent('35');
     fireEvent.click(button);
     expect(onOpenReconciliation).toHaveBeenCalledTimes(1);

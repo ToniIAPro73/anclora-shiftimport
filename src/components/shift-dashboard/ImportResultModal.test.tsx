@@ -122,7 +122,7 @@ describe('ImportResultModal', () => {
     expect(within(screen.getByTestId('import-result-metric-historical')).getByText('288')).toBeTruthy();
     expect(within(screen.getByTestId('import-result-metric-future')).getByText('30')).toBeTruthy();
     expect(within(screen.getByTestId('import-result-metric-weeks')).getByText('6')).toBeTruthy();
-    expect(screen.getByTestId('import-result-revision').textContent).toContain('versión 3');
+    expect(screen.getByTestId('import-result-revision').textContent).toContain('actualización 3');
     expect(screen.getByTestId('import-result-changes').textContent).toMatch(/2.*Modificados/);
     expect(screen.getByTestId('import-result-pending').textContent).toContain('1 día(s)');
     expect(screen.getByText(/borrador y no se publica sola/)).toBeTruthy();
@@ -145,6 +145,6 @@ describe('ImportResultModal', () => {
     );
     expect(screen.getByTestId('import-result-duplicate')).toBeTruthy();
     expect(screen.queryByTestId('import-result-revision')).toBeNull();
-    expect(screen.getByTestId('import-result-pending').textContent).toContain('Nada pendiente');
+    expect(screen.getByTestId('import-result-pending').textContent).toContain('Ninguna diferencia pendiente');
   });
 });
