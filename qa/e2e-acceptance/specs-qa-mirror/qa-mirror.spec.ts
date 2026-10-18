@@ -54,7 +54,7 @@ test.describe('QA mirror — read flows', () => {
     const shown = await button.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true, () => false);
     if (!shown) test.skip(true, 'no pending reconciliation in the mirror');
     await button.click();
-    const dialog = page.getByRole('dialog', { name: 'Reconciliación de días' });
+    const dialog = page.getByRole('dialog', { name: 'Diferencias' });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByTestId('recon-range')).toBeVisible();
     await expect(dialog.getByText(/\[run |[0-9a-f]{8}-[0-9a-f]{4}-/)).toHaveCount(0);
@@ -80,7 +80,7 @@ test.describe('QA mirror — review scenarios (2026 only, pilot employee)', () =
     await page.keyboard.press('Escape');
 
     await page.getByTestId('calendar-reconciliation-button').click();
-    const recon = page.getByRole('dialog', { name: 'Reconciliación de días' });
+    const recon = page.getByRole('dialog', { name: 'Diferencias' });
     await expect(recon.getByTestId('recon-range')).toBeVisible();
     expect(await recon.innerText()).not.toMatch(/\[run |[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}/i);
     await recon.screenshot({ path: shot('reconciliation') });

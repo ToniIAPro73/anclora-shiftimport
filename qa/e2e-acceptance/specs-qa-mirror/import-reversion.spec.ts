@@ -40,7 +40,7 @@ test('history: revert one import -> the dependent import is included automatical
 
   await page.goto('/app');
   await expect(page.locator('.month-grid-root')).toBeVisible({ timeout: 60_000 });
-  await page.getByRole('button', { name: /Historial de importaciones/ }).first().click();
+  await page.getByRole('button', { name: /Historial/ }).first().click();
   const revertFirst = page.getByTestId(`import-revert-${first.importId}`);
   await expect(revertFirst).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('button', { name: /Eliminar/ })).toHaveCount(0);

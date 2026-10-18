@@ -56,13 +56,13 @@ test.describe('source-aware import UI, desktop + mobile (QA mirror, real TRYP em
     const summary = page.getByTestId('import-source-summary');
     await expect(summary).toBeVisible({ timeout: 60_000 });
     await expect(summary).toHaveAttribute('data-source-kind', 'EMPLOYEE_CALENDAR_EXPORT');
-    await expect(summary).toContainText('Calendario de empleado');
+    await expect(summary).toContainText('Calendario del empleado');
     await expect(summary).toContainText('Incidencias DCF: 5');
     expect(await summary.innerText()).not.toMatch(/EMPLOYEE_CALENDAR_EXPORT|COMPANY_PLAN|[0-9a-f]{8}-[0-9a-f]{4}/);
     await expect(page.getByTestId('source-identity-panel')).toBeVisible();
     await expect(page.getByTestId('import-future-consent')).toBeAttached();
     await scrollIntoReach(page, 'import-future-consent');
-    const radio = page.getByRole('radio', { name: /Importar históricos y crear\/actualizar planificación futura/ });
+    const radio = page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ });
     await expect(radio).toBeInViewport();
     await radio.check();
     await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publica automáticamente');
@@ -82,11 +82,11 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     await page.getByRole('button', { name: 'Procesar archivo' }).click({ timeout: 10_000 }).catch(() => undefined);
     const consent = page.getByTestId('import-future-consent');
     await expect(consent).toBeVisible({ timeout: 60_000 });
-    await expect(consent).toContainText('datos históricos y planificación futura');
+    await expect(consent).toContainText('turnos anteriores y futuros');
     await expect(page.getByTestId('import-future-consent-counts')).toContainText(/Históricos detectados: \d+ · Futuros detectados: \d+/);
     // safe default: historical only; the plan option is explicit
-    await expect(page.getByRole('radio', { name: /Importar solo históricos/ })).toBeChecked();
-    await page.getByRole('radio', { name: /Importar históricos y crear\/actualizar planificación futura/ }).check();
+    await expect(page.getByRole('radio', { name: /Importar solo anteriores/ })).toBeChecked();
+    await page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ }).check();
     await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publica automáticamente');
     expect(await page.getByTestId('import-future-consent').innerText()).not.toMatch(/publicar|[0-9a-f]{8}-[0-9a-f]{4}/i);
     await consent.screenshot({ path: shot('import-xlsx-mixed-consent') });
@@ -104,9 +104,9 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     test.skip(/\b0\s*Turnos nuevos/.test(summaryText.replace(/\s+/g, ' ')) && /\b0\s*Conflictos/.test(summaryText.replace(/\s+/g, ' ')), 'the mirror already contains every row of this PDF');
     const consent = page.getByTestId('team-import-future-consent');
     await expect(consent).toBeVisible({ timeout: 90_000 });
-    await expect(consent).toContainText('planificación futura');
-    await expect(page.getByRole('radio', { name: /Importar solo históricos/ })).toHaveCount(0);
-    await page.getByRole('radio', { name: /Crear \/ actualizar planificación futura/ }).check();
+    await expect(consent).toContainText('turnos futuros');
+    await expect(page.getByRole('radio', { name: /Importar solo anteriores/ })).toHaveCount(0);
+    await page.getByRole('radio', { name: /Añadir los futuros a Planificación/ }).check();
     await expect(page.getByTestId('team-import-future-consent-document-class')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('team-import-future-consent-changes')).toBeVisible();
     await consent.screenshot({ path: shot('import-pdf-future-consent') }); // the decision block only: no employee names

@@ -86,7 +86,7 @@ test.describe('legacy plan bootstrap (QA mirror, synthetic roster)', () => {
       await page.getByRole('button', { name: 'Continuar' }).click();
       const card = page.getByTestId('team-plan-baseline-card');
       await expect(card).toBeVisible({ timeout: 30_000 });
-      await expect(card).toContainText('Todavía no existe un Plan Empresa');
+      await expect(card).toContainText('Primera referencia de la empresa');
       await expect(card).toContainText('no se duplicarán');
       expect(await card.innerText()).not.toMatch(/revisi[oó]n|fingerprint|[0-9a-f]{8}-[0-9a-f]{4}/i);
       const create = page.getByTestId('team-plan-baseline-card-create');
@@ -127,9 +127,9 @@ test.describe('reconciliation modal explains before / now / effective', () => {
     const button = page.getByTestId('calendar-reconciliation-button');
     await expect(button).toBeVisible({ timeout: 30_000 });
     await button.click();
-    const dialog = page.getByRole('dialog', { name: 'Reconciliación de días' });
+    const dialog = page.getByRole('dialog', { name: 'Diferencias' });
     await expect(dialog).toBeVisible();
-    for (const label of ['Empresa antes', 'Empresa ahora', 'Calendario efectivo']) await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible();
+    for (const label of ['Antes comunicado por la empresa', 'Ahora comunicado por la empresa', 'Calendario actual']) await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible();
     await expect(dialog.locator('[data-testid^="recon-why-"]').first()).toBeVisible();
     expect(await dialog.innerText()).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-|fingerprint|\[run /i);
   });

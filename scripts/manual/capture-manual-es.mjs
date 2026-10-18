@@ -1123,7 +1123,7 @@ async function openFormats(page) {
 async function openHistory(page) {
   await openApp(page);
   await page.getByTestId('sidebar-history').click();
-  const modal = dialog(page, 'Historial de importaciones');
+  const modal = dialog(page, 'Historial de cambios');
   await modal.waitFor();
   await modal.getByText('Cargando historial…').waitFor({ state: 'hidden' }).catch(() => null);
   await page.waitForTimeout(800);
