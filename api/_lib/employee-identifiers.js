@@ -1,4 +1,4 @@
-import { HttpError, requireRole } from './auth.js';
+import { HttpError, employeeRowInScope, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { assertEmployeeInOrg } from './data.js';
 
 /**
@@ -76,15 +76,21 @@ export async function resolveSourceIdentity(sql, ctx, { sourceSystem, externalId
   const identifier = clean(externalIdentifier);
   if (!system || !identifier) throw new HttpError(400, 'sourceSystem and externalIdentifier are required');
   const org = (await sql`SELECT name FROM organizations WHERE id = ${ctx.organizationId}`)[0];
-  const rows = await sql`
-    SELECT id, name, external_employee_id, status FROM employees
+  const allRows = await sql`
+    SELECT id, name, external_employee_id, status, area_id FROM employees
     WHERE organization_id = ${ctx.organizationId} AND status <> 'inactive'
   `;
+  // A scoped PLANNER (areas / employees) never resolves, nor learns about, an employee outside its scope.
+  const accessScope = ctx.role === 'EMPLOYEE' ? null : await resolveEffectiveAccessScope(sql, ctx);
+  const rows = accessScope ? allRows.filter((row) => employeeRowInScope(accessScope, row)) : allRows;
   const scoped = ctx.role === 'EMPLOYEE' ? rows.filter((row) => row.id === ctx.employeeId) : rows;
   const docKey = employeeNameKey(documentName, org?.name);
   const byName = docKey ? scoped.filter((row) => employeeNameKey(row.name, org?.name) === docKey) : [];
 
   const mappedId = await findEmployeeIdBySourceIdentifier(sql, ctx, system, identifier);
+  if (mappedId && accessScope && !rows.some((row) => row.id === mappedId) && allRows.some((row) => row.id === mappedId)) {
+    return { status: 'NONE', employee: null, candidates: [] };
+  }
   if (mappedId) {
     const employee = rows.find((row) => row.id === mappedId);
     if (ctx.role === 'EMPLOYEE' && mappedId !== ctx.employeeId) return { status: 'NOT_YOURS', employee: null, candidates: [] };

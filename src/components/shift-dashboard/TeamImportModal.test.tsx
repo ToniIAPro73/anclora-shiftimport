@@ -54,7 +54,7 @@ const mockedLoadRemoteShifts = vi.mocked(remote.loadRemoteShifts);
 
 function renderTeamImportModal(
   onImported: () => void = () => {},
-  sessionRole: 'ADMIN' | 'EMPLOYEE' = 'ADMIN',
+  sessionRole: 'ADMIN' | 'EMPLOYEE' | 'PLANNER' = 'ADMIN',
   options: { areas?: RemoteArea[]; currentAreaId?: string | null; allowAreaChoice?: boolean; currentPlan?: 'free' | 'personal' | 'team' | null } = {},
 ) {
   return render(
@@ -678,5 +678,52 @@ describe('TeamImportModal — real fixture diagnosis fallback (state-contract re
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input.accept).not.toContain('text/plain');
     expect(input.accept.split(',').map((entry) => entry.trim())).not.toContain('.txt');
+  });
+});
+
+describe('TeamImportModal — PLANNER imports only what is already recognised in its scope', () => {
+  const rosterOf = (names: string[]) => ({
+    employees: names.map((name, index) => ({
+      key: `p${index}`, externalEmployeeId: `EXT${index}`, name, shifts: [{ date: '2099-03-04', startTime: '08:00', endTime: '16:00', shiftType: 'Regular', location: 'Regular' }],
+    })),
+  });
+  const upload = async () => {
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [csvFile()] } });
+    await waitFor(() => expect(screen.getByText('Seleccionar todos')).toBeTruthy());
+  };
+
+  it('B1: a recognised in-scope row can be selected', async () => {
+    mockedDetectTeamRoster.mockReturnValue(rosterOf(['Ana Martinez']) as never);
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'recognized', employees: [remoteEmployee({ id: 'emp-ana', name: 'Ana Martinez', externalEmployeeId: 'EXT0' })] });
+    renderTeamImportModal(() => {}, 'PLANNER');
+    await upload();
+    const box = screen.getByLabelText('Ana Martinez') as HTMLInputElement;
+    expect(box.disabled).toBe(false);
+  });
+
+  it('B2/B3: a "new" row (including any out-of-scope employee) has no Crear and there is no bulk create', async () => {
+    mockedDetectTeamRoster.mockReturnValue(rosterOf(['Fuera De Ambito', 'Otra Persona']) as never);
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'new', employees: [] });
+    renderTeamImportModal(() => {}, 'PLANNER');
+    await upload();
+    expect(screen.getAllByText('Nuevo').length).toBe(2);
+    expect(screen.queryByText('Crear')).toBeNull();
+    expect(screen.queryByText(/Crear \d+ empleados nuevos/)).toBeNull();
+    expect((screen.getByLabelText('Fuera De Ambito') as HTMLInputElement).disabled).toBe(true);
+    expect(mockedCreateRemoteEmployee).not.toHaveBeenCalled();
+    expect(mockedBulkCreateRemoteEmployees).not.toHaveBeenCalled();
+  });
+
+  it('B4: an inactive match has no Reactivar for a PLANNER, and ADMIN keeps it', async () => {
+    mockedDetectTeamRoster.mockReturnValue(rosterOf(['Ana Inactiva']) as never);
+    mockedMatchRemoteEmployee.mockResolvedValue({ kind: 'recognized_inactive', employees: [remoteEmployee({ id: 'emp-in', name: 'Ana Inactiva', status: 'inactive', externalEmployeeId: 'EXT0' })] });
+    renderTeamImportModal(() => {}, 'PLANNER');
+    await upload();
+    expect(screen.queryByRole('button', { name: 'Reactivar' })).toBeNull();
+    cleanup();
+    renderTeamImportModal(() => {}, 'ADMIN');
+    await upload();
+    expect(screen.getByRole('button', { name: 'Reactivar' })).toBeTruthy();
   });
 });

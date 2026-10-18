@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { HttpError, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
+import { HttpError, employeeRowInScope, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 import { getOperationalDate, isHistoricalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict } from './shift-compatibility.js';
@@ -397,6 +397,9 @@ export async function listEmployees(sql, ctx, { areaId = null } = {}) {
     `;
     return rows.map(mapEmployeeRow);
   }
+  if (scope.type === 'AREAS' && areaId && !(scope.areaIds || []).includes(areaId)) {
+    throw scopeForbidden('Requested area is outside your assigned areas');
+  }
   // Optional area filter (ADMIN dashboard area context). A foreign area id
   // simply matches nothing — no cross-tenant leak through list filters.
   const rows = areaId
@@ -411,7 +414,8 @@ export async function listEmployees(sql, ctx, { areaId = null } = {}) {
         WHERE organization_id = ${ctx.organizationId}
         ORDER BY name ASC
       `;
-  return rows.map(mapEmployeeRow);
+  // AREAS / EMPLOYEES planners only ever receive the roster inside their scope (ORGANIZATION keeps everything).
+  return rows.filter((row) => employeeRowInScope(scope, row)).map(mapEmployeeRow);
 }
 
 /** A matched employee is only truly import-ready when ACTIVE. inactive and
@@ -460,7 +464,7 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name, so
       WHERE i.organization_id = ${ctx.organizationId} AND i.source_system = ${String(sourceSystem).trim()}
         AND i.external_identifier = ${externalId}
     `;
-    const inScope = mapped.filter((row) => scope.type !== 'AREA' || row.area_id === scope.areaId);
+    const inScope = mapped.filter((row) => employeeRowInScope(scope, row));
     if (inScope.length === 1) {
       const employee = mapEmployeeRow(inScope[0]);
       return { kind: matchKindForStatus(employee.status), employees: [employee], matchedBy: 'SOURCE_IDENTIFIER' };
@@ -481,14 +485,15 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name, so
           WHERE organization_id = ${ctx.organizationId}
             AND external_employee_id = ${externalId}
         `;
-    if (rows.length > 0) {
-      const employees = rows.map(mapEmployeeRow);
+    const visible = rows.filter((row) => employeeRowInScope(scope, row));
+    if (visible.length > 0) {
+      const employees = visible.map(mapEmployeeRow);
       return { kind: employees.length === 1 ? matchKindForStatus(employees[0].status) : 'recognized', employees };
     }
   }
 
   if (normalizedName) {
-    const rows = scope.type === 'AREA'
+    const rows = (scope.type === 'AREA'
       ? await sql`
           SELECT * FROM employees
           WHERE organization_id = ${ctx.organizationId}
@@ -499,7 +504,7 @@ export async function findEmployeeMatch(sql, ctx, { externalEmployeeId, name, so
           SELECT * FROM employees
           WHERE organization_id = ${ctx.organizationId}
             AND lower(trim(name)) = ${normalizedName}
-        `;
+        `).filter((row) => employeeRowInScope(scope, row));
     // A name alone never links a document to someone whose canonical payroll number DIFFERS from the one the
     // document carries (another system may use another number): ask, never guess.
     if (externalId && rows.some((row) => row.external_employee_id && row.external_employee_id !== externalId)) {

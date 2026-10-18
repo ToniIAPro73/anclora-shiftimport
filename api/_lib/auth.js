@@ -265,6 +265,19 @@ export function resolveAccessScope(membership) {
  * an unassigned PLANNER is global only when the organization has no active
  * areas. The client never supplies this decision.
  */
+/**
+ * Is an employee row (`id`, `area_id`) inside an already-resolved access scope? Single definition used by roster
+ * listing, importer matching and source-identity resolution so a scoped PLANNER never receives a wider roster.
+ */
+export function employeeRowInScope(scope, row) {
+  if (!scope || !row) return false;
+  if (scope.type === 'SELF') return row.id === scope.employeeId;
+  if (scope.type === 'AREA') return row.area_id === scope.areaId;
+  if (scope.type === 'AREAS') return (scope.areaIds || []).includes(row.area_id);
+  if (scope.type === 'EMPLOYEES') return (scope.employeeIds || []).includes(row.id);
+  return true; // ORGANIZATION
+}
+
 export async function resolveEffectiveAccessScope(sql, membership) {
   const scope = resolveAccessScope(membership);
   if (membership?.role !== 'PLANNER') {

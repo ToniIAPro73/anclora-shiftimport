@@ -215,6 +215,8 @@ export const TeamImportModal = ({
     onConfirm: () => void | Promise<void>;
   } | null>(null);
   const multiEmployeeImportLocked = currentPlan !== null && !canUseFeature(currentPlan, 'multiEmployeeImport');
+  // Creating / reactivating employees is administrative; a PLANNER only imports rows recognised inside its scope.
+  const canManageEmployees = !sessionRole || isAdminRole(sessionRole);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ created: number; existing: number; failed: number } | null>(null);
@@ -1068,7 +1070,7 @@ export const TeamImportModal = ({
                 {t('teamImport.selectedCount', { selected: selectedRows.length, total: rosterCounts.total })}
               </span>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {rosterCounts.new > 0 && (
+                {canManageEmployees && rosterCounts.new > 0 && (
                   <button
                     type="button"
                     className="btn-outline"
@@ -1177,7 +1179,7 @@ export const TeamImportModal = ({
                   >
                     {t(statusLabelKey[row.status])}
                   </span>
-                  {row.status === 'new' && (
+                  {row.status === 'new' && canManageEmployees && (
                     <button
                       type="button"
                       className="btn-outline"

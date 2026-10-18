@@ -256,6 +256,8 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [onboardingFile, setOnboardingFile] = useState<File | null>(null);
+  // Team import is a planning capability (OWNER / ADMIN / PLANNER), not an administrative one; employee creation inside it stays admin-only.
+  const canImportPlanning = session?.role === 'OWNER' || session?.role === 'ADMIN' || session?.role === 'PLANNER';
   const [adminIndividualImport, setAdminIndividualImport] = useState<{ file: File; employee: DetectedTeamEmployee; employeeId: string | null } | null>(null);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
@@ -2512,7 +2514,7 @@ function App() {
         />
       )}
 
-      {session && isAdminRole(session.role) && !adminIndividualImport && (
+      {session && canImportPlanning && !adminIndividualImport && (
         <TeamImportModal
           isOpen={isImportOpen}
           onClose={() => { if (!isImporting) setIsImportOpen(false); }}

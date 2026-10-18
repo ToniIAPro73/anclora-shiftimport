@@ -225,3 +225,50 @@ describe('App — Employee calendar selector (ADMIN)', () => {
     expect(screen.getAllByText('No vinculado').length).toBeGreaterThan(0);
   });
 });
+
+describe('App — PLANNER with an employee scope', () => {
+  const plannerSession: SessionInfo = {
+    user: { id: 'user-planner', email: 'planner@test.com', displayName: 'Planner' },
+    organizationId: 'org-1',
+    role: 'PLANNER',
+    employeeId: null,
+    memberships: [{ organizationId: 'org-1', organizationName: 'Org', role: 'PLANNER' }],
+  };
+
+  it('E1/E2: the selector only offers the employees the server returned for the planner', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({ session: plannerSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue([employees[1]]); // the server already scoped the roster to emp-b
+    mockedLoadRemoteShifts.mockImplementation(shiftsFor);
+
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Employee B · ID 1002').length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+    expect(screen.queryByText('Employee A · ID 1001')).toBeNull();
+    expect(screen.queryByText('Employee C · ID 1003')).toBeNull();
+    expect(mockedLoadRemoteShifts).not.toHaveBeenCalledWith('emp-a');
+  });
+
+  it('A1: "Importar turnos" opens the team import surface for a PLANNER', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({ session: plannerSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue([employees[1]]);
+    mockedLoadRemoteShifts.mockImplementation(shiftsFor);
+
+    renderApp();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar turnos' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Importar turnos' }));
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull());
+    expect(screen.queryByText('Crear todos los nuevos')).toBeNull();
+  });
+
+  it('A2: ADMIN keeps opening the same surface', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedLoadRemoteShifts.mockImplementation(shiftsFor);
+
+    renderApp();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar turnos' })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Importar turnos' }));
+    await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeNull());
+  });
+});
