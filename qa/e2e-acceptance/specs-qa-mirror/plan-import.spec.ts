@@ -65,7 +65,7 @@ test.describe('source-aware import UI, desktop + mobile (QA mirror, real TRYP em
     const radio = page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ });
     await expect(radio).toBeInViewport();
     await radio.check();
-    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publica automáticamente');
+    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publican automáticamente');
     // the confirm button stays reachable and the row list keeps some room
     await expect(page.getByRole('button', { name: /Confirmar Importación/ })).toBeInViewport();
     const list = await page.locator('.import-modal__shifts-list').boundingBox();
@@ -87,7 +87,7 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     // safe default: historical only; the plan option is explicit
     await expect(page.getByRole('radio', { name: /Importar solo anteriores/ })).toBeChecked();
     await page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ }).check();
-    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publica automáticamente');
+    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publican automáticamente');
     expect(await page.getByTestId('import-future-consent').innerText()).not.toMatch(/publicar|[0-9a-f]{8}-[0-9a-f]{4}/i);
     await consent.screenshot({ path: shot('import-xlsx-mixed-consent') });
   });
