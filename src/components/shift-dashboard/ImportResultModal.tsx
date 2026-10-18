@@ -95,7 +95,7 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
                   {t(report.duplicate === 'DUPLICATE_FILE' ? 'importResult.planDuplicateFile' : report.duplicate === 'DUPLICATE_DOCUMENT' ? 'importResult.planDuplicateDocument' : 'importResult.planDuplicatePlan')}
                 </p>
               ) : report.plan?.revisionCreated && report.plan.revisionNumber !== null ? (
-                <p data-testid="import-result-revision" className="import-result__plan">{t('importResult.planVersion', { revision: report.plan.revisionNumber })}</p>
+                <p data-testid="import-result-revision" className="import-result__plan">{t('importResult.planVersion')}</p>
               ) : null}
               {changeChips.some(([, value]) => value > 0) && (
                 <ul className="import-result__chips" data-testid="import-result-changes">

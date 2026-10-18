@@ -752,7 +752,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
     expect(screen.getByTestId('import-self-future-notice').textContent).toContain('Los empleados solo pueden importar turnos históricos');
 
     const badge = screen.getByTestId('import-future-count');
-    expect(badge.textContent).toBe('1 turnos futuros detectados; no se añadirán con la opción actual');
+    expect(badge.textContent).toBe('1 turnos futuros no se importarán');
     // EMPLOYEE never gets the consent toggle: the decision is not theirs to make.
     expect(screen.queryByTestId('import-future-consent')).toBeNull();
   });
@@ -1140,7 +1140,7 @@ describe('ImportModal (role-aware: EMPLOYEE identity lock + self-filter)', () =>
 
       await waitFor(() => expect(screen.getByTestId('import-future-count')).toBeTruthy());
       expect(screen.getByTestId('import-future-count').textContent).toBe(
-        '1 turnos futuros detectados; no se añadirán con la opción actual',
+        '1 turnos futuros no se importarán',
       );
 
       const draftOption = screen.getByLabelText(/Añadir los turnos a Planificación/i);
