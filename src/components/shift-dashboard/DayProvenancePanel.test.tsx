@@ -124,3 +124,49 @@ describe('pending difference choices (17/09 equivalent)', () => {
     expect(compare).not.toHaveTextContent(/Actualización|Revisión/);
   });
 });
+
+describe('day history: a technical check is not a change (16/07 equivalent)', () => {
+  const noChange = (reason: string) => ({
+    id: 'sys1', changeType: 'RECONCILIATION', createdAt: '2026-10-16T15:50:40Z', actorRole: 'SYSTEM', actorName: null, selfChange: false, reason,
+    before: [{ shiftType: 'Vacaciones', startTime: null, endTime: null }], after: [{ shiftType: 'Vacaciones', startTime: null, endTime: null }],
+  });
+  const dayOf = (changes: unknown[]) => ({
+    provenance: { requiresReview: false, effective: [row('e', 'Vacaciones', null, null)], companyOriginal: [], companyCurrent: [], revisions: [], legacyDutyRows: [] },
+    changes, rows: [],
+  });
+  const LEGACY = '[run 1acfbb93-09f0-40c3-9860-8de50a26b3d8] Reconciled (HIGH): consistent with company calendar';
+
+  it('ES: humane copy, no false diff, no technical text, no "ajuste de datos"', async () => {
+    loadDayHistory.mockResolvedValue(dayOf([noChange(LEGACY)]));
+    const { container } = renderPanel();
+    const item = await screen.findByTestId('day-history-change-sys1');
+    expect(item.getAttribute('data-semantic-change')).toBe('false');
+    expect(item).toHaveTextContent('Comprobación automática');
+    expect(item).toHaveTextContent('Sistema · comprobación automática');
+    expect(item).toHaveTextContent('Sin cambios');
+    expect(item).toHaveTextContent('La información ya coincidía con el calendario.');
+    expect(container.textContent).not.toMatch(/Reconciled|HIGH|run |1acfbb93|company calendar|ajuste de datos|Vacaciones → Vacaciones/i);
+    expect(container.querySelector('.day-history__change-diff')).toBeNull();
+  });
+
+  it('EN: natural localized copy', async () => {
+    window.localStorage?.setItem?.('anclora_shiftimport_locale_v1', 'en');
+    loadDayHistory.mockResolvedValue(dayOf([noChange(LEGACY)]));
+    const { container } = renderPanel();
+    const item = await screen.findByTestId('day-history-change-sys1');
+    expect(item).toHaveTextContent('Automatic check');
+    expect(item).toHaveTextContent('System · automatic check');
+    expect(item).toHaveTextContent('The information already matched the calendar.');
+    expect(container.textContent).not.toMatch(/Reconciled|HIGH|1acfbb93|company calendar/);
+  });
+
+  it('a REAL change keeps its before → after diff and its (humanized) reason', async () => {
+    loadDayHistory.mockResolvedValue(dayOf([{ ...noChange('Marked REQUIRES_REVIEW (LOW): x'), id: 'real1', after: [{ shiftType: 'Libre', startTime: null, endTime: null }] }]));
+    const { container } = renderPanel();
+    const item = await screen.findByTestId('day-history-change-real1');
+    expect(item.getAttribute('data-semantic-change')).toBe('true');
+    expect(item).toHaveTextContent('Vacaciones → Libre');
+    expect(container.textContent).not.toMatch(/REQUIRES_REVIEW|LOW/);
+    expect(item).toHaveTextContent('Se detectó una diferencia que necesita revisión.');
+  });
+});

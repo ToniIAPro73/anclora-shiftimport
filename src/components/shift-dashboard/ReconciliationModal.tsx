@@ -6,7 +6,7 @@ import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 import { SegmentedTabs, type SegmentedTab } from '../ui/SegmentedTabs';
 import { summarizeReason } from './reconciliation-display';
-import { RECONCILIATION_PAGE_SIZE, pageWindow } from './reconciliation-paging';
+import { pageWindow, reconciliationPageSize } from './reconciliation-paging';
 import './CalendarModals.css';
 
 type Filter = 'pending' | 'resolved' | 'all';
@@ -35,6 +35,14 @@ export function ReconciliationModal({
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<Filter>('pending');
   const [page, setPage] = useState(1);
+  // Rows per page follow the room the window really has (pagination instead of an outer scroll).
+  const [pageSize, setPageSize] = useState(() => reconciliationPageSize(typeof window === 'undefined' ? undefined : window.innerHeight));
+  useEffect(() => {
+    const update = () => setPageSize(reconciliationPageSize(window.innerHeight));
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   useEffect(() => {
     if (isOpen) { setFilter('pending'); setPage(1); }
@@ -44,9 +52,9 @@ export function ReconciliationModal({
     () => (worklist?.items ?? []).filter((item) => filter === 'all' || item.status.toLowerCase() === filter),
     [worklist, filter],
   );
-  const totalPages = Math.max(1, Math.ceil(visible.length / RECONCILIATION_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageItems = visible.slice((safePage - 1) * RECONCILIATION_PAGE_SIZE, safePage * RECONCILIATION_PAGE_SIZE);
+  const pageItems = visible.slice((safePage - 1) * pageSize, safePage * pageSize);
   const pendingCount = worklist?.pendingCount ?? 0;
 
   const describe = (labels: ReconciliationShiftLabel[]) => {
@@ -63,8 +71,8 @@ export function ReconciliationModal({
     { id: 'all', label: t('reconModal.tabAll') },
   ];
 
-  const from = visible.length ? (safePage - 1) * RECONCILIATION_PAGE_SIZE + 1 : 0;
-  const to = Math.min(visible.length, safePage * RECONCILIATION_PAGE_SIZE);
+  const from = visible.length ? (safePage - 1) * pageSize + 1 : 0;
+  const to = Math.min(visible.length, safePage * pageSize);
 
   return (
     <ModalShell
@@ -75,6 +83,7 @@ export function ReconciliationModal({
       maxWidth="920px"
       width="100%"
       className="recon-modal"
+      fitViewport
       closeAriaLabel={t('common.close')}
     >
       <div data-testid="reconciliation-modal">
@@ -131,12 +140,6 @@ export function ReconciliationModal({
                       <span className="recon-row__cell" data-label={t('reconModal.colNow')} data-testid={`recon-now-${item.date}`}>{describe(item.companyNow ?? item.company)}</span>
                       <span className="recon-row__cell recon-row__cell--current" data-label={t('reconModal.colEffective')} data-testid={`recon-effective-${item.date}`}>
                         {describe(item.effective ?? item.current)}
-                        {pending && item.reasonCode && (
-                          <small className="recon-row__reason" data-testid={`recon-why-${item.date}`}>{t(`reconModal.reason.${item.reasonCode}`)}</small>
-                        )}
-                        {reasonText && (
-                          <small className="recon-row__reason" title={reason?.full || undefined} data-testid={`recon-reason-${item.date}`}>{reasonText}</small>
-                        )}
                       </span>
                       <span className={`recon-row__status recon-row__status--${item.status.toLowerCase()}`}>
                         {pending ? <Clock3 size={13} aria-hidden="true" /> : <CheckCircle2 size={13} aria-hidden="true" />}
@@ -163,6 +166,12 @@ export function ReconciliationModal({
                           <CalendarDays size={16} aria-hidden="true" />
                         </button>
                       </span>
+                      {pending && item.reasonCode && (
+                        <small className="recon-row__reason" data-testid={`recon-why-${item.date}`}>{t(`reconModal.reason.${item.reasonCode}`)}</small>
+                      )}
+                      {reasonText && (
+                        <small className="recon-row__reason" title={reason?.full || undefined} data-testid={`recon-reason-${item.date}`}>{reasonText}</small>
+                      )}
                     </li>
                   );
                 })}

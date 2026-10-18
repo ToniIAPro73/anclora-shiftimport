@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { loadDayHistory, reconcileCalendarDayRemote, type RemoteDayHistory } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import type { NormalizedCalendarRow } from '../../lib/effective-calendar.js';
-import { humanizeReason, uniqueKeepOptions } from './reconciliation-display';
+import { classifyReason, hasSemanticDayChange, uniqueKeepOptions } from './reconciliation-display';
 
 interface DayProvenancePanelProps {
   employeeId: string;
@@ -86,25 +86,47 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
   const lineOf = (row: { shiftType?: string | null; startTime?: string | null; endTime?: string | null }) => `${row.shiftType || '—'}${row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}`;
   const showCurrent = provenance.revisions.length > 1;
   const showOriginal = provenance.companyOriginal.length > 0;
-  const renderChange = (change: (typeof changes)[number]) => (
-    <li key={change.id} data-testid={`day-history-change-${change.id}`}>
-      <div className="day-history__change-head">
-        <strong>{t(`dayHistory.changeTypes.${change.changeType}`)}</strong>
-        <span>{formatWhen(change.createdAt)}</span>
-      </div>
-      <div className="day-history__change-who">
-        {change.actorRole === 'SYSTEM' ? t('dayHistory.systemActor') : t('dayHistory.byActor', { name: change.actorName ?? '—', role: change.actorRole })}
-        {change.selfChange ? ` · ${t('dayHistory.selfChange')}` : ''}
-      </div>
-      {[...change.before, ...change.after].every((row) => typeof row?.shiftType === 'string') && (
-        <div className="day-history__change-diff">{describe(change.before)} → {describe(change.after)}</div>
-      )}
-      {change.reason && (() => {
-        const readable = humanizeReason(change.reason);
-        return <div className="day-history__change-reason" title={readable ?? undefined}>{t('dayHistory.reason')}: {readable ?? t('dayHistory.reasonAutomatic')}</div>;
-      })()}
-    </li>
-  );
+  const reasonText = (reason: string | null | undefined) => {
+    const { kind, text } = classifyReason(reason);
+    return kind === 'matchesCalendar' ? t('dayHistory.reasonMatchesCalendar') : kind === 'automatic' ? t('dayHistory.reasonAutomatic') : text;
+  };
+  const renderChange = (change: (typeof changes)[number]) => {
+    const rowsHaveData = [...change.before, ...change.after].every((row) => typeof row?.shiftType === 'string');
+    // History is not the same as a change: before === after (ignoring ids / provenance) is a technical event only.
+    const visibleChange = rowsHaveData ? hasSemanticDayChange(change.before, change.after) : true;
+    if (!visibleChange && change.actorRole === 'SYSTEM') {
+      const { kind } = classifyReason(change.reason);
+      return (
+        <li key={change.id} data-testid={`day-history-change-${change.id}`} data-semantic-change="false">
+          <div className="day-history__change-head">
+            <strong>{t('dayHistory.automaticCheck')}</strong>
+            <span>{formatWhen(change.createdAt)}</span>
+          </div>
+          <div className="day-history__change-who">{t('dayHistory.systemCheck')}</div>
+          <div className="day-history__change-reason">{t('dayHistory.noChange')} · {kind === 'text' ? reasonText(change.reason) : t('dayHistory.reasonMatchesCalendar')}</div>
+        </li>
+      );
+    }
+    return (
+      <li key={change.id} data-testid={`day-history-change-${change.id}`} data-semantic-change={visibleChange ? 'true' : 'false'}>
+        <div className="day-history__change-head">
+          <strong>{t(`dayHistory.changeTypes.${change.changeType}`)}</strong>
+          <span>{formatWhen(change.createdAt)}</span>
+        </div>
+        <div className="day-history__change-who">
+          {change.actorRole === 'SYSTEM' ? t('dayHistory.systemActor') : t('dayHistory.byActor', { name: change.actorName ?? '—', role: change.actorRole })}
+          {change.selfChange ? ` · ${t('dayHistory.selfChange')}` : ''}
+        </div>
+        {rowsHaveData && visibleChange && (
+          <div className="day-history__change-diff">{describe(change.before)} → {describe(change.after)}</div>
+        )}
+        {change.reason && (() => {
+          const readable = reasonText(change.reason);
+          return <div className="day-history__change-reason" title={readable}>{t('dayHistory.reason')}: {readable}</div>;
+        })()}
+      </li>
+    );
+  };
 
   return (
     <section className="day-history" aria-label={t('dayHistory.title')} data-testid="day-history">

@@ -1,3 +1,5 @@
+import { hasSemanticDayChange as sharedHasSemanticDayChange } from '../../lib/company-plan.js';
+
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const RUN_TAG = /\[\s*run[^\]]*\]\s*/gi;
 
@@ -11,25 +13,49 @@ export function cleanReason(reason: string | null | undefined): string {
     .trim();
 }
 
+const INTERNAL_TOKEN = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|REQUIRES_REVIEW/;
+const MATCHES_CALENDAR = /consistent with|company calendar|company plan|plan (de la )?empresa/i;
+const AUDIT_JARGON = /^(marked|reconciled)\b|\((?:high|medium|low)\)|\bconfidence\b/i;
+
+/**
+ * ONE interpretation of a stored reason for every screen (day history and the differences list):
+ *  - matchesCalendar: the automatic check found the information already consistent (legacy "Reconciled (HIGH): consistent with company calendar");
+ *  - automatic: audit jargon (confidence levels, internal codes, run tags): shown as a generic localized line;
+ *  - text: a human-written reason, shown as typed (ids / run tags stripped).
+ * The stored value is never rewritten: this only decides what is PRESENTED.
+ */
+export type ReasonKind = 'matchesCalendar' | 'automatic' | 'text';
+export function classifyReason(reason: string | null | undefined): { kind: ReasonKind; text: string } {
+  const clean = cleanReason(reason);
+  if (!clean) return { kind: 'automatic', text: '' };
+  if (MATCHES_CALENDAR.test(clean)) return { kind: 'matchesCalendar', text: '' };
+  if (INTERNAL_TOKEN.test(clean) || AUDIT_JARGON.test(clean)) return { kind: 'automatic', text: '' };
+  return { kind: 'text', text: clean };
+}
+
 export type ReasonSummary = { kind: 'matchesPlan' | 'reconciled' | 'text'; text: string; full: string };
 
 /** One short line for the row; `full` (still ID-free) feeds the tooltip. */
 export function summarizeReason(reason: string | null | undefined, maxLength = 48): ReasonSummary {
-  const full = cleanReason(reason);
-  if (!full) return { kind: 'reconciled', text: '', full: '' };
-  if (/company calendar|plan (de la )?empresa|company plan/i.test(full)) return { kind: 'matchesPlan', text: '', full };
-  if (humanizeReason(reason) === null) return { kind: 'reconciled', text: '', full: '' };
-  const text = full.length > maxLength ? `${full.slice(0, maxLength - 1).trimEnd()}…` : full;
-  return { kind: 'text', text, full };
+  const { kind, text: clean } = classifyReason(reason);
+  if (kind === 'matchesCalendar') return { kind: 'matchesPlan', text: '', full: cleanReason(reason) };
+  if (kind === 'automatic') return { kind: 'reconciled', text: '', full: '' };
+  const text = clean.length > maxLength ? `${clean.slice(0, maxLength - 1).trimEnd()}…` : clean;
+  return { kind: 'text', text, full: clean };
 }
 
-const INTERNAL_TOKEN = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b|REQUIRES_REVIEW/;
-
-/** Reason safe to show: ID-free and free of internal codes. `null` = the stored text is audit jargon; show a generic line instead. */
+/** Reason safe to show: `null` = not a human-written text (generic / matches-calendar line applies instead). */
 export function humanizeReason(reason: string | null | undefined): string | null {
-  const clean = cleanReason(reason);
-  if (!clean || INTERNAL_TOKEN.test(clean) || /^marked\b/i.test(clean)) return null;
-  return clean;
+  const { kind, text } = classifyReason(reason);
+  return kind === 'text' ? text : null;
+}
+
+type DayRow = { shiftType?: string | null; startTime?: string | null; endTime?: string | null; countsAsWork?: boolean | null };
+
+/** Visible business state of a day before / after a change: ids, imports, order and provenance never count. */
+export function hasSemanticDayChange(before: readonly DayRow[] = [], after: readonly DayRow[] = []): boolean {
+  const withDate = (rows: readonly DayRow[]) => rows.map((row) => ({ date: '2000-01-01', ...row }));
+  return sharedHasSemanticDayChange(withDate(before), withDate(after));
 }
 
 /**

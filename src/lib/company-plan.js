@@ -172,6 +172,33 @@ export function daySignature(rows = []) {
 
 const sameDay = (a = [], b = []) => daySignature(a) === daySignature(b);
 
+/** Business identity of ONE visible row: type + hours. Ids, imports, timestamps, provenance and plan revision never count. */
+const visibleRowKey = (row) => {
+  const n = normalizePlanRow({ date: '2000-01-01', ...row });
+  return `${n.type}|${n.start}|${n.end}`;
+};
+
+/**
+ * Has the day a user-visible change? `true` only when the business state before / after differs (order, ids and
+ * technical provenance ignored). A technical event whose before === after (e.g. an automatic reconciliation that confirmed
+ * "Vacaciones") is HISTORY, not a change.
+ */
+export const hasSemanticDayChange = (before = [], after = []) => !sameDay(before, after);
+
+/**
+ * Does a day hold history that really differs from what is visible now? `historicRows` = SUPERSEDED / ABSORBED rows,
+ * `effectiveRows` = what the calendar shows. Compared as sets of visible row states, so a superseded duplicate of the
+ * very same shift is not a change.
+ */
+export function hasSemanticHistoryChange(effectiveRows = [], historicRows = []) {
+  if (historicRows.length === 0) return false;
+  const effective = new Set(effectiveRows.map(visibleRowKey));
+  const historic = new Set(historicRows.map(visibleRowKey));
+  for (const key of historic) if (!effective.has(key)) return true;
+  for (const key of effective) if (!historic.has(key)) return true;
+  return false;
+}
+
 /**
  * Baseline B for a range: for every date the NEWEST revision covering it wins.
  * `revisions` = [{ revisionNumber, coverageFrom, coverageTo, rows:[{employeeKey,row}] }].

@@ -95,7 +95,7 @@
 .recon-row__date { font-variant-numeric: tabular-nums; }
 .recon-row__cell { min-width: 0; overflow-wrap: anywhere; color: var(--text-muted); }
 .recon-row__cell--current { display: grid; gap: 2px; color: var(--text-primary); font-weight: 700; }
-.recon-row__reason { color: var(--text-muted); font-size: 0.76rem; font-weight: 500; overflow-wrap: anywhere; }
+.recon-row__reason { grid-column: 2 / 5; margin-top: -2px; color: var(--text-muted); font-size: 0.76rem; font-weight: 500; overflow-wrap: anywhere; }
 .recon-row__status { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 4px 9px; border: 1px solid currentColor; border-radius: 999px; font-size: 0.74rem; font-weight: 800; }
 .recon-row__status--pending { color: var(--color-gold); background: color-mix(in srgb, var(--color-gold) 12%, transparent); }
 .recon-row__status--resolved { color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
@@ -140,8 +140,25 @@
   .recon-row__date { grid-column: 1; font-size: 0.98rem; }
   .recon-row__status { grid-column: 2; grid-row: 1; justify-self: end; }
   .recon-row__cell { grid-column: 1 / -1; }
+  .recon-row__reason { grid-column: 1 / -1; margin-top: 0; }
   .recon-row__cell::before { content: attr(data-label); display: block; color: var(--text-subtle); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
   .recon-row__actions { grid-column: 1 / -1; justify-content: stretch; }
   .recon-row__actions .eff-button:first-child { flex: 1 1 auto; justify-content: center; min-height: 40px; }
   .recon-pager { justify-content: center; }
+}
+
+/* Short desktop windows (a 1366x768 / 1440x900 screen leaves a browser tab ~620-700px): compact paddings and cards so
+   Estadísticas and Diferencias fit without an outer scrollbar. Same content, tighter composition. */
+@media (min-width: 900px) and (max-height: 760px) {
+  .stats-modal.modal-content, .recon-modal.modal-content { padding: 16px 20px; }
+  .stats-modal.modal-content > div:first-child { margin-bottom: 8px !important; }
+  .stats-modal__panel { gap: 10px; }
+  .stats-modal .hero-metric { padding: 12px 18px; gap: 14px; }
+  .stats-modal .hero-metric__icon { width: 44px; height: 44px; }
+  .stats-modal .hero-metric__value { font-size: clamp(1.6rem, 3.2vw, 2.1rem); }
+  .stats-modal .metric-grid { gap: 8px; }
+  .stats-modal .metric-card { padding: 10px 14px 10px 16px; gap: 4px 10px; }
+  .stats-modal .metric-card__value { font-size: 1.25rem; }
+  .stats-modal .planned-card { padding: 10px 14px; }
+  .recon-modal__header { margin-bottom: 8px; }
 }

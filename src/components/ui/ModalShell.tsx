@@ -35,6 +35,9 @@ interface ModalShellProps {
   workspace?: boolean;
   /** Fill the application viewport, used by the planner workspace. */
   fullscreen?: boolean;
+  /** Let a regular (scrolling) modal use the whole viewport height before it needs to scroll: desktop modals whose content
+   * fits a normal browser tab must not show an outer scrollbar. Content that still does not fit scrolls (never clipped). */
+  fitViewport?: boolean;
   /** Let the child provide a domain-specific header while retaining dialog semantics. */
   hideHeader?: boolean;
   /** Additive role override for destructive confirmations. */
@@ -59,6 +62,7 @@ export const ModalShell = ({
   suppressEscape = false,
   workspace = false,
   fullscreen = false,
+  fitViewport = false,
   hideHeader = false,
   dialogRole = 'dialog',
   initialFocus,
@@ -166,7 +170,7 @@ export const ModalShell = ({
               display: 'flex',
               flexDirection: 'column',
             }
-          : { maxWidth, width, maxHeight: '90vh', overflowY: 'auto' }}
+          : { maxWidth, width, maxHeight: fitViewport ? 'calc(100dvh - 24px)' : '90vh', overflowY: 'auto' }}
       >
         {!hideHeader && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800 }}>{title}</h2>

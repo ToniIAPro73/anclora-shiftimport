@@ -209,7 +209,9 @@ export const MonthGrid = ({
             const dayAnnotations = annotations.filter((item) => item.date === iso);
             const hasDcf = dayAnnotations.some((item) => item.kind === 'DCF');
             const hasComment = dayAnnotations.some((item) => item.kind === 'COMMENT');
-            const hasChange = dayShifts.some((shift) => shift.layer === 'CHANGE' || Boolean(shift.changeId) || shift.hasHistory === true);
+            // Visible change only: a change-layer row, or history whose business state really differs (computed by the server).
+            // A technical event alone (changeId, or history that equals what is shown) is audit trail, not a changed day.
+            const hasChange = dayShifts.some((shift) => shift.layer === 'CHANGE' || shift.hasHistory === true);
             const actionInput = { date: iso, today: todayISO, role, hasEditableSchedule: editableScheduleDates.has(iso), hasVacation: hasVacationShift };
             const action = getCalendarAction(actionInput);
             const reason = calendarActionReason(action, actionInput);

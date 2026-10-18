@@ -46,3 +46,5 @@ export function summarizeOutcomes(outcomes: ReconciliationItem[]): OutcomeSummar
 export function sameContent(a: PlanRowInput | null | undefined, b: PlanRowInput | null | undefined): boolean;
 export function daySignature(rows?: PlanRowInput[]): string;
 export function sameDay(a?: PlanRowInput[], b?: PlanRowInput[]): boolean;
+export function hasSemanticDayChange(before?: PlanRowInput[], after?: PlanRowInput[]): boolean;
+export function hasSemanticHistoryChange(effectiveRows?: PlanRowInput[], historicRows?: PlanRowInput[]): boolean;

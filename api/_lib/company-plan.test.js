@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DOCUMENT_CLASS, IMPORT_DECISION, RECONCILIATION_OUTCOME as O, TEMPORAL_CLASS,
   classifyDocument, classifyTemporal, employeeBusinessKey, normalizeImportDecision, normalizePlanRow,
-  daySignature, planCanonicalLines, reconcileThreeWay, resolveBaseline, resolveImportOptions, splitByOperationalDate, summarizeOutcomes,
+  daySignature, hasSemanticDayChange, hasSemanticHistoryChange, planCanonicalLines, reconcileThreeWay, resolveBaseline, resolveImportOptions, splitByOperationalDate, summarizeOutcomes,
 } from '../../src/lib/company-plan.js';
 
 const TODAY = '2026-10-16';
@@ -236,5 +236,30 @@ describe('source-aware semantics (synthetic data)', () => {
       reviewDays: new Set([`${K}\u001f${wed}`]),
     });
     expect(outcomes[0].outcome).toBe(O.REQUIRES_REVIEW);
+  });
+});
+
+describe('semantic day change (history is not a change)', () => {
+  const r = (shiftType, startTime = null, endTime = null, extra = {}) => ({ date: '2026-07-16', shiftType, startTime, endTime, ...extra });
+  it('A: Vacaciones -> Vacaciones is NOT a change', () => {
+    expect(hasSemanticDayChange([r('Vacaciones')], [r('Vacaciones')])).toBe(false);
+  });
+  it('B: same hours with different ids / provenance is NOT a change', () => {
+    expect(hasSemanticDayChange([r('Regular', '09:00', '17:00', { id: 'a', provenance: 'COMPANY_IMPORT' })], [r('Regular', '09:00:00', '17:00:00', { id: 'b', provenance: 'SYSTEM' })])).toBe(false);
+  });
+  it('C: Regular 09-17 -> Regular 10-18 IS a change', () => {
+    expect(hasSemanticDayChange([r('Regular', '09:00', '17:00')], [r('Regular', '10:00', '18:00')])).toBe(true);
+  });
+  it('D: Vacaciones -> Libre IS a change', () => {
+    expect(hasSemanticDayChange([r('Vacaciones')], [r('Libre')])).toBe(true);
+  });
+  it('E: the same rows in another order are NOT a change', () => {
+    const a = r('Regular', '06:00', '10:00'); const b = r('Regular', '14:00', '18:00');
+    expect(hasSemanticDayChange([a, b], [b, a])).toBe(false);
+  });
+  it('history flag: a superseded duplicate of the visible state is not a change; a different historic state is', () => {
+    expect(hasSemanticHistoryChange([r('Vacaciones')], [r('Vacaciones'), r('Vacaciones')])).toBe(false);
+    expect(hasSemanticHistoryChange([r('Vacaciones')], [r('Regular', '09:00', '17:00')])).toBe(true);
+    expect(hasSemanticHistoryChange([r('Vacaciones')], [])).toBe(false);
   });
 });

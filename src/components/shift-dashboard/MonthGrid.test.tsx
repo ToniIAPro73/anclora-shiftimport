@@ -407,3 +407,29 @@ describe('MonthGrid planning drafts', () => {
     expect(screen.queryByTestId('edit-shift-btn-draft:a1')).toBeNull();
   });
 });
+
+describe('MonthGrid "day changed" indicator is a VISIBLE change, not technical history', () => {
+  const day = (extra: Partial<Shift>): Shift => ({ id: 's1', date: '2026-07-16', startTime: '', endTime: '', location: 'Vacaciones', origin: 'IMP', shiftType: 'Vacaciones', effectiveState: 'EFFECTIVE', ...extra } as Shift);
+  const indicator = (shifts: Shift[]) => {
+    const view = render(
+      <I18nProvider>
+        <MonthGrid year={2026} month={6} shifts={shifts} onEditShift={vi.fn()} onCreateShift={vi.fn()} provenanceEnabled employeeId="e1" canReconcile />
+      </I18nProvider>,
+    );
+    const button = view.container.querySelector('[data-testid="day-history-btn-2026-07-16"]');
+    view.unmount();
+    return button;
+  };
+
+  it('a change id on a day whose history equals what is shown (Vacaciones → Vacaciones) shows no indicator', () => {
+    expect(indicator([day({ changeId: 'c-1', hasHistory: false })])).toBeNull();
+  });
+  it('a day with a real visible change (the server flags history that differs) shows the indicator', () => {
+    expect(indicator([day({ shiftType: 'Libre', location: 'Libre', changeId: 'c-2', hasHistory: true })])).not.toBeNull();
+  });
+  it('a pending difference still shows the warning', () => {
+    const button = indicator([day({ effectiveState: 'REQUIRES_REVIEW' })]);
+    expect(button).not.toBeNull();
+    expect(button?.getAttribute('data-review')).not.toBeNull();
+  });
+});

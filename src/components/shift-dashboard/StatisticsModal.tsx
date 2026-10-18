@@ -288,6 +288,7 @@ export function StatisticsModal({
       maxWidth="800px"
       width="100%"
       className="stats-modal"
+      fitViewport
       closeAriaLabel={t('common.close')}
       closeTestId="stats-modal-close"
     >

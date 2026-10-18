@@ -5,6 +5,7 @@ import { getOperationalDate, isHistoricalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict } from './shift-compatibility.js';
 import { importReversibility } from './import-reversion.js';
 import { LEDGER_PREFIX_LENGTH, ledgerPrefix } from './import-ledger.js';
+import { hasSemanticHistoryChange } from '../../src/lib/company-plan.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -2168,6 +2169,39 @@ export async function updateImportOutcome(sql, ctx, rawImportId, input = {}) {
 
 // ------------------------------------------------------------------- shifts
 
+/**
+ * `has_history` (SQL) only says that SUPERSEDED / ABSORBED rows exist on the day: technical history. The calendar's
+ * "this day changed" indicator needs a VISIBLE change, so a flagged day keeps the flag only when its historic business
+ * state really differs from the effective one (e.g. an automatic reconciliation that confirmed "Vacaciones" is not a change).
+ * The stored rows are never touched: the audit trail stays intact and the day detail still shows it.
+ */
+export async function refineHistoryFlags(sql, ctx, shifts) {
+  const flagged = shifts.filter((shift) => shift.hasHistory);
+  if (flagged.length === 0) return shifts;
+  const employeeIds = [...new Set(flagged.map((shift) => shift.employeeId))];
+  const dates = [...new Set(flagged.map((shift) => shift.date))];
+  const historic = await sql`
+    SELECT employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, shift_type, location, start_time, end_time, counts_as_work, duty_role
+    FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND effective_state IN ('SUPERSEDED', 'ABSORBED')
+      AND employee_id = ANY(${employeeIds}::uuid[]) AND date = ANY(${dates}::date[])
+  `;
+  const byDay = (rows, key) => rows.reduce((map, row) => {
+    const k = `${key(row, 'employee')}|${key(row, 'date')}`;
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(row);
+    return map;
+  }, new Map());
+  const historicByDay = byDay(historic, (row, part) => (part === 'employee' ? row.employee_id : row.date));
+  const effectiveByDay = byDay(shifts.filter((shift) => shift.effectiveState === 'EFFECTIVE'), (row, part) => (part === 'employee' ? row.employeeId : row.date));
+  return shifts.map((shift) => {
+    if (!shift.hasHistory) return shift;
+    const k = `${shift.employeeId}|${shift.date}`;
+    const effective = (effectiveByDay.get(k) ?? []).map((row) => ({ date: row.date, shiftType: row.shiftType, location: row.location, startTime: row.startTime, endTime: row.endTime, countsAsWork: row.countsAsWork, dutyRole: row.dutyRole }));
+    return { ...shift, hasHistory: hasSemanticHistoryChange(effective, historicByDay.get(k) ?? []) };
+  });
+}
+
 export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null } = {}) {
   const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA' && areaId && areaId !== scope.areaId) {
@@ -2211,7 +2245,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
             AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
           ORDER BY date ASC, start_time ASC, id ASC
         `;
-    return rows.map(mapShiftRow);
+    return refineHistoryFlags(sql, ctx, rows.map(mapShiftRow));
   }
 
   // Organization-scope or area-scope planner without employee filter.
@@ -2247,7 +2281,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
         ORDER BY date ASC, start_time ASC, id ASC
       `;
-  return rows.map(mapShiftRow);
+  return refineHistoryFlags(sql, ctx, rows.map(mapShiftRow));
 }
 
 /**
