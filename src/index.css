@@ -2871,7 +2871,7 @@ select:disabled {
   min-height: 0;
   display: grid;
   align-content: start;
-  gap: 4px;
+  gap: 3px;
   padding: 2px 0 0;
   overflow-x: hidden;
   overflow-y: hidden;
@@ -2893,7 +2893,7 @@ select:disabled {
   width: 100%;
   /* one shift = one compact band (never stretched to the height of the day) */
   height: auto;
-  min-height: 20px;
+  min-height: 18px;
   text-align: left;
   position: relative;
   z-index: 1;

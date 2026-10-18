@@ -72,7 +72,7 @@ try {
     counter += 1;
     const res = await admin('POST', '/api/imports/confirm-split', {
       fileName: `rev-${counter}-${Date.now()}.xlsx`, sourceFormat: 'excel', fileFingerprint: fp(), employeeId: emp.id, shifts, importMode: 'individual', periodKind: 'multi',
-      periodYear: 2027, periodMonth: null, periodLabel: 'QA', weekStart: 'monday', futureConsent: 'historical-and-plan', sourceKind: 'PUBLISHED_CALENDAR_EXPORT', deleteIds: [], ...extra,
+      periodYear: 2027, periodMonth: null, periodLabel: 'QA', weekStart: 'monday', futureConsent: 'historical-and-plan', sourceKind: 'TEAM_SCHEDULE_EXPORT', deleteIds: [], ...extra,
     });
     return res;
   };
@@ -151,7 +151,7 @@ try {
   // reimport the same file after the reversion
   const reA = await admin('POST', '/api/imports/confirm-split', {
     fileName: `rev-again-${Date.now()}.xlsx`, sourceFormat: 'excel', fileFingerprint: fp(), employeeId: E1.id, importMode: 'individual', periodKind: 'multi', periodYear: 2027, periodMonth: null, periodLabel: 'QA',
-    weekStart: 'monday', futureConsent: 'historical-and-plan', sourceKind: 'PUBLISHED_CALENDAR_EXPORT', deleteIds: [],
+    weekStart: 'monday', futureConsent: 'historical-and-plan', sourceKind: 'TEAM_SCHEDULE_EXPORT', deleteIds: [],
     shifts: [row(E1, '2027-06-01', '09:00', '17:00'), row(E1, '2027-06-02', '09:00', '17:00'), row(E1, '2027-06-03', null, null, 'Libre')],
   });
   check('same_document_can_be_imported_again_after_reversion', reA.status < 300 && !reA.body.duplicate && reA.body.plan?.revisionCreated === true && reA.body.importId !== A, { status: reA.status, duplicate: reA.body.duplicate });

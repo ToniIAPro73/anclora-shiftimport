@@ -117,7 +117,8 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
           </div>
           {canReconcile && (
             <>
-              <div className="day-history__options" role="group" aria-label={t('dayHistory.keepLabel')}>
+              <span id="day-history-keep-label" className="day-history__group-label">{t('dayHistory.keepLabel')}</span>
+              <div className="day-history__options" role="group" aria-labelledby="day-history-keep-label">
                 {keepOptions.map((row) => (
                   <label key={row.id} className={`day-history__keep${keepIds.includes(row.id as string) ? ' is-selected' : ''}`}>
                     <input

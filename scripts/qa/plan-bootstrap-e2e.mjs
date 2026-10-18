@@ -126,7 +126,7 @@ try {
   check('same_file_is_duplicate_file', replay.body.duplicate === 'DUPLICATE_FILE', { duplicate: replay.body.duplicate });
   const copy = await admin('POST', '/api/imports/confirm-split', input(same));
   check('same_document_other_bytes_no_revision', ['DUPLICATE_DOCUMENT', 'DUPLICATE_PLAN'].includes(copy.body.duplicate), { duplicate: copy.body.duplicate });
-  const other = await admin('POST', '/api/imports/confirm-split', input(same, { sourceFormat: 'pdf', sourceKind: 'PUBLISHED_CALENDAR_EXPORT', importMode: 'individual', employeeId: A.id, shifts: docRows(A, [{ date: D.a[0], s: '13:00', e: '21:00' }, { date: D.a[1], s: '13:00', e: '21:00' }, { date: D.a[2], t: 'Libre' }]) }));
+  const other = await admin('POST', '/api/imports/confirm-split', input(same, { sourceFormat: 'pdf', sourceKind: 'TEAM_SCHEDULE_EXPORT', importMode: 'individual', employeeId: A.id, shifts: docRows(A, [{ date: D.a[0], s: '13:00', e: '21:00' }, { date: D.a[1], s: '13:00', e: '21:00' }, { date: D.a[2], t: 'Libre' }]) }));
   const end1 = await counts();
   check('no_revision_2_on_duplicates', end1.revisions === before.revisions + 1 && end1.shifts === before.shifts && end1.assignments === before.assignments, { revisions: end1.revisions - before.revisions, other: other.body.duplicate });
 
