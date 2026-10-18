@@ -1893,7 +1893,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 DO_NOT_BREAK) so the row list keeps its min-height floor. */}
             <div className="import-modal-review-extra">
             {readyShifts.length > 0 && (
-              <div style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-subtle)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <div className="import-modal-review-counts" style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-subtle)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {importDiff.new.length > 0 && <span>{t('importModal.diffNew', { count: importDiff.new.length })}</span>}
                 {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
                 {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
@@ -1919,7 +1919,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 )}
                 <span>{t(temporalSummary.historical > 0 && temporalSummary.future > 0 ? 'importModal.sourceContent.MIXED' : temporalSummary.future > 0 ? 'importModal.sourceContent.FUTURE' : 'importModal.sourceContent.HISTORICAL')}</span>
                 <span data-testid="import-source-description">{t(`importModal.sourceDescription.${analysis.source.kind}`)}</span>
-                {temporalSummary.future > 0 && !identityLocked && <span>{t('importModal.sourceUsageFuture')}</span>}
+                {temporalSummary.future > 0 && !identityLocked && <span className="import-source-usage">{t('importModal.sourceUsageFuture')}</span>}
                 {sourceAnnotationCounts.dcf + sourceAnnotationCounts.comments > 0 && <span>{t('importModal.sourceAnnotations', { dcf: sourceAnnotationCounts.dcf, comments: sourceAnnotationCounts.comments })}</span>}
               </div>
             )}
@@ -1927,7 +1927,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               <SourceIdentityPanel
                 sourceSystem={analysis.source.system}
                 identifier={analysis.source.identifier}
-                documentName={analysis.source.employeeName}
+                documentName={analysis.source.employeeName || employeeName}
                 canPickManually={canAssociateIdentity && !identityLocked}
                 lockedEmployeeId={identityLocked ? lockedEmployeeId : null}
                 onResolved={setSourceEmployee}
@@ -1960,7 +1960,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   {t('importModal.noHistoricalInFile')}
                 </p>
               ) : (
-                <div role="alert" style={{ margin: '8px 0 0', textAlign: 'center' }}>
+                <div role="alert" className="import-modal-review-notice" style={{ margin: '8px 0 0', textAlign: 'center' }}>
                   <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                     {t('importModal.noNewShifts')}
                   </p>

@@ -74,6 +74,13 @@ describe('resolveSourceIdentity (canonical 84881 vs TRYP 6888)', () => {
     const r = await resolveSourceIdentity(identitySql({ org: 'ShiftImport — QA Mirror', employees: [qa, OTHER] }), admin, doc());
     expect(r).toMatchObject({ status: 'CANDIDATE', employee: { id: 'seb', externalEmployeeId: '84881' } });
   });
+  it('2a: production org — unmapped alias 6888 + unique name (accents/case/spacing aside) -> CANDIDATE carrying the canonical id 84881', async () => {
+    for (const printed of ['Sebastian Pozo Mendoza', 'SEBASTIÁN  POZO   MENDOZA', ' sebastian pozo-mendoza. ']) {
+      const r = await resolveSourceIdentity(identitySql({ org: 'CIF Import', employees: [{ ...SEB, name: 'Sebastián Pozo Mendoza' }, OTHER] }), { ...admin, role: 'OWNER' }, doc({ documentName: printed }));
+      expect(r.status).toBe('CANDIDATE');
+      expect(r.employee).toMatchObject({ id: 'seb', name: 'Sebastián Pozo Mendoza', externalEmployeeId: '84881' });
+    }
+  });
   it('2b: the decoration is NOT ignored in a production organization (no weakening)', async () => {
     const qa = { ...SEB, name: 'Sebastián Pozo Mendoza — QA' };
     expect((await resolveSourceIdentity(identitySql({ employees: [qa, OTHER] }), admin, doc())).status).toBe('NONE');

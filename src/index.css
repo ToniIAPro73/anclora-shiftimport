@@ -3170,6 +3170,52 @@ select:disabled {
   min-height: 120px;
 }
 
+/* Desktop (>= 1200 x 700): the review block is a compact two-column composition instead of a tall stack, so identity
+   and the future decision are visible together WITHOUT a second vertical scroll. The only scrollable region of the
+   modal is the detected-shifts list, which receives all the height the controls do not need. */
+@media (min-width: 1200px) and (min-height: 700px) {
+  .import-modal-review-extra {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 10px;
+    align-items: start;
+    max-height: none;
+    overflow: visible;
+    scrollbar-gutter: auto;
+  }
+  .import-modal-review-extra > * { margin-top: 0 !important; min-width: 0; }
+  .import-modal-review-extra > .import-modal-review-counts,
+  .import-modal-review-extra > [data-testid='import-source-summary'],
+  .import-modal-review-extra > .import-modal-review-notice { grid-column: 1 / -1; }
+  .import-modal-review-extra > [data-testid='import-source-summary'] {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 2px 14px !important;
+    padding: 8px 12px !important;
+    font-size: 0.8rem !important;
+  }
+  .import-modal-review-extra > [data-testid='import-source-summary'] > strong { flex: 1 0 100%; }
+  .import-modal-review-extra > [data-testid='source-identity-panel'] { padding: 10px 12px !important; gap: 6px !important; }
+  /* The future-draft sentence is already part of the decision block right below: not repeated in the summary. */
+  .import-modal-review-extra .import-source-usage { display: none; }
+  .import-modal-review-extra > fieldset { padding: 8px 12px !important; gap: 4px !important; }
+  .import-modal-review-extra > fieldset p { margin: 0 !important; }
+  .import-modal-review-extra > fieldset legend { font-size: 0.92rem; }
+  .import-modal-review-extra > fieldset label { align-items: center !important; }
+  .import-modal-review-extra > [data-testid='source-identity-panel'] { display: flex !important; flex-wrap: wrap; align-items: center; gap: 2px 8px !important; }
+  .import-modal-review-extra > [data-testid='source-identity-panel'] > strong:first-child,
+  .import-modal-review-extra > [data-testid='source-identity-panel'] > button,
+  .import-modal-review-extra > [data-testid='source-identity-panel'] > small,
+  .import-modal-review-extra > [data-testid='source-identity-panel'] > div,
+  .import-modal-review-extra > [data-testid='source-identity-panel'] > span:not([data-testid='source-identity-candidate-id']) { flex: 1 0 100%; }
+  .import-modal-review-extra > [data-testid='source-identity-panel'] > button { margin-top: 2px; }
+  /* Use the viewport: the shell is allowed 95% of the height before anything has to give way. */
+  .import-modal {
+    height: min(95vh, calc(100vh - var(--space-md) * 2));
+    height: min(95dvh, calc(100dvh - var(--space-md) * 2));
+  }
+}
+
 .import-modal__footer {
   flex: 0 0 auto;
   padding-top: 12px;

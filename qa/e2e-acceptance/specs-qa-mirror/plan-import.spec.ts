@@ -65,7 +65,7 @@ test.describe('source-aware import UI, desktop + mobile (QA mirror, real TRYP em
     const radio = page.getByRole('radio', { name: /Importar también los turnos futuros/ });
     await expect(radio).toBeInViewport();
     await radio.check();
-    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publican automáticamente');
+    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('No se publicarán automáticamente');
     // the confirm button stays reachable and the row list keeps some room
     await expect(page.getByRole('button', { name: /Confirmar Importación/ })).toBeInViewport();
     const list = await page.locator('.import-modal__shifts-list').boundingBox();
@@ -82,13 +82,13 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     await page.getByRole('button', { name: 'Procesar archivo' }).click({ timeout: 10_000 }).catch(() => undefined);
     const consent = page.getByTestId('import-future-consent');
     await expect(consent).toBeVisible({ timeout: 60_000 });
-    await expect(consent).toContainText('turnos anteriores y futuros');
+    await expect(consent).toContainText('también contiene turnos futuros');
     await expect(page.getByTestId('import-future-consent-counts')).toContainText(/Turnos anteriores: \d+ · Turnos futuros: \d+/);
     // safe default: historical only; the plan option is explicit
     await expect(page.getByRole('radio', { name: /Importar solo los turnos anteriores/ })).toBeChecked();
     await page.getByRole('radio', { name: /Importar también los turnos futuros/ }).check();
-    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('no se publican automáticamente');
-    expect(await page.getByTestId('import-future-consent').innerText()).not.toMatch(/publicar|[0-9a-f]{8}-[0-9a-f]{4}/i);
+    await expect(page.getByTestId('import-future-consent-plan-summary')).toContainText('No se publicarán automáticamente');
+    expect(await page.getByTestId('import-future-consent').innerText()).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}|revisi[oó]n|baseline/i);
     await consent.screenshot({ path: shot('import-xlsx-mixed-consent') });
   });
 

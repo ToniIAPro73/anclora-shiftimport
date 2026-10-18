@@ -2552,8 +2552,15 @@ function App() {
                 externalIdentifier: trypExport.sourceIdentifier,
                 documentName: trypExport.employeeName ?? employee.name,
               }).catch(() => null);
-              const documentEmployee = verdict && (verdict.status === 'MAPPED' || verdict.status === 'CANONICAL' || verdict.status === 'CANDIDATE')
-                ? employees.find((candidate) => candidate.id === verdict.employee?.id) ?? null
+              // The server resolved the document to a canonical employee (known alias, canonical id or a unique exact name):
+              // the import works with THAT employee (name + canonical id from the directory), never with the alias or the
+              // name printed in the document. Prefer the loaded directory row; the verdict itself is authoritative otherwise.
+              const resolvedEmployee = verdict && (verdict.status === 'MAPPED' || verdict.status === 'CANONICAL' || verdict.status === 'CANDIDATE')
+                ? verdict.employee
+                : null;
+              const documentEmployee = resolvedEmployee
+                ? employees.find((candidate) => candidate.id === resolvedEmployee.id)
+                  ?? { id: resolvedEmployee.id, name: resolvedEmployee.name, externalEmployeeId: resolvedEmployee.externalEmployeeId } as Pick<RemoteEmployee, 'id' | 'name' | 'externalEmployeeId'>
                 : null;
               if (session?.role === 'PLANNER' && !documentEmployee) {
                 // Not resolvable inside the planner's scope: stop before anything can be written or offered.
