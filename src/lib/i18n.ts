@@ -1561,6 +1561,7 @@ const translations: Record<Locale, TranslationTree> = {
       selfAmbiguous: 'Hemos encontrado varias coincidencias posibles para tus turnos.',
       selfAmbiguousHint: 'Necesitamos una identificación inequívoca antes de importar. Revisa el documento y vuelve a intentarlo.',
       selfImportFutureExcluded: '{{count}} turnos propios con fecha futura no se importarán en el autoservicio.',
+      plannerEmployeeUnavailable: 'Este empleado no está disponible en tu ámbito de trabajo. No puedes continuar con esta importación.',
       selfFutureMixed: 'Este archivo también contiene turnos futuros. Solo se importarán los turnos anteriores a hoy.',
       selfFutureOnly: 'Este archivo solo contiene turnos futuros. Los empleados solo pueden importar turnos históricos.',
       identity: {
@@ -3676,6 +3677,7 @@ const translations: Record<Locale, TranslationTree> = {
       selfAmbiguous: 'We found multiple possible matches for your shifts.',
       selfAmbiguousHint: 'We need an unambiguous identity before importing. Check the document and try again.',
       selfImportFutureExcluded: '{{count}} of your future shifts will not be imported through self-service.',
+      plannerEmployeeUnavailable: 'This employee is not available in your work scope. You cannot continue with this import.',
       selfFutureMixed: 'This file also contains future shifts. Only the shifts before today will be imported.',
       selfFutureOnly: 'This file only contains future shifts. Employees can only import past shifts.',
       identity: {

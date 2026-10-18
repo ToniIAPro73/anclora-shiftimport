@@ -1124,6 +1124,13 @@ function App() {
       return employees.find((employee) => employee.id === session.employeeId) ?? null;
     }
 
+    // Defence in depth: a PLANNER never reaches the administrative alta flow. An identity that is not already a
+    // resolved employee inside its (server-scoped) roster is simply unavailable: no CTA, no failed-import record.
+    if (session.role === 'PLANNER' && adminIndividualImport && !adminIndividualImport.employeeId && !selector?.employeeId) {
+      setAppFeedback({ kind: 'alert', message: t('importModal.plannerEmployeeUnavailable') });
+      return null;
+    }
+
     // Explicitly resolved by the source-identity gate (mapping / canonical id / admin association): authoritative.
     if (selector?.employeeId) {
       const explicit = (await listRemoteEmployees().catch(() => employees)).find((employee) => employee.id === selector.employeeId) ?? null;
@@ -1222,6 +1229,10 @@ function App() {
 
     // kind === 'new': inline alta, never leaves the import flow. The new
     // employee inherits the import's area context (never a cross-area row).
+    if (session.role === 'PLANNER') {
+      setAppFeedback({ kind: 'alert', message: t('importModal.plannerEmployeeUnavailable') });
+      return null;
+    }
     const label = externalId ? `${name || externalId} (ID ${externalId})` : name;
     if (!name) {
       return null;
@@ -2544,6 +2555,12 @@ function App() {
               const documentEmployee = verdict && (verdict.status === 'MAPPED' || verdict.status === 'CANONICAL' || verdict.status === 'CANDIDATE')
                 ? employees.find((candidate) => candidate.id === verdict.employee?.id) ?? null
                 : null;
+              if (session?.role === 'PLANNER' && !documentEmployee) {
+                // Not resolvable inside the planner's scope: stop before anything can be written or offered.
+                setAppFeedback({ kind: 'alert', message: t('importModal.plannerEmployeeUnavailable') });
+                setIsImportOpen(false);
+                return;
+              }
               setAdminIndividualImport({
                 file,
                 employee: {
@@ -2562,6 +2579,11 @@ function App() {
                 : normalizeText(candidate.name) === normalizeText(employee.name)
             ));
             const resolved = matching.length === 1 ? matching[0] : null;
+            if (session?.role === 'PLANNER' && !resolved) {
+              setAppFeedback({ kind: 'alert', message: t('importModal.plannerEmployeeUnavailable') });
+              setIsImportOpen(false);
+              return;
+            }
             if (resolved) {
               setSelectedEmployeeId(resolved.id);
             }

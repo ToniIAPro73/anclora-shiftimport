@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
+import { HttpError, employeeRowInScope, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { createShiftPublishedNotifications } from './data.js';
 import { getOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict, getShiftSemantics } from './shift-compatibility.js';
@@ -334,15 +334,22 @@ function mapSchedulingEmployee(row) {
   };
 }
 
-async function schedulingScopeAreaId(sql, ctx, requestedAreaId = null) {
+async function schedulingScope(sql, ctx, requestedAreaId = null) {
   const scope = await resolveEffectiveAccessScope(sql, ctx);
   if (scope.type === 'AREA') {
     if (requestedAreaId && requestedAreaId !== scope.areaId) {
       throw scheduleScopeError();
     }
-    return scope.areaId;
+    return { scope, areaId: scope.areaId };
   }
-  return requestedAreaId || null;
+  if (scope.type === 'AREAS' && requestedAreaId && !(scope.areaIds || []).includes(requestedAreaId)) {
+    throw scheduleScopeError();
+  }
+  return { scope, areaId: requestedAreaId || null };
+}
+
+async function schedulingScopeAreaId(sql, ctx, requestedAreaId = null) {
+  return (await schedulingScope(sql, ctx, requestedAreaId)).areaId;
 }
 
 /** Lists the latest version for each tenant-scoped schedule for draft discovery. */
@@ -423,7 +430,7 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
   `;
   if (rows.length === 0) throw new HttpError(404, 'Schedule version not found');
   const schedule = rows[0];
-  const scopedAreaId = await schedulingScopeAreaId(sql, ctx, schedule.area_id ?? null);
+  const { scope, areaId: scopedAreaId } = await schedulingScope(sql, ctx, schedule.area_id ?? null);
   const employeeQuery = scopedAreaId
     ? sql`
       SELECT id, name, external_employee_id, area_id
@@ -464,7 +471,11 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
         AND e.status = 'active'
       ORDER BY sa.date, sa.start_time, sa.employee_id, sa.id
     `;
-  const [employeeRows, assignmentRows] = await Promise.all([employeeQuery, assignmentQuery]);
+  const [allEmployeeRows, allAssignmentRows] = await Promise.all([employeeQuery, assignmentQuery]);
+  // Server-side read model: a scoped PLANNER (areas / employees) only receives its own roster and their assignments.
+  const employeeRows = allEmployeeRows.filter((row) => employeeRowInScope(scope, row));
+  const allowedEmployeeIds = new Set(employeeRows.map((row) => row.id));
+  const assignmentRows = allAssignmentRows.filter((row) => allowedEmployeeIds.has(row.employee_id));
   return {
     version: mapScheduleVersion(schedule),
     employees: employeeRows.map(mapSchedulingEmployee),
