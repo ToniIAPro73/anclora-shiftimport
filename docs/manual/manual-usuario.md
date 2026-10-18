@@ -201,13 +201,13 @@ como trazabilidad, pero no decide qué se suma.
   máximo»). Es información operativa: no calcula nóminas ni certifica la jornada legal. Si el año no
   tiene objetivo, verás **Objetivo anual no configurado**; los administradores y el propietario
   pueden pulsar **Configurar**. Los objetivos no se copian de un año a otro.
-- **Días con diferencia pendiente:** si lo comunicado por la empresa y el historial no coinciden, el día
+- **Días con diferencia pendiente:** si hay más de una versión posible para un día, el día
   se marca (⚠), sus horas no se suman y aparece un aviso con las fechas. Un administrador puede
-  abrirlas y registrar una decisión con motivo.
+  abrirlas, elegir qué debe quedar en el calendario (cada opción aparece una sola vez) y pulsar **Guardar decisión** con un motivo.
 - **Móvil:** las tarjetas se apilan y el detalle se expande bajo demanda.
 
-Un día cuyo plan cambió respecto a lo que comunicó la empresa muestra un pequeño icono de historial.
-Ábrelo para ver el **calendario actual**, lo que la empresa **comunicó antes** y lo que comunica **ahora**, la cronología de
+Un día que ha cambiado muestra un pequeño icono de historial.
+Ábrelo para ver el **calendario actual**, la **información anterior** y la **nueva información**, la cronología de
 **cambios** (quién, cuándo y por qué) y, si procede, que el antiguo código **JT** (jefe de turno) es
 solo una función y no añade horas.
 

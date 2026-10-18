@@ -54,7 +54,7 @@ describe('ReconciliationModal', () => {
     expect(screen.getByTestId('recon-before-2026-06-02')).toHaveTextContent('14:00–22:00');
     expect(screen.getByTestId('recon-now-2026-06-02')).toHaveTextContent('14:00–22:00');
     expect(screen.getByTestId('recon-effective-2026-06-02')).toHaveTextContent('Baja');
-    expect(screen.getByTestId('recon-why-2026-06-02')).toHaveTextContent('difiere de lo comunicado por la empresa');
+    expect(screen.getByTestId('recon-why-2026-06-02')).toHaveTextContent('difiere de la información importada');
     expect(screen.getByTestId('reconciliation-modal').textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
   });
 
@@ -139,7 +139,7 @@ describe('ReconciliationModal — presentation', () => {
     renderModal({ employeeId: 'e1', year: 2026, pendingCount: 0, resolvedCount: 1, items: [technical] });
     fireEvent.click(screen.getByRole('tab', { name: 'Resueltos' }));
     const reason = screen.getByTestId('recon-reason-2026-02-02');
-    expect(reason).toHaveTextContent('Coincide con lo comunicado por la empresa');
+    expect(reason).toHaveTextContent('Coincide con la información importada');
     const row = screen.getByTestId('recon-row-2026-02-02');
     expect(row.textContent).not.toMatch(/run|1acfbb93|[0-9a-f]{8}-[0-9a-f]{4}/i);
     expect(reason.getAttribute('title') ?? '').not.toMatch(/1acfbb93/);

@@ -33,13 +33,12 @@ const history = (over: Record<string, unknown> = {}) => ({
 const renderPanel = (canReconcile = true) => render(<I18nProvider><DayProvenancePanel employeeId="e1" date="2026-06-02" canReconcile={canReconcile} /></I18nProvider>);
 
 describe('DayProvenancePanel (compact two-column layout pieces)', () => {
-  it('shows the decision panel, the effective / original / current comparison and a compact trail', async () => {
+  it('shows the decision panel (no redundant comparison) and a compact trail', async () => {
     loadDayHistory.mockResolvedValue(history());
     renderPanel();
     expect(await screen.findByTestId('day-history-pending')).toHaveTextContent('Diferencia pendiente');
-    expect(screen.getByTestId('day-history-compare').children).toHaveLength(3);
-    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Antes comunicado por la empresa');
-    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Ahora comunicado por la empresa');
+    // M4: a pending difference is decided in the block itself; no redundant comparison underneath
+    expect(screen.queryByTestId('day-history-compare')).toBeNull();
     // only the latest two changes are inline; the rest sit behind "Ver 1 más"
     expect(screen.getByTestId('day-history-change-c1')).toBeInTheDocument();
     expect(screen.getByText('Ver 1 más')).toBeInTheDocument();
@@ -52,15 +51,76 @@ describe('DayProvenancePanel (compact two-column layout pieces)', () => {
     await screen.findByTestId('day-history-pending');
     fireEvent.click(screen.getAllByRole('checkbox')[0]);
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'confirmado' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Registrar decisión' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar decisión' }));
     await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-06-02', keepShiftIds: ['c'], reason: 'confirmado' }));
   });
 
-  it('a non-reconciling role sees the comparison but no decision controls', async () => {
+  it('a non-reconciling role sees the pending notice but no decision controls', async () => {
     loadDayHistory.mockResolvedValue(history());
     renderPanel(false);
     await screen.findByTestId('day-history-pending');
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Registrar decisión' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Guardar decisión' })).toBeNull();
+  });
+});
+
+describe('pending difference choices (17/09 equivalent)', () => {
+  const sep17 = () => ({
+    provenance: {
+      requiresReview: true, effective: [],
+      companyOriginal: [row('a1', 'Regular', '04:30', '12:30', 'REQUIRES_REVIEW')],
+      // the same 04:30 state arrives twice (plan history row + a pending row with another id) next to a genuinely different one
+      companyCurrent: [row('a1', 'Regular', '04:30', '12:30', 'REQUIRES_REVIEW'), row('b1', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')],
+      revisions: [1, 2], legacyDutyRows: [],
+    },
+    changes: [],
+    rows: [row('a2', 'Regular', '04:30', '12:30', 'REQUIRES_REVIEW'), row('b1', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')],
+  });
+
+  it('D1/M2/M3: offers each semantic state once (2 options, never 3)', async () => {
+    loadDayHistory.mockResolvedValue(sep17());
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.getAllByText(/Regular 04:30–12:30/)).toHaveLength(1);
+    expect(screen.getAllByText(/Regular 05:00–13:00/)).toHaveLength(1);
+  });
+
+  it('D2: two genuinely different shifts remain two options', async () => {
+    loadDayHistory.mockResolvedValue(history({ rows: [row('p1', 'Regular', '04:30', '12:30', 'REQUIRES_REVIEW'), row('p2', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')], provenance: { requiresReview: true, effective: [], companyOriginal: [], companyCurrent: [], revisions: [], legacyDutyRows: [] } }));
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+  });
+
+  it('D3: choosing an option keeps the id of the row that is pending', async () => {
+    loadDayHistory.mockResolvedValue(sep17());
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    fireEvent.click(screen.getByRole('checkbox', { name: /Usar como calendario actual: Regular 04:30–12:30/ }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'ok' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar decisión' }));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-06-02', keepShiftIds: ['a2'], reason: 'ok' }));
+  });
+
+  it('D4/D5/D6: no company-plan vocabulary, no revision labels', async () => {
+    loadDayHistory.mockResolvedValue(sep17());
+    const { container } = renderPanel();
+    await screen.findByTestId('day-history-pending');
+    expect(container.textContent).not.toMatch(/Plan Empresa|Antes comunicado|Ahora comunicado|Actualización \d|Revisión \d/i);
+    expect(screen.getByRole('group', { name: 'Elige el calendario del día' })).toBeInTheDocument();
+    expect(screen.getByTestId('day-history-pending-note')).toHaveTextContent('estos turnos no cuentan');
+  });
+
+  it('a resolved day keeps a neutral summary (previous / new information, no revision numbers)', async () => {
+    loadDayHistory.mockResolvedValue(history({ provenance: {
+      requiresReview: false, effective: [row('e', 'Regular', '05:00', '13:00')],
+      companyOriginal: [row('o', 'Regular', '04:30', '12:30')], companyCurrent: [row('c', 'Regular', '05:00', '13:00')], revisions: [1, 2], legacyDutyRows: [],
+    }, rows: [] }));
+    renderPanel();
+    const compare = await screen.findByTestId('day-history-compare');
+    expect(compare).toHaveTextContent('Información anterior');
+    expect(compare).toHaveTextContent('Nueva información');
+    expect(compare).not.toHaveTextContent(/Actualización|Revisión/);
   });
 });

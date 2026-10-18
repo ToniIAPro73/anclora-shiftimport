@@ -19,17 +19,17 @@ Historial**. This section is the single canonical mapping; the other product con
 
 | Internal | Visible (ES / EN) |
 | --- | --- |
-| `company_plan_revisions`, Plan Empresa | Turnos comunicados por la empresa · Información de la empresa / Shifts communicated by the company |
-| first revision (baseline) | Primera referencia de la empresa / Initial company reference (CTA «Usar como referencia inicial») |
-| revision N | Actualización de la empresa / Company update (never the number as the primary datum) |
+| `company_plan_revisions`, Plan Empresa | **No visible.** Detalle interno/legacy del cuadrante de empresa (PDF); no es un concepto de usuario. El usuario ve Planificación / Planning |
+| first revision (baseline) | **No visible.** Se crea, si procede, dentro de la confirmación ordinaria de un cuadrante de empresa; no hay tarjeta ni CTA de «referencia inicial» |
+| revision N | Nunca se muestra como dato principal ni como «Actualización N» |
 | effective calendar | Calendario · Calendario actual / Calendar · Current calendar |
 | reconciliation, `REQUIRES_REVIEW` | Diferencias · Diferencia pendiente / Differences · Pending difference |
-| company before / now / effective | Antes comunicado por la empresa · Ahora comunicado por la empresa · Calendario actual |
+| before / now / effective | Información anterior · Nueva información · Calendario actual (neutral: no se afirma que proceda de la empresa; el rótulo de fuente solo se muestra si es fiable) |
 | `KEPT_LOCAL` | «Se mantiene el cambio que ya existe en el calendario» |
 | `COMPANY_ADOPTED_LOCAL` | «La empresa ha comunicado ahora el mismo turno que ya tienes en el calendario» |
 | `TEAM_SCHEDULE_EXPORT` | Cuadrante de empresa |
-| `PUBLISHED_CALENDAR_EXPORT` | Mensual publicado |
-| `EMPLOYEE_CALENDAR_EXPORT` | Calendario del empleado |
+| `PUBLISHED_CALENDAR_EXPORT` | Mensual publicado (instantánea básica del calendario individual) |
+| `EMPLOYEE_CALENDAR_EXPORT` | Calendario del empleado (instantánea enriquecida: DCF, bajas, observaciones) |
 | Schedule / ScheduleVersion | Planificación (Borrador · Publicada · Bloqueada · Completada) |
 
 Guard: `src/lib/visible-model-copy.test.ts` fails if an internal term appears in any visible i18n string.

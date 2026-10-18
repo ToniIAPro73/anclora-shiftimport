@@ -78,26 +78,17 @@ test.describe('legacy plan bootstrap (QA mirror, synthetic roster)', () => {
   test.beforeEach(async () => { await reset(); });
 
   for (const mode of ['desktop', 'mobile'] as const) {
-    test(`admin ${mode}: data already exists, no plan → card → create initial plan without duplicating`, async ({ page }) => {
+    test(`admin ${mode}: data already exists, no plan → no first-reference flow is shown and nothing is written by merely previewing`, async ({ page }) => {
       test.skip(test.info().project.name !== mode, `${mode} project only`);
       const before = await counts();
       await openTeamImportWithCsv(page, /Importar turnos/);
       await page.getByText('Seleccionar todos', { exact: true }).first().click();
       await page.getByRole('button', { name: 'Continuar' }).click();
-      const card = page.getByTestId('team-plan-baseline-card');
-      await expect(card).toBeVisible({ timeout: 30_000 });
-      await expect(card).toContainText('Primera referencia de la empresa');
-      await expect(card).toContainText('no se duplicarán');
-      expect(await card.innerText()).not.toMatch(/revisi[oó]n|fingerprint|[0-9a-f]{8}-[0-9a-f]{4}/i);
-      const create = page.getByTestId('team-plan-baseline-card-create');
-      await create.scrollIntoViewIfNeeded();
-      await expect(create).toBeInViewport();
-      await create.click();
-      await expect.poll(async () => (await counts()).revisions, { timeout: 30_000 }).toBe(before.revisions + 1);
-      const after = await counts();
-      expect(after.shifts).toBe(before.shifts); // existing shifts reused, none duplicated
-      expect(after.assignments).toBe(before.assignments);
-      expect(after.pending).toBe(before.pending);
+      await expect(page.getByRole('button', { name: /Importar/ }).first()).toBeVisible({ timeout: 30_000 });
+      await page.waitForTimeout(3000);
+      await expect(page.getByTestId('team-plan-baseline-card')).toHaveCount(0);
+      expect(await page.locator('body').innerText()).not.toMatch(/Primera referencia|referencia inicial|Plan Empresa/i);
+      expect(await counts()).toEqual(before);
     });
   }
 
@@ -129,7 +120,7 @@ test.describe('reconciliation modal explains before / now / effective', () => {
     await button.click();
     const dialog = page.getByRole('dialog', { name: 'Diferencias' });
     await expect(dialog).toBeVisible();
-    for (const label of ['Antes comunicado por la empresa', 'Ahora comunicado por la empresa', 'Calendario actual']) await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible();
+    for (const label of ['Información anterior', 'Nueva información', 'Calendario actual']) await expect(dialog.getByText(label, { exact: true }).first()).toBeVisible();
     await expect(dialog.locator('[data-testid^="recon-why-"]').first()).toBeVisible();
     expect(await dialog.innerText()).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-|fingerprint|\[run /i);
   });

@@ -167,13 +167,13 @@
   box-sizing: border-box;
   width: fit-content;
   max-width: calc(100% - 16px);
-  min-width: 42px;
-  height: 26px;
-  min-height: 24px;
+  min-width: 38px;
+  height: 20px;
+  min-height: 20px;
   flex: 0 0 auto;
   align-self: center;
-  margin: 2px auto 6px;
-  padding: 4px 8px;
+  margin: 3px auto 0;
+  padding: 0 8px;
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 700;
@@ -220,7 +220,8 @@
 
 @media (max-width: 980px) {
   .month-day-more-button {
-    height: 28px;
+    height: 22px;
+    min-height: 22px;
     padding-inline: 10px;
   }
 }
@@ -256,12 +257,12 @@
 }
 .day-history__pending-head strong { font-size: 0.95rem; }
 .day-history__pending-head p { margin: 2px 0 0; color: var(--text-muted); line-height: 1.4; }
+.day-history__pending-head p.day-history__pending-note { font-size: 0.78rem; color: var(--text-subtle); }
 .day-history__options { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 .day-history__keep {
   display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--border-control, var(--glass-border)); background: var(--panel-muted-bg, transparent);
 }
-.day-history__keep small { display: block; font-size: 0.66rem; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 0.05em; }
 .day-history__keep span { font-weight: 700; font-variant-numeric: tabular-nums; }
 .day-history__keep.is-selected { border-color: var(--color-gold, #d4af37); background: color-mix(in srgb, var(--color-gold, #d4af37) 14%, transparent); }
 .day-history__reason { display: grid; gap: 4px; font-size: 0.78rem; color: var(--text-muted); }

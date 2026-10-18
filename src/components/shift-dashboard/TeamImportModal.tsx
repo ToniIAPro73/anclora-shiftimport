@@ -47,7 +47,6 @@ import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference } from '../../lib/week';
 import { FutureImportConsent } from './FutureImportConsent';
-import { PlanBaselineCard } from './PlanBaselineCard';
 import { splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
 
@@ -1283,14 +1282,6 @@ export const TeamImportModal = ({
                 <div style={{ fontSize: '0.74rem', color: 'var(--text-subtle)' }}>{t('teamImport.previewErrors')}</div>
               </div>
             </div>
-            {planPreview?.planBaseline?.canCreate && (
-              <PlanBaselineCard
-                baseline={planPreview.planBaseline}
-                busy={interactionLocked}
-                onCreate={() => { setFutureImportDecision('historical-and-plan'); void handleConfirmImport('historical-and-plan'); }}
-                testId="team-plan-baseline-card"
-              />
-            )}
             {(splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).future.length) > 0 && (
               <FutureImportConsent
                 decision={futureImportDecision}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { loadDayHistory, reconcileCalendarDayRemote, type RemoteDayHistory } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import type { NormalizedCalendarRow } from '../../lib/effective-calendar.js';
-import { humanizeReason } from './reconciliation-display';
+import { humanizeReason, uniqueKeepOptions } from './reconciliation-display';
 
 interface DayProvenancePanelProps {
   employeeId: string;
@@ -81,8 +81,9 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
   };
 
   const VISIBLE_CHANGES = 2;
-  const keepOptions = [...provenance.companyCurrent, ...pendingRows].filter((row) => row.id);
-  const lineOf = (row: { shiftType?: string | null; startTime: string | null; endTime: string | null }) => `${row.shiftType || '—'}${row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}`;
+  // Semantically unique choices: the same shift state is never offered twice, whatever internal row it comes from.
+  const keepOptions = uniqueKeepOptions(provenance.companyCurrent, pendingRows);
+  const lineOf = (row: { shiftType?: string | null; startTime?: string | null; endTime?: string | null }) => `${row.shiftType || '—'}${row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}`;
   const showCurrent = provenance.revisions.length > 1;
   const showOriginal = provenance.companyOriginal.length > 0;
   const renderChange = (change: (typeof changes)[number]) => (
@@ -112,6 +113,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
           <div className="day-history__pending-head">
             <strong>{t('dayHistory.pendingTitle')}</strong>
             <p>{t('dayHistory.pendingBody')}</p>
+            <p className="day-history__pending-note" data-testid="day-history-pending-note">{t('dayHistory.pendingNote')}</p>
           </div>
           {canReconcile && (
             <>
@@ -120,10 +122,11 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
                   <label key={row.id} className={`day-history__keep${keepIds.includes(row.id as string) ? ' is-selected' : ''}`}>
                     <input
                       type="checkbox"
+                      aria-label={t('dayHistory.keepOptionAria', { line: lineOf(row) })}
                       checked={keepIds.includes(row.id as string)}
                       onChange={(event) => setKeepIds((ids) => (event.target.checked ? [...ids, row.id as string] : ids.filter((id) => id !== row.id)))}
                     />
-                    <span><small>{t('dayHistory.keepLabel')}</small>{lineOf(row)}</span>
+                    <span>{lineOf(row)}</span>
                   </label>
                 ))}
               </div>
@@ -140,6 +143,8 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
         </div>
       )}
 
+      {/* A pending difference is decided in the block above: repeating the same shifts as comparison cards only adds height. */}
+      {!provenance.requiresReview && (
       <div className={`day-history__compare day-history__compare--${1 + Number(showOriginal) + Number(showCurrent)}`} data-testid="day-history-compare">
         <div className="day-history__card">
           <h4>{t('dayHistory.effective')}</h4>
@@ -147,17 +152,18 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
         </div>
         {showOriginal && (
           <div className="day-history__card">
-            <h4>{t('dayHistory.companyOriginal')}{provenance.revisions[0] ? <em>{t('dayHistory.revision', { n: provenance.revisions[0] })}</em> : null}</h4>
+            <h4>{t('dayHistory.companyOriginal')}</h4>
             <RowList rows={provenance.companyOriginal} empty={t('dayHistory.noRows')} />
           </div>
         )}
         {showCurrent && (
           <div className="day-history__card">
-            <h4>{t('dayHistory.companyCurrent')}<em>{t('dayHistory.revision', { n: provenance.revisions[provenance.revisions.length - 1] })}</em></h4>
+            <h4>{t('dayHistory.companyCurrent')}</h4>
             <RowList rows={provenance.companyCurrent} empty={t('dayHistory.noRows')} />
           </div>
         )}
       </div>
+      )}
 
       <div className="day-history__trail">
         <h4>{t('dayHistory.changes')}</h4>

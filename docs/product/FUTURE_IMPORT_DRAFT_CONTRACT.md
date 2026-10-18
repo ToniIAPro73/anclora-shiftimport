@@ -67,9 +67,11 @@ fichero), **clase temporal** (fechas que contiene) y **clase de negocio** (qué 
 
 | SOURCE_KIND | Evidencia estructural | Efecto |
 |---|---|---|
-| `EMPLOYEE_CALENDAR_EXPORT` | hoja `Leyenda` con `Calendario = Empleado` | pasado = evidencia del calendario efectivo e incidencias; futuro = candidato de planificación (solo con `historical-and-plan`) |
-| `PUBLISHED_CALENDAR_EXPORT` | `Calendario = Publicado` | Plan Empresa (línea base / actualización); nunca se publica solo ni sobrescribe el efectivo histórico |
-| `TEAM_SCHEDULE_EXPORT` | estructura de equipo (PDF/XLSX multiempleado con nómina) | Plan Empresa multiempleado |
+| `EMPLOYEE_CALENDAR_EXPORT` | hoja `Leyenda` con `Calendario = Empleado` | **instantánea enriquecida** del calendario individual (clase `EMPLOYEE_CALENDAR_SNAPSHOT`): se compara solo con el calendario actual; puede aportar DCF/bajas/observaciones; nunca crea revisión de plan |
+| `PUBLISHED_CALENDAR_EXPORT` | `Calendario = Publicado` | **instantánea básica** del mismo calendario individual (clase `EMPLOYEE_CALENDAR_SNAPSHOT`); ya no es fuente de Plan Empresa ni de línea base |
+| `TEAM_SCHEDULE_EXPORT` | estructura de equipo (PDF/XLSX multiempleado con nómina) | clase `TEAM_PLANNING`: pasado = evidencia del calendario, futuro = Planificación como BORRADOR (nunca se publica solo); usa `company_plan_revisions` como detalle interno/legacy |
+
+La clasificación vive en un único lugar: `api/_lib/source-class.js` (`getSourceBusinessClass`). Las dos instantáneas se tratan como el mismo modelo de calendario: si coinciden → sin cambios (no duplica); si una solo añade DCF/observaciones → enriquece el día; si hay diferencia real de turno/estado → política segura existente (`EVIDENCE_APPLIED` solo sobre días de plan puro, si no `REQUIRES_REVIEW`); un día ausente en una instantánea nunca se interpreta como orden de borrado. Las filas futuras de una instantánea, si las hay, entran como borrador de Planificación (no existe otra vía de escritura futura al calendario) y no crean revisión.
 
 - La evidencia de un calendario de empleado **no** cambia el `PLAN_FINGERPRINT` ni crea revisión; solo las filas de plan lo hacen.
 - Día con plan publicado 14:00–22:00 y evidencia de empleado «Baja»: el plan se conserva (revisión + fila sustituida como
@@ -93,9 +95,11 @@ resolución: mapeo explícito por organización → identificador canónico → 
 semejanza. El mapeo lo crea solo un ADMIN+ de forma explícita; un EMPLEADO solo puede importar si el número está asociado a su
 propio empleado. El servidor lo exige (`409 SOURCE_IDENTIFIER_MISMATCH` / `SOURCE_IDENTIFIER_UNMAPPED`).
 
-## Plan Empresa inicial sobre datos existentes (bootstrap)
+## Registro interno inicial sobre datos existentes (bootstrap; detalle legacy, no visible)
 
-Si el documento es una fuente de Plan Empresa (`PUBLISHED_CALENDAR_EXPORT` o `TEAM_SCHEDULE_EXPORT`), el calendario ya contiene
+> Desde 2026-10-18 la interfaz ya no ofrece «crear referencia inicial»: no hay tarjeta ni CTA. El `planBaseline` de `plan-preview` se conserva por compatibilidad de API y solo puede ser `canCreate` para `TEAM_SCHEDULE_EXPORT`.
+
+Si el documento es un cuadrante de empresa (`TEAM_SCHEDULE_EXPORT`), el calendario ya contiene
 total o parcialmente sus turnos y no existe baseline versionado para el ámbito, `plan-preview` devuelve
 `planBaseline = { status: MISSING, canCreate: true, existingEquivalentRows, newRows, modifiedRows, reviewRows }` y la UI ofrece
 «Crear Plan Empresa inicial» (OWNER/ADMIN/PLANNER en su ámbito; EMPLOYEE no, también en servidor).
@@ -104,7 +108,7 @@ total o parcialmente sus turnos y no existe baseline versionado para el ámbito,
   (`UNCHANGED`), no las duplica, y solo crea borradores para las `NEW`. Las discrepantes siguen la regla de primera importación
   (pasado → `KEPT_LOCAL`, futuro → `REQUIRES_REVIEW`).
 - El calendario efectivo no se modifica y las reconciliaciones pendientes no se resuelven.
-- Un `EMPLOYEE_CALENDAR_EXPORT` nunca puede establecer el baseline.
+- Una instantánea de calendario individual (`EMPLOYEE_CALENDAR_EXPORT`, `PUBLISHED_CALENDAR_EXPORT`) nunca puede establecer el baseline.
 - La revisión guarda autor, import, cobertura, huellas y, en `summary`, `sourceKind` e `initialBaseline` (auditoría).
 - Reimportar el mismo documento/plan es `DUPLICATE_FILE` / `DUPLICATE_DOCUMENT` / `DUPLICATE_PLAN`; dos confirmaciones
   simultáneas crean exactamente una revisión. El historial lo muestra como «Plan Empresa inicial».

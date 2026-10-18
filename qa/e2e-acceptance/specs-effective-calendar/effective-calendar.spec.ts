@@ -136,7 +136,7 @@ test('2026-06-02: pending reconciliation is reported, does not add hours and an 
   await expect(pending).toBeVisible();
   await pending.getByRole('checkbox').first().check();
   await pending.getByRole('textbox').fill('Company calendar says leave');
-  await pending.getByRole('button', { name: 'Registrar decisión' }).click();
+  await pending.getByRole('button', { name: 'Guardar decisión' }).click();
   await expect(page.getByTestId('day-history-pending')).toHaveCount(0);
   const audit = await sql`SELECT change_type, actor_role, self_change, reason FROM calendar_changes WHERE organization_id = ${ids.org} AND date = '2026-06-02'`;
   expect(audit[0]).toMatchObject({ change_type: 'RECONCILIATION', actor_role: 'ADMIN', self_change: true, reason: 'Company calendar says leave' });

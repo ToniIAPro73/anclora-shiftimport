@@ -2754,6 +2754,8 @@ select:disabled {
 }
 
 .month-day-cell {
+  /* ONE footprint for every header action (warning, add): the warning must never cost the cell a shift row. */
+  --day-action-size: 24px;
   border-radius: 14px;
   padding: 7px 9px;
   display: flex;
@@ -2773,10 +2775,12 @@ select:disabled {
 
 .month-day-header {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
+  gap: 6px;
+  min-height: var(--day-action-size);
+  margin-bottom: 3px;
 }
 
 .month-day-number {
@@ -2785,10 +2789,18 @@ select:disabled {
   flex-shrink: 0;
 }
 
+.month-day-add-button,
+.month-day-history-button {
+  box-sizing: border-box;
+  width: var(--day-action-size);
+  height: var(--day-action-size);
+  min-width: var(--day-action-size);
+  flex: 0 0 var(--day-action-size);
+  padding: 0;
+  line-height: 1;
+}
+
 .month-day-add-button {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2802,11 +2814,7 @@ select:disabled {
 }
 
 .month-day-history-button {
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
   margin-left: auto;
-  margin-right: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4833,10 +4841,8 @@ button[aria-busy='true'] {
     font-size: 0.72rem;
   }
 
-  .month-day-add-button {
-    width: 22px;
-    height: 22px;
-    flex-basis: 22px;
+  .month-day-cell {
+    --day-action-size: 22px;
   }
 }
 
@@ -4929,10 +4935,8 @@ button[aria-busy='true'] {
     font-size: 0.68rem;
   }
 
-  .month-day-add-button {
-    width: 21px;
-    height: 21px;
-    flex-basis: 21px;
+  .month-day-cell {
+    --day-action-size: 21px;
   }
 }
 

@@ -25,6 +25,7 @@ import {
   sameDay,
   summarizeOutcomes,
 } from '../../src/lib/company-plan.js';
+import { SOURCE_BUSINESS_CLASS, getSourceBusinessClass, isCalendarSnapshotSource } from './source-class.js';
 
 /**
  * The company plan changed iff some PLAN day differs from the baseline plan (or there is no baseline yet). Days that are
@@ -227,8 +228,9 @@ async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
     requireFeature(ctx.plan, 'multiEmployeeImport', 'This plan cannot import future shifts for multiple employees');
   }
 
-  // SOURCE KIND is a third, independent dimension (what produced the document). An employee-calendar export is
-  // effective-calendar EVIDENCE for its past dates; published calendars / team schedules / unknown sources are the PLAN.
+  // SOURCE KIND is a third, independent dimension (what produced the document). Individual calendar snapshots (published
+  // monthly / employee calendar) are effective-calendar EVIDENCE: compared with the current calendar only, they never
+  // create a company plan revision. Team schedules / unknown sources are the PLAN (see getSourceBusinessClass).
   const importMode = input.importMode === 'team' ? 'team' : 'individual';
   const sourceKind = SOURCE_KINDS.has(input.sourceKind) ? input.sourceKind : (importMode === 'team' ? 'TEAM_SCHEDULE_EXPORT' : 'UNKNOWN');
   const normalized = dated.shifts.map((shift, index) => ({
@@ -236,7 +238,7 @@ async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
     employeeId: shift.employeeId,
     areaId: requestedAreaId ?? employees.get(shift.employeeId)?.area_id ?? null,
     employeeKey: employeeBusinessKey({ externalEmployeeId: employees.get(shift.employeeId)?.external_employee_id, name: employees.get(shift.employeeId)?.name }) ?? `uuid:${shift.employeeId}`,
-    role: sourceKind === 'EMPLOYEE_CALENDAR_EXPORT' && shift.temporalClass === 'HISTORICAL' ? 'EVIDENCE' : 'PLAN',
+    role: isCalendarSnapshotSource(sourceKind) ? 'EVIDENCE' : 'PLAN',
     annotations: Array.isArray(rawShifts[index]?.annotations) ? rawShifts[index].annotations : [],
   }));
   // Informational annotations (DCF, observations) that came with the rows; validated, never interpreted as hours.
@@ -362,16 +364,14 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
   };
 }
 
-const BASELINE_SOURCES = new Set(['PUBLISHED_CALENDAR_EXPORT', 'TEAM_SCHEDULE_EXPORT']);
-
-/** Plain-language-ready counts for the "create the initial Plan Empresa" action (no ids, no revision numbers). */
+/** Counts for the legacy bootstrap of the internal plan record. Only planning sources can ever establish it; never surfaced as a user concept. */
 function planBaselineSummary(evaluation, prepared) {
   const planOutcomes = evaluation.outcomes.filter((item) => !item.evidence);
   const count = (...kinds) => planOutcomes.filter((item) => kinds.includes(item.outcome)).length;
   const missing = !evaluation.hasExistingPlan;
   return {
     status: missing ? 'MISSING' : 'EXISTS',
-    canCreate: missing && evaluation.planEntryCount > 0 && BASELINE_SOURCES.has(prepared.sourceKind),
+    canCreate: missing && evaluation.planEntryCount > 0 && getSourceBusinessClass(prepared.sourceKind) === SOURCE_BUSINESS_CLASS.TEAM_PLANNING,
     existingEquivalentRows: count(OUTCOME.UNCHANGED),
     newRows: count(OUTCOME.NEW),
     modifiedRows: count(OUTCOME.MODIFIED, OUTCOME.COMPANY_ADOPTED_LOCAL),
@@ -407,8 +407,8 @@ export async function previewFutureImport(sql, ctx, input = {}) {
     historicalCount: prepared.historical.length,
     futureCount: prepared.future.length,
     employeeCount: prepared.employeeIds.length,
-    // Legacy bootstrap: data already exists in the calendar but no versioned Plan Empresa was ever recorded. Only
-    // company-plan sources (published calendar, team schedule) may establish the first baseline; an employee calendar never does.
+    // Legacy bootstrap of the internal plan record. Only planning sources (team schedule) may establish it; individual
+    // calendar snapshots never do.
     planBaseline: planBaselineSummary(evaluation, prepared),
     plan: {
       baselineRevision: evaluation.latestRevision || null,

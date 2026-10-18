@@ -1,9 +1,16 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-10-18 (b) · documentos y diferencias
+
+- **Mensual publicado** y **Calendario del empleado** se explican como el mismo calendario individual (el segundo con información adicional: incidencias, DCF, observaciones). Ya no existe «referencia inicial de la empresa»: se compara con el calendario actual y lo ambiguo va a **Diferencias**.
+- **Diferencias:** cada opción aparece una sola vez; las columnas son **Información anterior**, **Nueva información** y **Calendario actual**. Botón **Guardar decisión**.
+- Calendario: el aviso de diferencia tiene el mismo tamaño que el botón + y ya no resta espacio a los turnos (2 turnos + «+N»).
+- Las capturas y el PDF del manual deben regenerarse.
+
 ## Actualización 2026-10-18 · modelo visible simplificado
 
 - La aplicación se explica con cinco ideas: **Calendario** (lo que hay ahora), **Planificación** (lo que se prepara para el futuro; importar nunca publica), **Importar** (traer un PDF o Excel), **Diferencias** (lo que necesita una decisión) e **Historial** (qué cambió, cuándo y por qué).
-- Los documentos se nombran como **Cuadrante de empresa**, **Mensual publicado** y **Calendario del empleado**. La primera vez que la empresa comunica un periodo se ofrece **Usar como referencia inicial**.
+- Los documentos se nombran como **Cuadrante de empresa**, **Mensual publicado** y **Calendario del empleado**. (Sustituido por la actualización (b): ya no hay «referencia inicial».)
 - Desaparece de la interfaz el vocabulario interno (Plan Empresa, revisión, baseline, calendario efectivo, reconciliación). No cambia el modelo de datos ni ninguna regla: solo la representación.
 - Contrato: mapeo interno↔visible en `docs/product/EFFECTIVE_CALENDAR_CONTRACT.md`. Las capturas del manual que muestren textos antiguos deben regenerarse (`scripts/capture-manual-screenshots.mjs`).
 

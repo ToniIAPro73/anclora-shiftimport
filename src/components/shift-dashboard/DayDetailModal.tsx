@@ -215,8 +215,8 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
       title={formattedDate || t('calendar.dayDetailTitle')}
       closeAriaLabel={t('teamWorkspace.close')}
       closeTestId="close-day-detail-modal"
-      maxWidth="1040px"
-      width="min(96vw, 1040px)"
+      maxWidth="1160px"
+      width="min(96vw, 1160px)"
     >
       <div className="day-detail-dialog" data-testid="day-detail-dialog">
         <div className={provenance ? 'day-detail-grid' : undefined}>

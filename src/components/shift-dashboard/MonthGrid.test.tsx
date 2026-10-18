@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
@@ -338,5 +340,51 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
       'No hay turnos registrados para este empleado el 15 de agosto de 2026.',
     );
     expect(screen.queryByTestId('day-more-btn-2026-08-15')).not.toBeInTheDocument();
+  });
+});
+
+describe('MonthGrid cell capacity with a pending difference', () => {
+  const withReview = (id: string, startTime: string, endTime: string): Shift => ({ id, date: '2026-09-17', startTime, endTime, location: 'Regular', origin: 'IMP', shiftType: 'Regular', effectiveState: 'REQUIRES_REVIEW' } as Shift);
+
+  const renderReview = (count: number) => {
+    const shifts = [withReview('s1', '04:30', '12:30'), withReview('s2', '05:00', '13:00'), withReview('s3', '06:00', '14:00')].slice(0, count);
+    return render(
+      <I18nProvider>
+        <MonthGrid year={2026} month={8} shifts={shifts} onEditShift={vi.fn()} onCreateShift={vi.fn()} provenanceEnabled employeeId="e1" canReconcile />
+      </I18nProvider>,
+    );
+  };
+  const cell = () => document.querySelector('[data-testid="day-history-btn-2026-09-17"]')!.closest('.month-day-cell') as HTMLElement;
+
+  it('G2/G4: two shifts and the warning share the cell without a +N chip', () => {
+    renderReview(2);
+    expect(cell().querySelectorAll('.month-shift-badge')).toHaveLength(2);
+    expect(cell().querySelector('[data-testid="day-more-btn-2026-09-17"]')).toBeNull();
+    expect(cell().querySelector('.month-day-add-button')).not.toBeNull();
+  });
+
+  it('G4: three shifts + warning → warning + add + two bands + +1 (never a third band)', () => {
+    renderReview(3);
+    expect(cell().querySelector('[data-testid="day-history-btn-2026-09-17"]')).not.toBeNull();
+    expect(cell().querySelector('.month-day-add-button')).not.toBeNull();
+    expect(cell().querySelectorAll('.month-shift-badge')).toHaveLength(MAX_VISIBLE_DAY_ITEMS);
+    expect(cell().querySelector('[data-testid="day-more-btn-2026-09-17"]')).toHaveTextContent('+1');
+  });
+
+  it('G5: warning and add buttons are laid out from the same size token (same footprint)', () => {
+    renderReview(3);
+    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const shared = css.match(/\.month-day-add-button,\s*\.month-day-history-button\s*{[^}]*}/)?.[0] ?? '';
+    expect(shared).toMatch(/width:\s*var\(--day-action-size\)/);
+    expect(shared).toMatch(/height:\s*var\(--day-action-size\)/);
+    expect(shared).toMatch(/flex:\s*0 0 var\(--day-action-size\)/);
+    // neither button re-declares its own fixed size anywhere (breakpoints only change the token)
+    expect(css).not.toMatch(/\.month-day-(add|history)-button\s*{[^}]*\b(width|height):\s*\d+px/);
+  });
+
+  it('G6/G7: warning and +N open the day detail', async () => {
+    renderReview(3);
+    fireEvent.click(document.querySelector('[data-testid="day-history-btn-2026-09-17"]')!);
+    expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
   });
 });
