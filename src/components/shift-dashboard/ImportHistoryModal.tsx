@@ -382,7 +382,7 @@ export const ImportHistoryModal = ({ isOpen, onClose, session, onReverted }: Imp
       </div>
 
       {canRevert && selected.size > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0, paddingTop: '8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0, paddingTop: '10px', paddingBottom: '2px', borderTop: '1px solid var(--glass-border)' }}>
           <button type="button" className="btn-gold" data-testid="import-revert-selected" onClick={() => setReverting([...selected])}>
             {selected.size === 1 ? t('reversion.historyAction') : t('reversion.historyActionMany', { count: selected.size })}
           </button>

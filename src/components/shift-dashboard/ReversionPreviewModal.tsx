@@ -32,11 +32,15 @@ const formatDate = (iso: string, locale: string) => new Date(iso).toLocaleDateSt
  */
 export function ReversionPreviewModal({ isOpen, importIds, onClose, onReverted }: ReversionPreviewModalProps) {
   const { t, locale } = useI18n();
-  const [plan, setPlan] = useState<ReversionPlan | null>(null);
+  // The plan is stored together with the selection it was computed for: a plan can never be rendered for a different selection,
+  // not even for the single render between a re-open/selection change and the effect that starts the new request.
+  const [loaded, setLoaded] = useState<{ key: string; plan: ReversionPlan } | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'executing'>('loading');
   const [notice, setNotice] = useState<'stale' | 'failed' | null>(null);
   const [reason, setReason] = useState('');
   const requestRef = useRef(0);
+  const selectionKey = importIds.join('|');
+  const plan = loaded && loaded.key === selectionKey ? loaded.plan : null;
 
   const load = useCallback(async (afterStale = false) => {
     const request = requestRef.current + 1;
@@ -45,17 +49,21 @@ export function ReversionPreviewModal({ isOpen, importIds, onClose, onReverted }
     setNotice(afterStale ? 'stale' : null);
     try {
       const next = await previewImportReversion(importIds);
-      if (requestRef.current !== request) return;
-      setPlan(next);
+      if (requestRef.current !== request) return; // a newer request (or a close) superseded this one
+      setLoaded({ key: importIds.join('|'), plan: next });
       setStatus('ready');
     } catch {
       if (requestRef.current !== request) return;
-      setPlan(null);
+      setLoaded(null);
       setStatus('error');
     }
   }, [importIds]);
 
   useEffect(() => {
+    // Every (re)open or selection change starts from a clean slate: nothing of the previous preview survives.
+    setLoaded(null);
+    setNotice(null);
+    setStatus('loading');
     if (isOpen) { setReason(''); void load(); }
     return () => { requestRef.current += 1; };
   }, [isOpen, load]);
