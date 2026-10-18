@@ -244,6 +244,8 @@
   .app-shell__topbar { min-height: 56px; padding: 8px 12px; }
   .app-shell__topbar-controls { gap: 4px; }
   .app-shell__user-copy { display: none; }
+  .app-shell__user-menu.ac-menu__content { min-width: 0; width: max-content; padding: 4px; }
+  .app-shell__user-menu .ac-menu__item { min-height: 34px; padding: 6px 10px; font-size: 0.78rem; }
   .app-shell__user-trigger { padding-right: 4px; }
   .app-shell__context-summary { max-width: min(42vw, 180px); }
   .app-shell__context-summary > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
