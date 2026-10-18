@@ -83,7 +83,7 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     const consent = page.getByTestId('import-future-consent');
     await expect(consent).toBeVisible({ timeout: 60_000 });
     await expect(consent).toContainText('turnos anteriores y futuros');
-    await expect(page.getByTestId('import-future-consent-counts')).toContainText(/Históricos detectados: \d+ · Futuros detectados: \d+/);
+    await expect(page.getByTestId('import-future-consent-counts')).toContainText(/Turnos anteriores: \d+ · Turnos futuros: \d+/);
     // safe default: historical only; the plan option is explicit
     await expect(page.getByRole('radio', { name: /Importar solo anteriores/ })).toBeChecked();
     await page.getByRole('radio', { name: /Importar anteriores y añadir los futuros a Planificación/ }).check();
@@ -104,9 +104,9 @@ test.describe('company plan import UI (QA mirror, real documents)', () => {
     test.skip(/\b0\s*Turnos nuevos/.test(summaryText.replace(/\s+/g, ' ')) && /\b0\s*Conflictos/.test(summaryText.replace(/\s+/g, ' ')), 'the mirror already contains every row of this PDF');
     const consent = page.getByTestId('team-import-future-consent');
     await expect(consent).toBeVisible({ timeout: 90_000 });
-    await expect(consent).toContainText('turnos futuros');
-    await expect(page.getByRole('radio', { name: /Importar solo anteriores/ })).toHaveCount(0);
-    await page.getByRole('radio', { name: /Añadir los futuros a Planificación/ }).check();
+    await expect(consent).toContainText(/turnos futuros/i);
+    // the PDF's earlier rows age into the past as time passes: the document may be FUTURE-only or MIXED
+    await page.getByRole('radio', { name: /añadir los futuros a Planificación/i }).first().check();
     await expect(page.getByTestId('team-import-future-consent-document-class')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('team-import-future-consent-changes')).toBeVisible();
     await consent.screenshot({ path: shot('import-pdf-future-consent') }); // the decision block only: no employee names

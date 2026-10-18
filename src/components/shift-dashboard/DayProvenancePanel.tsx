@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { loadDayHistory, reconcileCalendarDayRemote, type RemoteDayHistory } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import type { NormalizedCalendarRow } from '../../lib/effective-calendar.js';
+import { humanizeReason } from './reconciliation-display';
 
 interface DayProvenancePanelProps {
   employeeId: string;
@@ -94,8 +95,13 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
         {change.actorRole === 'SYSTEM' ? t('dayHistory.systemActor') : t('dayHistory.byActor', { name: change.actorName ?? '—', role: change.actorRole })}
         {change.selfChange ? ` · ${t('dayHistory.selfChange')}` : ''}
       </div>
-      <div className="day-history__change-diff">{describe(change.before)} → {describe(change.after)}</div>
-      {change.reason && <div className="day-history__change-reason" title={change.reason}>{t('dayHistory.reason')}: {change.reason}</div>}
+      {[...change.before, ...change.after].every((row) => typeof row?.shiftType === 'string') && (
+        <div className="day-history__change-diff">{describe(change.before)} → {describe(change.after)}</div>
+      )}
+      {change.reason && (() => {
+        const readable = humanizeReason(change.reason);
+        return <div className="day-history__change-reason" title={readable ?? undefined}>{t('dayHistory.reason')}: {readable ?? t('dayHistory.reasonAutomatic')}</div>;
+      })()}
     </li>
   );
 

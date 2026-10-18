@@ -39,7 +39,7 @@ describe('More', () => {
     renderMore();
     expect(screen.getByRole('button', { name: 'Importar mis turnos' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Añadir turno pasado' })).toBeTruthy();
-    expect(screen.queryByText('Planificar')).toBeNull();
+    expect(screen.queryByText('Planificación')).toBeNull();
     expect(screen.queryByText('Aprobaciones')).toBeNull();
   });
 
