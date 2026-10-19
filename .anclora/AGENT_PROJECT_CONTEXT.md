@@ -241,3 +241,8 @@ CROSS_PRODUCT_INFRASTRUCTURE_ASSUMPTION_ALLOWED=false
 
 WORKSPACE_POLICY_STATUS=ACTIVE
 ```
+
+<!-- ANCLORA-MODS:START -->
+ANCLORA_MODS_COMMON_CONTRACT_VERSION=1.0.0
+Canonical shared rules: [Anclora Common Agent Contract](../anclora-mods/contracts/ANCLORA_COMMON_AGENT_CONTRACT_V1.md) and [Flow Amendment v2](../anclora-mods/ANCLORA_FLUJO_UNICO_V2.md). Repository-specific facts remain in this repository's `.anclora/` contracts.
+<!-- ANCLORA-MODS:END -->
