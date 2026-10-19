@@ -149,6 +149,6 @@ test('EMPLOYEE: self-binding of their own alias, historical rows only, future ex
   const saved = await withDb((q) => q(`SELECT COUNT(*)::int n FROM shifts WHERE organization_id = $1 AND employee_id = $2 AND date IN ('2026-03-03','2026-03-04')`, [ctx.organizationId, employeeId]));
   expect(saved[0].n).toBeGreaterThanOrEqual(2);
   const after = await plan();
-  expect(after).toEqual(before); // no future shifts, no assignments, no plan revision
+  expect(after).toEqual(before); // no future shifts, assignments, or new legacy revisions
   await context.close();
 });

@@ -33,7 +33,6 @@ const api = (cookie, org) => async (method, path, body) => {
   const res = await fetch(`${BASE}${path}`, { method, headers: { 'content-type': 'application/json', cookie, 'x-organization-id': org }, body: body ? JSON.stringify(body) : undefined });
   return { status: res.status, body: await res.json().catch(() => ({})) };
 };
-const walk = (value, visit) => { if (Array.isArray(value)) value.forEach((v) => walk(v, visit)); else if (value && typeof value === 'object') { visit(value); Object.values(value).forEach((v) => walk(v, visit)); } };
 
 const db = await connect();
 try {
@@ -46,6 +45,7 @@ try {
   assertNotProtectedSource(mirror.id);
   await assertQaOrganization(db, mirror.id);
   const ORG = mirror.id;
+  const legacyRevisionBaseline = (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows[0].n;
 
   const admin = api(await login(QA_IDENTITY, env.MANUAL_QA_PASSWORD), ORG);
   const employee = api(await login(QA_EMPLOYEE_IDENTITY, env.MANUAL_QA_EMPLOYEE_PASSWORD), ORG);
@@ -82,18 +82,15 @@ try {
   check('admin_explicit_association_created', mapped.status < 300, { status: mapped.status });
   const mapAgain = await admin('POST', '/api/employees/identifiers', { employeeId: roster.find((e) => e.id !== pilotId && e.status === 'active').id, sourceSystem: 'TRYP_EMPLOYEE_CALENDAR', externalIdentifier: '6888' });
   check('mapping_cannot_be_stolen', mapAgain.status === 409, { status: mapAgain.status });
-  check('blocked_attempt_wrote_nothing', (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows[0].n === 0);
+  check('blocked_attempt_wrote_nothing', (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows[0].n === legacyRevisionBaseline);
 
-  // ---- PUBLISHED calendar = Plan Empresa (baseline) -----------------------------------------------------------
+  // ---- Published calendar import remains a proposal against CURRENT ------------------------------------------------
   const pubRes = await admin('POST', '/api/imports/confirm-split', input(pub));
-  check('published_calendar_imported_as_plan', pubRes.status < 300 && pubRes.body.sourceKind === 'PUBLISHED_CALENDAR_EXPORT', { status: pubRes.status, code: pubRes.body.code });
+  check('published_calendar_imported_without_revision', pubRes.status < 300 && pubRes.body.sourceKind === 'PUBLISHED_CALENDAR_EXPORT', { status: pubRes.status, code: pubRes.body.code });
   check('published_never_auto_published', pubRes.body.plan?.autoPublished === false);
-  const revisions = (await db.query('SELECT revision_number, rows FROM company_plan_revisions WHERE organization_id = $1 ORDER BY revision_number', [ORG])).rows;
-  let planHas0206 = false;
-  for (const r of revisions) walk(r.rows, (o) => { if (String(o.d ?? '') === '2026-06-02' && o.s === '14:00' && o.e === '22:00') planHas0206 = true; });
-  check('plan_revision_holds_0206_14_22', planHas0206, { revisions: revisions.length });
+  check('published_import_created_no_revision', (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows[0].n === legacyRevisionBaseline);
 
-  // ---- EMPLOYEE calendar = evidence over the plan (three-way) ------------------------------------------------
+  // ---- Employee calendar is proposed against CURRENT ------------------------------------------------
   const pendingBefore = (await admin('GET', `/api/calendar/reconciliation?employeeId=${pilotId}&year=2026`)).body.pendingCount;
   const empRes = await admin('POST', '/api/imports/confirm-split', input(emp));
   check('employee_calendar_imported', empRes.status < 300 && empRes.body.sourceKind === 'EMPLOYEE_CALENDAR_EXPORT', { status: empRes.status, code: empRes.body.code });
@@ -102,9 +99,9 @@ try {
   check('0206_plan_and_baja_both_preserved', rows0206.some((r) => r.shift_type === 'Regular' && String(r.start_time).slice(0, 5) === '14:00' && String(r.end_time).slice(0, 5) === '22:00') && rows0206.some((r) => /baja/i.test(r.shift_type)), { rows: rows0206.length });
   check('0206_not_auto_resolved', rows0206.every((r) => r.effective_state === 'REQUIRES_REVIEW'), { states: [...new Set(rows0206.map((r) => r.effective_state))] });
   const day0206 = (await admin('GET', `/api/calendar/reconciliation?employeeId=${pilotId}&year=2026`)).body.items.find((i) => i.date === '2026-06-02');
-  check('0206_explainable_before_now_effective', Boolean(day0206) && day0206.companyNow?.some((l) => l.startTime === '14:00' && l.endTime === '22:00') && day0206.effective?.some((l) => /baja/i.test(l.type)), { reasonCode: day0206?.reasonCode });
+  check('0206_current_and_proposed_are_separate', Boolean(day0206) && day0206.current?.some((l) => l.startTime === '14:00' && l.endTime === '22:00') && day0206.proposed?.some((l) => /baja/i.test(l.type)), { reasonCode: day0206?.reasonCode });
 
-  // Three-way on a clean past day (synthetic): published 14-22 as Plan Empresa, then employee-calendar Baja as evidence.
+  // Current/proposed behavior on a clean past day (synthetic): current 14-22, then incoming Baja remains pending.
   // Uses a roster employee other than the pilot (the pilot has shifts every day); the document number equals that
   // employee's canonical id, so the identity guard passes without any association.
   let other = null; let freeDay = null;
@@ -113,7 +110,7 @@ try {
         WHERE NOT EXISTS (SELECT 1 FROM shifts s WHERE s.organization_id = $1 AND s.employee_id = $2 AND s.date = d::date) ORDER BY d LIMIT 1`, [ORG, candidate.id])).rows[0];
     if (free) { other = candidate; freeDay = String(free.day).slice(0, 10); break; }
   }
-  check('clean_past_day_available_for_three_way', Boolean(freeDay));
+  check('clean_past_day_available_for_current_proposal', Boolean(freeDay));
   if (freeDay) {
     const one = (doc, row) => ({
       ...input(doc, { fileFingerprint: siblingFingerprint() }), employeeId: other.id, sourceIdentifier: other.externalEmployeeId,
@@ -125,14 +122,11 @@ try {
     });
     const p1 = await admin('POST', '/api/imports/confirm-split', one(pub, { shiftType: 'Regular', startTime: '14:00', endTime: '22:00' }));
     const p2 = await admin('POST', '/api/imports/confirm-split', one(emp, { shiftType: 'Baja', startTime: '', endTime: '' }));
-    check('three_way_imports_accepted', p1.status < 300 && p2.status < 300, { published: p1.status, employee: p2.status, code: p2.body.code });
+    check('current_proposal_imports_accepted', p1.status < 300 && p2.status < 300, { published: p1.status, employee: p2.status, code: p2.body.code });
     const d = (await db.query(`SELECT shift_type, start_time, end_time, effective_state, layer FROM shifts WHERE organization_id = $1 AND employee_id = $2 AND date = $3`, [ORG, other.id, freeDay])).rows;
-    check('three_way_effective_is_baja', d.some((r) => /baja/i.test(r.shift_type) && r.effective_state === 'EFFECTIVE'), { states: d.map((r) => `${r.layer}/${r.effective_state}`) });
-    check('three_way_plan_row_preserved', d.some((r) => r.shift_type === 'Regular' && String(r.start_time).slice(0, 5) === '14:00' && r.effective_state !== 'EFFECTIVE'), { rows: d.length });
-    check('three_way_evidence_applied_counted', (p2.body.plan?.evidenceDaysApplied ?? 0) >= 1, { evidenceDaysApplied: p2.body.plan?.evidenceDaysApplied });
-    let planHasDay = false;
-    for (const r of (await db.query('SELECT rows FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows) walk(r.rows, (o) => { if (String(o.d ?? '') === freeDay && o.k === `id:${other.externalEmployeeId}` && o.s === '14:00') planHasDay = true; });
-    check('three_way_plan_revision_keeps_14_22', planHasDay);
+    check('current_remains_effective', d.some((r) => r.shift_type === 'Regular' && String(r.start_time).slice(0, 5) === '14:00' && r.effective_state === 'EFFECTIVE'), { states: d.map((r) => `${r.layer}/${r.effective_state}`) });
+    check('incoming_difference_is_pending', d.some((r) => /baja/i.test(r.shift_type) && r.effective_state === 'REQUIRES_REVIEW'), { rows: d.length });
+    check('historical_import_writes_no_revision', (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows[0].n === legacyRevisionBaseline);
   }
   check('employee_calendar_did_not_publish_anything', empRes.body.plan?.autoPublished === false);
 
@@ -157,7 +151,7 @@ try {
 
   // ---- RECONCILIATION never auto-resolved; idempotency ------------------------------------------------------------
   const recon = (await admin('GET', `/api/calendar/reconciliation?employeeId=${pilotId}&year=2026`)).body;
-  check('reconciliation_items_have_before_now_effective', recon.items.every((i) => 'companyNow' in i && 'effective' in i && 'companyBefore' in i && i.reasonCode !== undefined) || recon.items.length === 0, { items: recon.items.length, pendingBefore, pendingNow: recon.pendingCount });
+  check('reconciliation_items_have_current_proposed', recon.items.every((i) => 'current' in i && 'proposed' in i && !('companyNow' in i) && !('companyBefore' in i) && i.reasonCode !== undefined) || recon.items.length === 0, { items: recon.items.length, pendingBefore, pendingNow: recon.pendingCount });
   check('reimport_did_not_auto_resolve_pending', recon.pendingCount >= pendingBefore);
   const dcfDates = new Set(dcf.map((a) => a.date));
   check('unknown_dcf_creates_no_reconciliation_alert', !recon.items.some((i) => dcfDates.has(i.date) && i.status === 'PENDING'), { pendingOnDcfDays: recon.items.filter((i) => dcfDates.has(i.date) && i.status === 'PENDING').length });
@@ -168,7 +162,7 @@ try {
   const commentOnly = { ...emp, fileFingerprint: siblingFingerprint(), annotations: emp.annotations.map((a) => (a.kind === 'COMMENT' ? { ...a, text: `${a.text} (editado)` } : a)) };
   const commentRes = await admin('POST', '/api/imports/confirm-split', input(commentOnly));
   const revCountAfterComment = (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [ORG])).rows[0].n;
-  check('comment_only_change_creates_no_plan_revision', commentRes.status < 300 && revCountAfterComment === revCount, { before: revCount, after: revCountAfterComment });
+  check('comment_only_change_creates_no_legacy_revision', commentRes.status < 300 && revCountAfterComment === revCount, { before: revCount, after: revCountAfterComment });
 
   // ---- SOURCE protection -----------------------------------------------------------------------------------------------
   const srcAfter = await sourceFingerprint(db, source.id);

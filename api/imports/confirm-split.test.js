@@ -119,7 +119,7 @@ describe('R3-M14 future import contract', () => {
     expect(result.plan.autoPublished).toBe(false);
     expect(result.future.publishedWeekCount).toBe(0);
     expect(executed.some((text) => /publish_|PUBLISHED'.*UPDATE|SET status = 'PUBLISHED'|publishScheduleVersion/i.test(text))).toBe(false);
-    expect(executed.some((text) => text.includes('company_plan_revisions'))).toBe(true); // the first import establishes the baseline revision
+    expect(executed.some((text) => text.includes('company_plan_revisions'))).toBe(false);
   });
 
   it('accepts the legacy wire value "publish" as the plan decision (it never meant auto-publication)', async () => {

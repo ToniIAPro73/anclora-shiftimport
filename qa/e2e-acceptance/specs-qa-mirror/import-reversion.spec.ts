@@ -22,7 +22,6 @@ test.skip(({ viewport }) => (viewport?.width ?? 1440) < 900, 'functional scenari
 test('history: revert one import -> the dependent import is included automatically, one confirmation, both end up Revertida', async ({ page }) => {
   const emp = (await withDb((q) => q(`SELECT id FROM employees WHERE organization_id = $1 AND status = 'active' AND external_employee_id IS NOT NULL AND external_employee_id <> '84881' AND user_id IS NULL ORDER BY name LIMIT 1`, [ctx.organizationId])))[0];
   await withDb(async (q) => {
-    await q(`DELETE FROM company_plan_revisions WHERE organization_id = $1 AND coverage_from >= '2027-01-01'`, [ctx.organizationId]);
     await q(`DELETE FROM shift_assignments WHERE schedule_version_id IN (SELECT v.id FROM schedule_versions v JOIN schedules s ON s.id = v.schedule_id WHERE s.organization_id = $1 AND s.period_start >= '2027-01-01')`, [ctx.organizationId]);
     await q(`DELETE FROM schedule_versions WHERE schedule_id IN (SELECT id FROM schedules WHERE organization_id = $1 AND period_start >= '2027-01-01')`, [ctx.organizationId]);
     await q(`DELETE FROM schedules WHERE organization_id = $1 AND period_start >= '2027-01-01'`, [ctx.organizationId]);
@@ -59,7 +58,6 @@ test('history: revert one import -> the dependent import is included automatical
   const state = await withDb((q) => q(`SELECT COUNT(*)::int n FROM imports WHERE id = ANY($1::uuid[]) AND reverted_at IS NOT NULL`, [[first.importId, second.importId]]));
   expect(state[0].n).toBe(2);
   await withDb(async (q) => {
-    await q(`DELETE FROM company_plan_revisions WHERE organization_id = $1 AND coverage_from >= '2027-01-01'`, [ctx.organizationId]);
     await q(`DELETE FROM shift_assignments WHERE schedule_version_id IN (SELECT v.id FROM schedule_versions v JOIN schedules s ON s.id = v.schedule_id WHERE s.organization_id = $1 AND s.period_start >= '2027-01-01')`, [ctx.organizationId]);
     await q(`DELETE FROM schedule_versions WHERE schedule_id IN (SELECT id FROM schedules WHERE organization_id = $1 AND period_start >= '2027-01-01')`, [ctx.organizationId]);
     await q(`DELETE FROM schedules WHERE organization_id = $1 AND period_start >= '2027-01-01'`, [ctx.organizationId]);

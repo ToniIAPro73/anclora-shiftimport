@@ -23,7 +23,7 @@ export interface HistoricalIncomingResult {
  * - Legacy path (pure historical Safe Import, EMPLOYEE self import): a differing day asks the user (replace / skip / abort);
  *   "replace" means delete the existing shift and insert the imported one.
  * - Smart server reconciliation (MIXED + planner + "historical-and-plan" => /api/imports/confirm-split): the SERVER owns every
- *   historical difference (UNCHANGED / EVIDENCE_APPLIED / KEPT_LOCAL / REQUIRES_REVIEW). The client never prompts, never
+ *   historical difference (unchanged or a pending proposal). The client never prompts, never
  *   generates deleteIds and never deletes locally; it just forwards the row.
  */
 export async function classifyHistoricalIncoming(input: {

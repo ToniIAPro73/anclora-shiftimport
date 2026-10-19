@@ -54,7 +54,6 @@ try {
   const clean = async () => {
     // mirror-only: remove the synthetic windows of previous runs (2027 + the evidence/legacy windows of 2026-12)
     await q(`DELETE FROM import_effects WHERE organization_id = $1 AND import_id IN (SELECT id FROM imports WHERE organization_id = $1 AND file_name LIKE 'rev-%')`, [ORG]);
-    await q(`DELETE FROM company_plan_revisions WHERE organization_id = $1 AND (coverage_from >= '2027-01-01' OR import_id IN (SELECT id FROM imports WHERE organization_id = $1 AND file_name LIKE 'rev-%'))`, [ORG]);
     await q(`DELETE FROM shift_assignments WHERE schedule_version_id IN (SELECT v.id FROM schedule_versions v JOIN schedules s ON s.id = v.schedule_id WHERE s.organization_id = $1 AND s.period_start >= '2027-01-01')`, [ORG]);
     await q(`DELETE FROM schedule_versions WHERE schedule_id IN (SELECT id FROM schedules WHERE organization_id = $1 AND period_start >= '2027-01-01')`, [ORG]);
     await q(`DELETE FROM schedules WHERE organization_id = $1 AND period_start >= '2027-01-01'`, [ORG]);
@@ -97,11 +96,11 @@ try {
   const A = a.body.importId;
   const afterA = await counts();
   const kinds = (await q(`SELECT DISTINCT effect_kind FROM import_effects WHERE import_id = $1`, [A])).map((r) => r.effect_kind).sort();
-  check('ledger_has_plan_revision_assignment_and_version_effects', ['ASSIGNMENT_INSERT', 'PLAN_REVISION_INSERT', 'SCHEDULE_VERSION_INSERT'].every((k) => kinds.includes(k)) || (kinds.includes('ASSIGNMENT_INSERT') && kinds.includes('PLAN_REVISION_INSERT')), { kinds });
-  check('ledger_written_in_the_same_transaction_as_the_business_rows', afterA.effects > base0.effects && afterA.revisions === base0.revisions + 1);
+  check('new_import_ledger_has_assignment_without_legacy_revision', kinds.includes('ASSIGNMENT_INSERT') && !kinds.includes('PLAN_REVISION_INSERT'), { kinds });
+  check('ledger_written_in_the_same_transaction_as_the_business_rows', afterA.effects > base0.effects && afterA.revisions === base0.revisions);
 
   const b = await importDoc(E1, [row(E1, '2027-06-01', '10:00', '18:00'), row(E1, '2027-06-02', '09:00', '17:00'), row(E1, '2027-06-03', null, null, 'Libre')]);
-  check('B_imported_as_plan_update', b.status < 300 && b.body.plan?.revisionCreated === true, { status: b.status, code: b.body.code });
+  check('B_imported_as_plan_update', b.status < 300, { status: b.status, code: b.body.code });
   const B = b.body.importId;
 
   const beforePreview = await counts();
@@ -134,7 +133,7 @@ try {
   const done = await confirm([A], p2.body.planHash, { reason: 'qa' });
   check('confirm_reverts_the_whole_chain_in_one_operation', done.status === 201 && done.body.effectiveImportCount === 3 && done.body.requestedImportCount === 1, { status: done.status, code: done.body.code });
   const post = await counts();
-  check('plan_revisions_marked_reverted_not_deleted', (await one(`SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1 AND reverted_at IS NOT NULL AND import_id = ANY($2::uuid[])`, [ORG, [A, B, C]])).n === 3 && post.revisions === pre.revisions - 3);
+  check('new_import_reversion_preserves_legacy_revision_count', post.revisions === pre.revisions);
   check('state_equals_before_the_chain', post.assignments === base0.assignments && post.versions === base0.versions && post.shifts === base0.shifts, { before: base0, after: post });
   const rows3 = await q(`SELECT id, reverted_at IS NOT NULL AS reverted, status, context_fingerprint FROM imports WHERE id = ANY($1::uuid[])`, [[A, B, C]]);
   check('imports_stay_in_history_marked_reverted', rows3.length === 3 && rows3.every((r) => r.reverted && r.status === 'completed' && String(r.context_fingerprint).includes('#reverted:')));
@@ -154,7 +153,7 @@ try {
     weekStart: 'monday', futureConsent: 'historical-and-plan', sourceKind: 'TEAM_SCHEDULE_EXPORT', deleteIds: [],
     shifts: [row(E1, '2027-06-01', '09:00', '17:00'), row(E1, '2027-06-02', '09:00', '17:00'), row(E1, '2027-06-03', null, null, 'Libre')],
   });
-  check('same_document_can_be_imported_again_after_reversion', reA.status < 300 && !reA.body.duplicate && reA.body.plan?.revisionCreated === true && reA.body.importId !== A, { status: reA.status, duplicate: reA.body.duplicate });
+  check('same_document_can_be_imported_again_after_reversion', reA.status < 300 && !reA.body.duplicate && reA.body.importId !== A, { status: reA.status, duplicate: reA.body.duplicate });
 
   // =========================================================================================================================
   // T2 — independent imports: no chronological coupling
@@ -230,7 +229,7 @@ try {
     await q(`INSERT INTO imports (id, organization_id, imported_by_user_id, employee_id, file_name, source_format, status, import_mode, period_kind, period_label, scope_type, employee_count, shift_count, created_shift_count, existing_shift_count, file_fingerprint, context_fingerprint)
              VALUES ($1,$2,(SELECT id FROM users WHERE lower(email) = lower($4)),$3,$5,'excel','completed','individual','single','legacy','global',1,1,1,0,$6,$7)`, [id, ORG, E3.id, QA_IDENTITY, fileName, fp(), fp()]);
     await q(`INSERT INTO shifts (organization_id, employee_id, import_id, date, start_time, end_time, shift_type, counts_as_work, location, origin, layer, provenance, effective_state)
-             VALUES ($1,$2,$3,$4,'09:00','17:00','Regular',true,'Regular','IMP','COMPANY_PLAN','COMPANY_IMPORT','EFFECTIVE')`, [ORG, E3.id, id, day]);
+             VALUES ($1,$2,$3,$4,'09:00','17:00','Regular',true,'Regular','IMP','CHANGE','COMPANY_IMPORT','EFFECTIVE')`, [ORG, E3.id, id, day]);
     if (withAssignment) {
       const ver = await one(`SELECT v.id FROM schedule_versions v JOIN schedules s ON s.id = v.schedule_id WHERE s.organization_id = $1 LIMIT 1`, [ORG]);
       if (ver) await q(`INSERT INTO shift_assignments (schedule_version_id, employee_id, date, start_time, end_time, import_id, shift_type, counts_as_work) VALUES ($1,$2,$4,'09:00','17:00',$3,'Regular',true)`, [ver.id, E3.id, id, day]);

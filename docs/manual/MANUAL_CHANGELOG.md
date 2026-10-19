@@ -338,3 +338,10 @@ La ejecución del commit, push y promoción autorizados se comunica con su SHA y
   - Nuevas referencias: `accept-invitation-dark.png`, `day-more-dark.png`, `day-detail-dark.png`, `grant-access-dark.png`, `pending-invitations-dark.png` y `settings-danger-dark.png`.
   - Todas las capturas se regeneran con `scripts/manual/capture-manual-es.sh` (identidad QA `qa.shiftimport@anclora.test`, organización QA).
 - **Pendiente**: ejecutar la captura, revisar las pantallas pendientes y regenerar el PDF con `node scripts/generate-manual-pdf.mjs`.
+## Actualización 2026-10-19 · modelo CURRENT / PROPOSED
+
+- El calendario actual cuenta mientras una propuesta de importación espera decisión. La propuesta no cuenta y no se muestra como turno activo.
+- Diferencias y detalle muestran **Calendario actual** frente a **Propuesta detectada**. Resolver recalcula calendario, estadísticas y proyección.
+- Los datos legacy pendientes usan evidencia de auditoría, JT como Regular provisional o el conjunto coherente más antiguo por `created_at`; los empates sin lineage siguen sin computar.
+- Las importaciones futuras escriben en borradores de Planning. Las nuevas confirmaciones no crean revisiones; las revisiones antiguas siguen disponibles para auditoría y reversión.
+- Contratos vigentes: `docs/product/EFFECTIVE_CALENDAR_CONTRACT.md` y `docs/product/FUTURE_IMPORT_DRAFT_CONTRACT.md`.

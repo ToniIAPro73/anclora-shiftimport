@@ -1,19 +1,13 @@
 /**
- * Company-plan import domain (pure, shared by API and client; NO I/O, NO crypto).
- *
- *   COMPANY PLAN (versioned baseline) -> CHANGES -> EFFECTIVE CALENDAR -> STATS
- *
- * - Temporal class of a document is derived AFTER parsing, whatever the format.
- * - Importing future rows creates/updates the PLAN (schedule drafts); it never publishes.
- * - A plan update is reconciled three-way per employee + date:
- *     B = previous company baseline, N = new company plan, E = effective calendar / local override.
+ * Calendar import domain (pure, shared by API and client; NO I/O, NO crypto).
+ * Temporal class is derived after parsing. Historical input is compared with CURRENT; future input creates or updates Planning drafts.
  */
 import { classifyKind, toMinutes } from './effective-calendar.js';
 
 export const TEMPORAL_CLASS = Object.freeze({ HISTORICAL: 'HISTORICAL', FUTURE: 'FUTURE', MIXED: 'MIXED' });
 export const DOCUMENT_CLASS = Object.freeze({
-  COMPANY_PLAN: 'COMPANY_PLAN',
-  COMPANY_PLAN_UPDATE: 'COMPANY_PLAN_UPDATE',
+  PLANNING_DRAFT: 'PLANNING_DRAFT',
+  PLANNING_UPDATE: 'PLANNING_UPDATE',
   HISTORICAL_CALENDAR: 'HISTORICAL_CALENDAR',
   UNDETERMINED: 'UNDETERMINED',
 });
@@ -21,12 +15,8 @@ export const IMPORT_DECISION = Object.freeze({ HISTORICAL_ONLY: 'historical-only
 export const RECONCILIATION_OUTCOME = Object.freeze({
   UNCHANGED: 'UNCHANGED',
   NEW: 'NEW',
-  KEPT_LOCAL: 'KEPT_LOCAL',
   MODIFIED: 'MODIFIED',
-  COMPANY_ADOPTED_LOCAL: 'COMPANY_ADOPTED_LOCAL',
   REQUIRES_REVIEW: 'REQUIRES_REVIEW',
-  /** Evidence from an employee calendar replaced a plan-only effective day (plan preserved, evidence explainable). */
-  EVIDENCE_APPLIED: 'EVIDENCE_APPLIED',
 });
 
 /** `publish` is the pre-rename wire value: it always meant "include the future", never "auto-publish". */
@@ -52,7 +42,7 @@ export function classifyTemporal(rows, today) {
  * Business proposal for what the document IS (the user may correct it when ambiguous).
  * Evidence = temporal coverage, employee count and relation to an existing plan; never the file name.
  */
-export function classifyDocument({ temporal, employeeCount, hasExistingPlan = false, rowCount = 0 }) {
+export function classifyDocument({ temporal, employeeCount, hasExistingSchedule = false, rowCount = 0 }) {
   const evidence = [];
   if (!rowCount || !employeeCount) return { documentClass: DOCUMENT_CLASS.UNDETERMINED, confidence: 'none', evidence: ['no-rows'] };
   if (temporal === TEMPORAL_CLASS.HISTORICAL) {
@@ -61,13 +51,13 @@ export function classifyDocument({ temporal, employeeCount, hasExistingPlan = fa
   }
   evidence.push(temporal === TEMPORAL_CLASS.FUTURE ? 'all-rows-from-today' : 'rows-before-and-after-today');
   evidence.push(employeeCount > 1 ? 'multi-employee' : 'single-employee');
-  if (hasExistingPlan) {
-    evidence.push('overlaps-existing-plan');
-    return { documentClass: DOCUMENT_CLASS.COMPANY_PLAN_UPDATE, confidence: 'high', evidence };
+  if (hasExistingSchedule) {
+    evidence.push('overlaps-existing-planning');
+    return { documentClass: DOCUMENT_CLASS.PLANNING_UPDATE, confidence: 'high', evidence };
   }
   // A single-employee document that straddles today may be a personal calendar rather than the company plan.
   const confidence = temporal === TEMPORAL_CLASS.MIXED && employeeCount === 1 ? 'medium' : 'high';
-  return { documentClass: DOCUMENT_CLASS.COMPANY_PLAN, confidence, evidence };
+  return { documentClass: DOCUMENT_CLASS.PLANNING_DRAFT, confidence, evidence };
 }
 
 /**
@@ -98,7 +88,7 @@ const hhmm = (value) => {
 };
 
 /** Normalised business content of one plan row (AJ→Libre etc. come from the effective-calendar classifier). */
-export function normalizePlanRow(row) {
+export function normalizeImportedCalendarRow(row) {
   const type = String(row.shiftType ?? row.shift_type ?? row.location ?? '').trim();
   const kind = classifyKind({ shiftType: type, countsAsWork: row.countsAsWork ?? row.counts_as_work ?? null });
   const fullDay = kind.kind === 'FULL_DAY' || kind.kind === 'ABSENCE';
@@ -111,24 +101,7 @@ export function normalizePlanRow(row) {
   };
 }
 
-/** `employee|date|type|start|end|duty` — deterministic, tenant/UUID independent. */
-export function planRowSignature(employeeKey, row) {
-  const n = normalizePlanRow(row);
-  return [employeeKey, n.date, n.type, n.start, n.end, n.duty].join('\u001f');
-}
-
-/** Ordered canonical lines of a plan; hashing them is done by the server (api/_lib/import-fingerprints.js). */
-export function planCanonicalLines(rows) {
-  return rows.map((entry) => planRowSignature(entry.employeeKey, entry.row)).sort();
-}
-
-/* ----------------------------------------------------------------- baseline + three-way */
-
-const sameContent = (a, b) => {
-  if (!a || !b) return false;
-  const x = normalizePlanRow(a); const y = normalizePlanRow(b);
-  return x.type === y.type && x.start === y.start && x.end === y.end && x.duty === y.duty;
-};
+/* ----------------------------------------------------------------- day grouping and current/proposal comparison */
 
 /** Rows for a day grouped per employee key -> array of normalised rows. */
 const dayKey = (employeeKey, date) => `${employeeKey}\u001f${date}`;
@@ -149,7 +122,7 @@ function indexRows(entries) {
  * Provenance and the Regular/Extras split never decide whether two plans differ.
  */
 export function daySignature(rows = []) {
-  const normalized = rows.map(normalizePlanRow);
+  const normalized = rows.map(normalizeImportedCalendarRow);
   const full = normalized.find((n) => !n.start && !n.end)?.type ?? null;
   if (full) return `full:${full}`;
   const merge = (list) => {
@@ -174,7 +147,7 @@ const sameDay = (a = [], b = []) => daySignature(a) === daySignature(b);
 
 /** Business identity of ONE visible row: type + hours. Ids, imports, timestamps, provenance and plan revision never count. */
 const visibleRowKey = (row) => {
-  const n = normalizePlanRow({ date: '2000-01-01', ...row });
+  const n = normalizeImportedCalendarRow({ date: '2000-01-01', ...row });
   return `${n.type}|${n.start}|${n.end}`;
 };
 
@@ -199,97 +172,41 @@ export function hasSemanticHistoryChange(effectiveRows = [], historicRows = []) 
   return false;
 }
 
-/**
- * Baseline B for a range: for every date the NEWEST revision covering it wins.
- * `revisions` = [{ revisionNumber, coverageFrom, coverageTo, rows:[{employeeKey,row}] }].
- */
-export function resolveBaseline(revisions, { from, to }) {
-  const ordered = [...revisions].sort((a, b) => b.revisionNumber - a.revisionNumber);
-  const claimed = new Set();
-  const result = [];
-  for (const revision of ordered) {
-    const claimedHere = new Set();
-    for (const entry of revision.rows) {
-      const date = String(entry.row.date).slice(0, 10);
-      if (date < from || date > to) continue;
-      const day = dayKey(entry.employeeKey, date);
-      if (claimed.has(day)) continue; // a newer revision already owns this employee/day
-      result.push(entry);
-      claimedHere.add(day);
-    }
-    for (const day of claimedHere) claimed.add(day);
-  }
-  return result;
-}
-
-/**
- * Three-way reconciliation per employee + date.
- *   B == N, E == B  -> UNCHANGED          B == N, E != B -> KEPT_LOCAL (override preserved)
- *   B != N, E == B  -> MODIFIED (future)  B != N, E == N -> COMPANY_ADOPTED_LOCAL (auto-resolved)
- *   B != N, E != B, E != N -> REQUIRES_REVIEW
- *   no B (and no E) -> NEW; no B but E exists: E == N -> UNCHANGED, else REQUIRES_REVIEW
- *   days already awaiting review stay REQUIRES_REVIEW (never silently resolved)
- * Historical dates never become MODIFIED silently: a contradiction with the effective history is REQUIRES_REVIEW.
- */
-export function reconcileThreeWay({ baseline, next, effective, today, reviewDays = new Set(), planOnlyDays = new Set() }) {
-  const B = indexRows(baseline); const N = indexRows(next); const E = indexRows(effective);
-  // Rows flagged `evidence` come from an employee calendar for a past date: they describe what the employee
-  // calendar SHOWS (effective evidence), not what the company planned.
-  const evidenceDays = new Set(next.filter((entry) => entry.evidence).map((entry) => dayKey(entry.employeeKey, String(entry.row.date).slice(0, 10))));
+/** Compares imported rows with CURRENT only. Pending alternatives never replace CURRENT silently. */
+export function reconcileCurrentProposal({ proposed, current, today, reviewDays = new Set() }) {
+  const incoming = indexRows(proposed);
+  const existing = indexRows(current);
   const outcomes = [];
-  for (const [key, newRows] of N) {
+  for (const [key, nextRows] of incoming) {
     const [employeeKey, date] = key.split('\u001f');
-    const b = B.get(key); const e = E.get(key);
+    const effective = existing.get(key) ?? null;
     const retrospective = date < today;
-    const evidence = evidenceDays.has(key);
-    const base = { employeeKey, date, next: newRows, baseline: b ?? null, effective: e ?? null, retrospective, evidence };
-    let outcome;
-    if (reviewDays.has(key)) outcome = RECONCILIATION_OUTCOME.REQUIRES_REVIEW; // never resolve a pending day silently
-    else if (evidence) {
-      // Employee-calendar evidence is compared with the effective day only (the plan baseline is not involved).
-      if (!e) outcome = RECONCILIATION_OUTCOME.NEW;
-      else if (sameDay(e, newRows)) outcome = RECONCILIATION_OUTCOME.UNCHANGED;
-      else outcome = planOnlyDays.has(key) ? RECONCILIATION_OUTCOME.EVIDENCE_APPLIED : RECONCILIATION_OUTCOME.REQUIRES_REVIEW;
-    }
-    else if (!b && !e) outcome = RECONCILIATION_OUTCOME.NEW;
-    // First import (no baseline): a day that already matches the effective calendar is simply UNCHANGED. A past day that
-    // differs keeps its effective state (the plan is recorded, the difference stays explainable); a future day that a
-    // planner already drafted differently needs a human decision.
-    else if (!b && e) {
-      if (sameDay(e, newRows)) outcome = RECONCILIATION_OUTCOME.UNCHANGED;
-      else outcome = retrospective ? RECONCILIATION_OUTCOME.KEPT_LOCAL : RECONCILIATION_OUTCOME.REQUIRES_REVIEW;
-    }
-    else if (sameDay(b, newRows)) {
-      outcome = !e || sameDay(e, b) ? RECONCILIATION_OUTCOME.UNCHANGED : RECONCILIATION_OUTCOME.KEPT_LOCAL;
-    } else if (!e || sameDay(e, b)) {
-      outcome = retrospective ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW : RECONCILIATION_OUTCOME.MODIFIED;
-    } else if (sameDay(e, newRows)) outcome = RECONCILIATION_OUTCOME.COMPANY_ADOPTED_LOCAL;
-    else outcome = RECONCILIATION_OUTCOME.REQUIRES_REVIEW;
-    outcomes.push({ ...base, outcome });
+    const outcome = reviewDays.has(key)
+      ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW
+      : !effective
+        ? RECONCILIATION_OUTCOME.NEW
+        : sameDay(effective, nextRows)
+          ? RECONCILIATION_OUTCOME.UNCHANGED
+          : retrospective ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW : RECONCILIATION_OUTCOME.MODIFIED;
+    outcomes.push({ employeeKey, date, next: nextRows, effective, retrospective, evidence: false, outcome });
   }
   return outcomes.sort((a, b) => a.date.localeCompare(b.date) || a.employeeKey.localeCompare(b.employeeKey));
 }
 
 export function summarizeOutcomes(outcomes) {
-  const summary = { total: outcomes.length, unchanged: 0, new: 0, keptLocal: 0, modified: 0, companyAdoptedLocal: 0, requiresReview: 0, evidenceApplied: 0 };
+  const summary = { total: outcomes.length, unchanged: 0, new: 0, modified: 0, requiresReview: 0 };
   for (const item of outcomes) {
     if (item.outcome === RECONCILIATION_OUTCOME.UNCHANGED) summary.unchanged += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.NEW) summary.new += 1;
-    else if (item.outcome === RECONCILIATION_OUTCOME.KEPT_LOCAL) summary.keptLocal += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.MODIFIED) summary.modified += 1;
-    else if (item.outcome === RECONCILIATION_OUTCOME.COMPANY_ADOPTED_LOCAL) summary.companyAdoptedLocal += 1;
-    else if (item.outcome === RECONCILIATION_OUTCOME.EVIDENCE_APPLIED) summary.evidenceApplied += 1;
     else summary.requiresReview += 1;
   }
   return summary;
 }
 
-/** Days whose rows must be written into the draft plan (everything else is left alone). */
-export const WRITES_TO_PLAN = new Set([
+/** Outcomes that create or update unpublished Planning assignments. */
+export const WRITES_TO_DRAFT = new Set([
   RECONCILIATION_OUTCOME.NEW,
   RECONCILIATION_OUTCOME.MODIFIED,
-  RECONCILIATION_OUTCOME.COMPANY_ADOPTED_LOCAL,
 ]);
-
-export { sameContent };
 export { sameDay };

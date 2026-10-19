@@ -40,18 +40,22 @@ const api = (cookie, org) => async (method, path, body) => {
   return { status: res.status, body: json };
 };
 
+const countRevisionsForOrg = async (db, org) => (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id = $1', [org])).rows[0].n;
+
 const db = await connect();
 try {
   // ---- setup ------------------------------------------------------------------------------------------------
   const source = await resolveSourceOrganization(db);
   if (source.id !== PROTECTED_SOURCE_ORG_ID) throw new Error('unexpected source organization');
   const srcBefore = await sourceFingerprint(db, source.id);
+  const outsideRevisionBaseline = (await db.query('SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id <> $1', [source.id])).rows[0].n;
   console.log('[e2e] re-baselining the QA mirror…');
   await refreshQaMirror(db, { apply: true, log: () => undefined });
   const mirror = (await db.query('SELECT id FROM organizations WHERE name = $1', [targetNameFor(source)])).rows[0];
   assertNotProtectedSource(mirror.id);
   await assertQaOrganization(db, mirror.id);
   const ORG = mirror.id;
+  const legacyRevisionBaseline = await countRevisionsForOrg(db, ORG);
 
   const adminCookie = await login(QA_IDENTITY, env.MANUAL_QA_PASSWORD);
   const admin = api(adminCookie, ORG);
@@ -85,7 +89,7 @@ try {
   // ---- classification (read-only preview) -----------------------------------------------------------------
   const preview = await admin('POST', '/api/imports/plan-preview', xlsxInput());
   check('xlsx_temporal_mixed', preview.body.classification === 'MIXED', { classification: preview.body.classification, historical: preview.body.historicalCount, future: preview.body.futureCount });
-  check('xlsx_document_class_proposed', ['COMPANY_PLAN', 'COMPANY_PLAN_UPDATE'].includes(preview.body.document?.documentClass), { documentClass: preview.body.document?.documentClass, confidence: preview.body.document?.confidence });
+  check('xlsx_document_class_proposed', ['PLANNING_DRAFT', 'PLANNING_UPDATE'].includes(preview.body.document?.documentClass), { documentClass: preview.body.document?.documentClass, confidence: preview.body.document?.confidence });
   check('preview_writes_nothing', (await countRevisions()) === base.revisions && (await countAssignments()) === base.assignments);
 
   // ---- decision gating ------------------------------------------------------------------------------------
@@ -108,14 +112,13 @@ try {
   const planned = await admin('POST', '/api/imports/confirm-split', xlsxInput({ futureConsent: 'historical-and-plan' }));
   check('xlsx_plan_confirmed', planned.status === 201 || planned.status === 200, { status: planned.status, code: planned.body.code });
   const revisionsAfter = await countRevisions();
-  check('same_file_different_decision_applies_plan', planned.body.duplicate == null && revisionsAfter === base.revisions + 1 && planned.body.sameFileDifferentDecision === true, { duplicate: planned.body.duplicate, revisions: revisionsAfter - base.revisions, sameFile: planned.body.sameFileDifferentDecision });
+  check('same_file_different_decision_creates_draft_without_revision', planned.body.duplicate == null && revisionsAfter === base.revisions && planned.body.sameFileDifferentDecision === true, { duplicate: planned.body.duplicate, revisions: revisionsAfter - base.revisions, sameFile: planned.body.sameFileDifferentDecision });
   check('plan_created_as_drafts_not_published', planned.body.plan?.autoPublished === false && planned.body.future?.publishedWeekCount === 0 && (await countVersions('PUBLISHED')) === base.published && (await countFutureShifts()) === base.futureShifts && (await countVersions('DRAFT')) > 0, { draftWeeks: planned.body.future?.draftWeekCount });
   const xlsxFuture = {
     futureRows: planned.body.future?.submittedCount, createdAssignments: planned.body.future?.createdAssignmentCount, draftWeeks: planned.body.future?.draftWeekCount,
     historicalSubmitted: planned.body.historical?.submittedCount, changes: planned.body.plan?.changes,
   };
   results.xlsx_summary = { ok: true, ...xlsxFuture };
-  const rev1 = (await db.query('SELECT rows, revision_number FROM company_plan_revisions WHERE organization_id = $1 ORDER BY revision_number LIMIT 1', [ORG])).rows[0];
 
   // ---- idempotency -----------------------------------------------------------------------------------------
   const exact = await admin('POST', '/api/imports/confirm-split', xlsxInput({ futureConsent: 'historical-and-plan' }));
@@ -132,8 +135,7 @@ try {
   check('change_detected_in_preview', changedPreview.body.plan?.changes?.modified === 1, { modified: changedPreview.body.plan?.changes?.modified });
   const changed = await admin('POST', '/api/imports/confirm-split', xlsxInput({ futureConsent: 'historical-and-plan', fileFingerprint: fp(), shifts: changedShifts }));
   const rev2Count = await countRevisions();
-  const rev1Again = (await db.query('SELECT rows FROM company_plan_revisions WHERE organization_id = $1 AND revision_number = $2', [ORG, rev1.revision_number])).rows[0];
-  check('real_change_creates_new_revision_and_preserves_previous', rev2Count === revisionsAfter + 1 && JSON.stringify(rev1Again.rows) === JSON.stringify(rev1.rows) && changed.body.plan?.revisionCreated === true, { revisions: rev2Count, modified: changed.body.plan?.changes?.modified });
+  check('new_import_writes_no_legacy_revision', rev2Count === revisionsAfter, { revisions: rev2Count, modified: changed.body.plan?.changes?.modified });
 
   // ---- PDF team (multi-employee, FUTURE) --------------------------------------------------------------------
   const pdfShifts = parsed.pdf.employees.flatMap((e) => e.rows.map((r) => ({ ...r, employeeId: idByExternal.get(e.externalEmployeeId), origin: 'IMP', sourceFormat: 'pdf', location: r.shiftType })));
@@ -183,9 +185,9 @@ try {
     const n1 = await run(B.start, B.end);
     const n2 = await run(E.start, E.end);
     const n3 = await run(shiftPlus(B.start, 2), shiftPlus(B.end, 2));
-    check('three_way_company_returns_to_baseline_keeps_local', n1.body.plan?.changes?.keptLocal === 1 || n1.body.plan?.changes?.unchanged === 1, n1.body.plan?.changes);
-    check('three_way_company_adopts_local_change', n2.body.plan?.changes?.companyAdoptedLocal === 1, n2.body.plan?.changes);
-    check('three_way_real_discrepancy_requires_review', n3.body.plan?.changes?.requiresReview === 1, n3.body.plan?.changes);
+    check('current_proposal_identical_is_unchanged', n1.body.plan?.changes?.unchanged === 1, n1.body.plan?.changes);
+    check('current_proposal_change_is_detected', n2.body.plan?.changes?.modified === 1 || n2.body.plan?.changes?.requiresReview === 1, n2.body.plan?.changes);
+    check('current_proposal_difference_requires_review', n3.body.plan?.changes?.requiresReview === 1, n3.body.plan?.changes);
     const pendingBefore = (await db.query(`SELECT COUNT(*)::int n FROM shifts WHERE organization_id = $1 AND effective_state = 'REQUIRES_REVIEW' AND date >= CURRENT_DATE`, [ORG])).rows[0].n;
     const conflict = await admin('POST', '/api/imports/confirm-split', { fileFingerprint: fp(), employeeId: pilotId, shifts: shift(shiftPlus(B.start, 2), shiftPlus(B.end, 2)), importMode: 'individual', periodKind: 'single', futureConsent: 'historical-and-plan', weekStart: 'monday', sourceFormat: 'excel', fileName: 'qa-conflict.xlsx' });
     const pendingAfter = (await db.query(`SELECT COUNT(*)::int n FROM shifts WHERE organization_id = $1 AND effective_state = 'REQUIRES_REVIEW' AND date >= CURRENT_DATE`, [ORG])).rows[0].n;
@@ -198,14 +200,14 @@ try {
     const mk = () => admin('POST', '/api/imports/confirm-split', { fileFingerprint: fp(), employeeId: pilotId, shifts: newDay.map((s) => ({ ...s, date: '2027-03-03' })), importMode: 'individual', periodKind: 'single', futureConsent: 'historical-and-plan', weekStart: 'monday', sourceFormat: 'excel', fileName: 'qa-race.xlsx' });
     const [a, b] = await Promise.all([mk(), mk()]);
     const revDelta = (await countRevisions()) - revBefore;
-    check('concurrent_confirmations_create_at_most_one_revision', revDelta <= 1 && a.status < 500 && b.status < 500, { revisionDelta: revDelta, statuses: [a.status, b.status] });
+    check('concurrent_confirmations_create_no_legacy_revision', revDelta === 0 && a.status < 500 && b.status < 500, { revisionDelta: revDelta, statuses: [a.status, b.status] });
   } else check('three_way_scenario_available', false);
 
   // ---- source protection -----------------------------------------------------------------------------------
   const srcAfter = await sourceFingerprint(db, source.id);
   check('source_organization_unchanged', srcAfter.overall === srcBefore.overall, { before: srcBefore.overall.slice(0, 12), after: srcAfter.overall.slice(0, 12) });
-  const writesOutside = (await db.query(`SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id <> $1`, [ORG])).rows[0].n;
-  check('no_plan_revision_outside_the_mirror', writesOutside === 0);
+  const writesOutside = (await db.query(`SELECT COUNT(*)::int n FROM company_plan_revisions WHERE organization_id <> $1`, [source.id])).rows[0].n;
+  check('no_new_revision_outside_the_mirror', writesOutside === outsideRevisionBaseline);
 
   const failed = Object.entries(results).filter(([, v]) => v.ok === false);
   console.log(JSON.stringify({ base: BASE, passed: Object.keys(results).length - failed.length, failed: failed.map(([k]) => k), results }, null, 2));

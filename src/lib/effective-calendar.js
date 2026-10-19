@@ -1,7 +1,7 @@
 /**
  * Effective calendar domain (single source of truth for API and client).
  *
- *   COMPANY PLAN  ->  CHANGES  ->  EFFECTIVE CALENDAR  ->  WORKTIME  ->  ANNUAL TARGET
+ *   CURRENT CALENDAR  ->  PENDING PROPOSALS  ->  WORKTIME  ->  ANNUAL TARGET
  *
  * Statistics are computed from the effective calendar. A pending day remains
  * unresolved, but its single deterministic current baseline may be counted
@@ -98,11 +98,15 @@ export function normalizeCalendarRow(row) {
     shiftType,
     countsAsWork: countsAsWork === undefined ? null : countsAsWork,
     effectiveState: pick('effectiveState', 'effective_state') ?? EFFECTIVE_STATES.EFFECTIVE,
-    layer: row.layer ?? CALENDAR_LAYERS.COMPANY_PLAN,
+    layer: row.layer ?? CALENDAR_LAYERS.CHANGE,
     provenance: row.provenance ?? null,
     legacyOrigin: pick('legacyOrigin', 'legacy_origin') ?? null,
     dutyRole: pick('dutyRole', 'duty_role') ?? null,
     planRevision: pick('planRevision', 'plan_revision') ?? 1,
+    createdAt: pick('createdAt', 'created_at') ?? null,
+    importId: pick('importId', 'import_id') ?? null,
+    changeId: pick('changeId', 'change_id') ?? null,
+    currentEvidence: pick('currentEvidence', 'current_evidence') === true,
   };
 }
 
@@ -148,7 +152,7 @@ const sumMinutes = (intervals) => intervals.reduce((total, i) => total + (i.end 
  * A day carrying a blocking inconsistency contributes NO minutes (never an
  * inflated or guessed total) and is reported through `issues`.
  */
-export function resolveProvisionalReviewRows(inputRows, companyNow = null) {
+export function resolveProvisionalReviewRows(inputRows) {
   const rows = inputRows.map(normalizeCalendarRow);
   const businessRows = (items) => items.filter((row) => classifyKind(row).kind !== 'LEGACY_DUTY_ROLE');
   const effective = businessRows(rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.EFFECTIVE));
@@ -159,20 +163,42 @@ export function resolveProvisionalReviewRows(inputRows, companyNow = null) {
   };
   if (valid(effective)) return { counted: true, reason: 'CURRENT_EFFECTIVE', rows: effective };
 
+  const effectiveJt = rows.filter((row) => !['SUPERSEDED', 'ABSORBED'].includes(row.effectiveState) && classifyKind(row).kind === 'LEGACY_DUTY_ROLE' && rowInterval(row));
+  if (!effective.length && effectiveJt.length) {
+    return { counted: true, reason: 'LEGACY_JT_AS_REGULAR', rows: effectiveJt.map((row) => ({ ...row, shiftType: 'Regular', countsAsWork: true, dutyRole: row.dutyRole ?? DUTY_ROLE_SHIFT_LEAD })) };
+  }
+
   const review = businessRows(rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW));
-  if (!review.length || !Array.isArray(companyNow)) return { counted: false, reason: 'AMBIGUOUS', rows: [] };
-  const label = (row) => `${classifyKind(row).type}|${row.startTime ?? ''}|${row.endTime ?? ''}`;
-  const companyLabels = new Set(companyNow.map((row) => label(normalizeCalendarRow(row))));
-  const local = review.filter((row) => !companyLabels.has(label(row)));
-  if (!valid(local)) return { counted: false, reason: 'AMBIGUOUS', rows: [] };
-  return { counted: true, reason: 'CURRENT_LOCAL', rows: local };
+  if (!review.length) return { counted: false, reason: 'AMBIGUOUS', rows: [] };
+  const auditCurrent = review.filter((row) => row.currentEvidence === true || row.current_evidence === true);
+  if (auditCurrent.length && valid(auditCurrent)) return { counted: true, reason: 'AUDIT_CURRENT', rows: auditCurrent };
+
+  const dated = review.filter((row) => row.createdAt && Number.isFinite(Date.parse(row.createdAt)));
+  if (!dated.length) return { counted: false, reason: 'MISSING_CREATED_AT', rows: [] };
+  const oldestTime = Math.min(...dated.map((row) => Date.parse(row.createdAt)));
+  const oldest = dated.filter((row) => Date.parse(row.createdAt) === oldestTime);
+  const lineageKey = (row) => row.changeId ? `change:${row.changeId}` : row.importId ? `import:${row.importId}:${row.createdAt}` : `created:${row.createdAt}`;
+  const groups = new Map();
+  for (const row of oldest) {
+    const key = lineageKey(row);
+    if (!groups.has(key)) {
+      groups.set(key, review.filter((candidate) => {
+        if (row.changeId) return candidate.changeId === row.changeId;
+        if (row.importId) return candidate.importId === row.importId && candidate.createdAt === row.createdAt;
+        return candidate.createdAt === row.createdAt;
+      }));
+    }
+  }
+  const candidates = [...groups.values()].filter(valid);
+  if (candidates.length !== 1) return { counted: false, reason: 'AMBIGUOUS_TIMESTAMP_TIE', rows: [] };
+  return { counted: true, reason: 'LEGACY_OLDEST_FALLBACK', rows: candidates[0] };
 }
 
-export function resolveDay(date, inputRows, { companyNow = null } = {}) {
+export function resolveDay(date, inputRows) {
   const allRows = inputRows.map(normalizeCalendarRow);
   const reviewRows = allRows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW);
   const selection = reviewRows.length
-    ? resolveProvisionalReviewRows(allRows, companyNow)
+    ? resolveProvisionalReviewRows(allRows)
     : { counted: false, reason: null, rows: [] };
   const rows = allRows.filter((row) => row.effectiveState !== EFFECTIVE_STATES.REQUIRES_REVIEW);
   if (selection.counted) rows.push(...selection.rows.map((row) => ({ ...row, effectiveState: EFFECTIVE_STATES.EFFECTIVE })));
@@ -190,6 +216,8 @@ export function resolveDay(date, inputRows, { companyNow = null } = {}) {
     requiresReview: false,
     countedProvisionally: false,
     provisionalReason: null,
+    currentRows: [],
+    proposedRows: [],
     legacyDutyRows: 0,
     dutyRole: null,
     duplicateRows: 0,
@@ -205,6 +233,8 @@ export function resolveDay(date, inputRows, { companyNow = null } = {}) {
   // Legacy JT rows parked as METADATA_ONLY still carry their interval.
   const active = rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.EFFECTIVE
     || (row.effectiveState === EFFECTIVE_STATES.METADATA_ONLY && classifyKind(row).kind === 'LEGACY_DUTY_ROLE'));
+  result.currentRows = active;
+  result.proposedRows = reviewRows.filter((row) => !selection.rows.some((current) => current.id === row.id));
   const seen = new Set();
   const entries = [];
   const dutyIntervals = [];
@@ -346,12 +376,34 @@ function addDay(bucket, day) {
   if (accountingStatus === 'BAJA') bucket.sickLeaveDays += 1;
 }
 
+/** Marks the rows proven current by the last audited after-state before a pending proposal appeared. */
+export function attachAuditCurrentEvidence(inputRows, changes = []) {
+  const rows = inputRows.map(normalizeCalendarRow);
+  const pendingByDate = new Map();
+  for (const row of rows) {
+    if (row.effectiveState !== EFFECTIVE_STATES.REQUIRES_REVIEW || !row.createdAt) continue;
+    const timestamp = Date.parse(row.createdAt);
+    if (Number.isFinite(timestamp)) pendingByDate.set(row.date, Math.min(pendingByDate.get(row.date) ?? Infinity, timestamp));
+  }
+  const idsByDate = new Map();
+  for (const [date, firstPendingAt] of pendingByDate) {
+    const prior = changes.filter((change) => String(change.date ?? date).slice(0, 10) === date
+      && Number.isFinite(Date.parse(change.createdAt ?? change.created_at))
+      && Date.parse(change.createdAt ?? change.created_at) < firstPendingAt)
+      .sort((a, b) => Date.parse(b.createdAt ?? b.created_at) - Date.parse(a.createdAt ?? a.created_at))[0];
+    const after = Array.isArray(prior?.afterState) ? prior.afterState : Array.isArray(prior?.after_state) ? prior.after_state : Array.isArray(prior?.after) ? prior.after : [];
+    const ids = new Set(after.map((entry) => entry?.id).filter(Boolean));
+    if (ids.size) idsByDate.set(date, ids);
+  }
+  return rows.map((row) => ({ ...row, currentEvidence: idsByDate.get(row.date)?.has(row.id) === true }));
+}
+
 /**
  * Effective statistics for a date range. `realized` covers dates before
  * `today`; `planned` covers today onwards. Future hours are never reported
  * as realized. Pending days remain listed even when counted provisionally.
  */
-export function computeEffectiveStats(inputRows, { from, to, today, companyNowByDate = {} } = {}) {
+export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
   const byDate = new Map();
   let calendarRows = 0;
   for (const row of inputRows) {
@@ -363,7 +415,7 @@ export function computeEffectiveStats(inputRows, { from, to, today, companyNowBy
     if (!byDate.has(normalized.date)) byDate.set(normalized.date, []);
     byDate.get(normalized.date).push(normalized);
   }
-  const days = [...byDate.entries()].map(([date, rows]) => resolveDay(date, rows, { companyNow: companyNowByDate[date] ?? null }));
+  const days = [...byDate.entries()].map(([date, rows]) => resolveDay(date, rows));
   const total = emptyBucket();
   const realized = emptyBucket();
   const planned = emptyBucket();
@@ -427,6 +479,12 @@ export function computeEffectiveStats(inputRows, { from, to, today, companyNowBy
     byType,
     unresolvedDays: unresolved.length,
     totalReviewDays: days.filter((day) => day.requiresReview).length,
+    currentEffectiveDays: days.filter((day) => day.provisionalReason === 'CURRENT_EFFECTIVE').length,
+    auditCurrentDays: days.filter((day) => day.provisionalReason === 'AUDIT_CURRENT').length,
+    legacyJtDays: days.filter((day) => day.provisionalReason === 'LEGACY_JT_AS_REGULAR').length,
+    legacyOldestDays: days.filter((day) => day.provisionalReason === 'LEGACY_OLDEST_FALLBACK').length,
+    ambiguousTieDays: days.filter((day) => day.provisionalReason === 'AMBIGUOUS_TIMESTAMP_TIE').length,
+    otherUncountedDays: days.filter((day) => day.requiresReview && !day.countedProvisionally && day.provisionalReason !== 'AMBIGUOUS_TIMESTAMP_TIE').length,
     provisionalReviewDays,
     provisionalReviewMinutes,
     unresolvedUncountedDays,
@@ -481,29 +539,21 @@ export function splitMinutes(totalMinutes) {
   return { sign, hours: Math.floor(abs / 60), minutes: abs % 60 };
 }
 
-/**
- * Day provenance model for the detail view: effective rows, the original and
- * current company plan, and the change trail (chronological).
- */
+/** Day provenance model for current/proposed rows and the chronological change trail. */
 export function buildDayProvenance(inputRows, changes = []) {
-  const rows = inputRows.map(normalizeCalendarRow);
-  const plan = rows.filter((row) => row.layer === CALENDAR_LAYERS.COMPANY_PLAN);
-  const revisions = [...new Set(plan.map((row) => row.planRevision))].sort((a, b) => a - b);
-  const forRevision = (revision) => plan.filter((row) => row.planRevision === revision && classifyKind(row).kind !== 'LEGACY_DUTY_ROLE');
-  const original = revisions.length ? forRevision(revisions[0]) : [];
-  const currentRevision = revisions.length
-    ? [...revisions].reverse().find((revision) => forRevision(revision).some((row) => row.effectiveState !== EFFECTIVE_STATES.REQUIRES_REVIEW)) ?? revisions[revisions.length - 1]
-    : null;
-  const current = currentRevision === null ? [] : forRevision(currentRevision);
+  const rows = attachAuditCurrentEvidence(inputRows, changes);
+  const pendingSelection = rows.some((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW)
+    ? resolveProvisionalReviewRows(rows)
+    : { counted: false, reason: null, rows: [] };
   const effective = rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.EFFECTIVE && classifyKind(row).kind !== 'LEGACY_DUTY_ROLE');
-  const signature = (list) => list.map((r) => `${classifyKind(r).type}|${r.startTime ?? ''}|${r.endTime ?? ''}`).sort().join(';');
   return {
     effective,
-    companyOriginal: original,
-    companyCurrent: current,
-    revisions,
+    current: pendingSelection.counted ? pendingSelection.rows : effective,
+    proposed: rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW
+      && !pendingSelection.rows.some((currentRow) => currentRow.id === row.id)),
+    countedProvisionally: pendingSelection.counted,
+    provisionalReason: pendingSelection.reason,
     changes: [...changes].sort((a, b) => String(a.createdAt ?? a.created_at).localeCompare(String(b.createdAt ?? b.created_at))),
-    hasChangesFromPlan: changes.length > 0 || signature(effective) !== signature(current),
     requiresReview: rows.some((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW),
     legacyDutyRows: rows.filter((row) => classifyKind(row).kind === 'LEGACY_DUTY_ROLE'),
   };

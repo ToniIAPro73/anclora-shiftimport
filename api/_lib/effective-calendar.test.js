@@ -3,6 +3,7 @@ import {
   JT_COUNTS_AS_ADDITIONAL_WORK,
   JT_COUNTS_AS_WORK_INTERVAL,
   buildDayProvenance,
+  attachAuditCurrentEvidence,
   computeEffectiveStats,
   evaluateAnnualTarget,
   hoursToMinutes,
@@ -199,7 +200,7 @@ describe('legacy JT', () => {
   });
 });
 
-describe('company plan revisions', () => {
+describe('legacy layer metadata', () => {
   const plan = (type, start, end, extra) => row('2026-01-01', type, start, end, { layer: 'COMPANY_PLAN', ...extra });
 
   it('2026-01-01: original Libre superseded by Regular 11-19 = 8h', () => {
@@ -213,10 +214,9 @@ describe('company plan revisions', () => {
     expect(s.total.freeDays).toBe(0);
     expect(s.unresolvedDays).toBe(0);
     const history = buildDayProvenance(rows);
-    expect(history.companyOriginal.map((r) => r.shiftType)).toEqual(['Libre']);
-    expect(history.companyCurrent.map((r) => r.shiftType)).toEqual(['Regular']);
+    expect(history.current.map((r) => r.shiftType)).toEqual(['Regular']);
+    expect(history.proposed).toEqual([]);
     expect(history.effective).toHaveLength(1);
-    expect(history.revisions).toEqual([1, 2]);
   });
 
   it('2026-06-02: company Baja vs historical Regular 14-22 requires review', () => {
@@ -248,20 +248,19 @@ describe('company plan revisions', () => {
     expect(result.unresolvedDays).toBe(1);
   });
 
-  it('uses only the local current candidate distinguished from the current company plan', () => {
+  it('uses the oldest legacy candidate without consulting plan revisions or layer metadata', () => {
     const rows = [
-      row('2026-02-01', 'Regular', '17:00', '01:00', { layer: 'CHANGE', effectiveState: 'REQUIRES_REVIEW' }),
-      row('2026-02-01', 'Regular', '16:00', '00:00', { layer: 'COMPANY_PLAN', effectiveState: 'REQUIRES_REVIEW' }),
+      row('2026-02-01', 'Regular', '17:00', '01:00', { layer: 'CHANGE', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-16T00:00:00Z' }),
+      row('2026-02-01', 'Regular', '16:00', '00:00', { layer: 'COMPANY_PLAN', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-11T00:00:00Z' }),
     ];
-    const companyNow = [row('2026-02-01', 'Regular', '16:00', '00:00')];
-    const result = computeEffectiveStats(rows, { today: '2026-02-02', companyNowByDate: { '2026-02-01': companyNow } });
+    const result = computeEffectiveStats(rows, { today: '2026-02-02' });
     expect(result.total.effectiveMinutes).toBe(480);
     expect(result.total.regularMinutes).toBe(480);
     expect(result.provisionalReviewMinutes).toBe(480);
-    expect(result.days[0]).toMatchObject({ status: 'REQUIRES_REVIEW', countedProvisionally: true, provisionalReason: 'CURRENT_LOCAL' });
+    expect(result.days[0]).toMatchObject({ status: 'REQUIRES_REVIEW', countedProvisionally: true, provisionalReason: 'LEGACY_OLDEST_FALLBACK' });
   });
 
-  it('fails closed when pending alternatives cannot be distinguished', () => {
+  it('fails closed when pending alternatives have no temporal evidence', () => {
     const rows = [
       row('2026-03-03', 'Regular', '08:00', '16:00', { effectiveState: 'REQUIRES_REVIEW' }),
       row('2026-03-03', 'Regular', '09:00', '15:00', { effectiveState: 'REQUIRES_REVIEW' }),
@@ -269,7 +268,48 @@ describe('company plan revisions', () => {
     const result = stats(rows, { today: '2026-03-04' });
     expect(result.total.effectiveMinutes).toBe(0);
     expect(result.unresolvedUncountedDays).toBe(1);
-    expect(result.days[0]).toMatchObject({ status: 'REQUIRES_REVIEW', requiresReview: true, countedProvisionally: false, provisionalReason: 'AMBIGUOUS' });
+    expect(result.days[0]).toMatchObject({ status: 'REQUIRES_REVIEW', requiresReview: true, countedProvisionally: false, provisionalReason: 'MISSING_CREATED_AT' });
+  });
+
+  it('fails closed on exact created_at ties without lineage evidence', () => {
+    const createdAt = '2026-10-11T10:00:00.000Z';
+    const result = stats([
+      row('2026-05-17', 'Extras', '05:00', '13:00', { effectiveState: 'REQUIRES_REVIEW', createdAt }),
+      row('2026-05-17', 'Libre', null, null, { effectiveState: 'REQUIRES_REVIEW', createdAt }),
+    ]);
+    expect(result.days[0]).toMatchObject({ countedProvisionally: false, provisionalReason: 'AMBIGUOUS_TIMESTAMP_TIE' });
+    expect(result.total.effectiveMinutes).toBe(0);
+  });
+
+  it('counts a pending legacy JT interval provisionally as Regular once', () => {
+    const result = stats([
+      row('2026-07-17', 'JT', '17:00', '01:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-07-17', 'Regular', '16:00', '00:00', { effectiveState: 'REQUIRES_REVIEW' }),
+    ]);
+    expect(result.days[0]).toMatchObject({ countedProvisionally: true, provisionalReason: 'LEGACY_JT_AS_REGULAR' });
+    expect(result.total.regularMinutes).toBe(480);
+    expect(result.total.effectiveMinutes).toBe(480);
+  });
+
+  it('uses the oldest coherent multirow legacy state as current', () => {
+    const result = stats([
+      row('2026-05-17', 'Regular', '06:00', '12:00', { effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-11T00:00:00Z', importId: 'batch-a' }),
+      row('2026-05-17', 'Extras', '12:00', '14:00', { effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-11T00:00:00Z', importId: 'batch-a' }),
+      row('2026-05-17', 'Regular', '07:00', '13:00', { effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-16T00:00:00Z', importId: 'batch-b' }),
+    ]);
+    expect(result.days[0]).toMatchObject({ countedProvisionally: true, provisionalReason: 'LEGACY_OLDEST_FALLBACK' });
+    expect(result.total.effectiveMinutes).toBe(480);
+  });
+
+  it('uses an audited after-state before the proposal as current', () => {
+    const rows = [
+      row('2026-04-23', 'Vacaciones', null, null, { id: 'vac', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-16T00:00:00Z' }),
+      row('2026-04-23', 'Libre', null, null, { id: 'free', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-10-16T00:00:00Z' }),
+    ];
+    const audited = attachAuditCurrentEvidence(rows, [{ date: '2026-04-23', createdAt: '2026-10-15T00:00:00Z', afterState: [{ id: 'vac' }] }]);
+    const day = resolveDay('2026-04-23', audited);
+    expect(day).toMatchObject({ countedProvisionally: true, provisionalReason: 'AUDIT_CURRENT' });
+    expect(stats(audited).total.vacationDays).toBe(1);
   });
 
   it('keeps future pending baseline in planned and exposes its bucket metadata', () => {
@@ -329,12 +369,13 @@ describe('company plan revisions', () => {
     expect(result.unresolved[0].status).toBe('REQUIRES_REVIEW');
   });
 
-  it('flags changed days relative to the company plan', () => {
+  it('legacy layer values do not choose the current calendar state', () => {
     const rows = [
-      plan('Regular', '12:00', '20:00', { planRevision: 1 }),
+      plan('Regular', '12:00', '20:00', { planRevision: 1, effectiveState: 'SUPERSEDED' }),
       row('2026-01-01', 'Regular', '11:00', '19:00', { layer: 'CHANGE', planRevision: 1 }),
     ];
-    expect(buildDayProvenance(rows).hasChangesFromPlan).toBe(true);
+    expect(buildDayProvenance(rows).current.map((r) => r.startTime)).toEqual(['11:00']);
+    expect(buildDayProvenance(rows).proposed).toEqual([]);
   });
 });
 

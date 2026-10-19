@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { daySignature, normalizePlanRow, planCanonicalLines } from '../../src/lib/company-plan.js';
+import { daySignature, normalizeImportedCalendarRow } from '../../src/lib/calendar-import.js';
 
 /**
  * Three-level fingerprints. None of them depends on a tenant UUID:
@@ -9,15 +9,11 @@ import { daySignature, normalizePlanRow, planCanonicalLines } from '../../src/li
  */
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
 
-export function planFingerprint(entries) {
-  return sha256(planCanonicalLines(entries).join('\n'));
-}
-
 /** entries = [{ employeeKey, row }] for the WHOLE document (historical + future). */
 export function documentFingerprint(entries, context = {}) {
   const byEmployee = new Map();
   for (const entry of entries) {
-    const n = normalizePlanRow(entry.row);
+    const n = normalizeImportedCalendarRow(entry.row);
     if (!byEmployee.has(entry.employeeKey)) byEmployee.set(entry.employeeKey, []);
     // Annotations (DCF, observation text) are part of the DOCUMENT, never of the business PLAN.
     const notes = (entry.annotations ?? []).map((a) => (a.kind === 'COMMENT' ? `C:${String(a.text ?? '').trim()}` : `D:${a.startTime ?? ''}-${a.endTime ?? ''}`)).sort().join(',');

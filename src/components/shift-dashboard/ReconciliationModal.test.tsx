@@ -13,14 +13,14 @@ beforeEach(() => window.localStorage?.setItem?.('anclora_shiftimport_locale_v1',
 const pending = (index: number): ReconciliationItem => ({
   date: `2026-01-${String(index).padStart(2, '0')}`,
   status: 'PENDING',
-  company: [{ type: 'Libre', startTime: null, endTime: null }],
   current: [{ type: 'Regular', startTime: '17:00', endTime: '01:00' }],
+  proposed: [{ type: 'Libre', startTime: null, endTime: null }],
   resolvedAt: null, resolvedReason: null, selfChange: null,
 });
 const resolved: ReconciliationItem = {
   date: '2026-02-02', status: 'RESOLVED',
-  company: [{ type: 'Regular', startTime: '13:00', endTime: '21:00' }],
   current: [{ type: 'Regular', startTime: '13:00', endTime: '21:00' }],
+  proposed: [],
   resolvedAt: '2026-10-01T10:00:00Z', resolvedReason: 'Confirmado con el jefe', selfChange: false,
 };
 const worklist = (count: number, withResolved = true): ReconciliationWorklist => ({
@@ -39,22 +39,18 @@ function renderModal(list: ReconciliationWorklist | null, extra: Partial<React.C
 }
 
 describe('ReconciliationModal', () => {
-  it('shows company before / company now / effective calendar with a plain-language reason (no ids)', () => {
+  it('shows current calendar / detected proposal with a plain-language reason (no ids)', () => {
     const item: ReconciliationItem = {
       date: '2026-06-02', status: 'PENDING',
-      companyBefore: [{ type: 'Regular', startTime: '14:00', endTime: '22:00' }],
-      companyNow: [{ type: 'Regular', startTime: '14:00', endTime: '22:00' }],
-      effective: [{ type: 'Baja', startTime: null, endTime: null }],
-      reasonCode: 'EFFECTIVE_DIFFERS_FROM_PLAN',
-      company: [{ type: 'Regular', startTime: '14:00', endTime: '22:00' }],
       current: [{ type: 'Baja', startTime: null, endTime: null }],
+      proposed: [{ type: 'Regular', startTime: '14:00', endTime: '22:00' }],
+      reasonCode: 'LEGACY_OLDEST_FALLBACK',
       resolvedAt: null, resolvedReason: null, selfChange: null,
     };
     renderModal({ employeeId: 'e1', year: 2026, pendingCount: 1, resolvedCount: 0, items: [item] });
-    expect(screen.getByTestId('recon-before-2026-06-02')).toHaveTextContent('14:00–22:00');
-    expect(screen.getByTestId('recon-now-2026-06-02')).toHaveTextContent('14:00–22:00');
-    expect(screen.getByTestId('recon-effective-2026-06-02')).toHaveTextContent('Baja');
-    expect(screen.getByTestId('recon-why-2026-06-02')).toHaveTextContent('difiere de la información importada');
+    expect(screen.getByTestId('recon-current-2026-06-02')).toHaveTextContent('Baja');
+    expect(screen.getByTestId('recon-proposed-2026-06-02')).toHaveTextContent('14:00–22:00');
+    expect(screen.getByTestId('recon-why-2026-06-02')).toHaveTextContent('Diferencia pendiente');
     expect(screen.getByTestId('reconciliation-modal').textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
   });
 

@@ -113,7 +113,7 @@ describe('ImportResultModal', () => {
             status: 'COMPLETED',
             historical: { submittedCount: 289, persistedCount: 288, existingCount: 1 },
             future: { submittedCount: 30, createdAssignmentCount: 30, existingAssignmentCount: 0, affectedWeekCount: 6, publishedWeekCount: 0, publishedShiftCount: 0, publicationResults: [], draftWeekCount: 6 },
-            plan: { revisionNumber: 3, revisionCreated: true, changes: { new: 30, unchanged: 280, modified: 2, keptLocal: 1, companyAdoptedLocal: 4, requiresReview: 1 } },
+            plan: { changes: { new: 30, unchanged: 280, modified: 2, requiresReview: 1 } },
           }}
         />
       </I18nProvider>,
@@ -122,7 +122,7 @@ describe('ImportResultModal', () => {
     expect(within(screen.getByTestId('import-result-metric-historical')).getByText('288')).toBeTruthy();
     expect(within(screen.getByTestId('import-result-metric-future')).getByText('30')).toBeTruthy();
     expect(within(screen.getByTestId('import-result-metric-weeks')).getByText('6')).toBeTruthy();
-    expect(screen.getByTestId('import-result-revision').textContent).toBe('Planificación actualizada; lo anterior se conserva en el historial.');
+    expect(screen.queryByTestId('import-result-revision')).toBeNull();
     expect(screen.getByTestId('import-result-changes').textContent).toMatch(/2.*Modificados/);
     expect(screen.getByTestId('import-result-pending').textContent).toContain('1 día(s)');
     expect(screen.getByText(/borrador y no se publica sola/)).toBeTruthy();

@@ -51,7 +51,7 @@ export interface RemoteImport {
   reversibility?: 'REVERSIBLE' | 'LEGACY_SAFE_CANDIDATE' | 'BLOCKED_LEGACY' | 'NO_EFFECTS' | 'REVERTED' | 'DELETED' | null;
   deduplicated?: boolean;
   importDecision?: 'historical-only' | 'historical-and-plan' | null;
-  documentClass?: 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED' | null;
+  documentClass?: ImportDocumentClass | null;
   temporalClass?: 'HISTORICAL' | 'FUTURE' | 'MIXED' | null;
   duplicateKind?: 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN' | null;
 }
@@ -193,16 +193,13 @@ export interface SchedulePublicationResult {
 }
 
 export type ImportDuplicateKind = 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN';
-export type ImportDocumentClass = 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED';
+export type ImportDocumentClass = 'PLANNING_DRAFT' | 'PLANNING_UPDATE' | 'HISTORICAL_CALENDAR' | 'UNDETERMINED' | 'COMPANY_PLAN' | 'COMPANY_PLAN_UPDATE';
 
 export interface PlanChangeCounts {
   new: number;
   unchanged: number;
   modified: number;
-  keptLocal: number;
-  companyAdoptedLocal: number;
   requiresReview: number;
-  evidenceApplied?: number;
 }
 
 export interface FutureImportResult {
@@ -228,11 +225,7 @@ export interface FutureImportResult {
   };
   plan?: {
     autoPublished: false;
-    revisionNumber: number | null;
-    baselineRevision: number | null;
-    revisionCreated: boolean;
     changes: PlanChangeCounts;
-    evidenceDaysApplied?: number;
   };
   sourceKind?: string;
   annotations?: { submitted: number };
@@ -242,16 +235,6 @@ export interface FutureImportResult {
 /** `historical-and-plan` = also create/update the planning from the future rows (never publishes). */
 export type FutureImportConsent = 'historical-and-plan';
 
-export interface PlanBaselineInfo {
-  status: 'MISSING' | 'EXISTS';
-  canCreate: boolean;
-  existingEquivalentRows: number;
-  newRows: number;
-  modifiedRows: number;
-  reviewRows: number;
-  sourceKind: string;
-}
-
 export interface PlanImportPreview {
   classification: 'HISTORICAL' | 'FUTURE' | 'MIXED';
   cutoff: string;
@@ -259,9 +242,7 @@ export interface PlanImportPreview {
   historicalCount: number;
   futureCount: number;
   employeeCount: number;
-  /** Legacy bootstrap: calendar data exists but no versioned company plan was ever recorded. */
-  planBaseline?: PlanBaselineInfo;
-  plan: { baselineRevision: number | null; changes: PlanChangeCounts; wouldCreateRevision: boolean; weeksAffected: string[] };
+  plan: { changes: PlanChangeCounts; weeksAffected: string[] };
   autoPublish: false;
 }
 
@@ -329,6 +310,8 @@ interface RemoteShiftRow {
   effectiveState?: Shift['effectiveState'];
   planRevision?: number;
   changeId?: string | null;
+  createdAt?: string | null;
+  importId?: string;
   hasHistory?: boolean;
 }
 
@@ -350,6 +333,8 @@ const toShift = (row: RemoteShiftRow): Shift => ({
   effectiveState: row.effectiveState,
   planRevision: row.planRevision,
   changeId: row.changeId ?? null,
+  createdAt: row.createdAt ?? null,
+  importId: row.importId,
   hasHistory: row.hasHistory === true,
 });
 
@@ -870,7 +855,7 @@ export async function confirmRemoteFutureImport(input: {
   });
 }
 
-/** Read-only reconciliation of a parsed document against the company plan (no writes). PLANNER+ only. */
+/** Read-only comparison of incoming information with CURRENT and Planning drafts (no writes). PLANNER+ only. */
 export async function previewPlanImport(input: {
   fileFingerprint: string;
   employeeId?: string;
@@ -1468,6 +1453,12 @@ export interface RemoteCalendarStats {
   planned: StatsBucket;
   unresolvedDays: number;
   totalReviewDays: number;
+  currentEffectiveDays: number;
+  auditCurrentDays: number;
+  legacyJtDays: number;
+  legacyOldestDays: number;
+  ambiguousTieDays: number;
+  otherUncountedDays: number;
   provisionalReviewDays: number;
   provisionalReviewMinutes: number;
   unresolvedUncountedDays: number;
@@ -1490,18 +1481,15 @@ export async function loadCalendarStats(employeeId: string, year: number, month?
 
 export interface ReconciliationShiftLabel { type: string; startTime: string | null; endTime: string | null }
 
-export type ReconciliationReasonCode = 'EFFECTIVE_DIFFERS_FROM_PLAN' | 'PLAN_CHANGED' | 'PENDING_REVIEW';
+export type ReconciliationReasonCode = string;
 
 export interface ReconciliationItem {
   date: string;
   status: 'PENDING' | 'RESOLVED';
-  /** Company plan before the latest change / now, and the effective calendar (when the information exists). */
-  companyBefore?: ReconciliationShiftLabel[] | null;
-  companyNow?: ReconciliationShiftLabel[] | null;
-  effective?: ReconciliationShiftLabel[];
-  reasonCode?: ReconciliationReasonCode;
-  company: ReconciliationShiftLabel[];
+  /** The resolved current calendar and the pending alternative. */
   current: ReconciliationShiftLabel[];
+  proposed: ReconciliationShiftLabel[];
+  reasonCode?: ReconciliationReasonCode;
   resolvedAt: string | null;
   resolvedReason: string | null;
   selfChange: boolean | null;

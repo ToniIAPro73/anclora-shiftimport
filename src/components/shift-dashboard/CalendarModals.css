@@ -89,7 +89,7 @@
 .recon-modal__body { min-height: 0; }
 .recon-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .recon-list__head,
-.recon-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.3fr) 104px 128px; align-items: center; column-gap: 16px; padding: 0 8px; }
+.recon-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr) 104px 128px; align-items: center; column-gap: 16px; padding: 0 8px; }
 .recon-list__head { padding-bottom: 8px; color: var(--text-subtle); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; border-bottom: 1px solid var(--glass-border); }
 .recon-row { min-height: 54px; padding-block: 6px; border-bottom: 1px solid var(--border-soft); font-size: 0.88rem; }
 .recon-row:last-child { border-bottom: 0; }

@@ -12,6 +12,7 @@ import { sortDayShifts } from '../../lib/shifts';
 import { DayDetailModal } from './DayDetailModal';
 import type { DayAnnotation } from '../../lib/remote';
 import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
+import { resolveProvisionalReviewRows } from '../../lib/effective-calendar.js';
 
 export const MAX_VISIBLE_DAY_ITEMS = 2;
 
@@ -198,14 +199,20 @@ export const MonthGrid = ({
 
             const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const dayShifts = getShiftsForDay(day);
-            const sortedDayShifts = sortDayShifts(dayShifts);
+            const pendingRows = dayShifts.some((shift) => shift.effectiveState === 'REQUIRES_REVIEW');
+            const provisional = pendingRows ? resolveProvisionalReviewRows(dayShifts) : null;
+            const currentIds = provisional?.counted ? new Set(provisional.rows.map((row) => row.id)) : null;
+            const currentShifts = pendingRows
+              ? dayShifts.filter((shift) => shift.effectiveState !== 'REQUIRES_REVIEW' || currentIds?.has(shift.id))
+              : dayShifts;
+            const sortedDayShifts = sortDayShifts(currentShifts);
             const visibleShifts = sortedDayShifts.slice(0, MAX_VISIBLE_DAY_ITEMS);
             const hiddenCount = sortedDayShifts.length - MAX_VISIBLE_DAY_ITEMS;
             const isToday = iso === todayISO;
             const isWeekend = index % 7 >= 5;
-            const hasVacationShift = dayShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
+            const hasVacationShift = currentShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const isHistorical = isHistoricalDate(iso, todayISO);
-            const needsReview = dayShifts.some((shift) => shift.effectiveState === 'REQUIRES_REVIEW');
+            const needsReview = pendingRows;
             const dayAnnotations = annotations.filter((item) => item.date === iso);
             const hasDcf = dayAnnotations.some((item) => item.kind === 'DCF');
             const hasComment = dayAnnotations.some((item) => item.kind === 'COMMENT');

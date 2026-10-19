@@ -6,6 +6,7 @@ import {
   CHANGE_TYPES,
   PROVENANCE,
   buildDayProvenance,
+  attachAuditCurrentEvidence,
   classifyKind,
   computeEffectiveStats,
   evaluateAnnualTarget,
@@ -14,7 +15,6 @@ import {
   resolveProvisionalReviewRows,
 } from '../../src/lib/effective-calendar.js';
 import { getOperationalDate } from './operational-date.js';
-import { employeeBusinessKey, sameDay } from '../../src/lib/company-plan.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -435,7 +435,8 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   const to = `${numericYear}-12-31`;
   const rows = await sql`
     SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location,
-           counts_as_work, layer, provenance, legacy_origin, duty_role, effective_state, plan_revision
+           counts_as_work, layer, provenance, legacy_origin, duty_role, effective_state, plan_revision,
+           created_at, import_id, change_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
       AND date BETWEEN ${from} AND ${to}
@@ -443,34 +444,22 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
            OR (effective_state = 'METADATA_ONLY' AND shift_type = 'JT'))
     ORDER BY date ASC, start_time ASC NULLS FIRST, id ASC
   `;
-  const reviewDates = [...new Set(rows.filter((row) => row.effective_state === 'REQUIRES_REVIEW').map((row) => row.date))];
-  const companyNowByDate = {};
-  if (reviewDates.length) {
-    const employee = (await sql`SELECT external_employee_id, name FROM employees WHERE id = ${targetEmployeeId} AND organization_id = ${ctx.organizationId}`)[0];
-    const employeeKey = employee ? employeeBusinessKey({ externalEmployeeId: employee.external_employee_id, name: employee.name }) : null;
-    if (employeeKey) {
-      const revisions = await sql`
-        SELECT revision_number, rows FROM company_plan_revisions
-        WHERE organization_id = ${ctx.organizationId} AND scope_key = 'global' AND reverted_at IS NULL AND coverage_to >= ${from} AND coverage_from <= ${to}
-        ORDER BY revision_number DESC
-      `;
-      for (const date of reviewDates) {
-        const current = revisions.map((revision) => (Array.isArray(revision.rows) ? revision.rows : [])
-          .filter((stored) => stored.k === employeeKey && stored.d === date)
-          .map((stored) => ({ shiftType: stored.t, startTime: stored.s || null, endTime: stored.e || null, date })))
-          .find((entry) => entry.length) ?? null;
-        companyNowByDate[date] = current;
-      }
-    }
-  }
-  const stats = computeEffectiveStats(rows, { from, to, today, companyNowByDate });
+  const auditChanges = await sql`
+    SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date, after_state, created_at
+    FROM calendar_changes
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+      AND date BETWEEN ${from} AND ${to}
+    ORDER BY created_at ASC
+  `;
+  const rowsWithAudit = attachAuditCurrentEvidence(rows, auditChanges);
+  const stats = computeEffectiveStats(rowsWithAudit, { from, to, today });
   const monthNumber = month === undefined || month === null || month === '' ? null : Number(month);
   if (monthNumber !== null && (!Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) {
     throw badRequest('month is invalid', 'INVALID_MONTH');
   }
   const monthPrefix = monthNumber === null ? null : `${numericYear}-${String(monthNumber).padStart(2, '0')}`;
   const monthStats = monthPrefix
-    ? computeEffectiveStats(rows, {
+    ? computeEffectiveStats(rowsWithAudit, {
       from: `${monthPrefix}-01`,
       to: `${monthPrefix}-31`,
       today,
@@ -540,62 +529,41 @@ export async function listReconciliationDays(sql, ctx, employeeId, year) {
   const rows = await sql`
     SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, location,
            shift_type, counts_as_work, layer, provenance, legacy_origin, duty_role,
-           effective_state, plan_revision
+           effective_state, plan_revision, created_at, import_id, change_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
       AND TO_CHAR(date, 'YYYY-MM-DD') = ANY(${dates})
   `;
+  const auditChanges = await sql`
+    SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date, after_state, created_at
+    FROM calendar_changes
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+      AND TO_CHAR(date, 'YYYY-MM-DD') = ANY(${dates})
+    ORDER BY created_at ASC
+  `;
+  const rowsWithAudit = attachAuditCurrentEvidence(rows, auditChanges);
   const byDate = new Map(dates.map((date) => [date, []]));
-  for (const row of rows) byDate.get(row.date)?.push(row);
+  for (const row of rowsWithAudit) byDate.get(row.date)?.push(row);
   const unwrap = (date) => byDate.get(date) ?? [];
   const label = (row) => {
     const normalized = normalizeCalendarRow(row);
     return { type: classifyKind(normalized).type, startTime: normalized.startTime, endTime: normalized.endTime };
   };
-  // Company-plan history for the explanation "Empresa antes / Empresa ahora / Calendario efectivo".
-  const employee = (await sql`SELECT external_employee_id, name FROM employees WHERE id = ${targetEmployeeId} AND organization_id = ${ctx.organizationId}`)[0];
-  const employeeKey = employee ? employeeBusinessKey({ externalEmployeeId: employee.external_employee_id, name: employee.name }) : null;
-  const revisionRows = employeeKey ? await sql`
-    SELECT revision_number, rows FROM company_plan_revisions
-    WHERE organization_id = ${ctx.organizationId} AND scope_key = 'global' AND reverted_at IS NULL AND coverage_to >= ${from} AND coverage_from <= ${to}
-    ORDER BY revision_number DESC
-  ` : [];
-  const planRowsFor = (date) => revisionRows
-    .map((revision) => ({
-      revision: revision.revision_number,
-      rows: (Array.isArray(revision.rows) ? revision.rows : [])
-        .filter((stored) => stored.k === employeeKey && stored.d === date)
-        .map((stored) => ({ type: stored.t, startTime: stored.s || null, endTime: stored.e || null })),
-    }))
-    .filter((entry) => entry.rows.length > 0);
-  const toPlan = (rows) => rows.map((r) => ({ shiftType: r.type, startTime: r.startTime, endTime: r.endTime, date: '' }));
   const items = dates.map((date) => {
     const provenance = buildDayProvenance(unwrap(date));
     const resolution = resolvedByDate.get(date);
     const isPending = pendingDates.has(date);
-    const planHistory = planRowsFor(date);
-    const companyNow = planHistory[0]?.rows ?? null;
-    const companyBefore = planHistory.find((entry, index) => index > 0 && !sameDay(toPlan(entry.rows), toPlan(companyNow ?? [])))?.rows ?? null;
-    // Keep reconciliation and statistics on the same selector. Ambiguous days
-    // intentionally show no single current baseline here or in accounting.
-    const provisional = isPending ? resolveProvisionalReviewRows(unwrap(date), companyNow ? toPlan(companyNow) : null) : null;
+    const provisional = isPending ? resolveProvisionalReviewRows(unwrap(date)) : null;
     const effectiveRows = isPending
       ? (provisional?.counted ? provisional.rows.map(label) : [])
       : provenance.effective.map(label);
-    let reasonCode = 'PENDING_REVIEW';
-    if (companyNow && effectiveRows.length && !sameDay(toPlan(companyNow), toPlan(effectiveRows))) reasonCode = 'EFFECTIVE_DIFFERS_FROM_PLAN';
-    else if (companyBefore) reasonCode = 'PLAN_CHANGED';
+    const reasonCode = isPending ? provisional?.reason ?? 'PENDING_REVIEW' : 'PENDING_REVIEW';
     return {
       date,
       status: isPending ? 'PENDING' : 'RESOLVED',
-      companyBefore,
-      companyNow,
-      effective: effectiveRows,
+      current: effectiveRows,
+      proposed: isPending ? unwrap(date).filter((row) => row.effectiveState === 'REQUIRES_REVIEW' && !provisional?.rows.some((current) => current.id === row.id)).map(label) : [],
       reasonCode,
-      company: provenance.companyCurrent.map(label),
-      current: (isPending
-        ? unwrap(date).map(normalizeCalendarRow).filter((row) => row.effectiveState === 'REQUIRES_REVIEW')
-        : provenance.effective).map(label),
       resolvedAt: !isPending && resolution ? resolution.created_at : null,
       resolvedReason: !isPending && resolution ? resolution.reason : null,
       selfChange: !isPending && resolution ? Boolean(resolution.self_change) : null,

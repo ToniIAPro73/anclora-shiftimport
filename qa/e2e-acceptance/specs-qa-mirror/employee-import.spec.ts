@@ -133,7 +133,7 @@ test.describe('EMPLOYEE import (browser, QA mirror)', () => {
     expect(after.shifts).toBeGreaterThan(before.shifts); // own history written
     expect(after.futureShifts).toBe(before.futureShifts); // no future schedule rows
     expect(after.assignments).toBe(before.assignments); // no assignments / drafts
-    expect(after.revisions).toBe(before.revisions); // never a company plan revision
+    expect(after.revisions).toBe(before.revisions); // new imports never create a legacy revision
   });
 
   test('FUTURE-only document: nothing is written and the reason is explained', async ({ browser, baseURL }) => {

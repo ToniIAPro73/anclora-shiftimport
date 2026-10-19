@@ -3,8 +3,8 @@ import { applyCalendarChange, getDayHistory, reconcileCalendarDay } from '../_li
 import { handleError, sendJson } from '../_lib/http.js';
 
 /**
- * GET  /api/calendar/changes?employeeId=&date= — provenance of one day: every
- *      recorded row, the company-plan revisions and the change trail.
+ * GET  /api/calendar/changes?employeeId=&date= — current/proposed state and
+ *      the day change trail.
  * POST /api/calendar/changes — administrative change on the effective
  *      calendar ({ employeeId, date, changeType, reason, after[], supersedeShiftIds[] }).
  *      With { action: 'RECONCILE', keepShiftIds[] } it resolves a REQUIRES_REVIEW day.

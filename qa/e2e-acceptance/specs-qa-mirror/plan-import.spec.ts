@@ -73,7 +73,7 @@ test.describe('source-aware import UI, desktop + mobile (QA mirror, real TRYP em
   });
 });
 
-test.describe('company plan import UI (QA mirror, real documents)', () => {
+test.describe('Planning draft import UI (QA mirror, real documents)', () => {
   // TODO(mobile): the decision block sits below the fold of the import sheet; the flow still needs a scroll-aware step.
   test.skip(({ viewport }) => (viewport?.width ?? 1440) < 900, 'desktop-only for now');
   test('XLSX individual (MIXED): explicit choice, safe default, plan summary stays a draft', async ({ page }) => {

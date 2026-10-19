@@ -95,7 +95,7 @@ interface TeamRow {
 
 interface PreviewEntry {
   row: TeamRow;
-  /** Every row of the document for this employee (new + already existing): the company plan is the whole document. */
+  /** Every row of the document for this employee, including rows already in CURRENT. */
   allShifts: Shift[];
   newShifts: Shift[];
   newCount: number;
@@ -233,7 +233,7 @@ export const TeamImportModal = ({
   const fallbackFileRef = useRef<File | null>(null);
   const interactionLocked = importing || isImporting;
 
-  // Read-only reconciliation against the company plan, shown next to the temporal decision (planners only).
+  // Read-only comparison against CURRENT, shown next to the temporal decision (planning roles only).
   useEffect(() => {
     let cancelled = false;
     const today = getOperationalDate();

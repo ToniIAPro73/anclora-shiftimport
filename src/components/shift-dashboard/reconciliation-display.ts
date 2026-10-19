@@ -1,4 +1,4 @@
-import { hasSemanticDayChange as sharedHasSemanticDayChange } from '../../lib/company-plan.js';
+import { hasSemanticDayChange as sharedHasSemanticDayChange } from '../../lib/calendar-import.js';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const RUN_TAG = /\[\s*run[^\]]*\]\s*/gi;

@@ -32,7 +32,7 @@ test('ADMIN viewing another employee imports Sebastián\'s workbook: target and 
     for (const d of DAYS) {
       // the OTHER employee (shown in the dashboard) holds exactly the rows of the document; Sebastián holds none of them
       await q(`INSERT INTO shifts (organization_id, employee_id, date, start_time, end_time, shift_type, counts_as_work, location, legacy_origin, layer, provenance, effective_state)
-               VALUES ($1,$2,$3,'09:00','17:00','Regular',true,'Regular','PDF','COMPANY_PLAN','COMPANY_IMPORT','EFFECTIVE')`, [ctx.organizationId, other.id, d]);
+               VALUES ($1,$2,$3,'09:00','17:00','Regular',true,'Regular','PDF','CHANGE','COMPANY_IMPORT','EFFECTIVE')`, [ctx.organizationId, other.id, d]);
     }
   });
   const wb = new ExcelJS.Workbook();

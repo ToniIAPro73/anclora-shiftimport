@@ -5,8 +5,8 @@ import { handleError, sendJson } from '../_lib/http.js';
 /**
  * POST /api/imports/plan-preview
  *
- * Read-only: classifies a parsed document and reconciles it against the company-plan baseline and the
- * effective calendar. Performs NO writes. Same authorization as confirm-split (planning capability).
+ * Read-only: classifies a parsed document and compares incoming rows with CURRENT and Planning drafts.
+ * Performs NO writes. Same authorization as confirm-split (planning capability).
  */
 export default async function handler(req, res) {
   try {

@@ -47,7 +47,6 @@ try {
   const past = addDays(cutoff, -2); const past2 = addDays(cutoff, -4); const future = addDays(cutoff, 3);
   const cleanRun = async () => {
     // mirror-only (guarded above): remove what a previous run of this scenario left for the synthetic employee
-    await db.query(`DELETE FROM company_plan_revisions WHERE organization_id = $1 AND import_id IN (SELECT id FROM imports WHERE organization_id = $1 AND file_name LIKE 'mixed-%')`, [ORG]);
     await db.query(`DELETE FROM shift_assignments WHERE employee_id = $1 AND date BETWEEN $2 AND $3 AND schedule_version_id IN (SELECT v.id FROM schedule_versions v JOIN schedules s ON s.id = v.schedule_id WHERE s.organization_id = $4 AND v.status = 'DRAFT')`, [emp.id, addDays(cutoff, -10), addDays(cutoff, 10), ORG]);
     await db.query(`DELETE FROM shifts WHERE organization_id = $1 AND employee_id = $2 AND date BETWEEN $3 AND $4`, [ORG, emp.id, addDays(cutoff, -10), addDays(cutoff, 10)]);
     await db.query(`DELETE FROM imports WHERE organization_id = $1 AND file_name LIKE 'mixed-%'`, [ORG]);
@@ -78,11 +77,11 @@ try {
   const stillThere = (await db.query('SELECT 1 FROM shifts WHERE id = $1', [existingId])).rows.length === 1;
   check('existing_historical_shift_not_destructively_deleted', stillThere);
   const ch = res.body.plan?.changes ?? {};
-  check('historical_difference_reconciled_by_engine', (ch.evidenceApplied ?? 0) + (ch.requiresReview ?? 0) + (ch.keptLocal ?? 0) >= 1, { changes: ch });
+  check('historical_difference_remains_proposed', (ch.requiresReview ?? 0) >= 1, { changes: ch });
   const after = await counts();
   // the draft week is cloned from the published one (copies of existing assignments + the new future row)
   check('future_draft_created', after.assignments >= before.assignments + 1 && res.body.future?.createdAssignmentCount >= 1, { delta: after.assignments - before.assignments });
-  check('import_completed_revision_recorded', after.revisions === before.revisions + 1 && res.body.plan?.autoPublished === false);
+  check('new_import_writes_no_legacy_revision', after.revisions === before.revisions && res.body.plan?.autoPublished === false);
   const pendingAfter = await pendingSet();
   check('existing_pending_not_resolved_by_import', [...pendingBefore].every((k) => pendingAfter.has(k)), { before: pendingBefore.size, after: pendingAfter.size });
 

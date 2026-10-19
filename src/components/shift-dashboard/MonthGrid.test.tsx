@@ -344,10 +344,11 @@ describe('MonthGrid cell item limit (MAX_VISIBLE_DAY_ITEMS = 2) & Day Detail Dia
 });
 
 describe('MonthGrid cell capacity with a pending difference', () => {
-  const withReview = (id: string, startTime: string, endTime: string): Shift => ({ id, date: '2026-09-17', startTime, endTime, location: 'Regular', origin: 'IMP', shiftType: 'Regular', effectiveState: 'REQUIRES_REVIEW' } as Shift);
+  const current = (id: string, startTime: string, endTime: string): Shift => ({ id, date: '2026-09-17', startTime, endTime, location: 'Regular', origin: 'IMP', shiftType: 'Regular', effectiveState: 'EFFECTIVE' } as Shift);
+  const proposal: Shift = { id: 'proposal', date: '2026-09-17', startTime: '08:00', endTime: '16:00', location: 'Regular', origin: 'IMP', shiftType: 'Regular', effectiveState: 'REQUIRES_REVIEW' } as Shift;
 
   const renderReview = (count: number) => {
-    const shifts = [withReview('s1', '04:30', '12:30'), withReview('s2', '05:00', '13:00'), withReview('s3', '06:00', '14:00')].slice(0, count);
+    const shifts = [current('s1', '04:30', '07:30'), current('s2', '08:00', '11:00'), current('s3', '12:00', '15:00')].slice(0, count).concat(proposal);
     return render(
       <I18nProvider>
         <MonthGrid year={2026} month={8} shifts={shifts} onEditShift={vi.fn()} onCreateShift={vi.fn()} provenanceEnabled employeeId="e1" canReconcile />

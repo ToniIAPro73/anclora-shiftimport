@@ -24,6 +24,7 @@ const change = (id: string, type = 'TIME_CHANGE') => ({
 const history = (over: Record<string, unknown> = {}) => ({
   provenance: {
     requiresReview: true, effective: [], companyOriginal: [row('o', 'Regular', '14:00', '22:00')], companyCurrent: [row('c', 'Regular', '14:00', '22:00')],
+    current: [row('c', 'Regular', '14:00', '22:00')], proposed: [row('p', 'Baja', null, null, 'REQUIRES_REVIEW')], countedProvisionally: true,
     revisions: [1, 2], legacyDutyRows: [row('d', 'Regular', '14:00', '22:00')],
   },
   changes: [change('c1'), change('c2'), change('c3')],
@@ -71,6 +72,7 @@ describe('pending difference choices (17/09 equivalent)', () => {
       companyOriginal: [row('a1', 'Regular', '04:30', '12:30', 'REQUIRES_REVIEW')],
       // the same 04:30 state arrives twice (plan history row + a pending row with another id) next to a genuinely different one
       companyCurrent: [row('a1', 'Regular', '04:30', '12:30', 'REQUIRES_REVIEW'), row('b1', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')],
+      current: [row('a1', 'Regular', '04:30', '12:30')], proposed: [row('b1', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')], countedProvisionally: true,
       revisions: [1, 2], legacyDutyRows: [],
     },
     changes: [],
@@ -100,7 +102,7 @@ describe('pending difference choices (17/09 equivalent)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Usar como calendario actual: Regular 04:30–12:30/ }));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'ok' } });
     fireEvent.click(screen.getByRole('button', { name: 'Guardar decisión' }));
-    await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-06-02', keepShiftIds: ['a2'], reason: 'ok' }));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-06-02', keepShiftIds: ['a1'], reason: 'ok' }));
   });
 
   it('D4/D5/D6: no company-plan vocabulary, no revision labels', async () => {
@@ -109,18 +111,18 @@ describe('pending difference choices (17/09 equivalent)', () => {
     await screen.findByTestId('day-history-pending');
     expect(container.textContent).not.toMatch(/Plan Empresa|Antes comunicado|Ahora comunicado|Actualización \d|Revisión \d/i);
     expect(screen.getByRole('group', { name: 'Elige el calendario del día' })).toBeInTheDocument();
-    expect(screen.getByTestId('day-history-pending-note')).toHaveTextContent('estos turnos no cuentan');
+    expect(screen.getByTestId('day-history-pending-note')).toHaveTextContent('el calendario actual sí cuentan provisionalmente');
   });
 
-  it('a resolved day keeps a neutral summary (previous / new information, no revision numbers)', async () => {
+  it('a resolved day shows only the current calendar, without revision numbers', async () => {
     loadDayHistory.mockResolvedValue(history({ provenance: {
       requiresReview: false, effective: [row('e', 'Regular', '05:00', '13:00')],
       companyOriginal: [row('o', 'Regular', '04:30', '12:30')], companyCurrent: [row('c', 'Regular', '05:00', '13:00')], revisions: [1, 2], legacyDutyRows: [],
     }, rows: [] }));
     renderPanel();
     const compare = await screen.findByTestId('day-history-compare');
-    expect(compare).toHaveTextContent('Información anterior');
-    expect(compare).toHaveTextContent('Nueva información');
+    expect(compare).toHaveTextContent('Calendario actual');
+    expect(compare).not.toHaveTextContent('Información anterior');
     expect(compare).not.toHaveTextContent(/Actualización|Revisión/);
   });
 });

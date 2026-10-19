@@ -5,7 +5,7 @@
  *   node scripts/qa/future-routing-e2e.mjs --base http://localhost:5173
  *
  * Rule: historical rows -> Calendar; future rows -> Planning DRAFT only for planning roles with an explicit decision, for ALL
- * source kinds; EMPLOYEE never plans; importing never publishes; calendar snapshots never create a company plan revision.
+ * source kinds; EMPLOYEE never plans; importing never publishes; new imports never create legacy revisions.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import {
@@ -73,8 +73,7 @@ try {
     check(`${kind}_historical_to_calendar`, s.shifts === HIST.length, s);
     check(`${kind}_future_to_draft`, s.assignments === 3 && s.draftVersions >= 1, s);
     check(`${kind}_never_auto_published`, s.publishedVersions === 0 && res.body.plan?.autoPublished === false, s);
-    const expectRevisions = kind === 'TEAM_SCHEDULE_EXPORT' ? 1 : 0;
-    check(`${kind}_company_plan_revisions_${expectRevisions}`, s.revisions === expectRevisions, { revisions: s.revisions });
+    check(`${kind}_creates_no_legacy_revision`, s.revisions === 0, { revisions: s.revisions });
   }
 
   // ---- historical-only: the explicit decision is required for any future write; 0 future assignments ----------------------------

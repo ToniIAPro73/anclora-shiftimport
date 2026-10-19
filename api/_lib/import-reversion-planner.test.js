@@ -73,7 +73,7 @@ describe('inverse planning', () => {
     expect(result.impact.shiftsRestored).toBe(1);
   });
 
-  it('EVIDENCE_APPLIED (plan 14-22 superseded by Baja): reverses in reverse ledger order and restores the plan row', () => {
+  it('legacy import effects superseded by Baja reverse in ledger order and restore the historical row', () => {
     const plan1422 = shift('p', { start_time: '14:00', end_time: '22:00' });
     const planSuperseded = { ...plan1422, effective_state: 'SUPERSEDED', change_id: 'c1' };
     const baja = shift('b', { start_time: null, end_time: null, shift_type: 'Baja', layer: 'CHANGE', change_id: 'c1' });

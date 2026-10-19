@@ -5,7 +5,7 @@ import { getOperationalDate, isHistoricalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict } from './shift-compatibility.js';
 import { importReversibility } from './import-reversion.js';
 import { LEDGER_PREFIX_LENGTH, ledgerPrefix } from './import-ledger.js';
-import { hasSemanticHistoryChange } from '../../src/lib/company-plan.js';
+import { hasSemanticHistoryChange } from '../../src/lib/calendar-import.js';
 
 /**
  * Tenant-scoped data access. Every function takes the resolved security
@@ -260,13 +260,14 @@ export function mapShiftRow(row) {
     origin: row.origin,
     acknowledgementStatus: row.acknowledgement_status ?? 'PENDING',
     acknowledgedAt: row.acknowledged_at ?? null,
-    layer: row.layer ?? 'COMPANY_PLAN',
+    layer: row.layer ?? 'CHANGE',
     provenance: row.provenance ?? null,
     legacyOrigin: row.legacy_origin ?? null,
     dutyRole: row.duty_role ?? null,
     effectiveState: row.effective_state ?? 'EFFECTIVE',
     planRevision: row.plan_revision ?? 1,
     changeId: row.change_id ?? null,
+    createdAt: row.created_at ?? null,
     hasHistory: row.has_history === true,
   };
 }
@@ -2162,7 +2163,7 @@ export async function updateImportOutcome(sql, ctx, rawImportId, input = {}) {
 }
 
 /**
- * NOTE: there is no longer a `deleteImport` here. An import is not "the rows with its import_id" any more (it can touch plan revisions,
+ * NOTE: there is no longer a `deleteImport` here. An import is not "the rows with its import_id" any more (legacy imports can touch historical planning records,
  * drafts, assignments, annotations and effective-state transitions), so removing it is a REVERSION: see import-reversion.js and
  * docs/product/IMPORT_REVERSION_CONTRACT.md. `DELETE /api/imports` is only an alias of a single-import reversion.
  */
@@ -2218,7 +2219,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
                  start_time, end_time, location, origin, shift_type, counts_as_work,
-                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2234,7 +2235,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
                  start_time, end_time, location, origin, shift_type, counts_as_work,
-                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2254,7 +2255,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
                start_time, end_time, location, origin, shift_type, counts_as_work,
-               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2270,7 +2271,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
                start_time, end_time, location, origin, shift_type, counts_as_work,
-               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id,
+               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2900,7 +2901,7 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
     const semanticFingerprint = shift.origin === 'IMP'
       ? sha256([employeeId, shift.date, shift.shiftType ?? '', shift.countsAsWork ?? '', shift.startTime, shift.endTime, shift.location].join('\u001f'))
       : null;
-    const writeLayer = shift.origin === 'MAN' ? 'CHANGE' : 'COMPANY_PLAN';
+    const writeLayer = 'CHANGE';
     const writeProvenance = shift.origin === 'MAN'
       ? (ctx.role === 'EMPLOYEE' ? 'EMPLOYEE_REQUEST' : 'MANUAL_ADMIN_CHANGE')
       : 'COMPANY_IMPORT';

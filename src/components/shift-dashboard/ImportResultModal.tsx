@@ -30,9 +30,7 @@ export interface TemporalImportReport {
   };
   duplicate?: 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN' | null;
   plan?: {
-    revisionNumber: number | null;
-    revisionCreated: boolean;
-    changes: { new: number; unchanged: number; modified: number; keptLocal: number; companyAdoptedLocal: number; requiresReview: number };
+    changes: { new: number; unchanged: number; modified: number; requiresReview: number };
   };
 }
 
@@ -70,8 +68,6 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
     ];
     const changeChips: Array<[string, number, string]> = changes ? [
       ['modified', changes.modified, 'importResult.changeModified'],
-      ['adopted', changes.companyAdoptedLocal, 'importResult.changeAdopted'],
-      ['kept', changes.keptLocal, 'importResult.changeKept'],
     ] : [];
     return (
       <ModalShell isOpen onClose={onClose} title={t('importResult.titleTemporalComplete')} closeAriaLabel={t('importResult.close')} maxWidth="780px" width="min(96vw, 780px)">
@@ -92,10 +88,8 @@ export const ImportResultModal = ({ isOpen, onClose, report, onCompleteEmployee,
               <h4>{t('importResult.doneTitle')}</h4>
               {report.duplicate ? (
                 <p data-testid="import-result-duplicate">
-                  {t(report.duplicate === 'DUPLICATE_FILE' ? 'importResult.planDuplicateFile' : report.duplicate === 'DUPLICATE_DOCUMENT' ? 'importResult.planDuplicateDocument' : 'importResult.planDuplicatePlan')}
+                  {t(report.duplicate === 'DUPLICATE_FILE' ? 'importResult.importDuplicateFile' : report.duplicate === 'DUPLICATE_DOCUMENT' ? 'importResult.importDuplicateDocument' : 'importResult.importDuplicatePlanning')}
                 </p>
-              ) : report.plan?.revisionCreated && report.plan.revisionNumber !== null ? (
-                <p data-testid="import-result-revision" className="import-result__plan">{t('importResult.planVersion')}</p>
               ) : null}
               {changeChips.some(([, value]) => value > 0) && (
                 <ul className="import-result__chips" data-testid="import-result-changes">

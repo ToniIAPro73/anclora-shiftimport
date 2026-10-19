@@ -4,7 +4,7 @@ import { handleError, sendJson } from '../_lib/http.js';
 
 /**
  * GET /api/calendar/reconciliation?employeeId=&year= — reconciliation worklist
- * (pending + resolved days with company plan vs current record). Read-only;
+ * (pending + resolved days with current calendar vs proposed information). Read-only;
  * resolution is POST /api/calendar/changes { action: 'RECONCILE' }.
  */
 export default async function handler(req, res) {

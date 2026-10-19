@@ -30,10 +30,9 @@ describe('user-facing vocabulary (ES + EN)', () => {
     }
   });
 
-  it('T3: differences are source-neutral — previous / new information vs the current calendar', () => {
+  it('T3: differences show current calendar vs detected proposal', () => {
     expect(translate('es', 'reconModal.title')).toBe('Diferencias');
-    expect(translate('es', 'reconModal.colBefore')).toBe('Información anterior');
-    expect(translate('es', 'reconModal.colNow')).toBe('Nueva información');
+    expect(translate('es', 'reconModal.colNow')).toBe('Propuesta detectada');
     expect(translate('es', 'reconModal.colEffective')).toBe('Calendario actual');
     expect(translate('en', 'reconModal.colEffective')).toBe('Current calendar');
     expect(translate('es', 'dayHistory.pendingTitle')).toBe('Diferencia pendiente');
@@ -60,8 +59,8 @@ describe('user-facing vocabulary (ES + EN)', () => {
   });
 
   it('T10: history events are phrased as happenings, not revision numbers', () => {
-    expect(translate('es', 'imports.kindPlanInitial')).toBe('Cuadrante de empresa importado');
-    expect(translate('es', 'importResult.planRevisionCreated', { revision: 17 })).not.toMatch(/17|revisi/i);
+    expect(translate('es', 'imports.kindPlanInitial')).toBe('Borrador de planificación');
+    expect(translate('es', 'imports.kindPlanUpdate')).toBe('Actualización de planificación');
     expect(translate('es', 'dayHistory.changeTypes.RECONCILIATION')).toBe('Diferencia resuelta');
   });
 });

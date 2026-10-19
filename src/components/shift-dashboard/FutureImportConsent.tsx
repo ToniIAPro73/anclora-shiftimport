@@ -9,7 +9,7 @@ interface FutureImportConsentProps {
   /** Rows of the document before / from today (operational date). */
   historicalCount?: number;
   futureCount?: number;
-  /** Optional read-only reconciliation against the company plan (planners only). */
+  /** Optional read-only comparison against CURRENT (planning roles only). */
   preview?: PlanImportPreview | null;
   previewLoading?: boolean;
 }
@@ -73,8 +73,6 @@ export const FutureImportConsent = ({
                   {changes.new > 0 && <span>{t('importModal.planChangeNew', { count: changes.new })}</span>}
                   {changes.modified > 0 && <span>{t('importModal.planChangeModified', { count: changes.modified })}</span>}
                   {changes.unchanged > 0 && <span>{t('importModal.planChangeUnchanged', { count: changes.unchanged })}</span>}
-                  {changes.keptLocal > 0 && <span>{t('importModal.planChangeKeptLocal', { count: changes.keptLocal })}</span>}
-                  {changes.companyAdoptedLocal > 0 && <span>{t('importModal.planChangeAdopted', { count: changes.companyAdoptedLocal })}</span>}
                   {changes.requiresReview > 0 && <span style={{ color: 'var(--color-gold)', fontWeight: 700 }}>{t('importModal.planChangeReview', { count: changes.requiresReview })}</span>}
                 </span>
               )}

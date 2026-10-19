@@ -28,9 +28,8 @@ function RowList({ rows, empty }: { rows: NormalizedCalendarRow[]; empty: string
 }
 
 /**
- * Day provenance: effective state, original and current company plan, the
- * chronological change trail and, for administrators, explicit reconciliation
- * of days marked REQUIRES_REVIEW.
+ * Day provenance: current calendar, detected alternatives, chronological
+ * change trail and explicit resolution for days awaiting review.
  */
 export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }: DayProvenancePanelProps) {
   const { t, locale } = useI18n();
@@ -56,8 +55,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
   if (status === 'loading') return <p className="day-history__empty" role="status">{t('dayHistory.loading')}</p>;
   if (status === 'error' || !history) return <p className="day-history__empty" role="alert">{t('dayHistory.error')}</p>;
 
-  const { provenance, changes, rows } = history;
-  const pendingRows = rows.filter((row) => row.effectiveState === 'REQUIRES_REVIEW');
+  const { provenance, changes } = history;
   const formatWhen = (iso: string) => new Date(iso).toLocaleString(locale === 'en' ? 'en-GB' : 'es-ES');
   const describe = (list: Array<{ shiftType: string; startTime: string | null; endTime: string | null }>) =>
     list.length === 0
@@ -82,10 +80,8 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
 
   const VISIBLE_CHANGES = 2;
   // Semantically unique choices: the same shift state is never offered twice, whatever internal row it comes from.
-  const keepOptions = uniqueKeepOptions(provenance.companyCurrent, pendingRows);
+  const keepOptions = uniqueKeepOptions(provenance.current ?? provenance.effective, provenance.proposed ?? history.rows.filter((row) => row.effectiveState === 'REQUIRES_REVIEW'));
   const lineOf = (row: { shiftType?: string | null; startTime?: string | null; endTime?: string | null }) => `${row.shiftType || '—'}${row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}`;
-  const showCurrent = provenance.revisions.length > 1;
-  const showOriginal = provenance.companyOriginal.length > 0;
   const reasonText = (reason: string | null | undefined) => {
     const { kind, text } = classifyReason(reason);
     return kind === 'matchesCalendar' ? t('dayHistory.reasonMatchesCalendar') : kind === 'automatic' ? t('dayHistory.reasonAutomatic') : text;
@@ -134,7 +130,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
         <div className="day-history__pending" role="status" data-testid="day-history-pending">
           <div className="day-history__pending-head">
             <strong>{t('dayHistory.pendingTitle')}</strong>
-            <p>{t('dayHistory.pendingBody')}</p>
+            <p>{provenance.countedProvisionally ? t('dayHistory.pendingBodyCounted') : t('dayHistory.pendingBody')}</p>
             <p className="day-history__pending-note" data-testid="day-history-pending-note">{t('dayHistory.pendingNote')}</p>
           </div>
           {canReconcile && (
@@ -168,23 +164,11 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
 
       {/* A pending difference is decided in the block above: repeating the same shifts as comparison cards only adds height. */}
       {!provenance.requiresReview && (
-      <div className={`day-history__compare day-history__compare--${1 + Number(showOriginal) + Number(showCurrent)}`} data-testid="day-history-compare">
+      <div className="day-history__compare day-history__compare--1" data-testid="day-history-compare">
         <div className="day-history__card">
           <h4>{t('dayHistory.effective')}</h4>
           <RowList rows={provenance.effective} empty={t('dayHistory.noRows')} />
         </div>
-        {showOriginal && (
-          <div className="day-history__card">
-            <h4>{t('dayHistory.companyOriginal')}</h4>
-            <RowList rows={provenance.companyOriginal} empty={t('dayHistory.noRows')} />
-          </div>
-        )}
-        {showCurrent && (
-          <div className="day-history__card">
-            <h4>{t('dayHistory.companyCurrent')}</h4>
-            <RowList rows={provenance.companyCurrent} empty={t('dayHistory.noRows')} />
-          </div>
-        )}
       </div>
       )}
 

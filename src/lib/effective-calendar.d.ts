@@ -25,6 +25,14 @@ export interface CalendarRowInput {
   duty_role?: string | null;
   planRevision?: number | null;
   plan_revision?: number | null;
+  createdAt?: string | null;
+  created_at?: string | null;
+  importId?: string | null;
+  import_id?: string | null;
+  changeId?: string | null;
+  change_id?: string | null;
+  currentEvidence?: boolean;
+  current_evidence?: boolean;
 }
 
 export interface NormalizedCalendarRow {
@@ -40,6 +48,10 @@ export interface NormalizedCalendarRow {
   legacyOrigin: string | null;
   dutyRole: string | null;
   planRevision: number;
+  createdAt: string | null;
+  importId: string | null;
+  changeId: string | null;
+  currentEvidence?: boolean;
 }
 
 export interface DayIssue { code: string; blocking: boolean; [key: string]: unknown }
@@ -55,7 +67,9 @@ export interface ResolvedDay {
   issues: DayIssue[];
   requiresReview: boolean;
   countedProvisionally: boolean;
-  provisionalReason: 'CURRENT_EFFECTIVE' | 'CURRENT_LOCAL' | 'AMBIGUOUS' | null;
+  provisionalReason: string | null;
+  currentRows: NormalizedCalendarRow[];
+  proposedRows: NormalizedCalendarRow[];
   legacyDutyRows: number;
   dutyRole: string | null;
   duplicateRows: number;
@@ -88,6 +102,12 @@ export interface EffectiveStats {
   duplicateRows: number;
   days: ResolvedDay[];
   totalReviewDays: number;
+  currentEffectiveDays: number;
+  auditCurrentDays: number;
+  legacyJtDays: number;
+  legacyOldestDays: number;
+  ambiguousTieDays: number;
+  otherUncountedDays: number;
   provisionalReviewDays: number;
   provisionalReviewMinutes: number;
   unresolvedUncountedDays: number;
@@ -114,11 +134,11 @@ export interface ContractEvaluation {
 
 export interface DayProvenance {
   effective: NormalizedCalendarRow[];
-  companyOriginal: NormalizedCalendarRow[];
-  companyCurrent: NormalizedCalendarRow[];
-  revisions: number[];
+  current: NormalizedCalendarRow[];
+  proposed: NormalizedCalendarRow[];
+  countedProvisionally: boolean;
+  provisionalReason: string | null;
   changes: Array<Record<string, unknown>>;
-  hasChangesFromPlan: boolean;
   requiresReview: boolean;
   legacyDutyRows: NormalizedCalendarRow[];
 }
@@ -137,10 +157,11 @@ export function toMinutes(value: string | null | undefined): number | null;
 export function formatClock(minutes: number): string;
 export function normalizeCalendarRow(row: CalendarRowInput): NormalizedCalendarRow;
 export function classifyKind(row: NormalizedCalendarRow): { kind: string; type: string; bucket?: string };
-export function resolveProvisionalReviewRows(rows: CalendarRowInput[], companyNow?: CalendarRowInput[] | null): { counted: boolean; reason: 'CURRENT_EFFECTIVE' | 'CURRENT_LOCAL' | 'AMBIGUOUS'; rows: NormalizedCalendarRow[] };
-export function resolveDay(date: string, rows: CalendarRowInput[], options?: { companyNow?: CalendarRowInput[] | null }): ResolvedDay;
+export function resolveProvisionalReviewRows(rows: CalendarRowInput[]): { counted: boolean; reason: string; rows: NormalizedCalendarRow[] };
+export function attachAuditCurrentEvidence(rows: CalendarRowInput[], changes?: Array<Record<string, unknown>>): NormalizedCalendarRow[];
+export function resolveDay(date: string, rows: CalendarRowInput[]): ResolvedDay;
 export function findOvernightSpillConflicts(days: ResolvedDay[]): Array<{ date: string; nextDate: string; code: string }>;
-export function computeEffectiveStats(rows: CalendarRowInput[], options?: { from?: string; to?: string; today?: string; companyNowByDate?: Record<string, CalendarRowInput[]> }): EffectiveStats;
+export function computeEffectiveStats(rows: CalendarRowInput[], options?: { from?: string; to?: string; today?: string }): EffectiveStats;
 export function evaluateAnnualTarget(effectiveMinutes: number, target?: AnnualTargetInput | null, options?: { calendarRows?: number | null }): ContractEvaluation;
 export function hoursToMinutes(hours: number): number;
 export function splitMinutes(totalMinutes: number): { sign: 1 | -1; hours: number; minutes: number };

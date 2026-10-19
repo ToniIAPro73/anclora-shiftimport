@@ -1434,8 +1434,7 @@ function App() {
     const excludedSchedulingCount = schedulingIncoming.length > 0 && (
       session.role === 'EMPLOYEE' || futureImportDecision === 'historical-only'
     ) ? schedulingIncoming.length : 0;
-    // MIXED + planner + "historical-and-plan" ends in /api/imports/confirm-split, whose server-side three-way reconciliation
-    // owns every historical difference: the legacy "replace = delete + insert" (deleteIds) must not run there.
+    // Mixed planning imports use the server reconciliation endpoint so historical differences remain proposals.
     const usesSmartServerReconciliation = session.role !== 'EMPLOYEE'
       && futureImportDecision === 'historical-and-plan'
       && schedulingIncoming.length > 0;
@@ -1471,11 +1470,7 @@ function App() {
     // and do not create another Import record or send an empty write request.
     // This also protects the flow when a second import is started after the
     // first one has already finished.
-    // Legacy bootstrap: every row already exists but the user explicitly asked to establish the company plan from this
-    // document (planners only). The server records the plan without duplicating shifts or touching the effective calendar.
-    const planBootstrap = session.role !== 'EMPLOYEE' && futureImportDecision === 'historical-and-plan'
-      && upserts.length === 0 && identicalCount > 0 && excludedSchedulingCount === 0;
-    if (upserts.length === 0 && (identicalCount > 0 || excludedSchedulingCount > 0) && !planBootstrap) {
+    if (upserts.length === 0 && (identicalCount > 0 || excludedSchedulingCount > 0)) {
       if (excludedSchedulingCount > 0) {
         const reason = session.role === 'EMPLOYEE' ? 'SELF_FUTURE_ROWS_EXCLUDED' : 'FUTURE_ROWS_NOT_CONFIRMED';
         const outcome: ImportOutcomeReport = {
