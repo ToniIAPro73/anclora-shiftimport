@@ -3170,10 +3170,12 @@ select:disabled {
   min-height: 120px;
 }
 
-/* Desktop (>= 1200 x 700): the review block is a compact two-column composition instead of a tall stack, so identity
+/* Desktop (>= 1200px): the review block is a compact two-column composition instead of a tall stack, so identity
    and the future decision are visible together WITHOUT a second vertical scroll. The only scrollable region of the
-   modal is the detected-shifts list, which receives all the height the controls do not need. */
-@media (min-width: 1200px) and (min-height: 700px) {
+   modal is the detected-shifts list, which receives all the height the controls do not need, including on short screens. */
+@media (min-width: 1200px) {
+  /* The shifts list is the only scrolling region and must give up height before review controls or footer do. */
+  .import-modal__shifts-list { min-height: 0; }
   .import-modal-review-extra {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -3214,6 +3216,44 @@ select:disabled {
     height: min(95vh, calc(100vh - var(--space-md) * 2));
     height: min(95dvh, calc(100dvh - var(--space-md) * 2));
   }
+}
+
+/* Short desktop windows need a little less chrome so the review controls stay
+   above the fixed footer; the detected list absorbs the height reduction. */
+@media (min-width: 1200px) and (max-height: 699px) {
+  .import-modal__header { margin-bottom: 8px !important; }
+  .import-modal__content { column-gap: 12px !important; }
+  .import-modal__shifts-panel { padding: 12px !important; }
+  .import-modal__shifts-panel > div:first-child { margin-bottom: 4px !important; }
+  .import-modal-review-extra { gap: 4px 8px; }
+  .import-modal-review-extra > [data-testid='import-source-summary'] {
+    padding: 5px 8px !important;
+    gap: 1px 10px !important;
+    font-size: 0.75rem !important;
+    line-height: 1.15 !important;
+  }
+  .import-modal-review-extra > [data-testid='source-identity-panel'] { padding: 6px 8px !important; gap: 3px !important; }
+  .import-modal-review-extra > fieldset { padding: 4px 8px !important; gap: 2px !important; }
+  .import-modal-review-extra > fieldset label { font-size: 0.78rem; line-height: 1.2; }
+  .import-modal-review-extra > fieldset p { line-height: 1.2 !important; }
+  .import-modal-review-extra > fieldset > p:last-child { font-size: 0.7rem !important; line-height: 1.15 !important; }
+  /* When the draft note expands, use the full review width for consent and
+     put the source summary beside identity so the rows list keeps a viewport. */
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > [data-testid='import-source-summary'] { grid-column: 1; }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > [data-testid='source-identity-panel'] { grid-column: 2; }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > fieldset {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > fieldset > p[data-testid='import-future-consent-counts'],
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > fieldset > [data-testid='import-future-consent-plan-summary'],
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > fieldset > p:last-child { grid-column: 1 / -1; }
+  .import-modal__shifts-panel:has(.import-modal-review-extra [data-testid='import-future-consent-plan-summary']) { padding: 8px !important; }
+  .import-modal__shifts-panel:has(.import-modal-review-extra [data-testid='import-future-consent-plan-summary']) > div:first-child { margin-bottom: 2px !important; }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) { gap: 2px 8px; }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > [data-testid='import-source-summary'] { padding: 2px 6px !important; font-size: 0.7rem !important; line-height: 1.08 !important; }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > [data-testid='source-identity-panel'] { padding: 4px 6px !important; gap: 2px !important; }
+  .import-modal-review-extra:has(> fieldset [data-testid='import-future-consent-plan-summary']) > fieldset { padding: 2px 6px !important; gap: 1px !important; }
 }
 
 .import-modal__footer {
