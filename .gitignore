@@ -93,3 +93,6 @@ evidence/
 
 qa/e2e-acceptance/.qa-state/
 qa/e2e-acceptance/test-results-qa-mirror/
+
+# Temporary agent-browser screenshot and snapshot evidence
+artifacts/qa/
