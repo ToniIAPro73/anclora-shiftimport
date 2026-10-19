@@ -7,6 +7,7 @@ import {
   computeEffectiveStats,
   evaluateAnnualTarget,
   hoursToMinutes,
+  projectCurrentCalendarRows,
   resolveDay,
 } from '../../src/lib/effective-calendar.js';
 
@@ -376,6 +377,51 @@ describe('legacy layer metadata', () => {
     ];
     expect(buildDayProvenance(rows).current.map((r) => r.startTime)).toEqual(['11:00']);
     expect(buildDayProvenance(rows).proposed).toEqual([]);
+  });
+
+  it('projects the 2026-01-07 JT baseline once and excludes both proposed rows', () => {
+    const current = row('2026-01-07', 'JT', '17:00', '01:00', { id: 'jt-current', effectiveState: 'EFFECTIVE', dutyRole: 'shift_lead' });
+    const projected = projectCurrentCalendarRows([
+      current,
+      row('2026-01-07', 'Regular', '17:00', '01:00', { id: 'proposal-same', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-01-08T10:00:00Z' }),
+      row('2026-01-07', 'Regular', '16:00', '00:00', { id: 'proposal-other', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-01-09T10:00:00Z' }),
+    ]);
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatchObject({ id: 'jt-current', shiftType: 'Regular', startTime: '17:00', endTime: '01:00', dutyRole: 'shift_lead' });
+  });
+
+  it('projects both 2026-01-14 CURRENT intervals and excludes the matching proposed row', () => {
+    const projected = projectCurrentCalendarRows([
+      row('2026-01-14', 'Regular', '06:00', '11:00', { id: 'regular-current', effectiveState: 'EFFECTIVE' }),
+      row('2026-01-14', 'Extras', '11:00', '13:00', { id: 'extras-current', effectiveState: 'EFFECTIVE' }),
+      row('2026-01-14', 'Regular', '06:00', '11:00', { id: 'regular-proposed', effectiveState: 'REQUIRES_REVIEW' }),
+    ]);
+    expect(projected.map((item) => item.id)).toEqual(['regular-current', 'extras-current']);
+  });
+
+  it('fails closed for ambiguous pending rows and never projects proposed-only data as CURRENT', () => {
+    const proposed = [
+      row('2026-03-03', 'Regular', '08:00', '16:00', { id: 'p1', effectiveState: 'REQUIRES_REVIEW' }),
+      row('2026-03-03', 'Regular', '09:00', '15:00', { id: 'p2', effectiveState: 'REQUIRES_REVIEW' }),
+    ];
+    expect(projectCurrentCalendarRows(proposed)).toEqual([]);
+  });
+
+  it('uses AUDIT_CURRENT evidence as the shared operational projection', () => {
+    const rows = [
+      row('2026-03-04', 'Regular', '08:00', '16:00', { id: 'audit-current', effectiveState: 'REQUIRES_REVIEW', currentEvidence: true }),
+      row('2026-03-04', 'Regular', '09:00', '17:00', { id: 'proposal', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-03-05T10:00:00Z' }),
+    ];
+    expect(projectCurrentCalendarRows(rows).map((item) => item.id)).toEqual(['audit-current']);
+  });
+
+  it('uses the oldest coherent review state and preserves its source row IDs', () => {
+    const rows = [
+      row('2026-03-05', 'Regular', '08:00', '16:00', { id: 'older-a', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-03-01T10:00:00Z', changeId: 'old-change' }),
+      row('2026-03-05', 'Extras', '16:00', '18:00', { id: 'older-b', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-03-01T10:00:00Z', changeId: 'old-change' }),
+      row('2026-03-05', 'Regular', '10:00', '18:00', { id: 'newer', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-03-02T10:00:00Z', changeId: 'new-change' }),
+    ];
+    expect(projectCurrentCalendarRows(rows).map((item) => item.id)).toEqual(['older-a', 'older-b']);
   });
 });
 

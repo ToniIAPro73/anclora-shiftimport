@@ -194,6 +194,38 @@ export function resolveProvisionalReviewRows(inputRows) {
   return { counted: true, reason: 'LEGACY_OLDEST_FALLBACK', rows: candidates[0] };
 }
 
+/**
+ * Projects source rows to the operational calendar for a day. Pending review
+ * rows use the same deterministic CURRENT selection as effective statistics
+ * and provenance; unresolved days fail closed. Returned rows retain source
+ * IDs and metadata so existing edit/delete actions still target persisted rows.
+ */
+export function projectCurrentCalendarRows(inputRows) {
+  const normalized = inputRows.map((source) => ({ source, row: normalizeCalendarRow(source) }));
+  const hasPending = normalized.some(({ row }) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW);
+
+  if (!hasPending) {
+    return normalized.map(({ source }) => source);
+  }
+
+  const selection = resolveProvisionalReviewRows(inputRows);
+  if (!selection.counted || selection.rows.some((row) => !row.id)) return [];
+  const selectedById = new Map(selection.rows.map((row) => [row.id, row]));
+
+  return normalized
+    .filter(({ row }) => selectedById.has(row.id))
+    .map(({ source, row }) => {
+      const selected = selectedById.get(row.id);
+      if (!selected) return source;
+      return {
+        ...source,
+        shiftType: selected.shiftType,
+        countsAsWork: selected.countsAsWork,
+        dutyRole: selected.dutyRole,
+      };
+    });
+}
+
 export function resolveDay(date, inputRows) {
   const allRows = inputRows.map(normalizeCalendarRow);
   const reviewRows = allRows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW);

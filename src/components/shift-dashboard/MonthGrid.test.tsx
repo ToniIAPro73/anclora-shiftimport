@@ -22,6 +22,7 @@ function renderGrid({
   onEditShift = vi.fn(),
   onDeleteShift = vi.fn(),
   onCreateShift = vi.fn(),
+  requestedDetailDate,
 }: {
   locale?: 'es' | 'en';
   shifts?: Shift[];
@@ -30,6 +31,7 @@ function renderGrid({
   onEditShift?: (id: string) => void;
   onDeleteShift?: (id: string) => void | Promise<void>;
   onCreateShift?: (date: string) => void;
+  requestedDetailDate?: string;
 } = {}) {
   if (locale === 'en') {
     localStorage.setItem('anclora_shiftimport_locale_v1', 'en');
@@ -45,6 +47,7 @@ function renderGrid({
         onEditShift={onEditShift}
         onDeleteShift={onDeleteShift}
         onCreateShift={onCreateShift}
+        requestedDetailDate={requestedDetailDate}
       />
     </I18nProvider>,
   );
@@ -387,6 +390,68 @@ describe('MonthGrid cell capacity with a pending difference', () => {
     renderReview(3);
     fireEvent.click(document.querySelector('[data-testid="day-history-btn-2026-09-17"]')!);
     expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
+  });
+});
+
+describe('MonthGrid current-only day detail for pending differences', () => {
+  const cellFor = (dayNumber: string) => Array.from(document.querySelectorAll('.month-day-cell'))
+    .find((cell) => cell.querySelector('.month-day-number')?.textContent === dayNumber) as HTMLElement;
+
+  it('2026-01-07: JT current is shown once as Regular; proposals stay out of calendar and detail, with source ID preserved', async () => {
+    const onEditShift = vi.fn();
+    const shifts: Shift[] = [
+      { id: 'jt-current', date: '2026-01-07', startTime: '17:00', endTime: '01:00', location: 'JT', shiftType: 'JT', dutyRole: 'shift_lead', origin: 'IMP', effectiveState: 'EFFECTIVE' },
+      { id: 'proposal-same', date: '2026-01-07', startTime: '17:00', endTime: '01:00', location: 'Regular', shiftType: 'Regular', origin: 'IMP', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-01-08T10:00:00Z' },
+      { id: 'proposal-other', date: '2026-01-07', startTime: '16:00', endTime: '00:00', location: 'Regular', shiftType: 'Regular', origin: 'IMP', effectiveState: 'REQUIRES_REVIEW', createdAt: '2026-01-09T10:00:00Z' },
+    ];
+    renderGrid({ year: 2026, month: 0, shifts, requestedDetailDate: '2026-01-07', onEditShift });
+
+    expect(cellFor('7').querySelectorAll('.month-shift-badge')).toHaveLength(1);
+    expect(cellFor('7')).toHaveTextContent('Regular 17:00–01:00');
+    expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('day-detail-count-badge')).toHaveTextContent('1 elemento');
+    expect(screen.getByTestId('day-detail-item-jt-current')).toHaveTextContent('Regular');
+    expect(screen.queryByTestId('day-detail-item-proposal-same')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('day-detail-item-proposal-other')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('edit-shift-btn-jt-current'));
+    expect(onEditShift).toHaveBeenCalledWith('jt-current');
+
+    cleanup();
+    const onDeleteShift = vi.fn();
+    renderGrid({ year: 2026, month: 0, shifts, requestedDetailDate: '2026-01-07', onDeleteShift });
+    await screen.findByTestId('day-detail-dialog');
+    fireEvent.click(screen.getByTestId('delete-shift-btn-jt-current'));
+    fireEvent.click(screen.getByTestId('confirm-delete-btn-jt-current'));
+    expect(onDeleteShift).toHaveBeenCalledWith('jt-current');
+  });
+
+  it('2026-01-14: keeps both CURRENT intervals and excludes the matching proposed Regular', async () => {
+    const shifts: Shift[] = [
+      { id: 'regular-current', date: '2026-01-14', startTime: '06:00', endTime: '11:00', location: 'Regular', shiftType: 'Regular', origin: 'IMP', effectiveState: 'EFFECTIVE' },
+      { id: 'extras-current', date: '2026-01-14', startTime: '11:00', endTime: '13:00', location: 'Extras', shiftType: 'Extras', origin: 'IMP', effectiveState: 'EFFECTIVE' },
+      { id: 'regular-proposed', date: '2026-01-14', startTime: '06:00', endTime: '11:00', location: 'Regular', shiftType: 'Regular', origin: 'IMP', effectiveState: 'REQUIRES_REVIEW' },
+    ];
+    renderGrid({ year: 2026, month: 0, shifts, requestedDetailDate: '2026-01-14' });
+
+    expect(cellFor('14').querySelectorAll('.month-shift-badge')).toHaveLength(2);
+    expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('day-detail-count-badge')).toHaveTextContent('2 elementos');
+    expect(screen.getByTestId('day-detail-item-regular-current')).toBeInTheDocument();
+    expect(screen.getByTestId('day-detail-item-extras-current')).toBeInTheDocument();
+    expect(screen.queryByTestId('day-detail-item-regular-proposed')).not.toBeInTheDocument();
+  });
+
+  it('pending detail rows always equal the deterministic CURRENT projection', async () => {
+    const shifts: Shift[] = [
+      { id: 'current', date: '2026-01-21', startTime: '08:00', endTime: '16:00', location: 'Regular', shiftType: 'Regular', origin: 'IMP', effectiveState: 'EFFECTIVE' },
+      { id: 'proposal', date: '2026-01-21', startTime: '09:00', endTime: '17:00', location: 'Regular', shiftType: 'Regular', origin: 'IMP', effectiveState: 'REQUIRES_REVIEW' },
+    ];
+    renderGrid({ year: 2026, month: 0, shifts, requestedDetailDate: '2026-01-21' });
+    await screen.findByTestId('day-detail-dialog');
+    const displayed = Array.from(document.querySelectorAll('[data-testid^="day-detail-item-"]'))
+      .map((item) => item.getAttribute('data-testid')?.replace('day-detail-item-', ''));
+    expect(displayed).toEqual(['current']);
+    expect(displayed).not.toContain('proposal');
   });
 });
 

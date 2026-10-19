@@ -158,6 +158,7 @@ export function formatClock(minutes: number): string;
 export function normalizeCalendarRow(row: CalendarRowInput): NormalizedCalendarRow;
 export function classifyKind(row: NormalizedCalendarRow): { kind: string; type: string; bucket?: string };
 export function resolveProvisionalReviewRows(rows: CalendarRowInput[]): { counted: boolean; reason: string; rows: NormalizedCalendarRow[] };
+export function projectCurrentCalendarRows<T extends CalendarRowInput>(rows: T[]): T[];
 export function attachAuditCurrentEvidence(rows: CalendarRowInput[], changes?: Array<Record<string, unknown>>): NormalizedCalendarRow[];
 export function resolveDay(date: string, rows: CalendarRowInput[]): ResolvedDay;
 export function findOvernightSpillConflicts(days: ResolvedDay[]): Array<{ date: string; nextDate: string; code: string }>;

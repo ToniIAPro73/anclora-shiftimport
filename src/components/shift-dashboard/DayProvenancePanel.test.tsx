@@ -43,7 +43,15 @@ describe('DayProvenancePanel (compact two-column layout pieces)', () => {
     // only the latest two changes are inline; the rest sit behind "Ver 1 más"
     expect(screen.getByTestId('day-history-change-c1')).toBeInTheDocument();
     expect(screen.getByText('Ver 1 más')).toBeInTheDocument();
-    expect(screen.getByText(/Jefe de turno \(legado JT/)).toBeInTheDocument();
+    expect(screen.getByText('Jefe de turno (registro legado; no duplica las horas del turno actual)')).toBeInTheDocument();
+  });
+
+  it('localizes the legacy shift-lead note in English', async () => {
+    window.localStorage?.setItem?.('anclora_shiftimport_locale_v1', 'en');
+    loadDayHistory.mockResolvedValue(history());
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    expect(screen.getByText('Shift lead (legacy record; does not duplicate current shift hours)')).toBeInTheDocument();
   });
 
   it('records the decision with the chosen rows and a reason (behaviour unchanged)', async () => {
@@ -86,6 +94,36 @@ describe('pending difference choices (17/09 equivalent)', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(2);
     expect(screen.getAllByText(/Regular 04:30–12:30/)).toHaveLength(1);
     expect(screen.getAllByText(/Regular 05:00–13:00/)).toHaveLength(1);
+  });
+
+  it('2026-01-07 JT case: decision options show the two semantic alternatives exactly once', async () => {
+    const current = row('jt-current', 'Regular', '17:00', '01:00');
+    const same = row('proposal-same', 'Regular', '17:00', '01:00', 'REQUIRES_REVIEW');
+    const other = row('proposal-other', 'Regular', '16:00', '00:00', 'REQUIRES_REVIEW');
+    loadDayHistory.mockResolvedValue(history({
+      provenance: { requiresReview: true, effective: [], current: [current], proposed: [same, other], countedProvisionally: true, legacyDutyRows: [current] },
+      rows: [same, other],
+    }));
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.getByRole('checkbox', { name: /Regular 17:00–01:00/ })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Regular 16:00–00:00/ })).toBeInTheDocument();
+  });
+
+  it('2026-01-14 case: matching proposal is not offered as a duplicate decision option', async () => {
+    const regular = row('regular-current', 'Regular', '06:00', '11:00');
+    const extras = row('extras-current', 'Extras', '11:00', '13:00');
+    const proposed = row('regular-proposed', 'Regular', '06:00', '11:00', 'REQUIRES_REVIEW');
+    loadDayHistory.mockResolvedValue(history({
+      provenance: { requiresReview: true, effective: [], current: [regular, extras], proposed: [proposed], countedProvisionally: true, legacyDutyRows: [] },
+      rows: [proposed],
+    }));
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
+    expect(screen.getByRole('checkbox', { name: /Regular 06:00–11:00/ })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Extras 11:00–13:00/ })).toBeInTheDocument();
   });
 
   it('D2: two genuinely different shifts remain two options', async () => {
