@@ -3,6 +3,7 @@ import { BarChart3, CalendarCheck, CalendarClock, CalendarOff, Clock, EyeOff, Ga
 import type { Shift } from '../../lib/types';
 import { computeEffectiveStats, evaluateAnnualTarget } from '../../lib/effective-calendar.js';
 import type { ContractEvaluation, StatsBucket } from '../../lib/effective-calendar.js';
+import { getStatisticsMonthRelation, statsBucketHasData } from '../../lib/statistics-period';
 import { loadCalendarStats, type RemoteCalendarStats } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { formatDuration } from './format-duration';
@@ -52,13 +53,14 @@ interface StatisticsModalProps {
 const ICON = 18;
 
 function PeriodPanel({
-  heading, contextLabel, realized, planned, plannedLabel, noData, t, locale, testId,
+  heading, contextLabel, primary, primaryLabel, workedDaysLabel, planned, noData, t, locale, testId,
 }: {
   heading: string;
   contextLabel: string;
-  realized: StatsBucket;
-  planned: StatsBucket;
-  plannedLabel: string;
+  primary: StatsBucket;
+  primaryLabel: string;
+  workedDaysLabel: string;
+  planned?: { bucket: StatsBucket; label: string };
   noData: boolean;
   t: Translate;
   locale: string;
@@ -81,26 +83,26 @@ function PeriodPanel({
     <section className="stats-modal__panel" aria-label={heading} data-testid={testId}>
       <HeroMetric
         icon={<BarChart3 size={26} />}
-        label={t('effectiveStats.realizedHours')}
-        value={hours(realized.effectiveMinutes)}
+        label={primaryLabel}
+        value={hours(primary.effectiveMinutes)}
         context={contextLabel}
         valueTestId={`${testId}-effective`}
       />
       <div className="metric-grid">
-        <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.regular')} value={hours(realized.regularMinutes)} style={shiftAccentStyle('Regular')} testId={`${testId}-regular`} />
-        <MetricCard icon={<Star size={ICON} />} label={t('effectiveStats.extras')} value={hours(realized.extrasMinutes)} style={shiftAccentStyle('Extras')} testId={`${testId}-extras`} />
-        <MetricCard icon={<EyeOff size={ICON} />} label={t('effectiveStats.absences')} value={hours(realized.absenceMinutes)} style={shiftAccentStyle('Ausencia')} testId={`${testId}-absence`} />
-        <MetricCard icon={<CalendarCheck size={ICON} />} label={t('effectiveStats.workedDays')} value={days(realized.workedDays)} style={NEUTRAL_ACCENT} testId={`${testId}-worked-days`} />
-        <MetricCard icon={<CalendarOff size={ICON} />} label={t('effectiveStats.freeDays')} value={days(realized.freeDays)} style={shiftAccentStyle('Libre')} testId={`${testId}-free-days`} />
-        <MetricCard icon={<Umbrella size={ICON} />} label={t('effectiveStats.vacationDays')} value={days(realized.vacationDays)} style={shiftAccentStyle('Vacaciones')} testId={`${testId}-vacation-days`} />
-        <MetricCard icon={<HeartPulse size={ICON} />} label={t('effectiveStats.sickLeaveDays')} value={days(realized.sickLeaveDays)} style={shiftAccentStyle('Baja')} testId={`${testId}-sick-days`} />
-        <PlannedCard
+        <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.regular')} value={hours(primary.regularMinutes)} style={shiftAccentStyle('Regular')} testId={`${testId}-regular`} />
+        <MetricCard icon={<Star size={ICON} />} label={t('effectiveStats.extras')} value={hours(primary.extrasMinutes)} style={shiftAccentStyle('Extras')} testId={`${testId}-extras`} />
+        <MetricCard icon={<EyeOff size={ICON} />} label={t('effectiveStats.absences')} value={hours(primary.absenceMinutes)} style={shiftAccentStyle('Ausencia')} testId={`${testId}-absence`} />
+        <MetricCard icon={<CalendarCheck size={ICON} />} label={workedDaysLabel} value={days(primary.workedDays)} style={NEUTRAL_ACCENT} testId={`${testId}-worked-days`} />
+        <MetricCard icon={<CalendarOff size={ICON} />} label={t('effectiveStats.freeDays')} value={days(primary.freeDays)} style={shiftAccentStyle('Libre')} testId={`${testId}-free-days`} />
+        <MetricCard icon={<Umbrella size={ICON} />} label={t('effectiveStats.vacationDays')} value={days(primary.vacationDays)} style={shiftAccentStyle('Vacaciones')} testId={`${testId}-vacation-days`} />
+        <MetricCard icon={<HeartPulse size={ICON} />} label={t('effectiveStats.sickLeaveDays')} value={days(primary.sickLeaveDays)} style={shiftAccentStyle('Baja')} testId={`${testId}-sick-days`} />
+        {planned && <PlannedCard
           icon={<CalendarClock size={ICON} />}
-          label={plannedLabel}
-          value={hours(planned.effectiveMinutes)}
+          label={planned.label}
+          value={hours(planned.bucket.effectiveMinutes)}
           note={t('statsModal.footnote')}
           testId={`${testId}-planned`}
-        />
+        />}
       </div>
     </section>
   );
@@ -271,14 +273,23 @@ export function StatisticsModal({
     };
   }, [employeeId, local, remote, year]);
 
+  const monthRelation = getStatisticsMonthRelation(year, month, today);
+  const monthPrimary = data?.month[monthRelation === 'FUTURE' ? 'planned' : 'realized'];
+  const monthHeroLabel = monthRelation === 'FUTURE'
+    ? t('statsModal.plannedHours')
+    : monthRelation === 'PAST'
+      ? t('statsModal.pastMonthHours')
+      : t('effectiveStats.realizedHours');
+
   const tabs: Array<SegmentedTab<Tab>> = [
     { id: 'month', label: t('statsModal.tabMonth'), shortLabel: t('statsModal.tabMonthShort') },
     { id: 'year', label: t('statsModal.tabYear', { year }), shortLabel: t('statsModal.tabYearShort') },
     ...(showContract ? [{ id: 'target' as Tab, label: t('statsModal.tabTarget'), shortLabel: t('statsModal.tabTargetShort') }] : []),
   ];
 
-  const monthNoData = data ? data.month.realized.effectiveMinutes === 0 && data.month.planned.effectiveMinutes === 0
-    && data.month.realized.workedDays + data.month.realized.freeDays + data.month.realized.vacationDays + data.month.realized.sickLeaveDays === 0 : false;
+  const monthHasVisibleData = Boolean(monthPrimary && statsBucketHasData(monthPrimary))
+    || (monthRelation === 'CURRENT' && Boolean(data && statsBucketHasData(data.month.planned)));
+  const monthNoData = data ? !monthHasVisibleData : false;
 
   return (
     <ModalShell
@@ -314,9 +325,12 @@ export function StatisticsModal({
             <PeriodPanel
               heading={monthLabel}
               contextLabel={monthLabel}
-              realized={data.month.realized}
-              planned={data.month.planned}
-              plannedLabel={t('statsModal.plannedMonth')}
+              primary={monthPrimary ?? data.month.realized}
+              primaryLabel={monthHeroLabel}
+              workedDaysLabel={t(monthRelation === 'FUTURE' ? 'statsModal.plannedWorkDays' : 'effectiveStats.workedDays')}
+              planned={monthRelation === 'CURRENT' && statsBucketHasData(data.month.planned)
+                ? { bucket: data.month.planned, label: t('statsModal.plannedMonth') }
+                : undefined}
               noData={monthNoData}
               t={t}
               locale={locale}
@@ -327,9 +341,10 @@ export function StatisticsModal({
             <PeriodPanel
               heading={t('effectiveStats.yearHeading', { year })}
               contextLabel={String(year)}
-              realized={data.year.realized}
-              planned={data.year.planned}
-              plannedLabel={t('statsModal.plannedYear')}
+              primary={data.year.realized}
+              primaryLabel={t('effectiveStats.realizedHours')}
+              workedDaysLabel={t('effectiveStats.workedDays')}
+              planned={{ bucket: data.year.planned, label: t('statsModal.plannedYear') }}
               noData={data.calendarRows === 0}
               t={t}
               locale={locale}

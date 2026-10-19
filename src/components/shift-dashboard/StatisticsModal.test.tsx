@@ -49,7 +49,7 @@ describe('StatisticsModal', () => {
   it('is a labelled dialog with month / year / target tabs', () => {
     renderModal();
     expect(screen.getByRole('dialog', { name: 'Estadísticas' })).toHaveAttribute('aria-modal', 'true');
-    expect(screen.getByRole('tab', { name: 'Mes actual' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Mes seleccionado' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Año 2026' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Objetivo anual' })).toBeInTheDocument();
   });
@@ -71,7 +71,7 @@ describe('StatisticsModal', () => {
 
   it('arrow keys move between tabs', () => {
     renderModal();
-    const month = screen.getByRole('tab', { name: 'Mes actual' });
+    const month = screen.getByRole('tab', { name: 'Mes seleccionado' });
     month.focus();
     fireEvent.keyDown(month, { key: 'ArrowRight' });
     expect(screen.getByRole('tab', { name: 'Año 2026' })).toHaveAttribute('aria-selected', 'true');
@@ -162,6 +162,69 @@ describe('StatisticsModal', () => {
     const planned = screen.getByTestId('eff-month-planned');
     expect(planned.className).toContain('planned-card');
     expect(planned).toHaveTextContent('Planificado futuro (resto del mes)');
+  });
+
+  it('shows the planned bucket as the primary statistics for a future month', () => {
+    const november = Array.from({ length: 10 }, (_, index) =>
+      shift(`nov-${index}`, `2026-11-${String(index + 1).padStart(2, '0')}`, 'Regular', '08:00', '14:12'));
+    renderModal({
+      today: '2026-10-19', month: 10, monthLabel: 'Noviembre 2026',
+      localMonthShifts: november, localYearShifts: november,
+    });
+
+    expect(screen.getByText('Horas planificadas')).toBeInTheDocument();
+    expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('62 h');
+    expect(screen.getByTestId('eff-month-regular')).toHaveTextContent('62 h');
+    expect(screen.getByTestId('eff-month-worked-days')).toHaveTextContent('Días planificados');
+    expect(screen.getByTestId('eff-month-worked-days')).toHaveTextContent('10 d');
+    expect(screen.queryByText('Horas efectivas hasta hoy')).toBeNull();
+    expect(screen.queryByTestId('eff-month-planned')).toBeNull();
+    expect(screen.queryByTestId('eff-month-no-data')).toBeNull();
+    expect(screen.getAllByText('62 h')).toHaveLength(2);
+  });
+
+  it('keeps realized and remaining planned hours separate in the current month', () => {
+    renderModal({
+      today: '2026-10-19', year: 2026, month: 9, monthLabel: 'Octubre 2026',
+      localMonthShifts: [shift('past-oct', '2026-10-05', 'Regular', '08:00', '15:00'), shift('future-oct', '2026-10-22', 'Regular', '08:00', '13:00')],
+    });
+    expect(screen.getByText('Horas efectivas hasta hoy')).toBeInTheDocument();
+    expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('7 h');
+    expect(screen.getByTestId('eff-month-planned')).toHaveTextContent('Planificado futuro (resto del mes)');
+    expect(screen.getByTestId('eff-month-planned')).toHaveTextContent('5 h');
+    expect(screen.getByTestId('eff-month-effective')).not.toHaveTextContent('12 h');
+  });
+
+  it('uses realized hours for a past month without a redundant planned card', () => {
+    renderModal({
+      today: '2026-10-19', year: 2026, month: 8, monthLabel: 'Septiembre 2026',
+      localMonthShifts: [shift('past-sep', '2026-09-04', 'Regular', '08:00', '16:00')],
+    });
+    expect(screen.getByText('Horas efectivas del mes')).toBeInTheDocument();
+    expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('8 h');
+    expect(screen.queryByText('Horas planificadas')).toBeNull();
+    expect(screen.queryByTestId('eff-month-planned')).toBeNull();
+  });
+
+  it('updates the presentation when the selected month changes without closing the modal', () => {
+    const rows = [
+      shift('past', '2026-09-04', 'Regular', '08:00', '16:00'),
+      shift('current-realized', '2026-10-05', 'Regular', '08:00', '15:00'),
+      shift('current-planned', '2026-10-22', 'Regular', '08:00', '13:00'),
+      shift('future', '2026-11-04', 'Regular', '08:00', '14:00'),
+    ];
+    const view = renderModal({ today: '2026-10-19', month: 9, monthLabel: 'Octubre 2026', localMonthShifts: rows });
+    expect(screen.getByText('Horas efectivas hasta hoy')).toBeInTheDocument();
+
+    view.rerender(
+      <I18nProvider><StatisticsModal isOpen onClose={vi.fn()} employeeId={null} year={2026} month={10} monthLabel="Noviembre 2026" today="2026-10-19" target={null} canConfigureTarget showContract localMonthShifts={rows} localYearShifts={rows} /></I18nProvider>,
+    );
+    expect(screen.getByText('Horas planificadas')).toBeInTheDocument();
+
+    view.rerender(
+      <I18nProvider><StatisticsModal isOpen onClose={vi.fn()} employeeId={null} year={2026} month={8} monthLabel="Septiembre 2026" today="2026-10-19" target={null} canConfigureTarget showContract localMonthShifts={rows} localYearShifts={rows} /></I18nProvider>,
+    );
+    expect(screen.getByText('Horas efectivas del mes')).toBeInTheDocument();
   });
 
   it('tabs are buttons with a stable accessible name even when a short label is shown', () => {
