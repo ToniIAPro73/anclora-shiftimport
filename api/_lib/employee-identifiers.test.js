@@ -32,7 +32,7 @@ describe('source identifier guard (6888 is never silently 84881)', () => {
   });
 });
 
-import { createSourceIdentifierMapping, employeeNameKey, normalizeNameKey, resolveSourceIdentity } from './employee-identifiers.js';
+import { createSourceIdentifierMapping, employeeNameKey, employeeNameKeys, normalizeNameKey, resolveSourceIdentity } from './employee-identifiers.js';
 
 /** Stub for the queries resolveSourceIdentity / createSourceIdentifierMapping issue. */
 function identitySql({ org = 'ShiftImport', employees, mapped = null }) {
@@ -80,6 +80,28 @@ describe('resolveSourceIdentity (canonical 84881 vs TRYP 6888)', () => {
       expect(r.status).toBe('CANDIDATE');
       expect(r.employee).toMatchObject({ id: 'seb', name: 'Sebastián Pozo Mendoza', externalEmployeeId: '84881' });
     }
+  });
+  it('surname-first DB names with one structural comma match the document order deterministically', async () => {
+    const surnameFirst = { ...SEB, name: 'Pozo Mendoza, Sebastian' };
+    const r = await resolveSourceIdentity(identitySql({ employees: [surnameFirst, OTHER] }), admin, doc());
+    expect(r).toMatchObject({ status: 'CANDIDATE', employee: { name: 'Pozo Mendoza, Sebastian', externalEmployeeId: '84881' } });
+    expect([...employeeNameKeys('Pozo Mendoza, Sebastian', 'ShiftImport')].sort()).toEqual(['pozo mendoza sebastian', 'sebastian pozo mendoza']);
+  });
+  it('surname-first equivalence keeps accent, case, and whitespace normalization', async () => {
+    const surnameFirst = { ...SEB, name: 'Pozo Mendoza, Sebastián' };
+    const r = await resolveSourceIdentity(identitySql({ employees: [surnameFirst, OTHER] }), admin, doc({ documentName: 'SEBASTIAN   POZO MENDOZA' }));
+    expect(r.status).toBe('CANDIDATE');
+  });
+  it('does not reorder tokens without a structural comma', async () => {
+    const surnameFirst = { ...SEB, name: 'Pozo Mendoza, Sebastian' };
+    const r = await resolveSourceIdentity(identitySql({ employees: [surnameFirst, OTHER] }), admin, doc({ documentName: 'Mendoza Sebastian Pozo' }));
+    expect(r.status).toBe('NONE');
+  });
+  it('returns AMBIGUOUS when surname-first and given-first rows both match', async () => {
+    const twin = { id: 'twin', name: 'Sebastian Pozo Mendoza', external_employee_id: '222' };
+    const r = await resolveSourceIdentity(identitySql({ employees: [{ ...SEB, name: 'Pozo Mendoza, Sebastian' }, twin] }), admin, doc());
+    expect(r.status).toBe('AMBIGUOUS');
+    expect(r.candidates).toHaveLength(2);
   });
   it('2b: the decoration is NOT ignored in a production organization (no weakening)', async () => {
     const qa = { ...SEB, name: 'Sebastián Pozo Mendoza — QA' };

@@ -30,7 +30,7 @@ import { parseXlsxTeamWorkbook } from '../../ingestion/adapters/xlsx-workbook';
 import type { ShiftCodeMapping } from '../../ingestion/core/shift-code-profile';
 import { useI18n } from '../../lib/use-i18n';
 import { useEscapeClose } from '../../lib/use-escape-close';
-import { classifyImportChanges, fingerprintShift } from '../../lib/import-dedup';
+import { classifyImportChanges, semanticShiftFingerprint } from '../../lib/import-dedup';
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 import { AssistantAnswers, buildProfileFromTokenMeanings, buildCodeOverridesFromAnswers } from '../../ingestion/assistant';
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
@@ -438,19 +438,39 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   );
   // While the document employee's calendar is loading (or failed to load) nothing can be confirmed against the wrong data.
   const scopeNotReady = documentHasSourceIdentity && Boolean(sourceEmployee) && !scopedReady;
+  const sourceIdentityBlocking = Boolean(analysis?.source?.system && analysis.source.identifier && !sourceEmployee);
+  const diffReady = !sourceIdentityBlocking && !scopeNotReady;
+  const diffStatus = sourceIdentityBlocking
+    ? 'PENDING_IDENTITY'
+    : scopeNotReady
+      ? scopedExisting?.status === 'error' ? 'TARGET_CALENDAR_ERROR' : 'LOADING_TARGET_CALENDAR'
+      : 'READY';
 
-  const importDiff = useMemo(() => {
-    const readyForDiff = parsedShifts.filter(hasImportableShiftData).map(toDomainShift);
-    return classifyImportChanges(existingShifts, readyForDiff);
-  }, [parsedShifts, existingShifts]);
   const temporalSummary = useMemo(() => {
     const ready = parsedShifts.filter(hasImportableShiftData);
     const split = splitImportByOperationalDate(ready);
     return {
       historical: split.historical.length,
       future: split.future.length,
+      historicalRows: split.historical,
+      futureRows: split.future,
     };
   }, [parsedShifts]);
+
+  const importDiff = useMemo(() => {
+    if (!diffReady) return null;
+    const accepted = futureImportDecision === 'historical-and-plan' && !identityLocked
+      ? [...temporalSummary.historicalRows, ...temporalSummary.futureRows]
+      : temporalSummary.historicalRows;
+    const seen = new Set<string>();
+    const readyForDiff = accepted.map(toDomainShift).filter((shift) => {
+      const key = semanticShiftFingerprint(shift);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return classifyImportChanges(existingShifts, readyForDiff);
+  }, [diffReady, existingShifts, futureImportDecision, identityLocked, temporalSummary]);
 
   // The badge must announce the effective destination, not the raw detected
   // count: role and the historical-only/draft decision can exclude every
@@ -474,44 +494,30 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     return { dcf, comments };
   }, [parsedShifts]);
   // A TRYP export carries a source-system number: the target employee must be resolved explicitly (never by name).
-  const sourceIdentityBlocking = Boolean(analysis?.source?.system && analysis.source.identifier && !sourceEmployee);
-
   const actionableCount = useMemo(() => {
+    if (!diffReady || !importDiff) return 0;
     if (parsedShifts.length === 0) {
       return 0;
     }
-    const ready = parsedShifts.filter(hasImportableShiftData);
-    if (ready.length === 0) {
-      return 0;
-    }
-
-    const seenIncoming = new Set<string>();
-    const uniqueReady: Shift[] = [];
-    for (const shift of ready) {
-      const domain = toDomainShift(shift);
-      const fp = fingerprintShift(domain).full;
-      if (!seenIncoming.has(fp)) {
-        seenIncoming.add(fp);
-        uniqueReady.push(domain);
-      }
-    }
-
-    const diff = classifyImportChanges(existingShifts, uniqueReady);
-    const candidateAdditions = diff.additions;
-
-    if (candidateAdditions.length === 0) {
-      return 0;
-    }
-
-    const split = splitImportByOperationalDate(candidateAdditions);
-    const historicalCount = split.historical.length;
-    const futureCount = split.future.length;
-
-    const canImportFuture = !identityLocked && futureImportDecision === 'historical-and-plan';
-    const effectiveFuture = canImportFuture ? futureCount : 0;
-
-    return historicalCount + effectiveFuture;
-  }, [parsedShifts, existingShifts, identityLocked, futureImportDecision]);
+    return importDiff.additions.length;
+  }, [diffReady, importDiff, parsedShifts.length]);
+  const confirmButtonKey = !diffReady
+    ? diffStatus === 'PENDING_IDENTITY'
+      ? 'importModal.confirmPendingIdentity'
+      : diffStatus === 'TARGET_CALENDAR_ERROR'
+        ? 'importModal.confirmPendingCalendarError'
+        : 'importModal.confirmPendingCalendar'
+    : importDiff && importDiff.changed.length > 0 && importDiff.new.length > 0
+      ? 'importModal.confirmImportMixed'
+      : importDiff && importDiff.changed.length > 0
+        ? importDiff.changed.length === 1 ? 'importModal.confirmImportChange' : 'importModal.confirmImportChanges'
+      : 'importModal.confirmImport';
+  const confirmButtonValues = {
+    changes: importDiff?.changed.length ?? 0,
+    new: importDiff?.new.length ?? 0,
+    ready: actionableCount,
+    total: parsedShifts.length,
+  };
 
   const selectedContext = useMemo<CalendarImportContext | undefined>(
     () => selectedPeriod === 'multi' ? undefined : {
@@ -1892,10 +1898,10 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                 the future-consent choice is required reading, per
                 DO_NOT_BREAK) so the row list keeps its min-height floor. */}
             <div className="import-modal-review-extra">
-            {readyShifts.length > 0 && (
+            {readyShifts.length > 0 && diffReady && importDiff && (
               <div className="import-modal-review-counts" style={{ marginTop: '12px', fontSize: '0.78rem', color: 'var(--text-subtle)', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {importDiff.new.length > 0 && <span>{t('importModal.diffNew', { count: importDiff.new.length })}</span>}
-                {importDiff.changed.length > 0 && <span>{t('importModal.diffChanged', { count: importDiff.changed.length })}</span>}
+                {importDiff.changed.length > 0 && <span>{t(importDiff.changed.length === 1 ? 'importModal.diffChangedOne' : 'importModal.diffChanged', { count: importDiff.changed.length })}</span>}
                 {importDiff.unchanged.length > 0 && <span>{t('importModal.diffUnchanged', { count: importDiff.unchanged.length })}</span>}
                 {temporalSummary.historical > 0 && <span data-testid="import-historical-count">{t('importModal.temporalHistorical', { count: temporalSummary.historical })}</span>}
                 {effectiveTemporalSummary.includedForPlanning > 0 && (
@@ -1909,6 +1915,11 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
                   </span>
                 )}
               </div>
+            )}
+            {parsedShifts.length > 0 && !diffReady && (
+              <p role="status" data-testid="import-diff-state" data-diff-status={diffStatus} style={{ margin: '12px 0 0', fontSize: '0.82rem', color: 'var(--text-subtle)' }}>
+                {t(`importModal.diffPending.${diffStatus}`)}
+              </p>
             )}
 
             {analysis?.source && analysis.source.kind !== 'UNKNOWN' && (
@@ -1954,7 +1965,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               )
             )}
 
-            {parsedShifts.length > 0 && actionableCount === 0 && !hasUnresolvedColors && !diagnosisBlocking && (
+            {diffReady && importDiff && parsedShifts.length > 0 && actionableCount === 0 && !hasUnresolvedColors && !diagnosisBlocking && (
               temporalSummary.historical === 0 && temporalSummary.future > 0 && futureImportDecision === 'historical-only' ? (
                 <p role="status" style={{ margin: '8px 0 0', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>
                   {t('importModal.noHistoricalInFile')}
@@ -1992,7 +2003,7 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
             style={{ width: '100%', height: '48px', fontSize: '1rem', cursor: interactionLocked ? 'wait' : undefined }}
           >
             <span aria-live="polite" data-import-progress tabIndex={interactionLocked ? -1 : undefined}>
-              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t('importModal.confirmImport', { ready: actionableCount, total: parsedShifts.length }) : t('importModal.authRequired')}
+              {interactionLocked ? t('importModal.importing') : isAuthenticated ? t(confirmButtonKey, confirmButtonValues) : t('importModal.authRequired')}
             </span>
           </button>
           {(diagnosisBlocking || hasUnresolvedColors) && (

@@ -1,5 +1,4 @@
-import { fingerprintShift } from './import-dedup';
-import { getShiftOrigin, getShiftType } from './shifts';
+import { semanticShiftFingerprint } from './import-dedup';
 import type { Shift } from './types';
 
 export type ImportConflictDecision = 'replace' | 'skip' | 'abort';
@@ -35,43 +34,54 @@ export async function classifyHistoricalIncoming(input: {
 }): Promise<HistoricalIncomingResult> {
   const { incoming, snapshot, smartServerReconciliation, requestDecision } = input;
   let working = [...snapshot];
-  const pendingImportedByDate = new Map<string, Shift[]>();
   const upserts: Shift[] = [];
   const deleteIds: string[] = [];
   const identicalIncoming: Shift[] = [];
   const serverReconciledHistorical: Shift[] = [];
 
-  for (const shift of incoming) {
-    const existingImportedShifts = pendingImportedByDate.get(shift.date)
-      ?? snapshot.filter((existing) => existing.date === shift.date && getShiftOrigin(existing) === 'IMP');
-    pendingImportedByDate.set(shift.date, existingImportedShifts);
+  const incomingByDate = new Map<string, Shift[]>();
+  for (const shift of incoming) incomingByDate.set(shift.date, [...(incomingByDate.get(shift.date) ?? []), shift]);
 
-    if (existingImportedShifts.length === 0) {
-      working.push(shift);
-      upserts.push(shift);
-      pendingImportedByDate.set(shift.date, [...existingImportedShifts, shift]);
-      continue;
+  for (const [date, dayIncoming] of incomingByDate) {
+    const dayExisting = snapshot.filter((existing) => existing.date === date);
+    const unmatchedExisting = [...dayExisting];
+    const unmatchedIncoming: Shift[] = [];
+
+    // Exact business equality is a no-op regardless of origin/provenance.
+    for (const shift of dayIncoming) {
+      const matchIndex = unmatchedExisting.findIndex((existing) => semanticShiftFingerprint(existing) === semanticShiftFingerprint(shift));
+      if (matchIndex < 0) unmatchedIncoming.push(shift);
+      else {
+        unmatchedExisting.splice(matchIndex, 1);
+        identicalIncoming.push(shift);
+      }
     }
 
-    // Idempotent re-import: identity is the deterministic fingerprint, never the random UUID.
-    if (existingImportedShifts.some((existing) => fingerprintShift(existing).full === fingerprintShift(shift).full)) {
-      identicalIncoming.push(shift);
+    if (unmatchedIncoming.length === 0) continue;
+    if (unmatchedExisting.length === 0) {
+      working.push(...unmatchedIncoming);
+      upserts.push(...unmatchedIncoming);
       continue;
     }
     if (smartServerReconciliation) {
-      serverReconciledHistorical.push(shift);
+      serverReconciledHistorical.push(...unmatchedIncoming);
       continue;
     }
 
-    const existingShift = existingImportedShifts.find((existing) => getShiftType(existing) === getShiftType(shift)) ?? existingImportedShifts[0];
-    const decision = await requestDecision(existingShift, shift);
-    if (decision === 'abort') return { aborted: true, upserts, deleteIds, identicalIncoming, serverReconciledHistorical, working: snapshot };
+    // Resolve only a one-to-one pair. If several rows remain, the legacy
+    // replace/skip prompt has no safe way to identify a target, so fail closed.
+    if (unmatchedIncoming.length !== 1 || unmatchedExisting.length !== 1) {
+      return { aborted: true, upserts: [], deleteIds: [], identicalIncoming: [], serverReconciledHistorical: [], working: snapshot };
+    }
+    const [incomingShift] = unmatchedIncoming;
+    const [existingShift] = unmatchedExisting;
+    const decision = await requestDecision(existingShift, incomingShift);
+    if (decision === 'abort') return { aborted: true, upserts: [], deleteIds: [], identicalIncoming: [], serverReconciledHistorical: [], working: snapshot };
     if (decision === 'skip') continue;
 
-    working = [...working.filter((existing) => existing.id !== existingShift.id), shift];
-    upserts.push(shift);
+    working = [...working.filter((existing) => existing.id !== existingShift.id), incomingShift];
+    upserts.push(incomingShift);
     deleteIds.push(existingShift.id);
-    pendingImportedByDate.set(shift.date, [...existingImportedShifts.filter((existing) => existing.id !== existingShift.id), shift]);
   }
   return { aborted: false, upserts, deleteIds, identicalIncoming, serverReconciledHistorical, working };
 }

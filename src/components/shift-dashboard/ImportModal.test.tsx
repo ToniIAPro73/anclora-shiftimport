@@ -10,6 +10,7 @@ import { saveShiftTypeOverrides } from '../../lib/shift-types';
 import { getTtfvEvents } from '../../lib/ttfv';
 import { ParsedCalendarShift } from '../../lib/import-types';
 import { Shift } from '../../lib/types';
+import * as remote from '../../lib/remote';
 import { analyzeDocumentFile, DocumentAnalysisResult } from '../../ingestion/parsers/file';
 import { analyzeItemsForImport, ItemAnalysis } from '../../ingestion/analysis';
 import { detectTeamRoster } from '../../ingestion/team-roster';
@@ -219,7 +220,8 @@ describe('ImportModal target (canonical ShiftImport identity)', () => {
 });
 
 describe('ImportModal — the document employee (not the dashboard selection) defines the import scope', () => {
-  const doc = () => makeResult({
+  const doc = (overrides: Partial<DocumentAnalysisResult> = {}) => makeResult({
+    ...overrides,
     source: { kind: 'EMPLOYEE_CALENDAR_EXPORT', system: 'TRYP_EMPLOYEE_CALENDAR', identifier: '6888', employeeName: 'Sebastian Pozo Mendoza' },
   });
   const existing = (id: string, date: string): Shift => ({ id, date, startTime: '08:00', endTime: '16:00', shiftType: 'Regular', countsAsWork: true, location: 'Regular', origin: 'IMP' });
@@ -257,7 +259,24 @@ describe('ImportModal — the document employee (not the dashboard selection) de
     mockedAnalyzeDocumentFile.mockResolvedValue(doc());
     renderImportModal('es', () => {}, { initialFile: csvFile(), existingShifts: dashboardA, loadEmployeeShifts: () => new Promise<Shift[]>(() => undefined) });
     await waitFor(() => expect(screen.getByTestId('source-identity-resolved')).toBeTruthy());
-    expect((screen.getByRole('button', { name: /Confirmar Importación/ }) as HTMLButtonElement).disabled).toBe(true);
+    const confirm = screen.getByRole('button', { name: 'Calculando cambios del calendario del empleado…' }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+  });
+
+  it('keeps the diff pending while identity is unresolved; parsed rows are never compared against an empty calendar', async () => {
+    const shifts = Array.from({ length: 319 }, () => makeShift());
+    mockedDetectTeamRoster.mockReturnValue(null);
+    mockedAnalyzeDocumentFile.mockResolvedValue(doc({ shifts, quality: { shifts, confidence: 1, warnings: [], state: 'CORRECT' } }));
+    vi.mocked(remote.resolveSourceIdentity).mockResolvedValueOnce({ status: 'NONE', employee: null, candidates: [] });
+    renderImportModal('es', () => {}, { initialFile: csvFile(), existingShifts: dashboardA, loadEmployeeShifts: vi.fn().mockResolvedValue([]) });
+    const pending = await screen.findByTestId('import-diff-state');
+    expect(pending.getAttribute('data-diff-status')).toBe('PENDING_IDENTITY');
+    expect(pending.textContent).toContain('Identifica al empleado para calcular los cambios');
+    const confirm = screen.getByRole('button', { name: 'Identifica al empleado para calcular los cambios' }) as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    expect(confirm.textContent).not.toContain('291 nuevos');
+    expect(screen.queryByText(/\d+ nuevos/)).toBeNull();
+    expect(screen.getByTestId('source-identity-reference').textContent).toContain('6888');
   });
 });
 

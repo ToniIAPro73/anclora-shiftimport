@@ -35,6 +35,13 @@ describe('i18n', () => {
     expect(translate('en', 'importModal.confirmImport', { ready: 2, total: 3 })).toContain('2 new of 3 rows');
   });
 
+  it('labels a semantic change as a change in Spanish and English', () => {
+    expect(translate('es', 'importModal.confirmImportChange', { changes: 1 })).toBe('Confirmar importación (1 cambio)');
+    expect(translate('en', 'importModal.confirmImportChange', { changes: 1 })).toBe('Confirm import (1 change)');
+    expect(translate('es', 'importModal.diffPending.PENDING_IDENTITY')).toContain('Identifica al empleado');
+    expect(translate('en', 'importModal.diffPending.LOADING_TARGET_CALENDAR')).toContain('Calculating changes');
+  });
+
   it('uses one daily date interpolation for the calendar empty state', () => {
     const date = '15 de agosto de 2026';
     expect(translate('es', 'calendar.noShiftsForEmployee', { date })).toBe(

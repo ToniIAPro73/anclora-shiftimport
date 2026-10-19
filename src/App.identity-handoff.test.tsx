@@ -21,7 +21,7 @@ vi.mock('./lib/remote', async (importOriginal) => {
 // The document is a TRYP individual export: source system + alias 6888 + the name printed in it.
 vi.mock('./ingestion/adapters/tryp-calendar-export', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./ingestion/adapters/tryp-calendar-export')>()),
-  parseTrypCalendarExport: vi.fn(async () => ({ sourceSystem: 'TRYP_EMPLOYEE_CALENDAR', sourceIdentifier: '6888', employeeName: 'Sebastian Pozo Mendoza' })),
+    parseTrypCalendarExport: vi.fn(async () => ({ sourceSystem: 'TRYP_EMPLOYEE_CALENDAR', sourceIdentifier: '6888', employeeName: 'Sebastian Pozo Mendoza' })),
 }));
 vi.mock('./components/shift-dashboard/TeamImportModal', () => ({
   TeamImportModal: ({ isOpen, onSingleEmployeeDetected }: { isOpen: boolean; onSingleEmployeeDetected?: (file: File, employee: unknown) => void }) => (isOpen ? (
@@ -32,8 +32,8 @@ vi.mock('./components/shift-dashboard/ImportModal', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./components/shift-dashboard/ImportModal')>();
   return {
     ...actual,
-    ImportModal: ({ isOpen, employeePreset }: { isOpen: boolean; employeePreset?: { name: string; externalId: string } | null }) => (isOpen ? (
-      <div data-testid="individual-import" data-name={employeePreset?.name ?? ''} data-external-id={employeePreset?.externalId ?? ''} />
+    ImportModal: ({ isOpen, employeePreset, employeeTargetFixed }: { isOpen: boolean; employeePreset?: { name: string; externalId: string } | null; employeeTargetFixed?: boolean }) => (isOpen ? (
+      <div data-testid="individual-import" data-name={employeePreset?.name ?? ''} data-external-id={employeePreset?.externalId ?? ''} data-target-fixed={String(Boolean(employeeTargetFixed))} />
     ) : null),
   };
 });
@@ -49,13 +49,13 @@ beforeEach(() => {
   vi.mocked(remote.loadRemoteShifts).mockResolvedValue([]);
 });
 
-const seb: RemoteEmployee = { id: 'uuid-seb', organizationId: 'org-1', externalEmployeeId: '84881', name: 'Sebastián Pozo Mendoza', userId: null, status: 'active' };
+const seb: RemoteEmployee = { id: 'uuid-seb', organizationId: 'org-1', externalEmployeeId: '84881', name: 'Pozo Mendoza, Sebastian', userId: null, status: 'active' };
 const owner: SessionInfo = { user: { id: 'u', email: 'u@test.com', displayName: 'U' }, organizationId: 'org-1', role: 'OWNER', employeeId: null, memberships: [{ organizationId: 'org-1', organizationName: 'CIF Import', role: 'OWNER' }] };
 
 async function detectSingle(directory: RemoteEmployee[]) {
   vi.mocked(session.fetchResolvedSession).mockResolvedValue({ session: owner, needsOrgChoice: false });
   vi.mocked(remote.listRemoteEmployees).mockResolvedValue(directory);
-  vi.mocked(remote.resolveSourceIdentity).mockResolvedValue({ status: 'CANDIDATE', employee: { id: 'uuid-seb', name: 'Sebastián Pozo Mendoza', externalEmployeeId: '84881', status: 'active' }, candidates: [] } as never);
+  vi.mocked(remote.resolveSourceIdentity).mockResolvedValue({ status: 'CANDIDATE', employee: { id: 'uuid-seb', name: 'Pozo Mendoza, Sebastian', externalEmployeeId: '84881', status: 'active' }, candidates: [] } as never);
   window.history.pushState({}, '', '/app');
   render(<ThemeProvider><I18nProvider><App /></I18nProvider></ThemeProvider>);
   await waitFor(() => expect(screen.getByRole('button', { name: 'Importar turnos' })).toBeTruthy());
@@ -67,15 +67,17 @@ async function detectSingle(directory: RemoteEmployee[]) {
 describe('single-employee handoff of a TRYP export with an unmapped alias', () => {
   it('C: a unique CANDIDATE is imported as the canonical employee (directory name + id 84881), never an empty id nor the alias', async () => {
     const modal = await detectSingle([seb]);
-    expect(modal.getAttribute('data-name')).toBe('Sebastián Pozo Mendoza');
+    expect(modal.getAttribute('data-name')).toBe('Pozo Mendoza, Sebastian');
     expect(modal.getAttribute('data-external-id')).toBe('84881');
+    expect(modal.getAttribute('data-target-fixed')).toBe('true');
     expect(modal.getAttribute('data-external-id')).not.toBe('6888');
     expect(remote.resolveSourceIdentity).toHaveBeenCalledWith({ sourceSystem: 'TRYP_EMPLOYEE_CALENDAR', externalIdentifier: '6888', documentName: 'Sebastian Pozo Mendoza' });
   });
 
   it('C: the server verdict is authoritative even if the loaded directory does not contain the row yet', async () => {
     const modal = await detectSingle([]);
-    expect(modal.getAttribute('data-name')).toBe('Sebastián Pozo Mendoza');
+    expect(modal.getAttribute('data-name')).toBe('Pozo Mendoza, Sebastian');
     expect(modal.getAttribute('data-external-id')).toBe('84881');
+    expect(modal.getAttribute('data-target-fixed')).toBe('true');
   });
 });

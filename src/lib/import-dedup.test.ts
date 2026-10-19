@@ -4,6 +4,7 @@ import {
   classifyImportChanges,
   fingerprintShift,
   mergeImportedShifts,
+  semanticShiftFingerprint,
 } from './import-dedup';
 import { Shift } from './types';
 
@@ -36,6 +37,13 @@ describe('fingerprintShift', () => {
     expect(fingerprintShift(shift({ date: '2026-8-1' })).full)
       .toBe(fingerprintShift(shift({ date: '2026-08-01' })).full);
   });
+
+  it('preserves provenance in the technical fingerprint while semantic identity ignores it', () => {
+    const existing = shift({ origin: 'schedule' as Shift['origin'] });
+    const incoming = shift({ origin: 'IMP' });
+    expect(fingerprintShift(existing).full).not.toBe(fingerprintShift(incoming).full);
+    expect(semanticShiftFingerprint(existing)).toBe(semanticShiftFingerprint(incoming));
+  });
 });
 
 describe('mergeImportedShifts — idempotent re-import', () => {
@@ -50,6 +58,13 @@ describe('mergeImportedShifts — idempotent re-import', () => {
     const first = mergeImportedShifts([], [shift({ id: 'stable-id' })]);
     const second = mergeImportedShifts(first, [shift({ id: 'random-uuid' })]);
     expect(second[0].id).toBe('stable-id');
+  });
+
+  it('preserves one existing row when only technical origin differs', () => {
+    const existing = shift({ id: 'scheduled', origin: 'schedule' as Shift['origin'] });
+    const merged = mergeImportedShifts([existing], [shift({ id: 'incoming', origin: 'IMP' })]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].id).toBe('scheduled');
   });
 
   it('does not delete shifts outside the incoming date range', () => {
@@ -99,6 +114,70 @@ describe('classifyImportChanges', () => {
     expect(report.unchanged.length).toBe(1);
     expect(report.removed.length).toBe(1);
     expect(report.removed[0].shift.id).toBe('b');
+  });
+
+  it('treats schedule vs IMP as unchanged business state, including day off', () => {
+    for (const existing of [
+      shift({ date: '2026-10-14', startTime: '13:00', endTime: '21:00', origin: 'schedule' as Shift['origin'] }),
+      shift({ date: '2026-10-14', startTime: '', endTime: '', shiftType: 'Libre', origin: 'schedule' as Shift['origin'] }),
+      shift({ date: '2026-10-14', startTime: '', endTime: '', shiftType: 'Vacaciones', origin: 'schedule' as Shift['origin'] }),
+    ]) {
+      const report = classifyImportChanges([existing], [{ ...existing, id: 'incoming', origin: 'IMP' }]);
+      expect(report.unchanged).toHaveLength(1);
+      expect(report.changed).toHaveLength(0);
+      expect(report.new).toHaveLength(0);
+      expect(report.removed).toHaveLength(0);
+    }
+  });
+
+  it('classifies a unique same-day time change as CHANGED, not an independent NEW + REMOVED pair', () => {
+    const report = classifyImportChanges(
+      [shift({ date: '2026-10-15', startTime: '11:00', endTime: '19:00' })],
+      [shift({ id: 'incoming', date: '2026-10-15', startTime: '10:00', endTime: '18:00' })],
+    );
+    expect(report.changed).toHaveLength(1);
+    expect(report.new).toHaveLength(0);
+    expect(report.removed).toHaveLength(0);
+  });
+
+  it('pairs a changed main shift while preserving an exact extra on the same day', () => {
+    const report = classifyImportChanges(
+      [
+        shift({ id: 'main', date: '2026-10-15', startTime: '11:00', endTime: '19:00' }),
+        shift({ id: 'extra', date: '2026-10-15', startTime: '19:00', endTime: '20:00', shiftType: 'Extras' }),
+      ],
+      [
+        shift({ id: 'incoming-main', date: '2026-10-15', startTime: '10:00', endTime: '18:00' }),
+        shift({ id: 'incoming-extra', date: '2026-10-15', startTime: '19:00', endTime: '20:00', shiftType: 'Extras' }),
+      ],
+    );
+    expect(report.unchanged.map(({ shift: row }) => row.id)).toEqual(['extra']);
+    expect(report.changed.map(({ shift: row }) => row.id)).toEqual(['incoming-main']);
+    expect(report.new).toHaveLength(0);
+    expect(report.removed).toHaveLength(0);
+  });
+
+  it('keeps ambiguous multiple same-day rows explicit instead of pairing arbitrarily', () => {
+    const report = classifyImportChanges(
+      [
+        shift({ id: 'first', date: '2026-10-15', startTime: '09:00', endTime: '17:00' }),
+        shift({ id: 'second', date: '2026-10-15', startTime: '11:00', endTime: '19:00' }),
+      ],
+      [shift({ id: 'incoming', date: '2026-10-15', startTime: '10:00', endTime: '18:00' })],
+    );
+    expect(report.changed).toHaveLength(0);
+    expect(report.new).toHaveLength(1);
+    expect(report.removed).toHaveLength(2);
+  });
+
+  it('classifies a unique same-day type change as CHANGED', () => {
+    const report = classifyImportChanges(
+      [shift({ date: '2026-10-15', startTime: '', endTime: '', shiftType: 'Vacaciones' })],
+      [shift({ id: 'incoming', date: '2026-10-15', startTime: '', endTime: '', shiftType: 'Libre' })],
+    );
+    expect(report.changed).toHaveLength(1);
+    expect(report.new).toHaveLength(0);
+    expect(report.removed).toHaveLength(0);
   });
 
   it('does not flag out-of-range shifts as REMOVED', () => {

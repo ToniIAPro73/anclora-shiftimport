@@ -21,7 +21,7 @@ beforeEach(() => {
   [resolveSourceIdentity, listRemoteEmployees, createSourceIdentifierMapping].forEach((m) => m.mockReset());
 });
 
-const SEB = { id: 'seb', name: 'Sebastián Pozo Mendoza — QA', externalEmployeeId: '84881', status: 'active' };
+const SEB = { id: 'seb', name: 'Pozo Mendoza, Sebastian', externalEmployeeId: '84881', status: 'active' };
 const renderPanel = (props: Partial<React.ComponentProps<typeof SourceIdentityPanel>> = {}) => {
   const onResolved = vi.fn();
   render(<I18nProvider><SourceIdentityPanel sourceSystem="TRYP_EMPLOYEE_CALENDAR" identifier="6888" documentName="Sebastian Pozo Mendoza" canPickManually onResolved={onResolved} {...props} /></I18nProvider>);
@@ -32,7 +32,7 @@ describe('SourceIdentityPanel — canonical ShiftImport identity vs the document
   it('1/7: a known alias resolves automatically, without any prompt', async () => {
     resolveSourceIdentity.mockResolvedValue({ status: 'MAPPED', employee: SEB, candidates: [] });
     const onResolved = renderPanel();
-    expect(await screen.findByTestId('source-identity-resolved')).toHaveTextContent('Sebastián Pozo Mendoza — QA');
+    expect(await screen.findByTestId('source-identity-resolved')).toHaveTextContent('Pozo Mendoza, Sebastian');
     expect(screen.queryByTestId('source-identity-select')).toBeNull();
     expect(screen.queryByTestId('source-identity-associate')).toBeNull();
     expect(onResolved).toHaveBeenLastCalledWith({ id: 'seb', name: SEB.name, externalEmployeeId: '84881' });
@@ -41,7 +41,7 @@ describe('SourceIdentityPanel — canonical ShiftImport identity vs the document
   it('2: a unique name match is PRESELECTED as a candidate (no empty selector), showing its canonical id, not 6888', async () => {
     resolveSourceIdentity.mockResolvedValue({ status: 'CANDIDATE', employee: SEB, candidates: [] });
     const onResolved = renderPanel();
-    expect(await screen.findByTestId('source-identity-candidate')).toHaveTextContent('Sebastián Pozo Mendoza — QA');
+    expect(await screen.findByTestId('source-identity-candidate')).toHaveTextContent('Pozo Mendoza, Sebastian');
     expect(screen.getByTestId('source-identity-candidate-id')).toHaveTextContent('ID 84881');
     expect(screen.queryByTestId('source-identity-select')).toBeNull();
     expect(screen.getByTestId('source-identity-reference')).toHaveTextContent('6888'); // small secondary reference only

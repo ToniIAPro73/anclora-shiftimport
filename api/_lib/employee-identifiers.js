@@ -64,6 +64,26 @@ export function employeeNameKey(name, organizationName) {
   return normalizeNameKey(base);
 }
 
+/**
+ * Exact deterministic name variants. A single structural comma may mark
+ * "surnames, given name"; no token sorting or fuzzy matching is performed.
+ */
+export function employeeNameKeys(name, organizationName) {
+  const base = String(name ?? '');
+  const mirrorSafe = /QA Mirror\s*$/i.test(String(organizationName ?? ''))
+    ? base.replace(/\s+[—–-]\s+QA\s*$/i, '')
+    : base;
+  const keys = new Set();
+  const direct = normalizeNameKey(mirrorSafe);
+  if (direct) keys.add(direct);
+  const comma = /^\s*([^,]+?)\s*,\s*([^,]+?)\s*$/.exec(mirrorSafe);
+  if (comma) {
+    const swapped = normalizeNameKey(`${comma[2]} ${comma[1]}`);
+    if (swapped) keys.add(swapped);
+  }
+  return keys;
+}
+
 const publicEmployee = (row) => ({ id: row.id, name: row.name, externalEmployeeId: row.external_employee_id ?? null, status: row.status });
 
 /**
@@ -84,8 +104,10 @@ export async function resolveSourceIdentity(sql, ctx, { sourceSystem, externalId
   const accessScope = ctx.role === 'EMPLOYEE' ? null : await resolveEffectiveAccessScope(sql, ctx);
   const rows = accessScope ? allRows.filter((row) => employeeRowInScope(accessScope, row)) : allRows;
   const scoped = ctx.role === 'EMPLOYEE' ? rows.filter((row) => row.id === ctx.employeeId) : rows;
-  const docKey = employeeNameKey(documentName, org?.name);
-  const byName = docKey ? scoped.filter((row) => employeeNameKey(row.name, org?.name) === docKey) : [];
+  const documentKeys = employeeNameKeys(documentName, org?.name);
+  const byName = documentKeys.size
+    ? scoped.filter((row) => [...employeeNameKeys(row.name, org?.name)].some((key) => documentKeys.has(key)))
+    : [];
 
   const mappedId = await findEmployeeIdBySourceIdentifier(sql, ctx, system, identifier);
   if (mappedId && accessScope && !rows.some((row) => row.id === mappedId) && allRows.some((row) => row.id === mappedId)) {
@@ -116,7 +138,8 @@ export async function createSourceIdentifierMapping(sql, ctx, { employeeId, sour
     if (!SELF_BINDABLE_SYSTEMS.has(system)) throw forbidden('This source cannot be associated by an employee');
     const verdict = await resolveSourceIdentity(sql, ctx, { sourceSystem: system, externalIdentifier: identifier, documentName });
     const already = verdict.status === 'MAPPED' && verdict.employee?.id === ctx.employeeId;
-    if (!already && !(verdict.status === 'CANDIDATE' && verdict.employee?.id === ctx.employeeId)) {
+    const verdictMatchesTarget = (verdict.status === 'MAPPED' || verdict.status === 'CANDIDATE') && verdict.employee?.id === ctx.employeeId;
+    if (!already && !verdictMatchesTarget) {
       throw forbidden('The document does not unambiguously identify you');
     }
   } else {

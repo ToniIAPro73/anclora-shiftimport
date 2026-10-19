@@ -1410,9 +1410,21 @@ function App() {
 
     }
 
-    const snapshot = targetEmployeeId === selectedEmployeeId
-      ? [...shifts]
-      : await loadRemoteShifts(targetEmployeeId ?? '').catch(() => [] as Shift[]);
+    // Source-identified imports always reread the document employee's
+    // calendar. The dashboard filter is context only; a failed GET must not
+    // turn an unknown snapshot into an empty calendar and produce duplicate writes.
+    let snapshot: Shift[];
+    try {
+      snapshot = importSource?.system && importSource.identifier
+        ? await loadRemoteShifts(targetEmployeeId ?? '')
+        : targetEmployeeId === selectedEmployeeId
+          ? [...shifts]
+          : await loadRemoteShifts(targetEmployeeId ?? '');
+    } catch (error) {
+      console.error('Failed to load import target calendar', error);
+      setAppFeedback({ kind: 'alert', message: t('importModal.targetCalendarLoadFailed') });
+      return false;
+    }
     const normalizedIncoming = newShifts.map(normalizeShift);
     const selfImportCutoff = getOperationalDate();
     const temporalSplit = splitImportByOperationalDate(normalizedIncoming, selfImportCutoff);
