@@ -11,6 +11,7 @@ import {
   evaluateAnnualTarget,
   normalizeCalendarRow,
   resolveDay,
+  resolveProvisionalReviewRows,
 } from '../../src/lib/effective-calendar.js';
 import { getOperationalDate } from './operational-date.js';
 import { employeeBusinessKey, sameDay } from '../../src/lib/company-plan.js';
@@ -442,7 +443,27 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
            OR (effective_state = 'METADATA_ONLY' AND shift_type = 'JT'))
     ORDER BY date ASC, start_time ASC NULLS FIRST, id ASC
   `;
-  const stats = computeEffectiveStats(rows, { from, to, today });
+  const reviewDates = [...new Set(rows.filter((row) => row.effective_state === 'REQUIRES_REVIEW').map((row) => row.date))];
+  const companyNowByDate = {};
+  if (reviewDates.length) {
+    const employee = (await sql`SELECT external_employee_id, name FROM employees WHERE id = ${targetEmployeeId} AND organization_id = ${ctx.organizationId}`)[0];
+    const employeeKey = employee ? employeeBusinessKey({ externalEmployeeId: employee.external_employee_id, name: employee.name }) : null;
+    if (employeeKey) {
+      const revisions = await sql`
+        SELECT revision_number, rows FROM company_plan_revisions
+        WHERE organization_id = ${ctx.organizationId} AND scope_key = 'global' AND reverted_at IS NULL AND coverage_to >= ${from} AND coverage_from <= ${to}
+        ORDER BY revision_number DESC
+      `;
+      for (const date of reviewDates) {
+        const current = revisions.map((revision) => (Array.isArray(revision.rows) ? revision.rows : [])
+          .filter((stored) => stored.k === employeeKey && stored.d === date)
+          .map((stored) => ({ shiftType: stored.t, startTime: stored.s || null, endTime: stored.e || null, date })))
+          .find((entry) => entry.length) ?? null;
+        companyNowByDate[date] = current;
+      }
+    }
+  }
+  const stats = computeEffectiveStats(rows, { from, to, today, companyNowByDate });
   const monthNumber = month === undefined || month === null || month === '' ? null : Number(month);
   if (monthNumber !== null && (!Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) {
     throw badRequest('month is invalid', 'INVALID_MONTH');
@@ -555,12 +576,12 @@ export async function listReconciliationDays(sql, ctx, employeeId, year) {
     const planHistory = planRowsFor(date);
     const companyNow = planHistory[0]?.rows ?? null;
     const companyBefore = planHistory.find((entry, index) => index > 0 && !sameDay(toPlan(entry.rows), toPlan(companyNow ?? [])))?.rows ?? null;
-    // A day awaiting review has no resolved effective state yet: the "effective" side is what the calendar held
-    // locally (the review rows that are NOT the company's plan row); if nothing differs, the review rows themselves.
-    const reviewLabels = isPending ? unwrap(date).filter((row) => normalizeCalendarRow(row).effectiveState === 'REQUIRES_REVIEW').map(label) : [];
-    const sameLabel = (a, b) => a.type === b.type && (a.startTime ?? null) === (b.startTime ?? null) && (a.endTime ?? null) === (b.endTime ?? null);
-    const localOnly = reviewLabels.filter((entry) => !(companyNow ?? []).some((planned) => sameLabel(planned, entry)));
-    const effectiveRows = isPending ? (localOnly.length ? localOnly : reviewLabels) : provenance.effective.map(label);
+    // Keep reconciliation and statistics on the same selector. Ambiguous days
+    // intentionally show no single current baseline here or in accounting.
+    const provisional = isPending ? resolveProvisionalReviewRows(unwrap(date), companyNow ? toPlan(companyNow) : null) : null;
+    const effectiveRows = isPending
+      ? (provisional?.counted ? provisional.rows.map(label) : [])
+      : provenance.effective.map(label);
     let reasonCode = 'PENDING_REVIEW';
     if (companyNow && effectiveRows.length && !sameDay(toPlan(companyNow), toPlan(effectiveRows))) reasonCode = 'EFFECTIVE_DIFFERS_FROM_PLAN';
     else if (companyBefore) reasonCode = 'PLAN_CHANGED';

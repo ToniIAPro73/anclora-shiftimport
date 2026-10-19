@@ -1,6 +1,6 @@
 # Effective Calendar, Annual Targets and Provenance Contract
 
-**Estado**: vigente · 2026-10-16 · migración `0041_effective_calendar_and_annual_targets.sql`
+**Estado**: vigente · actualizado 2026-10-19 · migración `0041_effective_calendar_and_annual_targets.sql`
 
 Sustituye las antiguas estadísticas paralelas «Propios» / «Empresa» (que sumaban según `origin`) por
 un cálculo único sobre el **calendario efectivo**. `origin` sigue existiendo como procedencia; ya no
@@ -44,7 +44,7 @@ Guard: `src/lib/visible-model-copy.test.ts` fails if an internal term appears in
 | `provenance` | `COMPANY_IMPORT`, `MANUAL_ADMIN_CHANGE`, `EMPLOYEE_REQUEST`, `SCHEDULE_PUBLICATION`, `MIGRATION`, `SYSTEM` | cómo entró el hecho |
 | `legacy_origin` | `PDF`, `MAN` | procedencia original recuperada de GroundSync |
 | `duty_role` | `shift_lead` | función (antes `JT`), nunca horas |
-| `effective_state` | `EFFECTIVE`, `SUPERSEDED`, `ABSORBED`, `METADATA_ONLY`, `REQUIRES_REVIEW` | pertenece o no al calendario efectivo |
+| `effective_state` | `EFFECTIVE`, `SUPERSEDED`, `ABSORBED`, `METADATA_ONLY`, `REQUIRES_REVIEW` | estado de resolución; `REQUIRES_REVIEW` puede tener un baseline provisional contable sin dejar de ser incidencia |
 | `plan_revision` | entero ≥ 1 | revisión del plan de empresa que representa |
 | `superseded_at`, `change_id` | | trazabilidad |
 
@@ -62,9 +62,15 @@ Reutilizados sin duplicar: `change_requests`, `approval_requests`, `organization
 
 ## 2. Calendario efectivo y tipos
 
-Solo cuentan las filas `EFFECTIVE`. Tipos canónicos: `Regular` y `Extras` (computan trabajo, con
-intervalo), `Ausencia` (intervalo, no computa), `Libre`, `Vacaciones`, `Baja` (día completo,
-exclusivos, no computan).
+Las filas `EFFECTIVE` cuentan como definitivas. Un día pendiente de revisión sigue siendo
+`REQUIRES_REVIEW` y aparece en Diferencias. Si el calendario actual puede determinarse de forma
+inequívoca mediante el conjunto `EFFECTIVE` vigente o la selección local que la reconciliación
+muestra frente al plan de empresa actual, ese único conjunto cuenta provisionalmente. Las filas
+alternativas no se suman. Si no se puede distinguir el estado actual, el día permanece sin computar.
+Al resolverlo, el resultado elegido pasa a ser definitivo y sustituye el cómputo provisional.
+
+Tipos canónicos: `Regular` y `Extras` (computan trabajo, con intervalo), `Ausencia` (intervalo, no
+computa), `Libre`, `Vacaciones`, `Baja` (día completo, exclusivos, no computan).
 
 Intervalos `[inicio, fin)`; un fin ≤ inicio cruza medianoche y se atribuye al día de inicio. El
 solape con el día siguiente también se comprueba.
@@ -118,10 +124,13 @@ una aprobación.
 
 ## 6. Estadísticas
 
-Calculadas únicamente sobre el calendario efectivo, en minutos enteros
+Calculadas sobre el calendario efectivo y, cuando es inequívoco, sobre el único baseline provisional
+de días pendientes, en minutos enteros
 (`src/lib/effective-calendar.js`, compartido por API y cliente):
 
 - Mes y año: horas efectivas, Regular, Extras, Ausencias, días trabajados, Libre, Vacaciones, Baja.
+- Las métricas identifican cuántos días pendientes y minutos están incluidos provisionalmente, y
+  cuántos días pendientes no se computan por ambigüedad o conflicto.
 - **Realizado** (`date < hoy operativo`) separado de **planificado futuro** (`date ≥ hoy`); lo
   futuro nunca se etiqueta como efectivo.
 - Contrato por empleado/año: `UNCONFIGURED`, `BELOW_MINIMUM`, `WITHIN_RANGE`, `ABOVE_MAXIMUM`; margen
@@ -138,8 +147,9 @@ API: `GET|PUT /api/calendar/annual-targets`, `GET /api/calendar/stats`,
 `scripts/reconciliation/reconcile-employee-calendar.mjs` (dry-run por defecto, un empleado, un año):
 contrasta calendario actual de la empresa (Excel), filas de ShiftImport y GroundSync (solo lectura,
 recupera `PDF`/`MAN`). Confianza `HIGH` (se aplica), `MEDIUM` (requiere regla) y `LOW`
-(`REQUIRES_REVIEW`). Solo se aplica `HIGH`; el resto se marca `REQUIRES_REVIEW` para no contar horas
-sin decisión. `--apply` exige copia verificada, una sola transacción y demuestra que ningún otro
+(`REQUIRES_REVIEW`). Solo se aplica `HIGH`; el resto se marca `REQUIRES_REVIEW` y nunca se decide
+automáticamente. Un baseline actual inequívoco puede contarse provisionalmente hasta que el usuario
+resuelva la diferencia. `--apply` exige copia verificada, una sola transacción y demuestra que ningún otro
 empleado cambió; `--rollback` restaura el estado previo. Los días futuros que solo existen en el
 Excel no se escriben desde aquí: pertenecen al flujo de importación/publicación.
 

@@ -143,6 +143,65 @@ describe('StatisticsModal', () => {
     spy.mockRestore();
   });
 
+  it('discloses provisional review days in month, year and annual target', async () => {
+    const remote = await import('../../lib/remote');
+    const bucket = {
+      effectiveMinutes: 480, regularMinutes: 480, extrasMinutes: 0, otherWorkMinutes: 0, unclassifiedWorkMinutes: 0,
+      absenceMinutes: 0, dutyMinutes: 0, dutyDays: 0, workedDays: 1, freeDays: 0, vacationDays: 0, sickLeaveDays: 0,
+    };
+    const spy = vi.spyOn(remote, 'loadCalendarStats').mockResolvedValue({
+      employeeId: 'e1', year: 2026, today: '2026-10-16', calendarRows: 50,
+      total: bucket, realized: bucket, planned: bucket, unresolvedDays: 3,
+      totalReviewDays: 3, provisionalReviewDays: 3, provisionalReviewMinutes: 1440, unresolvedUncountedDays: 0,
+      realizedProvisionalReviewDays: 2, plannedProvisionalReviewDays: 1,
+      realizedProvisionalReviewMinutes: 960, plannedProvisionalReviewMinutes: 480,
+      monthStats: {
+        month: 10, realized: bucket, planned: bucket, totalReviewDays: 2, provisionalReviewDays: 2,
+        provisionalReviewMinutes: 960, unresolvedUncountedDays: 0, realizedProvisionalReviewDays: 2,
+        plannedProvisionalReviewDays: 0, realizedProvisionalReviewMinutes: 960, plannedProvisionalReviewMinutes: 0,
+      },
+      target: null, contract: { status: 'UNCONFIGURED', effectiveMinutes: 480 },
+      projection: { realizedMinutes: 480, plannedMinutes: 480, projectedMinutes: 960 },
+    } as never);
+    renderModal({ employeeId: 'e1', month: 9, monthLabel: 'Octubre 2026' });
+    await waitFor(() => expect(screen.getByTestId('eff-month-provisional-notice')).toHaveTextContent('Incluye 2 días pendientes'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Año 2026' }));
+    expect(screen.getByTestId('eff-year-provisional-notice')).toHaveTextContent('Incluye 3 días pendientes');
+    fireEvent.click(screen.getByRole('tab', { name: 'Objetivo anual' }));
+    expect(screen.getByTestId('eff-contract-provisional-notice')).toHaveTextContent('Incluye 3 días pendientes');
+    spy.mockRestore();
+  });
+
+  it('reloads definitive statistics when reconciliation refreshKey changes', async () => {
+    const remote = await import('../../lib/remote');
+    const bucket = (minutes: number) => ({
+      effectiveMinutes: minutes, regularMinutes: minutes, extrasMinutes: 0, otherWorkMinutes: 0, unclassifiedWorkMinutes: 0,
+      absenceMinutes: 0, dutyMinutes: 0, dutyDays: 0, workedDays: 1, freeDays: 0, vacationDays: 0, sickLeaveDays: 0,
+    });
+    const payload = (minutes: number, pendingDays: number) => ({
+      employeeId: 'e1', year: 2026, today: '2026-10-16', calendarRows: 50,
+      total: bucket(minutes), realized: bucket(minutes), planned: bucket(0), unresolvedDays: pendingDays,
+      totalReviewDays: pendingDays, provisionalReviewDays: pendingDays, provisionalReviewMinutes: pendingDays * 60,
+      unresolvedUncountedDays: 0, realizedProvisionalReviewDays: pendingDays, plannedProvisionalReviewDays: 0,
+      realizedProvisionalReviewMinutes: pendingDays * 60, plannedProvisionalReviewMinutes: 0,
+      monthStats: { month: 10, realized: bucket(minutes), planned: bucket(0), totalReviewDays: pendingDays, provisionalReviewDays: pendingDays, provisionalReviewMinutes: pendingDays * 60, unresolvedUncountedDays: 0, realizedProvisionalReviewDays: pendingDays, plannedProvisionalReviewDays: 0, realizedProvisionalReviewMinutes: pendingDays * 60, plannedProvisionalReviewMinutes: 0 },
+      target: null, contract: { status: 'UNCONFIGURED', effectiveMinutes: minutes },
+      projection: { realizedMinutes: minutes, plannedMinutes: 0, projectedMinutes: minutes },
+    });
+    const spy = vi.spyOn(remote, 'loadCalendarStats').mockResolvedValueOnce(payload(480, 1) as never).mockResolvedValueOnce(payload(360, 0) as never);
+    const { rerender } = renderModal({ employeeId: 'e1', month: 9, monthLabel: 'Octubre 2026', refreshKey: 0 });
+    await waitFor(() => expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('8 h'));
+    rerender(
+      <I18nProvider>
+        <StatisticsModal isOpen onClose={vi.fn()} employeeId="e1" year={2026} month={9} monthLabel="Octubre 2026" today="2026-10-16" target={null} canConfigureTarget showContract refreshKey={1} />
+      </I18nProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('6 h'));
+    expect(screen.queryByTestId('eff-month-provisional-notice')).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+  });
+
   it('shows a hero metric and a color-tokenised metric grid (calendar shift tokens, no hardcoded hex)', () => {
     const { container } = renderModal();
     expect(container.querySelector('.hero-metric')).not.toBeNull();

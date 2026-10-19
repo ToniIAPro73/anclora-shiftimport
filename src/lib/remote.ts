@@ -1467,7 +1467,15 @@ export interface RemoteCalendarStats {
   realized: StatsBucket;
   planned: StatsBucket;
   unresolvedDays: number;
-  monthStats: { month: number; realized: StatsBucket; planned: StatsBucket } | null;
+  totalReviewDays: number;
+  provisionalReviewDays: number;
+  provisionalReviewMinutes: number;
+  unresolvedUncountedDays: number;
+  realizedProvisionalReviewDays: number;
+  plannedProvisionalReviewDays: number;
+  realizedProvisionalReviewMinutes: number;
+  plannedProvisionalReviewMinutes: number;
+  monthStats: { month: number; realized: StatsBucket; planned: StatsBucket; totalReviewDays: number; provisionalReviewDays: number; provisionalReviewMinutes: number; unresolvedUncountedDays: number; realizedProvisionalReviewDays: number; plannedProvisionalReviewDays: number; realizedProvisionalReviewMinutes: number; plannedProvisionalReviewMinutes: number } | null;
   target: RemoteAnnualTarget | null;
   contract: ContractEvaluation;
   projection: { realizedMinutes: number; plannedMinutes: number; projectedMinutes: number };

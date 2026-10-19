@@ -231,6 +231,104 @@ describe('company plan revisions', () => {
     expect(buildDayProvenance(rows).requiresReview).toBe(true);
   });
 
+  it('counts a valid EFFECTIVE baseline once while retaining its review issue', () => {
+    const rows = [
+      row('2026-01-14', 'Regular', '06:00', '11:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-01-14', 'Extras', '11:00', '13:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-01-14', 'Regular', '06:00', '11:00', { effectiveState: 'REQUIRES_REVIEW' }),
+    ];
+    const day = resolveDay('2026-01-14', rows);
+    const result = stats(rows, { today: '2026-01-15' });
+    expect(day).toMatchObject({ status: 'REQUIRES_REVIEW', requiresReview: true, countedProvisionally: true, provisionalReason: 'CURRENT_EFFECTIVE' });
+    expect(result.realized.effectiveMinutes).toBe(420);
+    expect(result.realized.regularMinutes).toBe(300);
+    expect(result.realized.extrasMinutes).toBe(120);
+    expect(result.byType).toEqual({ Regular: 300, Extras: 120 });
+    expect(result.provisionalReviewDays).toBe(1);
+    expect(result.unresolvedDays).toBe(1);
+  });
+
+  it('uses only the local current candidate distinguished from the current company plan', () => {
+    const rows = [
+      row('2026-02-01', 'Regular', '17:00', '01:00', { layer: 'CHANGE', effectiveState: 'REQUIRES_REVIEW' }),
+      row('2026-02-01', 'Regular', '16:00', '00:00', { layer: 'COMPANY_PLAN', effectiveState: 'REQUIRES_REVIEW' }),
+    ];
+    const companyNow = [row('2026-02-01', 'Regular', '16:00', '00:00')];
+    const result = computeEffectiveStats(rows, { today: '2026-02-02', companyNowByDate: { '2026-02-01': companyNow } });
+    expect(result.total.effectiveMinutes).toBe(480);
+    expect(result.total.regularMinutes).toBe(480);
+    expect(result.provisionalReviewMinutes).toBe(480);
+    expect(result.days[0]).toMatchObject({ status: 'REQUIRES_REVIEW', countedProvisionally: true, provisionalReason: 'CURRENT_LOCAL' });
+  });
+
+  it('fails closed when pending alternatives cannot be distinguished', () => {
+    const rows = [
+      row('2026-03-03', 'Regular', '08:00', '16:00', { effectiveState: 'REQUIRES_REVIEW' }),
+      row('2026-03-03', 'Regular', '09:00', '15:00', { effectiveState: 'REQUIRES_REVIEW' }),
+    ];
+    const result = stats(rows, { today: '2026-03-04' });
+    expect(result.total.effectiveMinutes).toBe(0);
+    expect(result.unresolvedUncountedDays).toBe(1);
+    expect(result.days[0]).toMatchObject({ status: 'REQUIRES_REVIEW', requiresReview: true, countedProvisionally: false, provisionalReason: 'AMBIGUOUS' });
+  });
+
+  it('keeps future pending baseline in planned and exposes its bucket metadata', () => {
+    const rows = [row('2026-11-05', 'Regular', '09:00', '17:00', { effectiveState: 'EFFECTIVE' }), row('2026-11-05', 'Regular', '10:00', '18:00', { effectiveState: 'REQUIRES_REVIEW' })];
+    const result = stats(rows, { today: '2026-10-19' });
+    expect(result.realized.effectiveMinutes).toBe(0);
+    expect(result.planned.effectiveMinutes).toBe(480);
+    expect(result.realizedProvisionalReviewDays).toBe(0);
+    expect(result.plannedProvisionalReviewDays).toBe(1);
+    expect(result.plannedProvisionalReviewMinutes).toBe(480);
+  });
+
+  it('keeps JT as duty metadata and never adds it as a second provisional shift', () => {
+    const rows = [
+      row('2026-05-01', 'Regular', '08:00', '16:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-05-01', 'Regular', '08:00', '16:00', { effectiveState: 'REQUIRES_REVIEW' }),
+      row('2026-05-01', 'JT', '08:00', '16:00', { effectiveState: 'METADATA_ONLY' }),
+    ];
+    const result = stats(rows, { today: '2026-05-02' });
+    expect(result.total.effectiveMinutes).toBe(480);
+    expect(result.total.regularMinutes).toBe(480);
+    expect(result.total.unclassifiedWorkMinutes).toBe(0);
+    expect(result.days[0].legacyDutyRows).toBe(1);
+  });
+
+  it('counts pending full-day type without adding the alternative type', () => {
+    const rows = [row('2026-04-01', 'Vacaciones', null, null, { effectiveState: 'EFFECTIVE' }), row('2026-04-01', 'Libre', null, null, { effectiveState: 'REQUIRES_REVIEW' })];
+    const result = stats(rows, { today: '2026-04-02' });
+    expect(result.total.vacationDays).toBe(1);
+    expect(result.total.freeDays).toBe(0);
+    const resolved = stats([row('2026-04-01', 'Libre', null, null, { effectiveState: 'EFFECTIVE' })], { today: '2026-04-02' });
+    expect(resolved.total.vacationDays).toBe(0);
+    expect(resolved.total.freeDays).toBe(1);
+    expect(resolved.total.effectiveMinutes - result.total.effectiveMinutes).toBe(0);
+  });
+
+  it('switching a provisional Extras baseline to Libre changes work by exactly the alternative delta', () => {
+    const pending = stats([
+      row('2026-04-02', 'Extras', '21:00', '02:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-04-02', 'Libre', null, null, { effectiveState: 'REQUIRES_REVIEW' }),
+    ], { today: '2026-04-03' });
+    const resolved = stats([row('2026-04-02', 'Libre', null, null, { effectiveState: 'EFFECTIVE' })], { today: '2026-04-03' });
+    expect(pending.total).toMatchObject({ extrasMinutes: 300, workedDays: 1, freeDays: 0 });
+    expect(resolved.total).toMatchObject({ extrasMinutes: 0, workedDays: 0, freeDays: 1 });
+    expect(resolved.total.effectiveMinutes - pending.total.effectiveMinutes).toBe(-300);
+  });
+
+  it('does not account a structural conflict just because the day also has a review row', () => {
+    const rows = [
+      row('2026-04-03', 'Regular', '08:00', '14:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-04-03', 'Extras', '13:00', '16:00', { effectiveState: 'EFFECTIVE' }),
+      row('2026-04-03', 'Libre', null, null, { effectiveState: 'REQUIRES_REVIEW' }),
+    ];
+    const result = stats(rows, { today: '2026-04-04' });
+    expect(result.total.effectiveMinutes).toBe(0);
+    expect(result.unresolvedUncountedDays).toBe(1);
+    expect(result.unresolved[0].status).toBe('REQUIRES_REVIEW');
+  });
+
   it('flags changed days relative to the company plan', () => {
     const rows = [
       plan('Regular', '12:00', '20:00', { planRevision: 1 }),

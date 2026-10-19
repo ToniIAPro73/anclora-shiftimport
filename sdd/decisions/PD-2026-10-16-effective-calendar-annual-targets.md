@@ -10,8 +10,10 @@
 
 - `D-EC-01`: las estadísticas se calculan solo sobre el **calendario efectivo**; `origin` pasa a ser
   procedencia, no criterio de cómputo. Se eliminan «Propios» / «Empresa» como acumuladores.
-- `D-EC-02`: el plan de empresa tiene revisiones; nada se borra. Los estados `SUPERSEDED`,
-  `ABSORBED`, `METADATA_ONLY` y `REQUIRES_REVIEW` no computan.
+- `D-EC-02`: el plan de empresa tiene revisiones; nada se borra. `SUPERSEDED`, `ABSORBED` y
+  `METADATA_ONLY` no computan. `REQUIRES_REVIEW` conserva su estado de incidencia; si su baseline
+  actual se determina inequívocamente, ese único estado cuenta provisionalmente hasta resolverlo.
+  Las alternativas nunca se suman y la ambigüedad se deja sin computar.
 - `D-EC-03`: `JT` (Jefe de Turno) es una función (`duty_role=shift_lead`), no trabajo adicional
   (`JT_COUNTS_AS_ADDITIONAL_WORK=false`).
 - `D-EC-04`: el objetivo anual es por empleado y por año, en minutos, sin copiar años; el margen se
@@ -20,6 +22,9 @@
   (`self_change`); no es una autoaprobación y la política de `approval_requests` no cambia.
 - `D-EC-06`: una sola implementación (`src/lib/effective-calendar.js`) para API y cliente.
 - `D-EC-07`: solo se aplican reconciliaciones de confianza HIGH; el resto queda `REQUIRES_REVIEW`.
+- `D-EC-08` (2026-10-19): el calendario efectivo compartido por API y cliente conserva la incidencia
+  y contabiliza provisionalmente solo el baseline actual inequívoco. La reconciliación y estadísticas
+  comparten el selector de estado; sin distinción segura, no se computa.
 
 ## Alternativas descartadas
 

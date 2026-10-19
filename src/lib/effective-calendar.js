@@ -3,11 +3,10 @@
  *
  *   COMPANY PLAN  ->  CHANGES  ->  EFFECTIVE CALENDAR  ->  WORKTIME  ->  ANNUAL TARGET
  *
- * Statistics are computed ONLY from the effective calendar: rows whose
- * `effectiveState` is EFFECTIVE. Superseded/absorbed plan revisions, legacy
- * `JT` summaries and rows awaiting reconciliation stay in the database for
- * audit but never contribute minutes. `origin` is provenance, never a
- * computation criterion.
+ * Statistics are computed from the effective calendar. A pending day remains
+ * unresolved, but its single deterministic current baseline may be counted
+ * provisionally. Alternatives are never combined; ambiguous days fail closed.
+ * `origin` is provenance, never a computation criterion.
  *
  * All arithmetic is done in integer minutes. Intervals are half-open
  * [start, end); an end that is <= start crosses midnight.
@@ -144,16 +143,44 @@ const overlapMinutes = (a, b) => Math.max(0, Math.min(a.end, b.end) - Math.max(a
 const sumMinutes = (intervals) => intervals.reduce((total, i) => total + (i.end - i.start), 0);
 
 /**
- * Resolves one calendar day from its rows. Only EFFECTIVE rows participate.
+ * Resolves one calendar day from its rows. EFFECTIVE rows and a deterministic
+ * provisional baseline may participate while the day remains under review.
  * A day carrying a blocking inconsistency contributes NO minutes (never an
  * inflated or guessed total) and is reported through `issues`.
  */
-export function resolveDay(date, inputRows) {
+export function resolveProvisionalReviewRows(inputRows, companyNow = null) {
   const rows = inputRows.map(normalizeCalendarRow);
+  const businessRows = (items) => items.filter((row) => classifyKind(row).kind !== 'LEGACY_DUTY_ROLE');
+  const effective = businessRows(rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.EFFECTIVE));
+  const valid = (selected) => {
+    if (!selected.length) return false;
+    const checked = resolveDay(selected[0].date, selected.map((row) => ({ ...row, effectiveState: EFFECTIVE_STATES.EFFECTIVE })));
+    return !checked.issues.some((issue) => issue.blocking);
+  };
+  if (valid(effective)) return { counted: true, reason: 'CURRENT_EFFECTIVE', rows: effective };
+
+  const review = businessRows(rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW));
+  if (!review.length || !Array.isArray(companyNow)) return { counted: false, reason: 'AMBIGUOUS', rows: [] };
+  const label = (row) => `${classifyKind(row).type}|${row.startTime ?? ''}|${row.endTime ?? ''}`;
+  const companyLabels = new Set(companyNow.map((row) => label(normalizeCalendarRow(row))));
+  const local = review.filter((row) => !companyLabels.has(label(row)));
+  if (!valid(local)) return { counted: false, reason: 'AMBIGUOUS', rows: [] };
+  return { counted: true, reason: 'CURRENT_LOCAL', rows: local };
+}
+
+export function resolveDay(date, inputRows, { companyNow = null } = {}) {
+  const allRows = inputRows.map(normalizeCalendarRow);
+  const reviewRows = allRows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW);
+  const selection = reviewRows.length
+    ? resolveProvisionalReviewRows(allRows, companyNow)
+    : { counted: false, reason: null, rows: [] };
+  const rows = allRows.filter((row) => row.effectiveState !== EFFECTIVE_STATES.REQUIRES_REVIEW);
+  if (selection.counted) rows.push(...selection.rows.map((row) => ({ ...row, effectiveState: EFFECTIVE_STATES.EFFECTIVE })));
   const issues = [];
   const result = {
     date,
     status: 'EMPTY',
+    accountingStatus: 'EMPTY',
     fullDayType: null,
     workIntervals: [],
     absenceIntervals: [],
@@ -161,14 +188,17 @@ export function resolveDay(date, inputRows) {
     byType: {},
     issues,
     requiresReview: false,
+    countedProvisionally: false,
+    provisionalReason: null,
     legacyDutyRows: 0,
     dutyRole: null,
     duplicateRows: 0,
   };
 
-  const reviewRows = rows.filter((row) => row.effectiveState === EFFECTIVE_STATES.REQUIRES_REVIEW);
   if (reviewRows.length) {
     result.requiresReview = true;
+    result.countedProvisionally = selection.counted;
+    result.provisionalReason = selection.reason;
     issues.push({ code: 'REQUIRES_REVIEW', blocking: true, rows: reviewRows.length });
   }
 
@@ -223,12 +253,17 @@ export function resolveDay(date, inputRows) {
   }
 
   result.fullDayType = fullDays[0]?.type ?? null;
-  const blocking = issues.some((issue) => issue.blocking);
+  const blocking = issues.some((issue) => issue.blocking && issue.code !== 'REQUIRES_REVIEW');
   result.workIntervals = work.map((entry) => ({ ...entry.interval, type: entry.type }));
   result.absenceIntervals = absences.map((entry) => ({ ...entry.interval, type: 'Ausencia' }));
 
-  if (blocking) {
+  if (blocking && !result.countedProvisionally) {
     result.status = result.requiresReview ? 'REQUIRES_REVIEW' : 'CONFLICT';
+    return result;
+  }
+  if (blocking && result.countedProvisionally) {
+    // The selected baseline itself must remain internally valid.
+    result.status = 'REQUIRES_REVIEW';
     return result;
   }
 
@@ -264,6 +299,8 @@ export function resolveDay(date, inputRows) {
   else if (absences.length) result.status = 'ABSENCE_ONLY';
   else result.status = result.legacyDutyRows ? 'DUTY_ONLY' : 'EMPTY';
   if (result.status === 'DUTY_ONLY') issues.push({ code: 'DUTY_ROLE_WITHOUT_WORK', blocking: false });
+  result.accountingStatus = result.status;
+  if (result.requiresReview) result.status = 'REQUIRES_REVIEW';
   return result;
 }
 
@@ -303,17 +340,18 @@ function addDay(bucket, day) {
   bucket.dutyMinutes += day.minutes.duty;
   if (day.minutes.duty > 0) bucket.dutyDays += 1;
   if (day.minutes.work > 0) bucket.workedDays += 1;
-  if (day.status === 'LIBRE') bucket.freeDays += 1;
-  if (day.status === 'VACACIONES') bucket.vacationDays += 1;
-  if (day.status === 'BAJA') bucket.sickLeaveDays += 1;
+  const accountingStatus = day.accountingStatus ?? day.status;
+  if (accountingStatus === 'LIBRE') bucket.freeDays += 1;
+  if (accountingStatus === 'VACACIONES') bucket.vacationDays += 1;
+  if (accountingStatus === 'BAJA') bucket.sickLeaveDays += 1;
 }
 
 /**
  * Effective statistics for a date range. `realized` covers dates before
  * `today`; `planned` covers today onwards. Future hours are never reported
- * as realized. Unresolved days are listed, never silently summed.
+ * as realized. Pending days remain listed even when counted provisionally.
  */
-export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
+export function computeEffectiveStats(inputRows, { from, to, today, companyNowByDate = {} } = {}) {
   const byDate = new Map();
   let calendarRows = 0;
   for (const row of inputRows) {
@@ -325,24 +363,50 @@ export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
     if (!byDate.has(normalized.date)) byDate.set(normalized.date, []);
     byDate.get(normalized.date).push(normalized);
   }
-  const days = [...byDate.entries()].map(([date, rows]) => resolveDay(date, rows));
+  const days = [...byDate.entries()].map(([date, rows]) => resolveDay(date, rows, { companyNow: companyNowByDate[date] ?? null }));
   const total = emptyBucket();
   const realized = emptyBucket();
   const planned = emptyBucket();
   const unresolved = [];
   let legacyDutyRows = 0;
   let duplicateRows = 0;
+  let provisionalReviewDays = 0;
+  let provisionalReviewMinutes = 0;
+  let unresolvedUncountedDays = 0;
+  let realizedProvisionalReviewDays = 0;
+  let plannedProvisionalReviewDays = 0;
+  let realizedProvisionalReviewMinutes = 0;
+  let plannedProvisionalReviewMinutes = 0;
   for (const day of days) {
     legacyDutyRows += day.legacyDutyRows;
     duplicateRows += day.duplicateRows;
-    if (day.status === 'CONFLICT' || day.status === 'REQUIRES_REVIEW') {
+    if (day.status === 'CONFLICT') {
       unresolved.push({ date: day.date, status: day.status, issues: day.issues.filter((i) => i.blocking).map((i) => i.code) });
+      unresolvedUncountedDays += 1;
+      continue;
+    }
+    if (day.status === 'REQUIRES_REVIEW') {
+      unresolved.push({ date: day.date, status: day.status, issues: day.issues.filter((i) => i.blocking).map((i) => i.code) });
+      if (!day.countedProvisionally) { unresolvedUncountedDays += 1; continue; }
+      provisionalReviewDays += 1;
+      provisionalReviewMinutes += day.minutes.work;
+      const bucket = today ? (day.date < today ? realized : planned) : total;
+      if (today && day.date < today) {
+        realizedProvisionalReviewDays += 1;
+        realizedProvisionalReviewMinutes += day.minutes.work;
+      } else if (today) {
+        plannedProvisionalReviewDays += 1;
+        plannedProvisionalReviewMinutes += day.minutes.work;
+      }
+      addDay(total, day);
+      if (today) addDay(bucket, day);
       continue;
     }
     if (day.status === 'DUTY_ONLY') {
       // A JT row without usable times is the only trace of that day: never
       // invent hours from it, never hide it either.
       unresolved.push({ date: day.date, status: 'REQUIRES_REVIEW', issues: ['DUTY_ROLE_WITHOUT_WORK'] });
+      unresolvedUncountedDays += 1;
       continue;
     }
     addDay(total, day);
@@ -352,7 +416,7 @@ export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
   for (const conflict of spill) unresolved.push({ date: conflict.date, status: 'CONFLICT', issues: [conflict.code] });
   const byType = {};
   for (const day of days) {
-    if (day.status === 'CONFLICT' || day.status === 'REQUIRES_REVIEW') continue;
+    if (day.status === 'CONFLICT' || (day.status === 'REQUIRES_REVIEW' && !day.countedProvisionally)) continue;
     for (const [type, minutes] of Object.entries(day.byType)) byType[type] = (byType[type] ?? 0) + minutes;
   }
   return {
@@ -362,6 +426,14 @@ export function computeEffectiveStats(inputRows, { from, to, today } = {}) {
     planned: today ? planned : emptyBucket(),
     byType,
     unresolvedDays: unresolved.length,
+    totalReviewDays: days.filter((day) => day.requiresReview).length,
+    provisionalReviewDays,
+    provisionalReviewMinutes,
+    unresolvedUncountedDays,
+    realizedProvisionalReviewDays,
+    plannedProvisionalReviewDays,
+    realizedProvisionalReviewMinutes,
+    plannedProvisionalReviewMinutes,
     unresolved: unresolved.sort((a, b) => a.date.localeCompare(b.date)),
     legacyDutyRows,
     duplicateRows,

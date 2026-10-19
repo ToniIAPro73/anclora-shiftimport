@@ -4,6 +4,7 @@
 
 .stats-modal__body { min-height: 0; }
 .stats-modal__panel { display: grid; gap: 14px; animation: modal-panel-in 0.18s ease both; }
+.stats-modal__provisional { margin: -4px 0 0; color: var(--text-muted); font-size: 0.82rem; line-height: 1.45; }
 @keyframes modal-panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .stats-modal__panel { animation: none; } }
 

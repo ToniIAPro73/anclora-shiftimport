@@ -23,8 +23,8 @@ type Tab = 'month' | 'year' | 'target';
 type Translate = (key: string, params?: Record<string, string | number>) => string;
 
 interface StatsData {
-  month: { realized: StatsBucket; planned: StatsBucket };
-  year: { realized: StatsBucket; planned: StatsBucket };
+  month: { realized: StatsBucket; planned: StatsBucket; realizedProvisionalReviewDays: number; plannedProvisionalReviewDays: number };
+  year: { realized: StatsBucket; planned: StatsBucket; provisionalReviewDays: number };
   calendarRows: number;
   contract: ContractEvaluation;
 }
@@ -53,7 +53,7 @@ interface StatisticsModalProps {
 const ICON = 18;
 
 function PeriodPanel({
-  heading, contextLabel, primary, primaryLabel, workedDaysLabel, planned, noData, t, locale, testId,
+  heading, contextLabel, primary, primaryLabel, workedDaysLabel, planned, provisionalReviewDays = 0, noData, t, locale, testId,
 }: {
   heading: string;
   contextLabel: string;
@@ -61,6 +61,7 @@ function PeriodPanel({
   primaryLabel: string;
   workedDaysLabel: string;
   planned?: { bucket: StatsBucket; label: string };
+  provisionalReviewDays?: number;
   noData: boolean;
   t: Translate;
   locale: string;
@@ -88,6 +89,7 @@ function PeriodPanel({
         context={contextLabel}
         valueTestId={`${testId}-effective`}
       />
+      {provisionalReviewDays > 0 && <p className="stats-modal__provisional" role="note" data-testid={`${testId}-provisional-notice`}>{t('statsModal.provisionalNotice', { count: provisionalReviewDays })}</p>}
       <div className="metric-grid">
         <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.regular')} value={hours(primary.regularMinutes)} style={shiftAccentStyle('Regular')} testId={`${testId}-regular`} />
         <MetricCard icon={<Star size={ICON} />} label={t('effectiveStats.extras')} value={hours(primary.extrasMinutes)} style={shiftAccentStyle('Extras')} testId={`${testId}-extras`} />
@@ -109,12 +111,13 @@ function PeriodPanel({
 }
 
 function TargetPanel({
-  year, target, evaluation, plannedMinutes, canConfigure, onConfigure, t, locale,
+  year, target, evaluation, plannedMinutes, provisionalReviewDays = 0, canConfigure, onConfigure, t, locale,
 }: {
   year: number;
   target: AnnualTargetValue | null;
   evaluation: ContractEvaluation;
   plannedMinutes: number;
+  provisionalReviewDays?: number;
   canConfigure: boolean;
   onConfigure?: () => void;
   t: Translate;
@@ -136,6 +139,7 @@ function TargetPanel({
           <span className="hero-metric__label">{heading}</span>
           <strong className="target-hero__value" data-testid="eff-contract-unconfigured">{t('statsModal.targetUnconfigured')}</strong>
           <p className="target-hero__hint">{t('statsModal.configureHint')}</p>
+          {provisionalReviewDays > 0 && <p className="stats-modal__provisional" role="note" data-testid="eff-contract-provisional-notice">{t('statsModal.provisionalNotice', { count: provisionalReviewDays })}</p>}
           {configureButton(false, t('statsModal.configureTarget'), 'eff-contract-configure')}
         </div>
       </section>
@@ -182,6 +186,7 @@ function TargetPanel({
         context={range}
         valueTestId="eff-contract-effective"
       />
+      {provisionalReviewDays > 0 && <p className="stats-modal__provisional" role="note" data-testid="eff-contract-provisional-notice">{t('statsModal.provisionalNotice', { count: provisionalReviewDays })}</p>}
       <div
         className="eff-progress"
         role="progressbar"
@@ -255,8 +260,8 @@ export function StatisticsModal({
     const monthStats = computeEffectiveStats(localMonthShifts ?? [], { from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today });
     const yearStats = computeEffectiveStats(localYearShifts ?? [], { from: `${year}-01-01`, to: `${year}-12-31`, today });
     return {
-      month: { realized: monthStats.realized, planned: monthStats.planned },
-      year: { realized: yearStats.realized, planned: yearStats.planned },
+      month: { realized: monthStats.realized, planned: monthStats.planned, realizedProvisionalReviewDays: monthStats.realizedProvisionalReviewDays, plannedProvisionalReviewDays: monthStats.plannedProvisionalReviewDays },
+      year: { realized: yearStats.realized, planned: yearStats.planned, provisionalReviewDays: yearStats.provisionalReviewDays },
       calendarRows: yearStats.calendarRows,
       contract: evaluateAnnualTarget(yearStats.realized.effectiveMinutes, target, { calendarRows: yearStats.calendarRows }),
     };
@@ -266,8 +271,8 @@ export function StatisticsModal({
     if (!employeeId) return local;
     if (!remote || remote.year !== year || !remote.monthStats) return null;
     return {
-      month: { realized: remote.monthStats.realized, planned: remote.monthStats.planned },
-      year: { realized: remote.realized, planned: remote.planned },
+      month: { realized: remote.monthStats.realized, planned: remote.monthStats.planned, realizedProvisionalReviewDays: remote.monthStats.realizedProvisionalReviewDays, plannedProvisionalReviewDays: remote.monthStats.plannedProvisionalReviewDays },
+      year: { realized: remote.realized, planned: remote.planned, provisionalReviewDays: remote.provisionalReviewDays },
       calendarRows: remote.calendarRows,
       contract: remote.contract,
     };
@@ -331,6 +336,7 @@ export function StatisticsModal({
               planned={monthRelation === 'CURRENT' && statsBucketHasData(data.month.planned)
                 ? { bucket: data.month.planned, label: t('statsModal.plannedMonth') }
                 : undefined}
+              provisionalReviewDays={monthRelation === 'PAST' ? data.month.realizedProvisionalReviewDays : monthRelation === 'FUTURE' ? data.month.plannedProvisionalReviewDays : data.month.realizedProvisionalReviewDays + data.month.plannedProvisionalReviewDays}
               noData={monthNoData}
               t={t}
               locale={locale}
@@ -345,6 +351,7 @@ export function StatisticsModal({
               primaryLabel={t('effectiveStats.realizedHours')}
               workedDaysLabel={t('effectiveStats.workedDays')}
               planned={{ bucket: data.year.planned, label: t('statsModal.plannedYear') }}
+              provisionalReviewDays={data.year.provisionalReviewDays}
               noData={data.calendarRows === 0}
               t={t}
               locale={locale}
@@ -357,6 +364,7 @@ export function StatisticsModal({
               target={target}
               evaluation={data.contract}
               plannedMinutes={data.year.planned.effectiveMinutes}
+              provisionalReviewDays={data.year.provisionalReviewDays}
               canConfigure={canConfigureTarget}
               onConfigure={onConfigureTarget}
               t={t}
