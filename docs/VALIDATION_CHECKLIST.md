@@ -22,6 +22,28 @@ No solicitada en este cambio. Push a `development` según el contrato del reposi
 
 ---
 
+# Checklist de validación — reemplazo por fecha en versiones de planificación
+
+**Alcance:** una versión publicada sustituye turnos anteriores solo para las fechas y empleados que contiene. Fechas no incluidas conservan su turno efectivo previo. El mismo criterio se aplica a calendario y estadísticas; no se consultó ni modificó producción.
+
+## Comprobaciones ejecutadas
+
+| Comprobación | Resultado |
+| --- | --- |
+| `npx vitest run api/schedules/publish.test.js api/_lib/data.test.js api/_lib/calendar-version-authority.test.js api/_lib/effective-calendar.test.js` | PASS — 182 tests |
+| ESLint focalizado sobre los seis archivos JavaScript modificados | PASS |
+| `git diff --check` | PASS |
+
+## Verificación visual
+
+No aplica: corrección del versionado y las consultas backend.
+
+## Promoción
+
+No solicitada en este cambio. Push a `development` según el contrato del repositorio.
+
+---
+
 # Checklist de validación — autoridad de la última versión publicada
 
 **Alcance:** las lecturas del calendario y de las estadísticas anual/mensual ignoran turnos materializados de versiones anteriores cuando existe una versión posterior publicada, bloqueada o completada del mismo schedule. Los borradores no sustituyen la versión publicada actual y los turnos no vinculados a schedules permanecen iguales. No se consultaron ni modificaron datos de producción.

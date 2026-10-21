@@ -885,6 +885,11 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
         AND current_shift.schedule_version_id = previous.id
         AND current_shift.organization_id = t.organization_id
         AND current_shift.effective_state = 'EFFECTIVE'
+        AND EXISTS (
+          SELECT 1 FROM active_assignments replacement
+          WHERE replacement.employee_id = current_shift.employee_id
+            AND replacement.date = current_shift.date
+        )
       RETURNING current_shift.id
     ),
     materialized AS (

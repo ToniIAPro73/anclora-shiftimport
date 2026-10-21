@@ -69,7 +69,7 @@ describe('publishScheduleVersion', () => {
     expect(sql.transactionQueries[0]).toContain('existing.schedule_version_id = a.schedule_version_id');
   });
 
-  it('retires only effective shifts from prior versions of the same schedule', async () => {
+  it('retires effective shifts from prior versions only on dates included in the new version', async () => {
     const sql = makeSql({
       found: true,
       current_status: 'DRAFT',
@@ -86,6 +86,9 @@ describe('publishScheduleVersion', () => {
     expect(statement).toContain('previous.id <> t.version_id');
     expect(statement).toContain("current_shift.effective_state = 'EFFECTIVE'");
     expect(statement).toContain('current_shift.schedule_version_id = previous.id');
+    expect(statement).toContain('FROM active_assignments replacement');
+    expect(statement).toContain('replacement.employee_id = current_shift.employee_id');
+    expect(statement).toContain('replacement.date = current_shift.date');
     expect(statement).toContain("a.counts_as_work, 'EFFECTIVE'");
   });
 
