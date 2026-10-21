@@ -875,22 +875,36 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
         AND v.error_code IS NULL
       RETURNING sv.id, sv.published_at
     ),
+    superseded AS (
+      UPDATE shifts current_shift
+      SET effective_state = 'SUPERSEDED', superseded_at = NOW(), updated_at = NOW()
+      FROM target t
+      JOIN updated u ON u.id = t.version_id
+      JOIN schedule_versions previous ON previous.schedule_id = t.schedule_id
+      WHERE previous.id <> t.version_id
+        AND current_shift.schedule_version_id = previous.id
+        AND current_shift.organization_id = t.organization_id
+        AND current_shift.effective_state = 'EFFECTIVE'
+      RETURNING current_shift.id
+    ),
     materialized AS (
       INSERT INTO shifts (
         organization_id, employee_id, import_id, area_id, date,
-        start_time, end_time, location, origin, schedule_version_id, shift_type, counts_as_work
+        start_time, end_time, location, origin, schedule_version_id, shift_type, counts_as_work, effective_state
       )
       SELECT t.organization_id, a.employee_id, NULL, t.area_id, a.date,
              TO_CHAR(a.start_time, 'HH24:MI'), TO_CHAR(a.end_time, 'HH24:MI'),
              COALESCE(a.location, ''), 'schedule', a.schedule_version_id,
-             a.shift_type, a.counts_as_work
+             a.shift_type, a.counts_as_work, 'EFFECTIVE'
       FROM active_assignments a
       JOIN target t ON TRUE
       JOIN updated u ON u.id = t.version_id
+      CROSS JOIN (SELECT COUNT(*) FROM superseded) retired
       WHERE NOT EXISTS (
         SELECT 1
         FROM shifts existing
-        WHERE existing.organization_id = t.organization_id
+        WHERE existing.schedule_version_id = a.schedule_version_id
+          AND existing.organization_id = t.organization_id
           AND existing.employee_id = a.employee_id
           AND existing.date = a.date
           AND existing.start_time IS NOT DISTINCT FROM TO_CHAR(a.start_time, 'HH24:MI')

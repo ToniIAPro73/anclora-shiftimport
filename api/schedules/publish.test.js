@@ -64,6 +64,29 @@ describe('publishScheduleVersion', () => {
     expect(sql.transaction).toHaveBeenCalledTimes(1);
     expect(sql.transactionQueries[0]).toContain('FROM shifts existing');
     expect(sql.transactionQueries[0]).toContain('existing.area_id IS NOT DISTINCT FROM t.area_id');
+    expect(sql.transactionQueries[0]).toContain("SET effective_state = 'SUPERSEDED'");
+    expect(sql.transactionQueries[0]).toContain('previous.schedule_id = t.schedule_id');
+    expect(sql.transactionQueries[0]).toContain('existing.schedule_version_id = a.schedule_version_id');
+  });
+
+  it('retires only effective shifts from prior versions of the same schedule', async () => {
+    const sql = makeSql({
+      found: true,
+      current_status: 'DRAFT',
+      error_code: null,
+      published_at: '2026-09-04T10:00:00.000Z',
+      created_shift_count: 2,
+      excluded_count: 0,
+      excluded_assignments: [],
+    });
+
+    await publishScheduleVersion(sql, ctx, SCHEDULE, VERSION);
+
+    const statement = sql.transactionQueries[0];
+    expect(statement).toContain('previous.id <> t.version_id');
+    expect(statement).toContain("current_shift.effective_state = 'EFFECTIVE'");
+    expect(statement).toContain('current_shift.schedule_version_id = previous.id');
+    expect(statement).toContain("a.counts_as_work, 'EFFECTIVE'");
   });
 
   it('maps a revalidation overlap to a 422 without leaving the transaction', async () => {

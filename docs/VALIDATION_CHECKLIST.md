@@ -1,19 +1,21 @@
-# Checklist de validación — auditoría de puertos locales: scripts de arranque cubiertos
+# Checklist de validación — reemplazo de turnos en publicación de planificación
 
-**Alcance:** tras auditar los scripts de arranque de todos los repos, se cubren los que seguían sin liberar su puerto (`preview`, scripts auxiliares de `dev`, `start` de los frontends CRA, `dev:log`) con la llamada a `anclora-infrastructure/scripts/free-port.mjs`, que se omite si el repo hermano no existe. Los frontends CRA liberan solo el puerto del frontend para no matar un backend hermano. En `anclora-visionflow` los scripts `dev:log` y `dev:ps` pasan del 3000 al puerto del registro (3027). En `anclora-impulso` el `BASE_URL` por defecto de Playwright pasa de 3000 a 3008, porque su `dev` ya sirve en el puerto del registro. No cambia código de la aplicación.
+**Alcance:** al publicar una nueva versión de un schedule, los turnos efectivos materializados desde versiones anteriores de ese mismo schedule pasan a `SUPERSEDED`. La nueva versión se materializa como efectiva, incluidos turnos que coincidan exactamente con los anteriores. No se tocan otros schedules ni filas que no provengan de versiones del schedule publicado. No requiere migración de esquema.
 
 ## Comprobaciones ejecutadas
 
 | Comprobación | Resultado |
 | --- | --- |
-| `package.json` válido tras el cambio | PASS |
-| Tests de las herramientas (`anclora-infrastructure`) | PASS — 13 tests |
-| Ruta relativa a `free-port.mjs` desde `frontend/` | PASS |
+| `npx vitest run api/schedules/publish.test.js` | PASS — 6 tests |
+| `npm run lint` | PASS |
+| `npx tsc --noEmit` | PASS |
+| `npm run build` | PASS — aviso preexistente de chunks grandes |
+| `git diff --check` | PASS |
 
 ## Verificación visual
 
-No aplica: solo scripts de arranque y configuración de tests.
+No aplica: corrección del backend de publicación de planificación.
 
 ## Promoción
 
-No solicitada en este cambio.
+No solicitada en este cambio. Push a `development` según el contrato del repositorio.
