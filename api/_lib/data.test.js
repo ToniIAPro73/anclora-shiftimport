@@ -541,6 +541,8 @@ describe('employee isolation', () => {
     const select = calls.find((call) => call.text.includes('FROM shifts'));
     expect(select.values).toContain(EMP_A1);
     expect(select.values).not.toContain(EMP_A2);
+    expect(select.text).toContain('newer.version_number > current_version.version_number');
+    expect(select.text).toContain("newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')");
   });
 
   it('EMPLOYEE role rejects a write addressed to another employee', async () => {

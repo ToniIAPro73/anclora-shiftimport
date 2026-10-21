@@ -2229,6 +2229,15 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
             AND area_id = ${effectiveAreaId}
             AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
+            AND (schedule_version_id IS NULL OR NOT EXISTS (
+              SELECT 1
+              FROM schedule_versions current_version
+              JOIN schedule_versions newer
+                ON newer.schedule_id = current_version.schedule_id
+               AND newer.version_number > current_version.version_number
+               AND newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+              WHERE current_version.id = shifts.schedule_version_id
+            ))
           ORDER BY date ASC, start_time ASC, id ASC
         `
       : await sql`
@@ -2244,6 +2253,15 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           FROM shifts
           WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
             AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
+            AND (schedule_version_id IS NULL OR NOT EXISTS (
+              SELECT 1
+              FROM schedule_versions current_version
+              JOIN schedule_versions newer
+                ON newer.schedule_id = current_version.schedule_id
+               AND newer.version_number > current_version.version_number
+               AND newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+              WHERE current_version.id = shifts.schedule_version_id
+            ))
           ORDER BY date ASC, start_time ASC, id ASC
         `;
     return refineHistoryFlags(sql, ctx, rows.map(mapShiftRow));
@@ -2265,6 +2283,15 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
         WHERE organization_id = ${ctx.organizationId}
           AND area_id = ${effectiveAreaId}
           AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
+          AND (schedule_version_id IS NULL OR NOT EXISTS (
+            SELECT 1
+            FROM schedule_versions current_version
+            JOIN schedule_versions newer
+              ON newer.schedule_id = current_version.schedule_id
+             AND newer.version_number > current_version.version_number
+             AND newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+            WHERE current_version.id = shifts.schedule_version_id
+          ))
         ORDER BY date ASC, start_time ASC, id ASC
       `
     : await sql`
@@ -2280,6 +2307,15 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
         FROM shifts
         WHERE organization_id = ${ctx.organizationId}
           AND effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
+          AND (schedule_version_id IS NULL OR NOT EXISTS (
+            SELECT 1
+            FROM schedule_versions current_version
+            JOIN schedule_versions newer
+              ON newer.schedule_id = current_version.schedule_id
+             AND newer.version_number > current_version.version_number
+             AND newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+            WHERE current_version.id = shifts.schedule_version_id
+          ))
         ORDER BY date ASC, start_time ASC, id ASC
       `;
   return refineHistoryFlags(sql, ctx, rows.map(mapShiftRow));

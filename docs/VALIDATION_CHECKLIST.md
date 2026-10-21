@@ -19,3 +19,27 @@ No aplica: corrección del backend de publicación de planificación.
 ## Promoción
 
 No solicitada en este cambio. Push a `development` según el contrato del repositorio.
+
+---
+
+# Checklist de validación — autoridad de la última versión publicada
+
+**Alcance:** las lecturas del calendario y de las estadísticas anual/mensual ignoran turnos materializados de versiones anteriores cuando existe una versión posterior publicada, bloqueada o completada del mismo schedule. Los borradores no sustituyen la versión publicada actual y los turnos no vinculados a schedules permanecen iguales. No se consultaron ni modificaron datos de producción.
+
+## Comprobaciones ejecutadas
+
+| Comprobación | Resultado |
+| --- | --- |
+| `npx vitest run api/_lib/data.test.js api/_lib/calendar-version-authority.test.js api/_lib/effective-calendar.test.js` | PASS — 176 tests |
+| `npx eslint api/_lib/data.js api/_lib/calendar.js api/_lib/data.test.js api/_lib/calendar-version-authority.test.js` | PASS |
+| `npx tsc --noEmit` | PASS |
+| `npm run build` | PASS — aviso de chunks grandes |
+| `git diff --check` | PASS |
+
+## Verificación visual
+
+No aplica: cambio en consultas backend de calendario y estadísticas.
+
+## Promoción
+
+No solicitada en este cambio. Push a `development` según el contrato del repositorio.

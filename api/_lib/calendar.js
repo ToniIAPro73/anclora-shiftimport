@@ -442,6 +442,15 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
       AND date BETWEEN ${from} AND ${to}
       AND (effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
            OR (effective_state = 'METADATA_ONLY' AND shift_type = 'JT'))
+      AND (schedule_version_id IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM schedule_versions current_version
+        JOIN schedule_versions newer
+          ON newer.schedule_id = current_version.schedule_id
+         AND newer.version_number > current_version.version_number
+         AND newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+        WHERE current_version.id = shifts.schedule_version_id
+      ))
     ORDER BY date ASC, start_time ASC NULLS FIRST, id ASC
   `;
   const auditChanges = await sql`
