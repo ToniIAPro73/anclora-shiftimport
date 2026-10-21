@@ -22,6 +22,31 @@ No solicitada en este cambio. Push a `development` según el contrato del reposi
 
 ---
 
+# Checklist de validación — versiones publicadas vacías como autoridad
+
+**Alcance:** calendario y estadísticas aplican la versión publicada más reciente del schedule completo, incluso si no contiene asignaciones. Esto evita contar turnos materializados de una versión anterior para días que la versión vigente dejó vacíos. Los borradores y las filas sin schedule asociado no cambian. La investigación de octubre se limitó a consultas `SELECT` de lectura; no se modificaron datos de producción.
+
+## Comprobaciones ejecutadas
+
+| Comprobación | Resultado |
+| --- | --- |
+| Pruebas focalizadas de calendario y estadísticas | PASS — 118 tests |
+| `npm test -- --reporter=dot` | PASS — 2.183 tests, 2 omitidos |
+| `npm run lint` | PASS |
+| `npx tsc --noEmit` | PASS |
+| `npm run build` | PASS — aviso de chunks grandes |
+| `git diff --check` | PASS |
+
+## Verificación visual
+
+No aplica: corrección de lecturas backend de calendario y estadísticas.
+
+## Promoción
+
+No solicitada en este cambio. Push a `development` según el contrato del repositorio.
+
+---
+
 # Checklist de validación — reemplazo por fecha en versiones de planificación
 
 **Alcance:** una versión publicada sustituye turnos anteriores solo para las fechas y empleados que contiene. Fechas no incluidas conservan su turno efectivo previo. El mismo criterio se aplica a calendario y estadísticas; no se consultó ni modificó producción.

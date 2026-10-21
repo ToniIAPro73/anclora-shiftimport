@@ -449,10 +449,6 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
           ON newer.schedule_id = current_version.schedule_id
          AND newer.version_number > current_version.version_number
          AND newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
-        JOIN shift_assignments newer_assignment
-          ON newer_assignment.schedule_version_id = newer.id
-         AND newer_assignment.employee_id = shifts.employee_id
-         AND newer_assignment.date = shifts.date
         WHERE current_version.id = shifts.schedule_version_id
       ))
     ORDER BY date ASC, start_time ASC NULLS FIRST, id ASC

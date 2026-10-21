@@ -534,6 +534,15 @@ describe('batch atomicity (R1-M08)', () => {
 });
 
 describe('employee isolation', () => {
+  it('organization calendar reads let an empty newer published version retire old rows', async () => {
+    const { sql, calls } = makeFakeSql();
+    await listShifts(sql, adminCtx, '');
+    const select = calls.find((call) => call.text.includes('FROM shifts'));
+    expect(select.text).toContain('newer.schedule_id = current_version.schedule_id');
+    expect(select.text).toContain("newer.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')");
+    expect(select.text).not.toContain('newer_assignment');
+  });
+
   it('EMPLOYEE role reads are forced to its own employee id', async () => {
     const { sql, calls } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A)] });
     // Requests another employee; the context must override it.
@@ -542,9 +551,8 @@ describe('employee isolation', () => {
     expect(select.values).toContain(EMP_A1);
     expect(select.values).not.toContain(EMP_A2);
     expect(select.text).toContain('newer.version_number > current_version.version_number');
-    expect(select.text).toContain('newer_assignment.schedule_version_id = newer.id');
-    expect(select.text).toContain('newer_assignment.employee_id = shifts.employee_id');
-    expect(select.text).toContain('newer_assignment.date = shifts.date');
+    expect(select.text).toContain('newer.schedule_id = current_version.schedule_id');
+    expect(select.text).not.toContain('newer_assignment');
   });
 
   it('EMPLOYEE role rejects a write addressed to another employee', async () => {
