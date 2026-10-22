@@ -19,3 +19,9 @@ export function getOperationalDate(now = new Date()) {
 export function isHistoricalDate(date, today = getOperationalDate()) {
   return date < today;
 }
+
+export function shiftOperationalDate(date, days) {
+  const shifted = new Date(`${date}T00:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return shifted.toISOString().slice(0, 10);
+}

@@ -245,7 +245,11 @@ describe('StatisticsModal', () => {
   it('keeps realized and remaining planned hours separate in the current month', () => {
     renderModal({
       today: '2026-10-19', year: 2026, month: 9, monthLabel: 'Octubre 2026',
-      localMonthShifts: [shift('past-oct', '2026-10-05', 'Regular', '08:00', '15:00'), shift('future-oct', '2026-10-22', 'Regular', '08:00', '13:00')],
+      localMonthShifts: [
+        shift('past-oct', '2026-10-05', 'Regular', '08:00', '15:00'),
+        shift('today-oct', '2026-10-19', 'Regular', '05:00', '13:00'),
+        shift('future-oct', '2026-10-22', 'Regular', '08:00', '13:00'),
+      ],
     });
     expect(screen.getByText('Horas efectivas hasta hoy')).toBeInTheDocument();
     expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('7 h');

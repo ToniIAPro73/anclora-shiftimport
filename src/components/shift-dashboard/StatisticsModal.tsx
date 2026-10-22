@@ -4,6 +4,7 @@ import type { Shift } from '../../lib/types';
 import { computeEffectiveStats, evaluateAnnualTarget } from '../../lib/effective-calendar.js';
 import type { ContractEvaluation, StatsBucket } from '../../lib/effective-calendar.js';
 import { getStatisticsMonthRelation, statsBucketHasData } from '../../lib/statistics-period';
+import { shiftOperationalDate } from '../../lib/operational-date';
 import { loadCalendarStats, type RemoteCalendarStats } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { formatDuration } from './format-duration';
@@ -258,9 +259,19 @@ export function StatisticsModal({
   const local = useMemo<StatsData | null>(() => {
     if (employeeId || !isOpen) return null;
     const monthStats = computeEffectiveStats(localMonthShifts ?? [], { from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today });
+    // The monthly card says "rest of the month", so its bucket starts tomorrow.
+    // Keep realized hours and annual projections on their existing boundaries.
+    const monthFutureStats = computeEffectiveStats(localMonthShifts ?? [], {
+      from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today: shiftOperationalDate(today, 1),
+    });
     const yearStats = computeEffectiveStats(localYearShifts ?? [], { from: `${year}-01-01`, to: `${year}-12-31`, today });
     return {
-      month: { realized: monthStats.realized, planned: monthStats.planned, realizedProvisionalReviewDays: monthStats.realizedProvisionalReviewDays, plannedProvisionalReviewDays: monthStats.plannedProvisionalReviewDays },
+      month: {
+        realized: monthStats.realized,
+        planned: monthFutureStats.planned,
+        realizedProvisionalReviewDays: monthStats.realizedProvisionalReviewDays,
+        plannedProvisionalReviewDays: monthFutureStats.plannedProvisionalReviewDays,
+      },
       year: { realized: yearStats.realized, planned: yearStats.planned, provisionalReviewDays: yearStats.provisionalReviewDays },
       calendarRows: yearStats.calendarRows,
       contract: evaluateAnnualTarget(yearStats.realized.effectiveMinutes, target, { calendarRows: yearStats.calendarRows }),

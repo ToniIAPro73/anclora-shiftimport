@@ -24,4 +24,31 @@ describe('day-scoped published schedule authority', () => {
     expect(statsQuery.text).toContain('newer_assignment.date = shifts.date');
     expect(statsQuery.text).toContain('schedule_version_id IS NULL');
   });
+
+  it('excludes the current operational day from the current-month future bucket', async () => {
+    const sql = async (strings) => {
+      const text = strings.join(' ').replace(/\s+/g, ' ').trim();
+      if (text.includes('FROM employees')) return [{ id: 'employee-1', status: 'active' }];
+      if (text.includes('FROM shifts')) return [
+        ...['23', '24', '25', '26', '27', '28', '29'].map((day) => ({
+          id: `shift-${day}`,
+          date: `2026-10-${day}`,
+          start_time: '05:00',
+          end_time: '13:00',
+          shift_type: 'Regular',
+          counts_as_work: true,
+          effective_state: 'EFFECTIVE',
+        })),
+      ];
+      return [];
+    };
+
+    const result = await getEffectiveStats(sql, {
+      organizationId: 'org-1', role: 'ADMIN', employeeId: null,
+    }, 'employee-1', 2026, { today: '2026-10-23', month: 10 });
+
+    expect(result.monthStats.realized.effectiveMinutes).toBe(0);
+    expect(result.monthStats.planned.effectiveMinutes).toBe(6 * 8 * 60);
+    expect(result.planned.effectiveMinutes).toBe(7 * 8 * 60);
+  });
 });

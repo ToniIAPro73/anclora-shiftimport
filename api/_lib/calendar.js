@@ -14,7 +14,7 @@ import {
   resolveDay,
   resolveProvisionalReviewRows,
 } from '../../src/lib/effective-calendar.js';
-import { getOperationalDate } from './operational-date.js';
+import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -472,11 +472,19 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   }
   const monthPrefix = monthNumber === null ? null : `${numericYear}-${String(monthNumber).padStart(2, '0')}`;
   const monthStats = monthPrefix
-    ? computeEffectiveStats(rowsWithAudit, {
-      from: `${monthPrefix}-01`,
-      to: `${monthPrefix}-31`,
-      today,
-    })
+    ? (() => {
+      const options = { from: `${monthPrefix}-01`, to: `${monthPrefix}-31` };
+      const current = computeEffectiveStats(rowsWithAudit, { ...options, today });
+      // “Planned future (rest of month)” excludes today while realized hours
+      // and annual projections keep the shared effective-calendar boundary.
+      const future = computeEffectiveStats(rowsWithAudit, { ...options, today: shiftOperationalDate(today, 1) });
+      return {
+        ...current,
+        planned: future.planned,
+        plannedProvisionalReviewDays: future.plannedProvisionalReviewDays,
+        plannedProvisionalReviewMinutes: future.plannedProvisionalReviewMinutes,
+      };
+    })()
     : null;
   const targetRows = await sql`
     SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
