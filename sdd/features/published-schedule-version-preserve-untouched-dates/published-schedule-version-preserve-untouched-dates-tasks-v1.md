@@ -6,4 +6,4 @@
 - [x] Run focused validation: 118 API tests passed, targeted ESLint passed, and `git diff --check` passed.
 - [x] Verify with the restored read predicate that production returns the three existing shifts; perform no production writes.
 - [x] Create the implementation commit.
-- [ ] Push to `development`; stop before promotion.
+- [x] Push to `development`; stop before promotion.
