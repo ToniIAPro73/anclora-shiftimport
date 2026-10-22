@@ -114,3 +114,27 @@ No aplica: cambio en consultas backend de calendario y estadísticas.
 ## Promoción
 
 No solicitada en este cambio. Push a `development` según el contrato del repositorio.
+
+---
+
+# Checklist de validación — horas futuras estrictas del mes
+
+**Alcance:** la tarjeta mensual “Planificado futuro (resto del mes)” excluye los turnos fechados hoy y cuenta solo fechas posteriores. La clasificación anual mantiene el límite anterior. La consulta a producción fue de solo lectura: las 56 h observadas se desglosan en 8 h del 23 de octubre y 48 h del 24 al 29; no se modificaron datos.
+
+## Comprobaciones ejecutadas
+
+| Comprobación | Resultado |
+| --- | --- |
+| `npm test -- --run src/components/shift-dashboard/StatisticsModal.test.tsx api/_lib/calendar-version-authority.test.js` | PASS — 21 tests |
+| `npm run lint` | PASS |
+| `npx tsc --noEmit` | PASS |
+| `npm run build` | PASS — aviso de chunks grandes |
+| `git diff --check` | PASS |
+
+## Verificación visual
+
+No aplica: ajuste en la frontera temporal del cálculo de estadísticas.
+
+## Promoción
+
+No solicitada en este cambio. Push a `development` según el contrato del repositorio.
