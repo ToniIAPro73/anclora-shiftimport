@@ -1,3 +1,27 @@
+# Checklist de validación — preservar fechas omitidas en revisiones publicadas
+
+**Alcance:** calendario y estadísticas solo ocultan filas de una versión anterior cuando una versión posterior publicada contiene una asignación para el mismo empleado y fecha. Se confirmó con consultas de solo lectura que los turnos efectivos de Sebastián Pozo Mendoza (13:00–21:00, 16–18 de octubre de 2026) siguen en producción y que la revisión posterior no contiene asignaciones para esas fechas. El predicado corregido devuelve los tres turnos. No se modificaron datos de producción.
+
+## Comprobaciones ejecutadas
+
+| Comprobación | Resultado |
+| --- | --- |
+| `npx vitest run api/_lib/calendar-version-authority.test.js api/_lib/data.test.js` | PASS — 118 tests |
+| ESLint focalizado en los cuatro archivos JavaScript afectados | PASS |
+| `npx tsc --noEmit` | PASS |
+| `npm run build` | PASS — aviso de chunks grandes |
+| `git diff --check` | PASS |
+
+## Verificación visual
+
+No aplica: corrección de consultas backend de calendario y estadísticas.
+
+## Promoción
+
+Pendiente de autorización explícita. Commit y push a `development` únicamente.
+
+---
+
 # Checklist de validación — reemplazo de turnos en publicación de planificación
 
 **Alcance:** al publicar una nueva versión de un schedule, los turnos efectivos materializados desde versiones anteriores de ese mismo schedule pasan a `SUPERSEDED`. La nueva versión se materializa como efectiva, incluidos turnos que coincidan exactamente con los anteriores. No se tocan otros schedules ni filas que no provengan de versiones del schedule publicado. No requiere migración de esquema.
