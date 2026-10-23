@@ -1,140 +1,41 @@
-# Checklist de validación — preservar fechas omitidas en revisiones publicadas
+# Checklist de validación — política de promoción (2026-10-23)
 
-**Alcance:** calendario y estadísticas solo ocultan filas de una versión anterior cuando una versión posterior publicada contiene una asignación para el mismo empleado y fecha. Se confirmó con consultas de solo lectura que los turnos efectivos de Sebastián Pozo Mendoza (13:00–21:00, 16–18 de octubre de 2026) siguen en producción y que la revisión posterior no contiene asignaciones para esas fechas. El predicado corregido devuelve los tres turnos. No se modificaron datos de producción.
+> Entrega de cambios de flujo y configuración. El SHA final queda registrado en el commit que incluye este checklist.
 
-## Comprobaciones ejecutadas
+**Repositorio:** anclora-shiftimport
+**Rama:** development
+**Entorno de validación:** entorno development/Preview del repositorio, pendiente de revisión de Toni
+**Datos:** no se usaron ni modificaron datos de aplicación.
 
-| Comprobación | Resultado |
+## 1. Qué cambia
+- El workflow promote.yml admite el dispatch de cadena completa con target=full y source_sha revisado en Preview.
+- El contrato runtime define validación expresa en development, Preview y promoción completa asíncrona.
+
+## 2. Ya comprobado por el agente
+| Comprobación | Comando o método | Resultado |
+| --- | --- | --- |
+| Sintaxis de workflows | Parser YAML sobre los 41 `promote.yml` del workspace | PASS |
+| Integridad del diff | `git diff --check` | PASS |
+
+## 3. Pruebas no ejecutadas (NOT_RUN)
+| Prueba | Motivo concreto |
 | --- | --- |
-| `npx vitest run api/_lib/calendar-version-authority.test.js api/_lib/data.test.js` | PASS — 118 tests |
-| ESLint focalizado en los cuatro archivos JavaScript afectados | PASS |
-| `npx tsc --noEmit` | PASS |
-| `npm run build` | PASS — aviso de chunks grandes |
-| `git diff --check` | PASS |
+| Suite de la aplicación, lint y build | Cambios de políticas y configuración de promoción; no se ejecutaron suites por no afectar código de aplicación. |
+| Revisión visual y smoke test de Preview | Pendiente de Toni en el entorno publicado tras este push. |
+| Resultado de CI/deployments | No se esperará ni consultará; Toni revisa los entornos según la política acordada. |
 
-## Verificación visual
+## 4. Checklist para Toni
+| # | Dónde | Pasos | Resultado esperado | Bloqueante |
+| --- | --- | --- | --- | --- |
+| 1 | development | Revisar el contrato y `promote.yml` de este repositorio | Cambios acordes con el flujo aprobado | Sí |
+| 2 | Preview | Confirmar la Preview correspondiente al SHA de este push | La revisión corresponde al SHA publicado | Sí, antes de promoción |
 
-No aplica: corrección de consultas backend de calendario y estadísticas.
+## 5. Riesgos y limitaciones
+- La promoción requiere el SHA exacto revisado en Preview. Si `development` avanza, el workflow completo se detendrá y requerirá revisión nueva.
+- Los resultados de staging, production y main quedan bajo revisión de Toni.
 
-## Promoción
-
-Pendiente de autorización explícita. Commit y push a `development` únicamente.
-
----
-
-# Checklist de validación — reemplazo de turnos en publicación de planificación
-
-**Alcance:** al publicar una nueva versión de un schedule, los turnos efectivos materializados desde versiones anteriores de ese mismo schedule pasan a `SUPERSEDED`. La nueva versión se materializa como efectiva, incluidos turnos que coincidan exactamente con los anteriores. No se tocan otros schedules ni filas que no provengan de versiones del schedule publicado. No requiere migración de esquema.
-
-## Comprobaciones ejecutadas
-
-| Comprobación | Resultado |
-| --- | --- |
-| `npx vitest run api/schedules/publish.test.js` | PASS — 6 tests |
-| `npm run lint` | PASS |
-| `npx tsc --noEmit` | PASS |
-| `npm run build` | PASS — aviso preexistente de chunks grandes |
-| `git diff --check` | PASS |
-
-## Verificación visual
-
-No aplica: corrección del backend de publicación de planificación.
-
-## Promoción
-
-No solicitada en este cambio. Push a `development` según el contrato del repositorio.
-
----
-
-# Checklist de validación — versiones publicadas vacías como autoridad
-
-**Alcance:** calendario y estadísticas aplican la versión publicada más reciente del schedule completo, incluso si no contiene asignaciones. Esto evita contar turnos materializados de una versión anterior para días que la versión vigente dejó vacíos. Los borradores y las filas sin schedule asociado no cambian. La investigación de octubre se limitó a consultas `SELECT` de lectura; no se modificaron datos de producción.
-
-## Comprobaciones ejecutadas
-
-| Comprobación | Resultado |
-| --- | --- |
-| Pruebas focalizadas de calendario y estadísticas | PASS — 118 tests |
-| `npm test -- --reporter=dot` | PASS — 2.183 tests, 2 omitidos |
-| `npm run lint` | PASS |
-| `npx tsc --noEmit` | PASS |
-| `npm run build` | PASS — aviso de chunks grandes |
-| `git diff --check` | PASS |
-
-## Verificación visual
-
-No aplica: corrección de lecturas backend de calendario y estadísticas.
-
-## Promoción
-
-No solicitada en este cambio. Push a `development` según el contrato del repositorio.
-
----
-
-# Checklist de validación — reemplazo por fecha en versiones de planificación
-
-**Alcance:** una versión publicada sustituye turnos anteriores solo para las fechas y empleados que contiene. Fechas no incluidas conservan su turno efectivo previo. El mismo criterio se aplica a calendario y estadísticas; no se consultó ni modificó producción.
-
-## Comprobaciones ejecutadas
-
-| Comprobación | Resultado |
-| --- | --- |
-| `npx vitest run api/schedules/publish.test.js api/_lib/data.test.js api/_lib/calendar-version-authority.test.js api/_lib/effective-calendar.test.js` | PASS — 182 tests |
-| ESLint focalizado sobre los seis archivos JavaScript modificados | PASS |
-| `git diff --check` | PASS |
-
-## Verificación visual
-
-No aplica: corrección del versionado y las consultas backend.
-
-## Promoción
-
-No solicitada en este cambio. Push a `development` según el contrato del repositorio.
-
----
-
-# Checklist de validación — autoridad de la última versión publicada
-
-**Alcance:** las lecturas del calendario y de las estadísticas anual/mensual ignoran turnos materializados de versiones anteriores cuando existe una versión posterior publicada, bloqueada o completada del mismo schedule. Los borradores no sustituyen la versión publicada actual y los turnos no vinculados a schedules permanecen iguales. No se consultaron ni modificaron datos de producción.
-
-## Comprobaciones ejecutadas
-
-| Comprobación | Resultado |
-| --- | --- |
-| `npx vitest run api/_lib/data.test.js api/_lib/calendar-version-authority.test.js api/_lib/effective-calendar.test.js` | PASS — 176 tests |
-| `npx eslint api/_lib/data.js api/_lib/calendar.js api/_lib/data.test.js api/_lib/calendar-version-authority.test.js` | PASS |
-| `npx tsc --noEmit` | PASS |
-| `npm run build` | PASS — aviso de chunks grandes |
-| `git diff --check` | PASS |
-
-## Verificación visual
-
-No aplica: cambio en consultas backend de calendario y estadísticas.
-
-## Promoción
-
-No solicitada en este cambio. Push a `development` según el contrato del repositorio.
-
----
-
-# Checklist de validación — horas futuras estrictas del mes
-
-**Alcance:** la tarjeta mensual “Planificado futuro (resto del mes)” excluye los turnos fechados hoy y cuenta solo fechas posteriores. La clasificación anual mantiene el límite anterior. La consulta a producción fue de solo lectura: las 56 h observadas se desglosan en 8 h del 23 de octubre y 48 h del 24 al 29; no se modificaron datos.
-
-## Comprobaciones ejecutadas
-
-| Comprobación | Resultado |
-| --- | --- |
-| `npm test -- --run src/components/shift-dashboard/StatisticsModal.test.tsx api/_lib/calendar-version-authority.test.js` | PASS — 21 tests |
-| `npm run lint` | PASS |
-| `npx tsc --noEmit` | PASS |
-| `npm run build` | PASS — aviso de chunks grandes |
-| `git diff --check` | PASS |
-
-## Verificación visual
-
-No aplica: ajuste en la frontera temporal del cálculo de estadísticas.
-
-## Promoción
-
-No solicitada en este cambio. Push a `development` según el contrato del repositorio.
+## 6. Decisión de Toni
+- [ ] Validado en development
+- [ ] Validado en Preview
+- [ ] PROMOTE=FULL
+- [ ] No se promociona. Motivo: ______________________

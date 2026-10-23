@@ -202,7 +202,7 @@ Essential operational invariants:
 - **Local Seeding**: `SEED_ALLOW_ENV="development"` satisfies the local guard only; seeding writes to Production. Treat local seeding as a Production write.
 - **Migrations**: Schema changes are authorized via `npm run db:migrate` (`CUSTOM_FORWARD_ONLY` strategy). Confirmations are not required; backward compatibility is preferred.
 - **QA Testing**: Locate, reuse, or create the persistent production QA user. Never delete it after testing.
-- **Git Flow**: Work directly on `development`. Do not create feature branches by default. Commit after validation and push to `origin/development`, then STOP by default. An explicit current-task user request may authorize a new, gated promotion operation under the workspace Canonical Promotion Policy; prior mission-scoped `No promotion` instructions do not persist.
+- **Git Flow**: Work directly on `development`. Do not create feature branches by default. Keep changes local until Toni explicitly validates them in the development environment; only then commit and push to `origin/development`. Wait for Toni to review Preview. The exact `PROMOTE=FULL` token then authorizes one asynchronous full-chain workflow. Do not wait for or poll workflow/CI/deployment completion or verify branches hop by hop.
 - **Governance**: Elevation to AOS is required for multi-repo or constitutional changes.
 
 ## 9. Machine-Readable Bootstrap
