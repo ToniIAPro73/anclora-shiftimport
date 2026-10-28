@@ -88,6 +88,7 @@ export interface StatsBucket {
   freeDays: number;
   vacationDays: number;
   sickLeaveDays: number;
+  byType?: Record<string, number>;
 }
 
 export interface EffectiveStats {

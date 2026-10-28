@@ -2297,8 +2297,6 @@ function App() {
           isOpen={statsOpen}
           onClose={() => setStatsOpen(false)}
           employeeId={session ? activeEmployeeId : null}
-          employeeExternalId={activeEmployeeExternalId}
-          organizationId={session?.organizationId ?? null}
           year={currentYear}
           month={currentMonth}
           monthLabel={monthLabel}
@@ -2307,6 +2305,7 @@ function App() {
             ? {
               minimumAnnualMinutes: currentYearTarget.minimumAnnualMinutes,
               maximumAnnualMinutes: currentYearTarget.maximumAnnualMinutes,
+              includedShiftTypes: currentYearTarget.includedShiftTypes,
             }
             : null}
           showContract={Boolean(session && activeEmployeeId)}

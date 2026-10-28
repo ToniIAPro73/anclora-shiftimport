@@ -64,11 +64,9 @@ describe('StatisticsModal', () => {
     expect(screen.getByTestId('eff-month-free-days')).toHaveTextContent('1 d');
   });
 
-  it('uses Regular only for Sebastian and keeps his Extras metric visible', () => {
+  it('uses only target-selected shift types in totals and keeps each type metric visible', () => {
     renderModal({
-      employeeExternalId: '84881',
-      organizationId: 'a4cf0768-f08d-49e6-bb81-0d3635d58028',
-      target: { minimumAnnualMinutes: 0, maximumAnnualMinutes: 100_000 },
+      target: { minimumAnnualMinutes: 0, maximumAnnualMinutes: 100_000, includedShiftTypes: ['Regular'] },
     });
     expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('7 h');
     expect(screen.getByTestId('eff-month-regular')).toHaveTextContent('7 h');
@@ -78,8 +76,8 @@ describe('StatisticsModal', () => {
     expect(screen.getByTestId('eff-contract-extras')).toHaveTextContent('1 h');
   });
 
-  it('does not apply Sebastian’s Regular-only policy to the same external ID in another organization', () => {
-    renderModal({ employeeExternalId: '84881', organizationId: 'another-organization' });
+  it('includes all work types when no annual target is configured', () => {
+    renderModal();
     expect(screen.getByTestId('eff-month-effective')).toHaveTextContent('8 h');
     expect(screen.getByTestId('eff-month-extras')).toHaveTextContent('1 h');
   });

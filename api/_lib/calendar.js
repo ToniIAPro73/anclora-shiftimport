@@ -16,7 +16,11 @@ import {
 } from '../../src/lib/effective-calendar.js';
 import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
-import { applyEmployeeStatisticsPolicy, employeeTargetMinutes } from '../../src/lib/employee-statistics.js';
+import {
+  applyEmployeeStatisticsPolicy,
+  DEFAULT_OBJECTIVE_SHIFT_TYPES,
+  employeeTargetMinutes,
+} from '../../src/lib/employee-statistics.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -54,6 +58,9 @@ function mapTargetRow(row) {
     year: row.year,
     minimumAnnualMinutes: row.minimum_annual_minutes,
     maximumAnnualMinutes: row.maximum_annual_minutes,
+    includedShiftTypes: Array.isArray(row.included_shift_types) && row.included_shift_types.length
+      ? row.included_shift_types
+      : DEFAULT_OBJECTIVE_SHIFT_TYPES,
     // Derived, never stored twice.
     marginMinutes: row.maximum_annual_minutes - row.minimum_annual_minutes,
     notes: row.notes ?? '',
@@ -81,7 +88,7 @@ export async function listAnnualTargets(sql, ctx, employeeId) {
     throw new HttpError(403, 'Not allowed to view annual targets for this employee');
   }
   const rows = await sql`
-    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
+    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
            notes, source, updated_at, updated_by_user_id
     FROM employee_annual_targets
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
@@ -111,10 +118,18 @@ export async function setAnnualTarget(sql, ctx, input) {
   assertMinutes(maximum, 'maximumAnnualMinutes');
   if (maximum < minimum) throw badRequest('maximum must not be lower than minimum', 'INVALID_ANNUAL_TARGET');
   const notes = String(input?.notes ?? '').trim().slice(0, 2000);
+  const rawIncludedTypes = input?.includedShiftTypes ?? DEFAULT_OBJECTIVE_SHIFT_TYPES;
+  if (!Array.isArray(rawIncludedTypes)) throw badRequest('includedShiftTypes must be an array', 'INVALID_ANNUAL_TARGET_TYPES');
+  const includedShiftTypes = [...new Set(rawIncludedTypes
+    .map((type) => String(type).trim())
+    .filter((type) => type.length > 0 && type.length <= 80))];
+  if (!includedShiftTypes.length || includedShiftTypes.length !== rawIncludedTypes.length) {
+    throw badRequest('Select at least one valid shift type', 'INVALID_ANNUAL_TARGET_TYPES');
+  }
 
   await assertEmployeeInScope(sql, ctx, employeeId);
   const previousRows = await sql`
-    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
+    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
            notes, source, updated_at, updated_by_user_id
     FROM employee_annual_targets
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND year = ${year}
@@ -123,18 +138,19 @@ export async function setAnnualTarget(sql, ctx, input) {
   const saved = await sql`
     INSERT INTO employee_annual_targets (
       organization_id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
-      notes, source, created_by_user_id, updated_by_user_id
+      included_shift_types, notes, source, created_by_user_id, updated_by_user_id
     ) VALUES (
       ${ctx.organizationId}, ${employeeId}, ${year}, ${minimum}, ${maximum},
-      ${notes}, 'ADMIN_UI', ${ctx.user.id}, ${ctx.user.id}
+      ${includedShiftTypes}::text[], ${notes}, 'ADMIN_UI', ${ctx.user.id}, ${ctx.user.id}
     )
     ON CONFLICT (organization_id, employee_id, year) DO UPDATE SET
       minimum_annual_minutes = EXCLUDED.minimum_annual_minutes,
       maximum_annual_minutes = EXCLUDED.maximum_annual_minutes,
+      included_shift_types = EXCLUDED.included_shift_types,
       notes = EXCLUDED.notes,
       updated_by_user_id = EXCLUDED.updated_by_user_id,
       updated_at = NOW()
-    RETURNING id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
+    RETURNING id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
               notes, source, updated_at, updated_by_user_id
   `;
   const target = mapTargetRow(saved[0]);
@@ -145,9 +161,17 @@ export async function setAnnualTarget(sql, ctx, input) {
     metadata: {
       year,
       before: previous
-        ? { minimumAnnualMinutes: previous.minimumAnnualMinutes, maximumAnnualMinutes: previous.maximumAnnualMinutes }
+        ? {
+          minimumAnnualMinutes: previous.minimumAnnualMinutes,
+          maximumAnnualMinutes: previous.maximumAnnualMinutes,
+          includedShiftTypes: previous.includedShiftTypes,
+        }
         : null,
-      after: { minimumAnnualMinutes: minimum, maximumAnnualMinutes: maximum },
+      after: {
+        minimumAnnualMinutes: minimum,
+        maximumAnnualMinutes: maximum,
+        includedShiftTypes,
+      },
     },
   });
   return target;
@@ -432,11 +456,13 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   const numericYear = Number(year);
   if (!Number.isInteger(numericYear) || numericYear < 2000 || numericYear > 2200) throw badRequest('year is invalid', 'INVALID_YEAR');
   await assertEmployeeInScope(sql, ctx, targetEmployeeId);
-  const employeeIdentityRows = await sql`
-    SELECT external_employee_id FROM employees
-    WHERE id = ${targetEmployeeId} AND organization_id = ${ctx.organizationId}
+  const targetRows = await sql`
+    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
+           notes, source, updated_at, updated_by_user_id
+    FROM employee_annual_targets
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId} AND year = ${numericYear}
   `;
-  const externalEmployeeId = employeeIdentityRows[0]?.external_employee_id ?? null;
+  const target = mapTargetRow(targetRows[0]);
   const from = `${numericYear}-01-01`;
   const to = `${numericYear}-12-31`;
   const rows = await sql`
@@ -474,9 +500,9 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   const rawStats = computeEffectiveStats(rowsWithAudit, { from, to, today });
   const stats = {
     ...rawStats,
-    total: applyEmployeeStatisticsPolicy(rawStats.total, externalEmployeeId, ctx.organizationId),
-    realized: applyEmployeeStatisticsPolicy(rawStats.realized, externalEmployeeId, ctx.organizationId),
-    planned: applyEmployeeStatisticsPolicy(rawStats.planned, externalEmployeeId, ctx.organizationId),
+    total: applyEmployeeStatisticsPolicy(rawStats.total, target?.includedShiftTypes),
+    realized: applyEmployeeStatisticsPolicy(rawStats.realized, target?.includedShiftTypes),
+    planned: applyEmployeeStatisticsPolicy(rawStats.planned, target?.includedShiftTypes),
   };
   const monthNumber = month === undefined || month === null || month === '' ? null : Number(month);
   if (monthNumber !== null && (!Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) {
@@ -489,18 +515,18 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
       const rawCurrent = computeEffectiveStats(rowsWithAudit, { ...options, today });
       const current = {
         ...rawCurrent,
-        total: applyEmployeeStatisticsPolicy(rawCurrent.total, externalEmployeeId, ctx.organizationId),
-        realized: applyEmployeeStatisticsPolicy(rawCurrent.realized, externalEmployeeId, ctx.organizationId),
-        planned: applyEmployeeStatisticsPolicy(rawCurrent.planned, externalEmployeeId, ctx.organizationId),
+        total: applyEmployeeStatisticsPolicy(rawCurrent.total, target?.includedShiftTypes),
+        realized: applyEmployeeStatisticsPolicy(rawCurrent.realized, target?.includedShiftTypes),
+        planned: applyEmployeeStatisticsPolicy(rawCurrent.planned, target?.includedShiftTypes),
       };
       // “Planned future (rest of month)” excludes today while realized hours
       // and annual projections keep the shared effective-calendar boundary.
       const rawFuture = computeEffectiveStats(rowsWithAudit, { ...options, today: shiftOperationalDate(today, 1) });
       const future = {
         ...rawFuture,
-        total: applyEmployeeStatisticsPolicy(rawFuture.total, externalEmployeeId, ctx.organizationId),
-        realized: applyEmployeeStatisticsPolicy(rawFuture.realized, externalEmployeeId, ctx.organizationId),
-        planned: applyEmployeeStatisticsPolicy(rawFuture.planned, externalEmployeeId, ctx.organizationId),
+        total: applyEmployeeStatisticsPolicy(rawFuture.total, target?.includedShiftTypes),
+        realized: applyEmployeeStatisticsPolicy(rawFuture.realized, target?.includedShiftTypes),
+        planned: applyEmployeeStatisticsPolicy(rawFuture.planned, target?.includedShiftTypes),
       };
       return {
         ...current,
@@ -510,13 +536,6 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
       };
     })()
     : null;
-  const targetRows = await sql`
-    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
-           notes, source, updated_at, updated_by_user_id
-    FROM employee_annual_targets
-    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId} AND year = ${numericYear}
-  `;
-  const target = mapTargetRow(targetRows[0]);
   const summary = { ...stats };
   delete summary.days;
   let monthSummary = null;
@@ -531,12 +550,12 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     ...summary,
     monthStats: monthSummary,
     target,
-    contract: evaluateAnnualTarget(employeeTargetMinutes(stats.realized, externalEmployeeId, ctx.organizationId), target, { calendarRows: stats.calendarRows }),
+    contract: evaluateAnnualTarget(employeeTargetMinutes(stats.realized, target?.includedShiftTypes), target, { calendarRows: stats.calendarRows }),
     projection: {
-      realizedMinutes: employeeTargetMinutes(stats.realized, externalEmployeeId, ctx.organizationId),
-      plannedMinutes: employeeTargetMinutes(stats.planned, externalEmployeeId, ctx.organizationId),
-      projectedMinutes: employeeTargetMinutes(stats.total, externalEmployeeId, ctx.organizationId),
-      contract: evaluateAnnualTarget(employeeTargetMinutes(stats.total, externalEmployeeId, ctx.organizationId), target, { calendarRows: stats.calendarRows }),
+      realizedMinutes: employeeTargetMinutes(stats.realized, target?.includedShiftTypes),
+      plannedMinutes: employeeTargetMinutes(stats.planned, target?.includedShiftTypes),
+      projectedMinutes: employeeTargetMinutes(stats.total, target?.includedShiftTypes),
+      contract: evaluateAnnualTarget(employeeTargetMinutes(stats.total, target?.includedShiftTypes), target, { calendarRows: stats.calendarRows }),
     },
   };
 }

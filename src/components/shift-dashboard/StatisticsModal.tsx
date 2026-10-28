@@ -19,6 +19,7 @@ import './CalendarModals.css';
 export interface AnnualTargetValue {
   minimumAnnualMinutes: number;
   maximumAnnualMinutes: number;
+  includedShiftTypes?: string[];
 }
 
 type Tab = 'month' | 'year' | 'target';
@@ -36,6 +37,7 @@ interface StatisticsModalProps {
   onClose: () => void;
   /** Backend sessions load the effective engine from the API; null = local-first. */
   employeeId: string | null;
+  /** Retained for older callers; objective accounting now comes from the annual target. */
   employeeExternalId?: string | null;
   organizationId?: string | null;
   year: number;
@@ -242,7 +244,7 @@ function TargetPanel({
  * is counted and future planned hours are never reported as realised.
  */
 export function StatisticsModal({
-  isOpen, onClose, employeeId, employeeExternalId = null, organizationId = null, year, month, monthLabel, today, target, canConfigureTarget,
+  isOpen, onClose, employeeId, year, month, monthLabel, today, target, canConfigureTarget,
   showContract, refreshKey = 0, localMonthShifts, localYearShifts, onConfigureTarget,
 }: StatisticsModalProps) {
   const { t, locale } = useI18n();
@@ -272,8 +274,8 @@ export function StatisticsModal({
     const rawMonthStats = computeEffectiveStats(localMonthShifts ?? [], { from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today });
     const monthStats = {
       ...rawMonthStats,
-      realized: applyEmployeeStatisticsPolicy(rawMonthStats.realized, employeeExternalId, organizationId),
-      planned: applyEmployeeStatisticsPolicy(rawMonthStats.planned, employeeExternalId, organizationId),
+      realized: applyEmployeeStatisticsPolicy(rawMonthStats.realized, target?.includedShiftTypes),
+      planned: applyEmployeeStatisticsPolicy(rawMonthStats.planned, target?.includedShiftTypes),
     };
     // The monthly card says "rest of the month", so its bucket starts tomorrow.
     // Keep realized hours and annual projections on their existing boundaries.
@@ -282,13 +284,13 @@ export function StatisticsModal({
     });
     const monthFutureStats = {
       ...rawMonthFutureStats,
-      planned: applyEmployeeStatisticsPolicy(rawMonthFutureStats.planned, employeeExternalId, organizationId),
+      planned: applyEmployeeStatisticsPolicy(rawMonthFutureStats.planned, target?.includedShiftTypes),
     };
     const rawYearStats = computeEffectiveStats(localYearShifts ?? [], { from: `${year}-01-01`, to: `${year}-12-31`, today });
     const yearStats = {
       ...rawYearStats,
-      realized: applyEmployeeStatisticsPolicy(rawYearStats.realized, employeeExternalId, organizationId),
-      planned: applyEmployeeStatisticsPolicy(rawYearStats.planned, employeeExternalId, organizationId),
+      realized: applyEmployeeStatisticsPolicy(rawYearStats.realized, target?.includedShiftTypes),
+      planned: applyEmployeeStatisticsPolicy(rawYearStats.planned, target?.includedShiftTypes),
     };
     return {
       month: {
@@ -299,33 +301,33 @@ export function StatisticsModal({
       },
       year: { realized: yearStats.realized, planned: yearStats.planned, provisionalReviewDays: yearStats.provisionalReviewDays },
       calendarRows: yearStats.calendarRows,
-      contract: evaluateAnnualTarget(employeeTargetMinutes(yearStats.realized, employeeExternalId, organizationId), target, { calendarRows: yearStats.calendarRows }),
+      contract: evaluateAnnualTarget(employeeTargetMinutes(yearStats.realized, target?.includedShiftTypes), target, { calendarRows: yearStats.calendarRows }),
     };
-  }, [employeeExternalId, employeeId, isOpen, localMonthShifts, localYearShifts, monthPrefix, organizationId, today, year, target]);
+  }, [employeeId, isOpen, localMonthShifts, localYearShifts, monthPrefix, today, year, target]);
 
   const data = useMemo<StatsData | null>(() => {
     if (!employeeId) return local;
     if (!remote || remote.year !== year || !remote.monthStats) return null;
-    const realized = applyEmployeeStatisticsPolicy(remote.realized, employeeExternalId, organizationId);
+    const realized = applyEmployeeStatisticsPolicy(remote.realized, target?.includedShiftTypes);
     return {
       month: {
-        realized: applyEmployeeStatisticsPolicy(remote.monthStats.realized, employeeExternalId, organizationId),
-        planned: applyEmployeeStatisticsPolicy(remote.monthStats.planned, employeeExternalId, organizationId),
+        realized: applyEmployeeStatisticsPolicy(remote.monthStats.realized, target?.includedShiftTypes),
+        planned: applyEmployeeStatisticsPolicy(remote.monthStats.planned, target?.includedShiftTypes),
         realizedProvisionalReviewDays: remote.monthStats.realizedProvisionalReviewDays,
         plannedProvisionalReviewDays: remote.monthStats.plannedProvisionalReviewDays,
       },
       year: {
         realized,
-        planned: applyEmployeeStatisticsPolicy(remote.planned, employeeExternalId, organizationId),
+        planned: applyEmployeeStatisticsPolicy(remote.planned, target?.includedShiftTypes),
         provisionalReviewDays: remote.provisionalReviewDays,
       },
       calendarRows: remote.calendarRows,
-      contract: evaluateAnnualTarget(employeeTargetMinutes(realized, employeeExternalId, organizationId), target, { calendarRows: remote.calendarRows }),
+      contract: evaluateAnnualTarget(employeeTargetMinutes(realized, target?.includedShiftTypes), target, { calendarRows: remote.calendarRows }),
     };
-  }, [employeeExternalId, employeeId, local, organizationId, remote, target, year]);
+  }, [employeeId, local, remote, target, year]);
 
   const monthRelation = getStatisticsMonthRelation(year, month, today);
-  const regularOnly = usesRegularOnlyStatistics(employeeExternalId, organizationId);
+  const regularOnly = usesRegularOnlyStatistics(target?.includedShiftTypes);
   const monthPrimary = data?.month[monthRelation === 'FUTURE' ? 'planned' : 'realized'];
   const monthHeroLabel = regularOnly
     ? t('effectiveStats.regular')

@@ -1374,6 +1374,7 @@ export interface RemoteAnnualTarget {
   year: number;
   minimumAnnualMinutes: number;
   maximumAnnualMinutes: number;
+  includedShiftTypes: string[];
   marginMinutes: number;
   notes: string;
   source: string;
@@ -1392,6 +1393,7 @@ export async function saveAnnualTarget(input: {
   year: number;
   minimumAnnualMinutes: number;
   maximumAnnualMinutes: number;
+  includedShiftTypes: string[];
   notes?: string;
 }): Promise<RemoteAnnualTarget> {
   const payload = await apiFetch<{ target: RemoteAnnualTarget }>('/api/calendar/annual-targets', {

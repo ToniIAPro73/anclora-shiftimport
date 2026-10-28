@@ -57,7 +57,7 @@ Un duplicado exacto no suma dos veces. Solapes entre intervalos y dos estados de
 
 `layer='COMPANY_PLAN'` y `plan_revision` se conservan como `LEGACY_STORAGE_METADATA`; no identifican CURRENT ni otorgan autoridad. No se borran filas históricas ni se elimina `company_plan_revisions`. El runtime activo de calendario, estadísticas y diferencias no consulta esa tabla. Solo la compatibilidad de auditoría/reversión de importaciones antiguas puede leerla.
 
-Las tablas `calendar_changes` y `employee_annual_targets` mantienen su función de auditoría y objetivos por empleado/año en minutos. No se requiere migración de esquema para este modelo.
+Las tablas `calendar_changes` y `employee_annual_targets` mantienen su función de auditoría y objetivos por empleado/año en minutos. Cada objetivo guarda los tipos de turno de trabajo que cuentan en sus totales; por defecto se incluye `Regular` y las métricas por tipo, como `Extras`, siguen visibles aunque no formen parte del total.
 
 ## 6. Terminología visible
 

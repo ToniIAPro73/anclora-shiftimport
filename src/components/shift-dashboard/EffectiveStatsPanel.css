@@ -272,6 +272,29 @@
   font-weight: 700;
 }
 
+.annual-target__shift-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.annual-target__shift-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.annual-target__shift-type input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--color-gold, #d4af37);
+}
+
 .eff-form__field input,
 .eff-form__field textarea {
   min-height: 40px;

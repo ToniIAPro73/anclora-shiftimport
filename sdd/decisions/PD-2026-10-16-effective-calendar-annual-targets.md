@@ -25,6 +25,9 @@
 - `D-EC-08` (2026-10-19): el calendario efectivo compartido por API y cliente conserva la incidencia
   y contabiliza provisionalmente solo el baseline actual inequívoco. La reconciliación y estadísticas
   comparten el selector de estado; sin distinción segura, no se computa.
+- `D-EC-09` (2026-10-28): cada objetivo anual por empleado/año define qué tipos de turno de trabajo
+  suman a sus totales. Por defecto solo se incluye `Regular`; otros tipos de trabajo, como `Extras`,
+  se pueden activar en la edición del objetivo. Las métricas individuales por tipo siguen visibles.
 
 ## Alternativas descartadas
 

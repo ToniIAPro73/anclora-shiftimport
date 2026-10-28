@@ -1,45 +1,27 @@
-# Checklist de validación — mostrar turnos manuales en planificación (2026-10-28)
+# Checklist de validación — objetivos anuales por tipo de turno
 
 > Se sobrescribe en cada entrega; el historial queda en Git.
 
-**Repositorio:** anclora-shiftimport  
-**Rama y commit base:** development @ c5256b4e3954bff9a82a8eeb349db8d15e475775  
-**Entorno:** UI de planificación y API snapshot; sin escrituras de datos  
-**Datos:** sin escrituras; cuenta QA no utilizada.
+**Repositorio:** anclora-shiftimport
+**Rama:** development
+**Alcance:** selector de tipos de turno que computan en el objetivo anual de cada empleado, persistencia de la selección y cálculo de estadísticas.
 
-## 1. Qué cambia
+## Validación realizada
 
-- El snapshot de una semana incluye por separado los turnos manuales efectivos de calendario, para que aparezcan en Planificación como **Ya en calendario**.
-- Los turnos continúan siendo registros operativos manuales: no se convierten en asignaciones del borrador, no incrementan el contador y no se publican otra vez.
-- La lectura limita los registros a la organización, semana, empleados activos y ámbito de área/empleado autorizado.
-
-## 2. Ya comprobado por el agente
-
-| Comprobación | Comando o método | Resultado |
-| --- | --- | --- |
-| Pruebas dirigidas de API y componentes | `npm test -- --run src/components/scheduling/WeeklyPlanner.test.tsx src/components/scheduling/AccessibleScheduleTable.test.tsx api/schedules/snapshot-scope.test.js api/schedules/version.test.js` | PASS — 30 pruebas |
-| Typecheck | `npx tsc --noEmit` | PASS |
-| Lint de archivos cambiados | `npx eslint api/_lib/scheduling.js api/schedules/snapshot-scope.test.js src/components/scheduling/AccessibleScheduleTable.tsx src/components/scheduling/AccessibleScheduleTable.test.tsx src/components/scheduling/WeeklyPlanner.tsx src/components/scheduling/WeeklyPlanner.test.tsx src/lib/i18n.ts src/lib/remote.ts` | PASS |
-| Runtime de QA visual | `anclora-visual-qa doctor` | PASS — navegador compartido disponible; no se verificó una sesión visual autenticada contra la semana del usuario |
-| Diff whitespace | `git diff --check` | PASS |
-
-## 3. No ejecutado
-
-| Comprobación | Motivo |
+| Comprobación | Resultado |
 | --- | --- |
-| Suite completa | Los tests específicos del snapshot, tabla y cuadrícula cubren el cambio; QA proporcional. |
-| Recorrido visual autenticado de esa semana | Requiere una sesión autorizada en la organización/datos donde se creó el turno. No se hicieron escrituras para preparar datos visuales. |
-| Pruebas con datos de producción | El cambio solo altera una lectura y presentación; no se modificaron datos ni esquema. |
+| `git diff --check` | PASS — sin errores de espacios o formato en el diff. |
+| Suite de pruebas | No ejecutada en esta tarea. |
+| Verificación visual/local | No realizada en esta tarea. |
 
-## 4. Revisión en la aplicación
+## Estado de migración
 
-| # | Dónde | Resultado esperado |
-| --- | --- | --- |
-| 1 | Planificación → semana con turno manual futuro | Se muestra con la etiqueta **Ya en calendario**, tipo y horario; aparece separado de las asignaciones del borrador. |
-| 2 | Contador y publicación del borrador | El turno manual no incrementa el contador de asignaciones ni vuelve a publicarse. |
-| 3 | Vista de tabla accesible | El turno aparece como solo lectura, con la aclaración de que no pertenece al borrador. |
+La migración `0047_annual_target_shift_types.sql` añade `included_shift_types` y una restricción de validación. Toni informó que ejecutó el SQL desde Neon: la columna ya existe y el `DROP CONSTRAINT IF EXISTS` produjo un aviso esperado; la tercera consulta, que añade la restricción, apareció como `ERROR`. No se ha confirmado que la restricción quedara creada ni que la migración esté registrada por el runner `_migrations`.
 
-## 5. Riesgos y límites
+Antes de promocionar esta versión, confirmar la salida de la tercera consulta y reconciliar el estado mediante el runner canónico `npm run db:migrate` / `npm run db:migrate:status`, según corresponda.
 
-- Solo se incluyen turnos efectivos de origen manual con provenance administrativa; los turnos importados, solicitudes pendientes y turnos publicados desde planificación no aparecen como manuales.
-- Publicar el borrador no cambia el origen ni el estado de los turnos manuales ya existentes.
+## Revisión funcional pendiente
+
+- Configurar por empleado y año los tipos de turno incluidos en el objetivo; `Regular` es la selección inicial.
+- Verificar que la selección se conserva y afecta a los totales correspondientes, mientras los extras siguen visibles en sus contadores independientes.
+- Revisar el estado de la migración en Neon y validar el flujo en el entorno de desarrollo.

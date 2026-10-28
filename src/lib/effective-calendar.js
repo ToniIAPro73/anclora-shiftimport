@@ -245,6 +245,7 @@ export function resolveDay(date, inputRows) {
     absenceIntervals: [],
     minutes: { regular: 0, extras: 0, other: 0, unclassified: 0, work: 0, absence: 0, duty: 0 },
     byType: {},
+    workedByType: {},
     issues,
     requiresReview: false,
     countedProvisionally: false,
@@ -338,6 +339,7 @@ export function resolveDay(date, inputRows) {
     const minutes = entry.interval.end - entry.interval.start;
     result.minutes[entry.bucket] += minutes;
     result.byType[entry.type] = (result.byType[entry.type] ?? 0) + minutes;
+    result.workedByType[entry.type] = (result.workedByType[entry.type] ?? 0) + minutes;
   }
   // JT: union with confirmed work. Only the part of a JT interval that no
   // classified interval already covers is (unclassified) legacy work.
@@ -351,6 +353,7 @@ export function resolveDay(date, inputRows) {
     if (uncovered > 0) {
       result.minutes.unclassified = uncovered;
       result.byType[LEGACY_UNCLASSIFIED_WORK] = uncovered;
+      result.workedByType[LEGACY_UNCLASSIFIED_WORK] = uncovered;
       if (work.length) issues.push({ code: 'DUTY_INTERVAL_PARTIAL_OVERLAP', blocking: false, uncoveredMinutes: uncovered });
     }
   } else if (dutyUnion.length && result.fullDayType) {
@@ -395,10 +398,14 @@ export function findOvernightSpillConflicts(days) {
 const emptyBucket = () => ({
   effectiveMinutes: 0, regularMinutes: 0, extrasMinutes: 0, otherWorkMinutes: 0, unclassifiedWorkMinutes: 0,
   absenceMinutes: 0, dutyMinutes: 0, dutyDays: 0, workedDays: 0, freeDays: 0, vacationDays: 0, sickLeaveDays: 0,
+  byType: {},
 });
 
 function addDay(bucket, day) {
   bucket.effectiveMinutes += day.minutes.work;
+  for (const [type, minutes] of Object.entries(day.workedByType ?? {})) {
+    bucket.byType[type] = (bucket.byType[type] ?? 0) + minutes;
+  }
   bucket.regularMinutes += day.minutes.regular;
   bucket.extrasMinutes += day.minutes.extras;
   bucket.otherWorkMinutes += day.minutes.other;

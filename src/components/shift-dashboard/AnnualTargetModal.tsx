@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { hoursToMinutes, splitMinutes } from '../../lib/effective-calendar.js';
 import { saveAnnualTarget, type RemoteAnnualTarget } from '../../lib/remote';
+import { getAllShiftTypesForManagement, getShiftTypeSemantics } from '../../lib/shift-types';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
 import './EffectiveStatsPanel.css';
@@ -35,6 +36,7 @@ export function AnnualTargetModal({
   const [minimum, setMinimum] = useState('');
   const [maximum, setMaximum] = useState('');
   const [notes, setNotes] = useState('');
+  const [includedShiftTypes, setIncludedShiftTypes] = useState<string[]>(['Regular']);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export function AnnualTargetModal({
     setMinimum(current ? toHoursText(current.minimumAnnualMinutes) : '');
     setMaximum(current ? toHoursText(current.maximumAnnualMinutes) : '');
     setNotes(current?.notes ?? '');
+    setIncludedShiftTypes(current?.includedShiftTypes?.length ? current.includedShiftTypes : ['Regular']);
     setError(null);
   }, [isOpen, current]);
 
@@ -64,11 +67,16 @@ export function AnnualTargetModal({
       setError(t('annualTarget.invalidRange'));
       return;
     }
+    if (includedShiftTypes.length === 0) {
+      setError(t('annualTarget.invalidTypes'));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       const saved = await saveAnnualTarget({
-        employeeId, year, minimumAnnualMinutes: minimumMinutes, maximumAnnualMinutes: maximumMinutes, notes,
+        employeeId, year, minimumAnnualMinutes: minimumMinutes, maximumAnnualMinutes: maximumMinutes,
+        includedShiftTypes, notes,
       });
       onSaved(saved);
       onClose();
@@ -85,6 +93,15 @@ export function AnnualTargetModal({
       const { hours, minutes } = splitMinutes(margin);
       return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
     })();
+
+  const workTypes = getAllShiftTypesForManagement().filter((type) => (
+    getShiftTypeSemantics(type.id).contributesWorkedTime || includedShiftTypes.includes(type.id)
+  ));
+  const knownTypeIds = new Set(workTypes.map((type) => type.id));
+  const displayedTypes = [
+    ...workTypes,
+    ...includedShiftTypes.filter((typeId) => !knownTypeIds.has(typeId)).map((id) => ({ id, label: id })),
+  ];
 
   return (
     <ModalShell
@@ -126,6 +143,27 @@ export function AnnualTargetModal({
         <p className="eff-form__margin" data-testid="annual-target-margin">
           {t('annualTarget.marginLabel')}: <strong>{marginText}</strong>
         </p>
+        <fieldset className="eff-form__field" disabled={!canEdit || saving}>
+          <legend>{t('annualTarget.includedTypesLabel')}</legend>
+          <p className="eff-form__note">{t('annualTarget.includedTypesHelp')}</p>
+          <div className="annual-target__shift-types">
+            {displayedTypes.map((type) => (
+              <label key={type.id} className="annual-target__shift-type">
+                <input
+                  type="checkbox"
+                  checked={includedShiftTypes.includes(type.id)}
+                  onChange={(event) => setIncludedShiftTypes((currentTypes) => (
+                    event.target.checked
+                      ? [...currentTypes, type.id]
+                      : currentTypes.filter((currentType) => currentType !== type.id)
+                  ))}
+                  data-testid={`annual-target-type-${type.id}`}
+                />
+                <span>{type.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <label className="eff-form__field">
           <span>{t('annualTarget.notesLabel')}</span>
           <textarea
