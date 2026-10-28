@@ -221,7 +221,7 @@ Cada día del calendario muestra como máximo dos elementos. Si hay más, aparec
 
 ### Turnos que pueden coincidir el mismo día
 
-**Libre**, **Vacaciones** y una baja de día completo ocupan la jornada entera y no se combinan con ningún otro turno ese día. Los turnos con horario, incluida **Ausencia**, pueden coincidir el mismo día si sus horas no se solapan: por ejemplo, Regular 08:00–11:00, Ausencia 11:00–12:00 y Regular 12:00–16:00. Si intentas combinarlos, verás avisos como «No puedes combinar un día libre con otros turnos en la misma fecha» o «Este horario se solapa con otro registro del mismo día». En un día con vacaciones, el botón **+** de la celda queda desactivado.
+**Libre**, **Vacaciones** y una baja de día completo ocupan toda la jornada. Si ya existe uno de ellos, una persona con rol **Propietario**, **Administrador** o **Planificador** puede añadir un turno con horario tras confirmar el aviso que explica la coincidencia. Una persona con rol **Empleado** no puede aceptar esta excepción. Dos registros de día completo siguen sin poder combinarse. En todos los casos, los turnos con horario deben tener intervalos sin solapamiento: Regular 08:00–11:00, Ausencia 11:00–12:00 y Regular 12:00–16:00 sí son compatibles; Regular 08:00–12:00 y Extras 11:00–13:00 no lo son. En días con Vacaciones, el botón **+** se habilita para Propietario o Administrador cuando se permite el alta directa; el Planificador conserva sus límites temporales habituales.
 
 **Si no ves un turno**, comprueba mes, empleado y área. Si hay más de dos elementos, abre el detalle del día. Si procede de una planificación, confirma que esté publicada. Si procede de una importación, revisa su resultado y su historial.
 

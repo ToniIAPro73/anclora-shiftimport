@@ -49,7 +49,7 @@ Los imports nuevos no deben crear un Shift horario solo por detectar JT; el rol 
 
 Tipos canónicos: Regular y Extras (intervalo de trabajo), Ausencia (intervalo no computable), Libre, Vacaciones y Baja (estado de día completo). Los intervalos son `[inicio, fin)`; un fin ≤ inicio cruza medianoche y se atribuye al día de inicio.
 
-Un duplicado exacto no suma dos veces. Solapes inválidos, combinación de día completo con trabajo y dos estados incompatibles bloquean el cómputo del conjunto seleccionado. La unión de intervalos evita duplicar JT.
+Un duplicado exacto no suma dos veces. Solapes entre intervalos y dos estados de día completo incompatibles bloquean el cómputo del conjunto seleccionado. Un usuario OWNER, ADMIN o PLANNER puede confirmar la incorporación manual de un intervalo horario cuando ya existe un estado de día completo; el servidor marca esa fila con `MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE`. Solo esa marca permite contabilizar juntas ambas entradas. Una combinación sin la marca sigue siendo inconsistente. La unión de intervalos evita duplicar JT.
 
 ## 5. Datos y compatibilidad histórica
 

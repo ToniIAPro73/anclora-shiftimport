@@ -507,6 +507,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           { conname: 'calendar_annotations_unique', def: 'UNIQUE (organization_id, employee_id, date, kind, origin)' },
           { conname: 'employee_source_identifiers_unique', def: 'UNIQUE (organization_id, source_system, external_identifier)' },
           { conname: 'import_reversion_items_unique', def: 'UNIQUE (reversion_id, import_id)' },
+          { conname: 'shifts_provenance_check', def: "CHECK (provenance IN ('MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE'))" },
         ],
       });
 

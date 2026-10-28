@@ -13,7 +13,9 @@ export interface CalendarActionInput {
 
 /** Shared policy for monthly calendar date actions. */
 export function getCalendarAction({ date, today, role, hasEditableSchedule, hasVacation }: CalendarActionInput): CalendarAction {
-  if (hasVacation) return 'DISABLED';
+  const canAddAlongsideFullDay = role === 'OWNER' || role === 'ADMIN'
+    || (role === 'PLANNER' && isHistoricalDate(date, today));
+  if (hasVacation && !canAddAlongsideFullDay) return 'DISABLED';
   if (isHistoricalDate(date, today)) return role === 'EMPLOYEE' || !role || role === 'OWNER' || role === 'ADMIN' || role === 'PLANNER'
     ? 'HISTORICAL_ADD'
     : 'DISABLED';
@@ -25,7 +27,7 @@ export function getCalendarAction({ date, today, role, hasEditableSchedule, hasV
 }
 
 export function calendarActionReason(action: CalendarAction, input: CalendarActionInput): 'vacation' | 'employee_future' | 'no_schedule' | 'historical' | 'direct_add' | 'plan' {
-  if (input.hasVacation) return 'vacation';
+  if (input.hasVacation && action === 'DISABLED') return 'vacation';
   if (action === 'DIRECT_ADD') return 'direct_add';
   if (action === 'HISTORICAL_ADD') return 'historical';
   if (action === 'PLAN') return 'plan';

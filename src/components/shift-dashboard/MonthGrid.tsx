@@ -223,14 +223,14 @@ export const MonthGrid = ({
               ? t('calendar.employeeFutureBlocked')
               : reason === 'no_schedule'
                 ? t('calendar.noEditableSchedule')
-                : hasVacationShift
+                : reason === 'vacation'
                   ? t('calendar.addShiftBlockedAria', { date: iso })
                   : action === 'DIRECT_ADD' || isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso });
 
             return (
               <div
                 key={day}
-                className={hasVacationShift ? 'month-day-cell has-add-disabled' : 'month-day-cell'}
+                className={hasVacationShift && actionDisabled ? 'month-day-cell has-add-disabled' : 'month-day-cell'}
                 data-today={isToday || undefined}
                 onClick={() => {
                   if (expandedShiftId) {
@@ -307,7 +307,7 @@ export const MonthGrid = ({
                     }}
                     disabled={actionDisabled}
                     aria-label={actionLabel}
-                    title={reason === 'employee_future' ? t('calendar.employeeFutureBlocked') : reason === 'no_schedule' ? t('calendar.noEditableSchedule') : hasVacationShift ? t('calendar.addShiftBlockedTitle') : action === 'DIRECT_ADD' || isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
+                    title={reason === 'employee_future' ? t('calendar.employeeFutureBlocked') : reason === 'no_schedule' ? t('calendar.noEditableSchedule') : reason === 'vacation' ? t('calendar.addShiftBlockedTitle') : action === 'DIRECT_ADD' || isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
                   >
                     <Plus size={14} strokeWidth={2.2} />
                   </button>

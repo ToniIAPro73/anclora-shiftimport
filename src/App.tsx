@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { Shift } from './lib/types';
 import { getMonthDaysISO, getPlannerWeekStartPreference } from './lib/week';
 import { clearAnonymousShiftDraft, loadShifts, normalizeShift, syncShiftChanges } from './lib/storage';
-import { findShiftConflict } from './lib/shift-conflicts';
+import { findDomainShiftConflict } from './lib/shift-compatibility';
 
 import { fingerprintShift } from './lib/import-dedup';
 import { classifyHistoricalIncoming } from './lib/import-historical-conflicts';
@@ -58,6 +58,7 @@ import { StatisticsModal } from './components/shift-dashboard/StatisticsModal';
 import { ReconciliationModal } from './components/shift-dashboard/ReconciliationModal';
 import { AnnualTargetModal } from './components/shift-dashboard/AnnualTargetModal';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
@@ -261,6 +262,7 @@ function App() {
   const [adminIndividualImport, setAdminIndividualImport] = useState<{ file: File; employee: DetectedTeamEmployee; employeeId: string | null } | null>(null);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
+  const [pendingWholeDayOverride, setPendingWholeDayOverride] = useState<{ shift: Shift; fullDayType: string } | null>(null);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
   const isImporting = appOperation === 'importing';
   const isSavingShift = appOperation === 'saving-shift';
@@ -699,7 +701,7 @@ function App() {
    * localStorage for guests. */
   const persistChanges = useCallback(async (
     nextShifts: Shift[],
-    changes: { upserts?: Shift[]; deleteIds?: string[]; importId?: string },
+    changes: { upserts?: Shift[]; deleteIds?: string[]; importId?: string; confirmWholeDayOverride?: boolean },
   ): Promise<void> => {
     if (session && selectedEmployeeId) {
       await syncRemoteShifts(selectedEmployeeId, changes);
@@ -945,7 +947,7 @@ function App() {
     setCurrentMonth(d.getMonth());
   };
 
-  const handleSaveShift = async (shift: Shift) => {
+  const handleSaveShift = async (shift: Shift, confirmWholeDayOverride = false) => {
     if (isImporting || isSavingShift) {
       return;
     }
@@ -953,14 +955,26 @@ function App() {
       setAppFeedback({ kind: 'alert', message: t('shiftModal.historicalOnly') });
       return;
     }
-    const conflict = findShiftConflict(shifts, shift, locale);
+    const conflict = findDomainShiftConflict(shifts, shift, locale);
     const incomingType = getShiftType(shift);
     if (getShiftTypeSemantics(incomingType).timed && !hasShiftTimes(shift)) {
       setAppFeedback({ kind: 'alert', message: t('conflicts.timedRequiresTimes') });
       return;
     }
-    if (conflict) {
-      setAppFeedback({ kind: 'alert', message: conflict });
+    if (conflict?.code === 'FULL_DAY_CONFLICT') {
+      const canConfirmOverride = ['OWNER', 'ADMIN', 'PLANNER'].includes(session?.role ?? '')
+        && getShiftTypeSemantics(incomingType).timed
+        && !getShiftTypeSemantics(incomingType).exclusive;
+      if (canConfirmOverride && !confirmWholeDayOverride) {
+        setPendingWholeDayOverride({ shift, fullDayType: getShiftType(conflict.existing) });
+        return;
+      }
+      if (!canConfirmOverride || !confirmWholeDayOverride) {
+        setAppFeedback({ kind: 'alert', message: conflict.message });
+        return;
+      }
+    } else if (conflict) {
+      setAppFeedback({ kind: 'alert', message: conflict.message });
       return;
     }
 
@@ -968,7 +982,7 @@ function App() {
 
     setAppOperation('saving-shift');
     try {
-      await persistChanges(nextShifts, { upserts: [shift] });
+      await persistChanges(nextShifts, { upserts: [shift], confirmWholeDayOverride });
       setShifts(nextShifts);
       setIsModalOpen(false);
       setEditingShiftId(null);
@@ -2373,6 +2387,26 @@ function App() {
         }}
         onSave={handleSaveShift}
         onDelete={handleDeleteShift}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingWholeDayOverride !== null}
+        title={t('conflicts.wholeDayOverrideTitle')}
+        description={pendingWholeDayOverride
+          ? t('conflicts.wholeDayOverrideDescription', {
+            fullDayType: pendingWholeDayOverride.fullDayType,
+            shiftType: getShiftType(pendingWholeDayOverride.shift),
+            date: pendingWholeDayOverride.shift.date,
+          })
+          : ''}
+        confirmLabel={t('conflicts.wholeDayOverrideConfirm')}
+        cancelLabel={t('common.cancel')}
+        onCancel={() => setPendingWholeDayOverride(null)}
+        onConfirm={async () => {
+          const pending = pendingWholeDayOverride;
+          setPendingWholeDayOverride(null);
+          if (pending) await handleSaveShift(pending.shift, true);
+        }}
       />
 
       <ApprovalInboxModal

@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, employeeRowInScope, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 import { getOperationalDate, isHistoricalDate } from './operational-date.js';
-import { assertTimedTypeHasTimes, findAssignmentConflict } from './shift-compatibility.js';
+import { assertTimedTypeHasTimes, findAssignmentConflict, getShiftSemantics } from './shift-compatibility.js';
 import { importReversibility } from './import-reversion.js';
 import { LEDGER_PREFIX_LENGTH, ledgerPrefix } from './import-ledger.js';
 import { hasSemanticHistoryChange } from '../../src/lib/calendar-import.js';
@@ -119,6 +119,7 @@ export function normalizeShiftInput(raw) {
       : !LEGACY_NON_WORKING_TYPES.has(shiftType.toLowerCase()),
     location,
     origin: raw?.origin === 'MAN' ? 'MAN' : 'IMP',
+    ...(raw?.confirmWholeDayOverride === true ? { confirmWholeDayOverride: true } : {}),
     areaId: raw?.areaId ? String(raw.areaId).trim() || null : null,
   };
 }
@@ -2957,7 +2958,7 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
     const writeProvenance = shift.origin === 'MAN'
       ? (ctx.role === 'EMPLOYEE' ? 'EMPLOYEE_REQUEST' : 'MANUAL_ADMIN_CHANGE')
       : 'COMPANY_IMPORT';
-    prepared.push({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance });
+    prepared.push({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance, confirmedWholeDayOverride: false });
   }
 
   if (prepared.length === 0) {
@@ -2998,7 +2999,20 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
         !(item.semanticFingerprint && row.semantic_fingerprint === item.semanticFingerprint)
         && String(row.shift_type ?? '').trim().toLowerCase() !== 'jt'
       ));
-      const conflict = findAssignmentConflict(relevantExisting, candidate, item.id);
+      let conflict;
+      const mayConfirmWholeDayOverride = item.shift.confirmWholeDayOverride
+        && item.shift.origin === 'MAN'
+        && ['OWNER', 'ADMIN', 'PLANNER'].includes(ctx.role)
+        && getShiftSemantics(candidate).timed
+        && !getShiftSemantics(candidate).exclusive;
+      const fullDayRows = relevantExisting.filter((row) => getShiftSemantics(row).exclusive);
+      if (mayConfirmWholeDayOverride && fullDayRows.length === 1) {
+        const timedRows = relevantExisting.filter((row) => !getShiftSemantics(row).exclusive);
+        conflict = findAssignmentConflict(timedRows, candidate, item.id);
+        if (!conflict) item.confirmedWholeDayOverride = true;
+      } else {
+        conflict = findAssignmentConflict(relevantExisting, candidate, item.id);
+      }
       if (conflict) {
         const error = new HttpError(422, conflict.code === 'OVERLAP'
           ? 'This time overlaps another record on the same day'
@@ -3044,7 +3058,7 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
   const prefix = ledgerImportId ? LEDGER_PREFIX_LENGTH : 0;
   const rowsPerShiftRaw = await sql.transaction((txn) => [
     ...(ledgerImportId ? ledgerPrefix(txn, ctx.organizationId, ledgerImportId) : []),
-    ...prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance }) => (
+    ...prepared.map(({ shift, id, employeeId, shiftAreaId, semanticFingerprint, writeLayer, writeProvenance, confirmedWholeDayOverride }) => (
     semanticFingerprint
       ? txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
@@ -3053,13 +3067,13 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
               ${shiftAreaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null},
               ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork},
-              NOW(), ${semanticFingerprint}, ${writeLayer}, ${writeProvenance})
+              NOW(), ${semanticFingerprint}, ${writeLayer}, ${confirmedWholeDayOverride ? 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE' : writeProvenance})
       ON CONFLICT (organization_id, employee_id, semantic_fingerprint)
       WHERE semantic_fingerprint IS NOT NULL
       DO UPDATE SET updated_at = NOW()
       RETURNING id, organization_id, employee_id, import_id, area_id,
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                start_time, end_time, location, origin, shift_type, counts_as_work
+                start_time, end_time, location, origin, shift_type, counts_as_work, layer, provenance
     `
       : txn`
       INSERT INTO shifts (id, organization_id, employee_id, import_id, area_id, date,
@@ -3068,7 +3082,7 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
       VALUES (${id}, ${ctx.organizationId}, ${employeeId}, ${shift.importId},
               ${shiftAreaId}, ${shift.date}, ${shift.startTime || null}, ${shift.endTime || null},
               ${shift.location}, ${shift.origin}, ${shift.shiftType}, ${shift.countsAsWork}, NOW(),
-              ${writeLayer}, ${writeProvenance})
+              ${writeLayer}, ${confirmedWholeDayOverride ? 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE' : writeProvenance})
       ON CONFLICT (id) DO UPDATE SET
         date = EXCLUDED.date,
         start_time = EXCLUDED.start_time,
@@ -3078,12 +3092,13 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
         shift_type = EXCLUDED.shift_type,
         counts_as_work = EXCLUDED.counts_as_work,
         area_id = EXCLUDED.area_id,
+        provenance = EXCLUDED.provenance,
         updated_at = NOW()
       WHERE shifts.organization_id = ${ctx.organizationId}
         AND shifts.employee_id = ${employeeId}
       RETURNING id, organization_id, employee_id, import_id, area_id,
                 TO_CHAR(date, 'YYYY-MM-DD') AS date,
-                start_time, end_time, location, origin, shift_type, counts_as_work
+                start_time, end_time, location, origin, shift_type, counts_as_work, layer, provenance
     `
     )),
   ]);

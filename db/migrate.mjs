@@ -599,6 +599,8 @@ export const MIGRATION_SENTINELS = {
     cat.columns.has('company_plan_revisions.reverted_at') &&
     cat.constraints.has('import_reversion_items_unique'),
   '0045_import_effect_plan_revision_key.sql': (cat) => cat.indexes.has('import_effects_resource_idx'),
+  '0046_confirmed_full_day_shift_override.sql': (cat) =>
+    Boolean(cat.constraintDefs?.get('shifts_provenance_check')?.includes('MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE')),
 };
 
 /**

@@ -28,6 +28,7 @@ export const CALENDAR_LAYERS = Object.freeze({
 export const PROVENANCE = Object.freeze({
   COMPANY_IMPORT: 'COMPANY_IMPORT',
   MANUAL_ADMIN_CHANGE: 'MANUAL_ADMIN_CHANGE',
+  MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE: 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE',
   EMPLOYEE_REQUEST: 'EMPLOYEE_REQUEST',
   SCHEDULE_PUBLICATION: 'SCHEDULE_PUBLICATION',
   MIGRATION: 'MIGRATION',
@@ -285,13 +286,14 @@ export function resolveDay(date, inputRows) {
       issues.push({ code: 'MISSING_TIMES', blocking: true, type: classified.type });
       continue;
     }
-    const key = `${classified.kind}|${classified.type}|${interval?.start ?? ''}|${interval?.end ?? ''}`;
+    const overrideMarker = row.provenance === PROVENANCE.MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE ? 'confirmed-override' : '';
+    const key = `${classified.kind}|${classified.type}|${interval?.start ?? ''}|${interval?.end ?? ''}|${overrideMarker}`;
     if (seen.has(key)) {
       result.duplicateRows += 1;
       continue;
     }
     seen.add(key);
-    entries.push({ ...classified, interval });
+    entries.push({ ...classified, interval, provenance: row.provenance });
   }
   if (result.duplicateRows) issues.push({ code: 'DUPLICATE_ROWS', blocking: false, rows: result.duplicateRows });
 
@@ -302,10 +304,13 @@ export function resolveDay(date, inputRows) {
   if (new Set(fullDays.map((entry) => entry.type)).size > 1) {
     issues.push({ code: 'FULL_DAY_CONFLICT', blocking: true, types: [...new Set(fullDays.map((e) => e.type))] });
   }
-  if (fullDays.length && (work.length || absences.length)) {
+  const timedEntries = [...work, ...absences];
+  const allTimedEntriesConfirmedOverrides = timedEntries.length > 0
+    && timedEntries.every((entry) => entry.provenance === PROVENANCE.MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE);
+  if (fullDays.length && timedEntries.length && !allTimedEntriesConfirmedOverrides) {
     issues.push({ code: 'FULL_DAY_WITH_WORK', blocking: true, fullDay: fullDays[0].type });
   }
-  const timed = [...work, ...absences];
+  const timed = timedEntries;
   for (let i = 0; i < timed.length; i += 1) {
     for (let j = i + 1; j < timed.length; j += 1) {
       if (overlaps(timed[i].interval, timed[j].interval)) {

@@ -20,8 +20,12 @@ describe('calendar temporal action policy', () => {
     expect(getCalendarAction({ ...base, date: '2026-09-07', role: 'PLANNER' })).toBe('DISABLED');
   });
 
-  it('blocks employee today/future and vacation cells', () => {
+  it('blocks employee today/future and allows eligible management roles to open vacation dates', () => {
     expect(getCalendarAction({ ...base, date: '2026-09-06', role: 'EMPLOYEE', hasEditableSchedule: true })).toBe('DISABLED');
-    expect(getCalendarAction({ ...base, date: '2026-09-05', role: 'OWNER', hasVacation: true })).toBe('DISABLED');
+    expect(getCalendarAction({ ...base, date: '2026-09-05', role: 'OWNER', hasVacation: true })).toBe('HISTORICAL_ADD');
+    expect(getCalendarAction({ ...base, date: '2026-09-06', role: 'ADMIN', hasVacation: true })).toBe('DIRECT_ADD');
+    expect(getCalendarAction({ ...base, date: '2026-09-05', role: 'PLANNER', hasVacation: true })).toBe('HISTORICAL_ADD');
+    expect(getCalendarAction({ ...base, date: '2026-09-06', role: 'PLANNER', hasVacation: true, hasEditableSchedule: true })).toBe('DISABLED');
+    expect(getCalendarAction({ ...base, date: '2026-09-06', role: 'EMPLOYEE', hasVacation: true })).toBe('DISABLED');
   });
 });

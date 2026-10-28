@@ -28,6 +28,8 @@ export interface Shift {
   /** Legacy storage metadata; it never selects CURRENT. */
   layer?: 'COMPANY_PLAN' | 'CHANGE';
   provenance?: string | null;
+  /** Transient API intent: elevated users explicitly confirmed adding this timed shift beside a full-day record. */
+  confirmWholeDayOverride?: boolean;
   dutyRole?: string | null;
   effectiveState?: 'EFFECTIVE' | 'SUPERSEDED' | 'ABSORBED' | 'METADATA_ONLY' | 'REQUIRES_REVIEW';
   planRevision?: number;

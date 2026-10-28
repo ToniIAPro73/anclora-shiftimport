@@ -553,7 +553,7 @@ function addDaysToIso(value: string, days: number): string {
  */
 export async function syncRemoteShifts(
   employeeId: string,
-  changes: { upserts?: Shift[]; deleteIds?: string[]; importId?: string },
+  changes: { upserts?: Shift[]; deleteIds?: string[]; importId?: string; confirmWholeDayOverride?: boolean },
 ): Promise<{ saved: Shift[]; deleted: number }> {
   const payload = await apiFetch<{ saved: RemoteShiftRow[]; deleted: number }>('/api/shifts', {
     method: 'PATCH',
@@ -571,6 +571,7 @@ export async function syncRemoteShifts(
         countsAsWork: shift.countsAsWork ?? shiftTypeCountsAsWork(getShiftType(shift)),
         location: shift.location,
         origin: shift.origin === 'MAN' ? 'MAN' : 'IMP',
+        confirmWholeDayOverride: changes.confirmWholeDayOverride === true,
       })),
       deleteIds: changes.deleteIds ?? [],
     }),
