@@ -182,6 +182,19 @@ export interface ScheduleSnapshot {
   version: ScheduleVersion;
   employees: SchedulingEmployee[];
   assignments: ShiftAssignment[];
+  /** Effective manual shifts already recorded in the calendar; never part of the draft. */
+  calendarShifts: CalendarScheduleShift[];
+}
+
+export interface CalendarScheduleShift {
+  id: string;
+  employeeId: string;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  location: string | null;
+  shiftType: string;
+  countsAsWork: boolean;
 }
 
 export interface SchedulePublicationResult {

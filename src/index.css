@@ -4277,6 +4277,20 @@ button[aria-busy='true'] {
   outline: none;
 }
 
+.weekly-planner__calendar-shift {
+  cursor: default;
+  border-style: dashed;
+  opacity: 0.82;
+}
+
+.weekly-planner__calendar-shift-label {
+  display: inline-block;
+  margin-right: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
 .weekly-planner__assignment:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--assignment-accent) 70%, var(--glass-border));
   border-left-color: var(--assignment-accent);

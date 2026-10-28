@@ -13,6 +13,10 @@ const employees = [
 const assignments = employees.map((e, i) => ({
   id: `as-${i}`, schedule_version_id: VERSION, employee_id: e.id, date: '2026-11-25', start_time: '14:00', end_time: '22:00', location: 'Regular', created_at: '2026', updated_at: '2026',
 }));
+const calendarShifts = employees.map((e, i) => ({
+  id: `cal-${i}`, employee_id: e.id, date: '2026-11-27', start_time: '21:00', end_time: '02:00',
+  location: null, shift_type: 'Extras', counts_as_work: true,
+}));
 
 // Organization-wide schedule (area_id null) holding three employees: the read model must still respect the planner scope.
 const sql = (strings) => {
@@ -22,6 +26,7 @@ const sql = (strings) => {
   }
   if (text.startsWith('SELECT id, name, external_employee_id')) return Promise.resolve(employees);
   if (text.startsWith('SELECT sa.id')) return Promise.resolve(assignments);
+  if (text.startsWith('SELECT sh.id')) return Promise.resolve(calendarShifts);
   if (text.includes('FROM areas')) return Promise.resolve([{ active_area_count: 0 }]);
   return Promise.resolve([]);
 };
@@ -33,16 +38,19 @@ describe('schedule snapshot read model respects the planner scope', () => {
     const snap = await snapshotFor({ role: 'PLANNER', plannerScopeType: 'EMPLOYEES', scopedEmployeeIds: [EMP.two], scopedAreaIds: [] });
     expect(snap.employees.map((e) => e.id)).toEqual([EMP.two]);
     expect(snap.assignments.map((a) => a.employeeId)).toEqual([EMP.two]);
+    expect(snap.calendarShifts.map((shift) => shift.employeeId)).toEqual([EMP.two]);
   });
   it('S2: PLANNER AREAS=[area-a] receives only area-a employees and assignments', async () => {
     const snap = await snapshotFor({ role: 'PLANNER', plannerScopeType: 'AREAS', scopedAreaIds: ['area-a'], scopedAreaId: 'area-a' });
     expect(snap.employees.map((e) => e.id)).toEqual([EMP.one, EMP.two]);
     expect(snap.assignments.map((a) => a.employeeId)).toEqual([EMP.one, EMP.two]);
+    expect(snap.calendarShifts.map((shift) => shift.employeeId)).toEqual([EMP.one, EMP.two]);
   });
   it('S3: ORGANIZATION planner and ADMIN keep the whole roster', async () => {
     const planner = await snapshotFor({ role: 'PLANNER', plannerScopeType: 'ORGANIZATION' });
     expect(planner.employees).toHaveLength(3);
     expect(planner.assignments).toHaveLength(3);
+    expect(planner.calendarShifts).toHaveLength(3);
     expect((await snapshotFor({ role: 'ADMIN' })).employees).toHaveLength(3);
   });
 });

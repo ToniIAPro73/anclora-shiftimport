@@ -163,6 +163,16 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     }
     return byCell;
   }, [snapshot]);
+  const calendarShiftsByCell = useMemo(() => {
+    const byCell = new Map<string, NonNullable<ScheduleSnapshot['calendarShifts']>>();
+    for (const shift of snapshot?.calendarShifts ?? []) {
+      const key = `${shift.employeeId}:${shift.date}`;
+      const current = byCell.get(key) ?? [];
+      current.push(shift);
+      byCell.set(key, current);
+    }
+    return byCell;
+  }, [snapshot]);
   const editable = canEdit && snapshot?.version.status === 'DRAFT' && !isViewingHistoricalVersion;
   const previousWeekDisabled = addDays(periodStart, -1) < today;
 
@@ -645,6 +655,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                   snapshot={visibleSnapshot ?? snapshot}
                   editorSnapshot={snapshot}
                   assignmentsByCell={assignmentsByCell}
+                  calendarShiftsByCell={calendarShiftsByCell}
                   editable={Boolean(editable)}
                   minimumDate={today}
                   editor={editor}
@@ -713,6 +724,30 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                           : displayType}</strong>
                                         {assignment.location && <span>{assignment.location}</span>}
                                       </button>
+                                    );
+                                  })}
+                                  {(calendarShiftsByCell.get(`${employee.id}:${day}`) ?? []).map((shift) => {
+                                    const shiftTypeId = shift.shiftType;
+                                    const displayType = translateShiftTypeLabel(
+                                      shiftTypeId,
+                                      locale,
+                                      getShiftTypeDefinition(shiftTypeId)?.label ?? shiftTypeId,
+                                    );
+                                    const hasTimes = Boolean(shift.startTime && shift.endTime);
+                                    return (
+                                      <div
+                                        className="weekly-planner__assignment weekly-planner__calendar-shift"
+                                        key={`calendar-${shift.id}`}
+                                        data-shift-type={shiftTypeId}
+                                        title={t('planner.alreadyOnCalendar')}
+                                        aria-label={`${t('planner.alreadyOnCalendar')}: ${displayType}${hasTimes ? ` ${shift.startTime}–${shift.endTime}` : ''}`}
+                                      >
+                                        <span className="weekly-planner__assignment-type">{t('planner.alreadyOnCalendar')}</span>
+                                        <strong>{hasTimes
+                                          ? `${displayType} · ${shift.startTime}–${shift.endTime}`
+                                          : displayType}</strong>
+                                        {shift.location && <span>{shift.location}</span>}
+                                      </div>
                                     );
                                   })}
                                   {editable && day >= today && (

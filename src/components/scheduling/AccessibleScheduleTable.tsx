@@ -2,7 +2,7 @@ import { FormEvent } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Locale, translateShiftTypeLabel } from '../../lib/i18n';
 import { formatEmployeeProfileLabel } from '../../lib/personas';
-import { ScheduleSnapshot, ShiftAssignment } from '../../lib/remote';
+import { CalendarScheduleShift, ScheduleSnapshot, ShiftAssignment } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { getAssignmentShiftType } from '../../lib/shifts';
 import { getShiftTypeDefinition } from '../../lib/shift-types';
@@ -14,6 +14,7 @@ interface AccessibleScheduleTableProps {
   snapshot: ScheduleSnapshot;
   editorSnapshot?: ScheduleSnapshot;
   assignmentsByCell: Map<string, ShiftAssignment[]>;
+  calendarShiftsByCell: Map<string, CalendarScheduleShift[]>;
   editable: boolean;
   minimumDate?: string;
   editor: AssignmentEditorState | null;
@@ -44,6 +45,7 @@ export function AccessibleScheduleTable({
   snapshot,
   editorSnapshot = snapshot,
   assignmentsByCell,
+  calendarShiftsByCell,
   editable,
   minimumDate,
   editor,
@@ -80,9 +82,13 @@ export function AccessibleScheduleTable({
           <tbody>
             {snapshot.employees.flatMap((employee) => days.flatMap((day) => {
               const cellAssignments = assignmentsByCell.get(`${employee.id}:${day}`) ?? [];
+              const calendarShifts = calendarShiftsByCell.get(`${employee.id}:${day}`) ?? [];
               const dateEditable = editable && day >= today;
-              const rows = cellAssignments.length > 0 ? cellAssignments : [undefined];
-              return rows.map((assignment) => (
+              const assignmentRows = cellAssignments.length > 0 || calendarShifts.length === 0
+                ? (cellAssignments.length > 0 ? cellAssignments : [undefined])
+                : [];
+              return [
+                ...assignmentRows.map((assignment) => (
                 <tr key={rowKey(employee.id, day, assignment)}>
                   <th scope="row">
                     <span>{formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId)}</span>
@@ -118,7 +124,29 @@ export function AccessibleScheduleTable({
                     </div>
                   </td>
                 </tr>
-              ));
+                )),
+                ...calendarShifts.map((shift) => {
+                  const shiftTypeId = shift.shiftType;
+                  const displayType = translateShiftTypeLabel(
+                    shiftTypeId,
+                    locale,
+                    getShiftTypeDefinition(shiftTypeId)?.label ?? shiftTypeId,
+                  );
+                  const hasTimes = Boolean(shift.startTime && shift.endTime);
+                  return (
+                    <tr key={`calendar:${employee.id}:${day}:${shift.id}`} className="weekly-planner__calendar-shift-row">
+                      <th scope="row"><span>{formatEmployeeProfileLabel(employee.name, employee.externalEmployeeId)}</span></th>
+                      <td data-today={day === today || undefined}><time dateTime={day}>{formatDay(day, locale)}</time></td>
+                      <td>
+                        <span className="weekly-planner__calendar-shift-label">{t('planner.alreadyOnCalendar')}</span>{' '}
+                        <strong>{hasTimes ? `${displayType} (${shift.startTime}–${shift.endTime})` : displayType}</strong>
+                      </td>
+                      <td>{shift.location || <span className="weekly-planner__table-muted">{t('planner.noLocation')}</span>}</td>
+                      <td><span className="weekly-planner__table-muted">{t('planner.calendarShiftReadOnly')}</span></td>
+                    </tr>
+                  );
+                }),
+              ];
             }))}
           </tbody>
         </table>

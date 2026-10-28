@@ -42,18 +42,21 @@ const mockSnapshot: ScheduleSnapshot = {
     { id: 'employee-1', name: 'Ana Lopez', externalEmployeeId: 'EMP-001', areaId: 'area-1' },
   ],
   assignments: [mockAssignment],
+  calendarShifts: [],
 };
 
 function renderAccessibleTable(overrides: Partial<Parameters<typeof AccessibleScheduleTable>[0]> = {}) {
   const assignmentsByCell = new Map<string, ShiftAssignment[]>([
     ['employee-1:2026-09-28', [mockAssignment]],
   ]);
+  const calendarShiftsByCell = new Map<string, NonNullable<ScheduleSnapshot['calendarShifts']>>();
 
   const defaultProps: Parameters<typeof AccessibleScheduleTable>[0] = {
     days: mockDays,
     locale: 'es',
     snapshot: mockSnapshot,
     assignmentsByCell,
+    calendarShiftsByCell,
     editable: true,
     minimumDate: '2026-09-28',
     editor: null,
@@ -127,5 +130,18 @@ describe('AccessibleScheduleTable (UXR-F3-M02 / CX-F02)', () => {
     fireEvent.click(addBtn);
 
     expect(onAdd).toHaveBeenCalledWith('employee-1', '2026-09-29');
+  });
+
+  it('shows an operational calendar shift separately from draft assignments', () => {
+    renderAccessibleTable({
+      calendarShiftsByCell: new Map([['employee-1:2026-09-29', [{
+        id: 'calendar-shift-1', employeeId: 'employee-1', date: '2026-09-29',
+        startTime: '21:00', endTime: '02:00', location: null, shiftType: 'Extras', countsAsWork: true,
+      }]]]),
+    });
+
+    const row = screen.getByRole('row', { name: /Ana Lopez.*Ya en calendario/i });
+    expect(row).toHaveTextContent('Extras (21:00–02:00)');
+    expect(row).toHaveTextContent('Turno operativo; no forma parte del borrador');
   });
 });

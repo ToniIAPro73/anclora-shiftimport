@@ -471,15 +471,66 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
         AND e.status = 'active'
       ORDER BY sa.date, sa.start_time, sa.employee_id, sa.id
     `;
-  const [allEmployeeRows, allAssignmentRows] = await Promise.all([employeeQuery, assignmentQuery]);
+  // Calendar-entered manual shifts are already operational records, not draft
+  // assignments. Return them separately so Planning can show them without
+  // counting or publishing them a second time.
+  const calendarShiftQuery = scopedAreaId
+    ? sql`
+      SELECT sh.id, sh.employee_id, sh.date, sh.start_time, sh.end_time,
+             sh.location, sh.shift_type, sh.counts_as_work
+      FROM shifts sh
+      JOIN employees e ON e.id = sh.employee_id
+      WHERE sh.organization_id = ${ctx.organizationId}
+        AND e.organization_id = ${ctx.organizationId}
+        AND e.status = 'active'
+        AND e.area_id = ${scopedAreaId}
+        AND sh.area_id = ${scopedAreaId}
+        AND sh.date BETWEEN ${schedule.period_start} AND ${schedule.period_end}
+        AND sh.origin = 'MAN'
+        AND sh.provenance IN ('MANUAL_ADMIN_CHANGE', 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE')
+        AND sh.effective_state = 'EFFECTIVE'
+        AND sh.schedule_version_id IS NULL
+      ORDER BY sh.date, sh.start_time NULLS FIRST, sh.employee_id, sh.id
+    `
+    : sql`
+      SELECT sh.id, sh.employee_id, sh.date, sh.start_time, sh.end_time,
+             sh.location, sh.shift_type, sh.counts_as_work
+      FROM shifts sh
+      JOIN employees e ON e.id = sh.employee_id
+      WHERE sh.organization_id = ${ctx.organizationId}
+        AND e.organization_id = ${ctx.organizationId}
+        AND e.status = 'active'
+        AND sh.date BETWEEN ${schedule.period_start} AND ${schedule.period_end}
+        AND sh.origin = 'MAN'
+        AND sh.provenance IN ('MANUAL_ADMIN_CHANGE', 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE')
+        AND sh.effective_state = 'EFFECTIVE'
+        AND sh.schedule_version_id IS NULL
+      ORDER BY sh.date, sh.start_time NULLS FIRST, sh.employee_id, sh.id
+    `;
+  const [allEmployeeRows, allAssignmentRows, allCalendarShiftRows] = await Promise.all([
+    employeeQuery, assignmentQuery, calendarShiftQuery,
+  ]);
   // Server-side read model: a scoped PLANNER (areas / employees) only receives its own roster and their assignments.
   const employeeRows = allEmployeeRows.filter((row) => employeeRowInScope(scope, row));
   const allowedEmployeeIds = new Set(employeeRows.map((row) => row.id));
   const assignmentRows = allAssignmentRows.filter((row) => allowedEmployeeIds.has(row.employee_id));
+  const calendarShifts = allCalendarShiftRows
+    .filter((row) => allowedEmployeeIds.has(row.employee_id))
+    .map((row) => ({
+      id: row.id,
+      employeeId: row.employee_id,
+      date: databaseDateToIso(row.date),
+      startTime: row.start_time === null || row.start_time === undefined ? null : String(row.start_time).slice(0, 5),
+      endTime: row.end_time === null || row.end_time === undefined ? null : String(row.end_time).slice(0, 5),
+      location: row.location ?? null,
+      shiftType: row.shift_type ?? 'Regular',
+      countsAsWork: row.counts_as_work !== false,
+    }));
   return {
     version: mapScheduleVersion(schedule),
     employees: employeeRows.map(mapSchedulingEmployee),
     assignments: assignmentRows.map(mapAssignment),
+    calendarShifts,
   };
 }
 

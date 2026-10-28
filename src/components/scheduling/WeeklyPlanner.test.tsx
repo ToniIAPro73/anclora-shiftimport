@@ -71,6 +71,7 @@ const snapshot = (overrides: Partial<ScheduleSnapshot> = {}): ScheduleSnapshot =
   version: version(),
   employees: [{ id: 'employee-1', name: 'Ana Planner', externalEmployeeId: 'E001', areaId: 'area-1' }],
   assignments: [assignment()],
+  calendarShifts: [],
   ...overrides,
 });
 
@@ -146,6 +147,23 @@ describe('WeeklyPlanner', () => {
     await waitFor(() => expect(remote.updateRemoteAssignment).toHaveBeenCalledWith(
       'schedule-1', 'version-1', 'assignment-1', expect.objectContaining({ location: 'Lobby' }),
     ));
+  });
+
+  it('shows an already-recorded calendar shift inside the matching draft week', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [],
+      calendarShifts: [{
+        id: 'calendar-shift-1', employeeId: 'employee-1', date: '2026-09-29',
+        startTime: '21:00', endTime: '02:00', location: null, shiftType: 'Extras', countsAsWork: true,
+      }],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByText('Ya en calendario')).toBeInTheDocument());
+    expect(screen.getByText('Extras · 21:00–02:00')).toBeInTheDocument();
+    expect(screen.getByText('0 turnos')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Extras/ })).not.toBeInTheDocument();
   });
 
   it('preserves start and end times and keeps inputs enabled when selecting Ausencia type', async () => {
