@@ -1,18 +1,23 @@
-# Checklist de validación — objetivos anuales por tipo de turno
+# Checklist de validación — corrección de build de objetivos anuales
 
 > Se sobrescribe en cada entrega; el historial queda en Git.
 
 **Repositorio:** anclora-shiftimport
 **Rama:** development
-**Alcance:** selector de tipos de turno que computan en el objetivo anual de cada empleado, persistencia de la selección y cálculo de estadísticas.
+**Alcance:** eliminar una variable local declarada pero no utilizada que impedía compilar `src/App.tsx` en Vercel Preview (`TS6133`).
 
 ## Validación realizada
 
 | Comprobación | Resultado |
 | --- | --- |
+| `npm run build` | PASS — `tsc` y `vite build` completados. Vite muestra solo el aviso no bloqueante de tamaño de chunks. |
 | `git diff --check` | PASS — sin errores de espacios o formato en el diff. |
-| Suite de pruebas | No ejecutada en esta tarea. |
-| Verificación visual/local | No realizada en esta tarea. |
+| Suite de pruebas | No ejecutada para esta corrección de build. |
+| Verificación visual/local | No realizada para esta corrección de build. |
+
+## Causa del Preview fallido
+
+Vercel Preview del commit `93cc1be` falló en `npm run build` porque `activeEmployeeExternalId` estaba declarado y no se leía. Se eliminó esa declaración obsoleta. El build local equivalente ahora pasa.
 
 ## Estado de migración
 

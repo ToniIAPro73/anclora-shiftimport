@@ -754,10 +754,6 @@ function App() {
   const activeEmployeeId = session
     ? (selectedEmployeeId ?? session.employeeId ?? null)
     : null;
-  const activeEmployeeExternalId = useMemo(
-    () => employees.find((employee) => employee.id === activeEmployeeId)?.externalEmployeeId ?? null,
-    [employees, activeEmployeeId],
-  );
   // Planning DRAFT rows of the visible month for the working employee: read-only, never published shifts.
   const [draftShifts, setDraftShifts] = useState<Shift[]>([]);
   useEffect(() => {
