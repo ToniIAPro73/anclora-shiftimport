@@ -225,7 +225,7 @@ export const MonthGrid = ({
                 ? t('calendar.noEditableSchedule')
                 : hasVacationShift
                   ? t('calendar.addShiftBlockedAria', { date: iso })
-                  : isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso });
+                  : action === 'DIRECT_ADD' || isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso });
 
             return (
               <div
@@ -307,7 +307,7 @@ export const MonthGrid = ({
                     }}
                     disabled={actionDisabled}
                     aria-label={actionLabel}
-                    title={reason === 'employee_future' ? t('calendar.employeeFutureBlocked') : reason === 'no_schedule' ? t('calendar.noEditableSchedule') : hasVacationShift ? t('calendar.addShiftBlockedTitle') : isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
+                    title={reason === 'employee_future' ? t('calendar.employeeFutureBlocked') : reason === 'no_schedule' ? t('calendar.noEditableSchedule') : hasVacationShift ? t('calendar.addShiftBlockedTitle') : action === 'DIRECT_ADD' || isHistorical ? t('calendar.addShiftTitle') : t('calendar.planShiftTitle')}
                   >
                     <Plus size={14} strokeWidth={2.2} />
                   </button>

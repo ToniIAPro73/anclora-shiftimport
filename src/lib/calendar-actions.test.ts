@@ -9,9 +9,15 @@ describe('calendar temporal action policy', () => {
     expect(getCalendarAction({ ...base, date: '2026-09-05', role: 'EMPLOYEE' })).toBe('HISTORICAL_ADD');
   });
 
-  it('requires an editable schedule for management today/future actions', () => {
-    expect(getCalendarAction({ ...base, date: '2026-09-06', role: 'ADMIN' })).toBe('DISABLED');
+  it('lets owners and admins add shifts directly on past, today, and future dates', () => {
+    expect(getCalendarAction({ ...base, date: '2026-09-05', role: 'ADMIN' })).toBe('HISTORICAL_ADD');
+    expect(getCalendarAction({ ...base, date: '2026-09-06', role: 'ADMIN' })).toBe('DIRECT_ADD');
+    expect(getCalendarAction({ ...base, date: '2026-09-07', role: 'OWNER' })).toBe('DIRECT_ADD');
+  });
+
+  it('keeps planner future actions tied to an editable schedule', () => {
     expect(getCalendarAction({ ...base, date: '2026-09-07', role: 'PLANNER', hasEditableSchedule: true })).toBe('PLAN');
+    expect(getCalendarAction({ ...base, date: '2026-09-07', role: 'PLANNER' })).toBe('DISABLED');
   });
 
   it('blocks employee today/future and vacation cells', () => {

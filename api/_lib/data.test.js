@@ -495,9 +495,17 @@ describe('active-employee gate on import', () => {
       .rejects.toMatchObject({ status: 409, code: 'EMPLOYEE_NOT_ACTIVE' });
   });
 
-  it('rejects a MAN shift on or after the operational date', async () => {
+  it('allows ADMIN to record a MAN shift in the future without a plan', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A2, ORG_A, { status: 'active' })] });
+    const saved = await upsertShifts(sql, adminCtx, [shiftInput({
+      employeeId: EMP_A2, origin: 'MAN', date: '2099-01-01',
+    })]);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('keeps the manual date restriction for EMPLOYEE role', async () => {
     const { sql, calls, state } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })] });
-    await expect(upsertShifts(sql, adminCtx, [shiftInput({ origin: 'MAN', date: '2099-01-01' })]))
+    await expect(upsertShifts(sql, employeeCtx, [shiftInput({ origin: 'MAN', date: '2099-01-01' })]))
       .rejects.toMatchObject({ status: 400, code: 'MANUAL_SHIFT_HISTORICAL_ONLY' });
     expect(state.transactionUsed).toBe(false);
     expect(calls.some((call) => call.text.startsWith('INSERT INTO shifts'))).toBe(false);

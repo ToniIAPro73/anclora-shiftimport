@@ -2892,7 +2892,7 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
       error.code = 'SELF_IMPORT_FUTURE_FORBIDDEN';
       throw error;
     }
-    if (shift.origin === 'MAN' && !isHistoricalDate(shift.date)) {
+    if (shift.origin === 'MAN' && !isHistoricalDate(shift.date) && !['OWNER', 'ADMIN'].includes(ctx.role)) {
       const error = new HttpError(400, 'Manual shifts must be historical');
       error.code = 'MANUAL_SHIFT_HISTORICAL_ONLY';
       throw error;

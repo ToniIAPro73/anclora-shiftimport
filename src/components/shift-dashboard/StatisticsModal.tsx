@@ -5,6 +5,7 @@ import { computeEffectiveStats, evaluateAnnualTarget } from '../../lib/effective
 import type { ContractEvaluation, StatsBucket } from '../../lib/effective-calendar.js';
 import { getStatisticsMonthRelation, statsBucketHasData } from '../../lib/statistics-period';
 import { shiftOperationalDate } from '../../lib/operational-date';
+import { applyEmployeeStatisticsPolicy, employeeTargetMinutes, usesRegularOnlyStatistics } from '../../lib/employee-statistics.js';
 import { loadCalendarStats, type RemoteCalendarStats } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
 import { formatDuration } from './format-duration';
@@ -35,6 +36,8 @@ interface StatisticsModalProps {
   onClose: () => void;
   /** Backend sessions load the effective engine from the API; null = local-first. */
   employeeId: string | null;
+  employeeExternalId?: string | null;
+  organizationId?: string | null;
   year: number;
   /** 0-based month, as used by the calendar. */
   month: number;
@@ -112,12 +115,14 @@ function PeriodPanel({
 }
 
 function TargetPanel({
-  year, target, evaluation, plannedMinutes, provisionalReviewDays = 0, canConfigure, onConfigure, t, locale,
+  year, target, evaluation, plannedMinutes, extrasMinutes, regularOnly, provisionalReviewDays = 0, canConfigure, onConfigure, t, locale,
 }: {
   year: number;
   target: AnnualTargetValue | null;
   evaluation: ContractEvaluation;
   plannedMinutes: number;
+  extrasMinutes: number;
+  regularOnly: boolean;
   provisionalReviewDays?: number;
   canConfigure: boolean;
   onConfigure?: () => void;
@@ -131,6 +136,9 @@ function TargetPanel({
       <Settings2 size={14} aria-hidden="true" /> {label}
     </button>
   );
+  const extrasMetric = regularOnly && (
+    <MetricCard icon={<Star size={ICON} />} label={t('effectiveStats.extras')} value={hours(extrasMinutes)} style={shiftAccentStyle('Extras')} testId="eff-contract-extras" />
+  );
 
   if (!target || evaluation.status === 'UNCONFIGURED') {
     return (
@@ -143,6 +151,7 @@ function TargetPanel({
           {provisionalReviewDays > 0 && <p className="stats-modal__provisional" role="note" data-testid="eff-contract-provisional-notice">{t('statsModal.provisionalNotice', { count: provisionalReviewDays })}</p>}
           {configureButton(false, t('statsModal.configureTarget'), 'eff-contract-configure')}
         </div>
+        {extrasMetric && <div className="metric-grid metric-grid--target">{extrasMetric}</div>}
       </section>
     );
   }
@@ -162,6 +171,7 @@ function TargetPanel({
           </p>
           {configureButton(true, t('effectiveStats.editTarget'), 'eff-contract-edit')}
         </div>
+        {extrasMetric && <div className="metric-grid metric-grid--target">{extrasMetric}</div>}
       </section>
     );
   }
@@ -182,7 +192,7 @@ function TargetPanel({
     <section className="stats-modal__panel stats-modal__panel--target" aria-label={heading} data-testid="eff-contract-card">
       <HeroMetric
         icon={<Target size={26} />}
-        label={t('effectiveStats.effectiveSoFar')}
+        label={t(regularOnly ? 'effectiveStats.regular' : 'effectiveStats.effectiveSoFar')}
         value={hours(effective)}
         context={range}
         valueTestId="eff-contract-effective"
@@ -203,6 +213,7 @@ function TargetPanel({
       <div className="metric-grid metric-grid--target">
         <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.minimum')} value={hours(minimum)} style={NEUTRAL_ACCENT} testId="eff-contract-minimum" />
         <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.maximum')} value={hours(maximum)} style={NEUTRAL_ACCENT} testId="eff-contract-maximum" />
+        {extrasMetric}
         <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginUsed')} value={hours(evaluation.marginUsedMinutes ?? 0)} style={shiftAccentStyle('Regular')} testId="eff-contract-margin-used" />
         <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginRemaining')} value={hours(evaluation.marginRemainingMinutes ?? 0)} style={shiftAccentStyle('Vacaciones')} testId="eff-contract-margin-remaining" />
         <div className="metric-card metric-card--status metric-card--wide">
@@ -231,7 +242,7 @@ function TargetPanel({
  * is counted and future planned hours are never reported as realised.
  */
 export function StatisticsModal({
-  isOpen, onClose, employeeId, year, month, monthLabel, today, target, canConfigureTarget,
+  isOpen, onClose, employeeId, employeeExternalId = null, organizationId = null, year, month, monthLabel, today, target, canConfigureTarget,
   showContract, refreshKey = 0, localMonthShifts, localYearShifts, onConfigureTarget,
 }: StatisticsModalProps) {
   const { t, locale } = useI18n();
@@ -258,13 +269,27 @@ export function StatisticsModal({
   const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
   const local = useMemo<StatsData | null>(() => {
     if (employeeId || !isOpen) return null;
-    const monthStats = computeEffectiveStats(localMonthShifts ?? [], { from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today });
+    const rawMonthStats = computeEffectiveStats(localMonthShifts ?? [], { from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today });
+    const monthStats = {
+      ...rawMonthStats,
+      realized: applyEmployeeStatisticsPolicy(rawMonthStats.realized, employeeExternalId, organizationId),
+      planned: applyEmployeeStatisticsPolicy(rawMonthStats.planned, employeeExternalId, organizationId),
+    };
     // The monthly card says "rest of the month", so its bucket starts tomorrow.
     // Keep realized hours and annual projections on their existing boundaries.
-    const monthFutureStats = computeEffectiveStats(localMonthShifts ?? [], {
+    const rawMonthFutureStats = computeEffectiveStats(localMonthShifts ?? [], {
       from: `${monthPrefix}-01`, to: `${monthPrefix}-31`, today: shiftOperationalDate(today, 1),
     });
-    const yearStats = computeEffectiveStats(localYearShifts ?? [], { from: `${year}-01-01`, to: `${year}-12-31`, today });
+    const monthFutureStats = {
+      ...rawMonthFutureStats,
+      planned: applyEmployeeStatisticsPolicy(rawMonthFutureStats.planned, employeeExternalId, organizationId),
+    };
+    const rawYearStats = computeEffectiveStats(localYearShifts ?? [], { from: `${year}-01-01`, to: `${year}-12-31`, today });
+    const yearStats = {
+      ...rawYearStats,
+      realized: applyEmployeeStatisticsPolicy(rawYearStats.realized, employeeExternalId, organizationId),
+      planned: applyEmployeeStatisticsPolicy(rawYearStats.planned, employeeExternalId, organizationId),
+    };
     return {
       month: {
         realized: monthStats.realized,
@@ -274,28 +299,41 @@ export function StatisticsModal({
       },
       year: { realized: yearStats.realized, planned: yearStats.planned, provisionalReviewDays: yearStats.provisionalReviewDays },
       calendarRows: yearStats.calendarRows,
-      contract: evaluateAnnualTarget(yearStats.realized.effectiveMinutes, target, { calendarRows: yearStats.calendarRows }),
+      contract: evaluateAnnualTarget(employeeTargetMinutes(yearStats.realized, employeeExternalId, organizationId), target, { calendarRows: yearStats.calendarRows }),
     };
-  }, [employeeId, isOpen, localMonthShifts, localYearShifts, monthPrefix, today, year, target]);
+  }, [employeeExternalId, employeeId, isOpen, localMonthShifts, localYearShifts, monthPrefix, organizationId, today, year, target]);
 
   const data = useMemo<StatsData | null>(() => {
     if (!employeeId) return local;
     if (!remote || remote.year !== year || !remote.monthStats) return null;
+    const realized = applyEmployeeStatisticsPolicy(remote.realized, employeeExternalId, organizationId);
     return {
-      month: { realized: remote.monthStats.realized, planned: remote.monthStats.planned, realizedProvisionalReviewDays: remote.monthStats.realizedProvisionalReviewDays, plannedProvisionalReviewDays: remote.monthStats.plannedProvisionalReviewDays },
-      year: { realized: remote.realized, planned: remote.planned, provisionalReviewDays: remote.provisionalReviewDays },
+      month: {
+        realized: applyEmployeeStatisticsPolicy(remote.monthStats.realized, employeeExternalId, organizationId),
+        planned: applyEmployeeStatisticsPolicy(remote.monthStats.planned, employeeExternalId, organizationId),
+        realizedProvisionalReviewDays: remote.monthStats.realizedProvisionalReviewDays,
+        plannedProvisionalReviewDays: remote.monthStats.plannedProvisionalReviewDays,
+      },
+      year: {
+        realized,
+        planned: applyEmployeeStatisticsPolicy(remote.planned, employeeExternalId, organizationId),
+        provisionalReviewDays: remote.provisionalReviewDays,
+      },
       calendarRows: remote.calendarRows,
-      contract: remote.contract,
+      contract: evaluateAnnualTarget(employeeTargetMinutes(realized, employeeExternalId, organizationId), target, { calendarRows: remote.calendarRows }),
     };
-  }, [employeeId, local, remote, year]);
+  }, [employeeExternalId, employeeId, local, organizationId, remote, target, year]);
 
   const monthRelation = getStatisticsMonthRelation(year, month, today);
+  const regularOnly = usesRegularOnlyStatistics(employeeExternalId, organizationId);
   const monthPrimary = data?.month[monthRelation === 'FUTURE' ? 'planned' : 'realized'];
-  const monthHeroLabel = monthRelation === 'FUTURE'
-    ? t('statsModal.plannedHours')
-    : monthRelation === 'PAST'
-      ? t('statsModal.pastMonthHours')
-      : t('effectiveStats.realizedHours');
+  const monthHeroLabel = regularOnly
+    ? t('effectiveStats.regular')
+    : monthRelation === 'FUTURE'
+      ? t('statsModal.plannedHours')
+      : monthRelation === 'PAST'
+        ? t('statsModal.pastMonthHours')
+        : t('effectiveStats.realizedHours');
 
   const tabs: Array<SegmentedTab<Tab>> = [
     { id: 'month', label: t('statsModal.tabMonth'), shortLabel: t('statsModal.tabMonthShort') },
@@ -359,7 +397,7 @@ export function StatisticsModal({
               heading={t('effectiveStats.yearHeading', { year })}
               contextLabel={String(year)}
               primary={data.year.realized}
-              primaryLabel={t('effectiveStats.realizedHours')}
+              primaryLabel={regularOnly ? t('effectiveStats.regular') : t('effectiveStats.realizedHours')}
               workedDaysLabel={t('effectiveStats.workedDays')}
               planned={{ bucket: data.year.planned, label: t('statsModal.plannedYear') }}
               provisionalReviewDays={data.year.provisionalReviewDays}
@@ -375,6 +413,8 @@ export function StatisticsModal({
               target={target}
               evaluation={data.contract}
               plannedMinutes={data.year.planned.effectiveMinutes}
+              extrasMinutes={data.year.realized.extrasMinutes}
+              regularOnly={regularOnly}
               provisionalReviewDays={data.year.provisionalReviewDays}
               canConfigure={canConfigureTarget}
               onConfigure={onConfigureTarget}

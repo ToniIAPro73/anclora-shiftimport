@@ -16,6 +16,7 @@ import {
 } from '../../src/lib/effective-calendar.js';
 import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
+import { applyEmployeeStatisticsPolicy, employeeTargetMinutes } from '../../src/lib/employee-statistics.js';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -431,6 +432,11 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   const numericYear = Number(year);
   if (!Number.isInteger(numericYear) || numericYear < 2000 || numericYear > 2200) throw badRequest('year is invalid', 'INVALID_YEAR');
   await assertEmployeeInScope(sql, ctx, targetEmployeeId);
+  const employeeIdentityRows = await sql`
+    SELECT external_employee_id FROM employees
+    WHERE id = ${targetEmployeeId} AND organization_id = ${ctx.organizationId}
+  `;
+  const externalEmployeeId = employeeIdentityRows[0]?.external_employee_id ?? null;
   const from = `${numericYear}-01-01`;
   const to = `${numericYear}-12-31`;
   const rows = await sql`
@@ -465,7 +471,13 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     ORDER BY created_at ASC
   `;
   const rowsWithAudit = attachAuditCurrentEvidence(rows, auditChanges);
-  const stats = computeEffectiveStats(rowsWithAudit, { from, to, today });
+  const rawStats = computeEffectiveStats(rowsWithAudit, { from, to, today });
+  const stats = {
+    ...rawStats,
+    total: applyEmployeeStatisticsPolicy(rawStats.total, externalEmployeeId, ctx.organizationId),
+    realized: applyEmployeeStatisticsPolicy(rawStats.realized, externalEmployeeId, ctx.organizationId),
+    planned: applyEmployeeStatisticsPolicy(rawStats.planned, externalEmployeeId, ctx.organizationId),
+  };
   const monthNumber = month === undefined || month === null || month === '' ? null : Number(month);
   if (monthNumber !== null && (!Number.isInteger(monthNumber) || monthNumber < 1 || monthNumber > 12)) {
     throw badRequest('month is invalid', 'INVALID_MONTH');
@@ -474,10 +486,22 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   const monthStats = monthPrefix
     ? (() => {
       const options = { from: `${monthPrefix}-01`, to: `${monthPrefix}-31` };
-      const current = computeEffectiveStats(rowsWithAudit, { ...options, today });
+      const rawCurrent = computeEffectiveStats(rowsWithAudit, { ...options, today });
+      const current = {
+        ...rawCurrent,
+        total: applyEmployeeStatisticsPolicy(rawCurrent.total, externalEmployeeId, ctx.organizationId),
+        realized: applyEmployeeStatisticsPolicy(rawCurrent.realized, externalEmployeeId, ctx.organizationId),
+        planned: applyEmployeeStatisticsPolicy(rawCurrent.planned, externalEmployeeId, ctx.organizationId),
+      };
       // “Planned future (rest of month)” excludes today while realized hours
       // and annual projections keep the shared effective-calendar boundary.
-      const future = computeEffectiveStats(rowsWithAudit, { ...options, today: shiftOperationalDate(today, 1) });
+      const rawFuture = computeEffectiveStats(rowsWithAudit, { ...options, today: shiftOperationalDate(today, 1) });
+      const future = {
+        ...rawFuture,
+        total: applyEmployeeStatisticsPolicy(rawFuture.total, externalEmployeeId, ctx.organizationId),
+        realized: applyEmployeeStatisticsPolicy(rawFuture.realized, externalEmployeeId, ctx.organizationId),
+        planned: applyEmployeeStatisticsPolicy(rawFuture.planned, externalEmployeeId, ctx.organizationId),
+      };
       return {
         ...current,
         planned: future.planned,
@@ -507,12 +531,12 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     ...summary,
     monthStats: monthSummary,
     target,
-    contract: evaluateAnnualTarget(stats.realized.effectiveMinutes, target, { calendarRows: stats.calendarRows }),
+    contract: evaluateAnnualTarget(employeeTargetMinutes(stats.realized, externalEmployeeId, ctx.organizationId), target, { calendarRows: stats.calendarRows }),
     projection: {
-      realizedMinutes: stats.realized.effectiveMinutes,
-      plannedMinutes: stats.planned.effectiveMinutes,
-      projectedMinutes: stats.total.effectiveMinutes,
-      contract: evaluateAnnualTarget(stats.total.effectiveMinutes, target, { calendarRows: stats.calendarRows }),
+      realizedMinutes: employeeTargetMinutes(stats.realized, externalEmployeeId, ctx.organizationId),
+      plannedMinutes: employeeTargetMinutes(stats.planned, externalEmployeeId, ctx.organizationId),
+      projectedMinutes: employeeTargetMinutes(stats.total, externalEmployeeId, ctx.organizationId),
+      contract: evaluateAnnualTarget(employeeTargetMinutes(stats.total, externalEmployeeId, ctx.organizationId), target, { calendarRows: stats.calendarRows }),
     },
   };
 }

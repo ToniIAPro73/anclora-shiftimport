@@ -752,6 +752,10 @@ function App() {
   const activeEmployeeId = session
     ? (selectedEmployeeId ?? session.employeeId ?? null)
     : null;
+  const activeEmployeeExternalId = useMemo(
+    () => employees.find((employee) => employee.id === activeEmployeeId)?.externalEmployeeId ?? null,
+    [employees, activeEmployeeId],
+  );
   // Planning DRAFT rows of the visible month for the working employee: read-only, never published shifts.
   const [draftShifts, setDraftShifts] = useState<Shift[]>([]);
   useEffect(() => {
@@ -945,7 +949,7 @@ function App() {
     if (isImporting || isSavingShift) {
       return;
     }
-    if (!isHistoricalDate(shift.date)) {
+    if (!isHistoricalDate(shift.date) && !isAdminRole(session?.role)) {
       setAppFeedback({ kind: 'alert', message: t('shiftModal.historicalOnly') });
       return;
     }
@@ -1041,7 +1045,7 @@ function App() {
     if (isImporting) {
       return;
     }
-    if (isHistoricalDate(date)) {
+    if (isHistoricalDate(date) || isAdminRole(session?.role)) {
       setEditingShiftId(null);
       setDraftShiftDate(date);
       setIsModalOpen(true);
@@ -2279,6 +2283,8 @@ function App() {
           isOpen={statsOpen}
           onClose={() => setStatsOpen(false)}
           employeeId={session ? activeEmployeeId : null}
+          employeeExternalId={activeEmployeeExternalId}
+          organizationId={session?.organizationId ?? null}
           year={currentYear}
           month={currentMonth}
           monthLabel={monthLabel}
@@ -2345,7 +2351,7 @@ function App() {
         isOpen={isModalOpen && !isImporting}
         editingShift={editingShift}
         defaultDate={draftShiftDate}
-        maxDate={getPreviousOperationalDate()}
+        maxDate={isAdminRole(session?.role) ? null : getPreviousOperationalDate()}
         isSaving={isSavingShift}
         sessionRole={session?.role}
         currentEmployeeId={session?.employeeId}

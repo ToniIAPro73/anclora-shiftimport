@@ -1,41 +1,48 @@
-# Checklist de validación — política de promoción (2026-10-23)
-
-> Entrega de cambios de flujo y configuración. El SHA final queda registrado en el commit que incluye este checklist.
+# Checklist de validación — turnos directos y estadísticas por empleado (2026-10-28)
 
 **Repositorio:** anclora-shiftimport
 **Rama:** development
-**Entorno de validación:** entorno development/Preview del repositorio, pendiente de revisión de Toni
-**Datos:** no se usaron ni modificaron datos de aplicación.
+**Entorno:** validado por Toni en development antes del commit
+**Datos:** no se hicieron escrituras ni migraciones en la base de datos.
 
-## 1. Qué cambia
-- El workflow promote.yml admite el dispatch de cadena completa con target=full y source_sha revisado en Preview.
-- El contrato runtime define validación expresa en development, Preview y promoción completa asíncrona.
+## 1. Cambios incluidos
 
-## 2. Ya comprobado por el agente
-| Comprobación | Comando o método | Resultado |
+- ADMIN y OWNER pueden registrar turnos manuales de cualquier empleado de su organización en fechas pasadas, de hoy o futuras, sin planificación ni solicitud. Las restricciones para otros roles se conservan.
+- Para Sebastián Pozo Mendoza (external employee ID `84881`) en ShiftImport, los totales y el objetivo anual cuentan solo horas Regular; el contador de Extras permanece visible. La regla se limita a ShiftImport y su espejo de QA.
+
+## 2. Validación ejecutada
+
+| Comprobación | Método | Resultado |
 | --- | --- | --- |
-| Sintaxis de workflows | Parser YAML sobre los 41 `promote.yml` del workspace | PASS |
+| Pruebas focalizadas | `npm test -- --run src/lib/calendar-actions.test.ts src/lib/employee-statistics.test.js src/components/shift-dashboard/StatisticsModal.test.tsx api/_lib/data.test.js api/_lib/calendar-version-authority.test.js` | PASS — 147 tests |
+| Typecheck y build | `npm run build` | PASS — `tsc` y `vite build`; Vite informó advertencia por tamaño de bundle |
+| Lint | `npm run lint` | PASS |
 | Integridad del diff | `git diff --check` | PASS |
+| Smoke visual local | `anclora-visual-qa check http://127.0.0.1:4173` | PASS — página cargada, sin overlay de error; vista pública, sin sesión autenticada |
+| Revisión de Toni | Confirmación expresa en conversación | Validado en development |
 
-## 3. Pruebas no ejecutadas (NOT_RUN)
-| Prueba | Motivo concreto |
+## 3. No ejecutado
+
+| Comprobación | Motivo |
 | --- | --- |
-| Suite de la aplicación, lint y build | Cambios de políticas y configuración de promoción; no se ejecutaron suites por no afectar código de aplicación. |
-| Revisión visual y smoke test de Preview | Pendiente de Toni en el entorno publicado tras este push. |
-| Resultado de CI/deployments | No se esperará ni consultará; Toni revisa los entornos según la política acordada. |
+| Flujo autenticado E2E como ADMIN sobre Sebastián | No se escribió en la base de datos de producción; la revisión funcional de development fue confirmada por Toni |
+| Preview del SHA final | Se debe revisar después del push y antes de cualquier promoción |
 
-## 4. Checklist para Toni
-| # | Dónde | Pasos | Resultado esperado | Bloqueante |
+## 4. Revisión posterior al push
+
+| # | Entorno | Acción | Resultado esperado | Bloqueante |
 | --- | --- | --- | --- | --- |
-| 1 | development | Revisar el contrato y `promote.yml` de este repositorio | Cambios acordes con el flujo aprobado | Sí |
-| 2 | Preview | Confirmar la Preview correspondiente al SHA de este push | La revisión corresponde al SHA publicado | Sí, antes de promoción |
+| 1 | Preview | Revisar la Preview vinculada al SHA publicado | Confirmar que corresponde al cambio revisado y se comporta correctamente | Sí, antes de promoción |
 
 ## 5. Riesgos y limitaciones
-- La promoción requiere el SHA exacto revisado en Preview. Si `development` avanza, el workflow completo se detendrá y requerirá revisión nueva.
-- Los resultados de staging, production y main quedan bajo revisión de Toni.
+
+- La excepción estadística depende del external employee ID `84881` y del ID de organización de ShiftImport; otras personas y organizaciones conservan el cálculo actual.
+- El alta manual directa mantiene las validaciones existentes de solapamiento, tipo de turno, empleado activo, organización y plan.
+- No se modificaron datos de producción.
 
 ## 6. Decisión de Toni
-- [ ] Validado en development
+
+- [x] Validado en development
 - [ ] Validado en Preview
 - [ ] PROMOTE=FULL
 - [ ] No se promociona. Motivo: ______________________
