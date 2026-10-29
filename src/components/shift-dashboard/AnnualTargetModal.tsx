@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { hoursToMinutes, splitMinutes } from '../../lib/effective-calendar.js';
-import { saveAnnualTarget, type RemoteAnnualTarget } from '../../lib/remote';
+import { createWorktimeTargetVersion, loadWorktimeTargets, type RemoteAnnualTarget } from '../../lib/remote';
 import { getAllShiftTypesForManagement, getShiftTypeSemantics } from '../../lib/shift-types';
 import { useI18n } from '../../lib/use-i18n';
 import { ModalShell } from '../ui/ModalShell';
@@ -28,6 +28,23 @@ const parseHours = (value: string): number | null => {
   return hoursToMinutes(Number(normalized));
 };
 
+const localDate = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
+const periodEndFor = (periodType: string, start: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return start;
+  const date = new Date(`${start}T00:00:00.000Z`);
+  if (periodType === 'ANNUAL') return `${start.slice(0, 4)}-12-31`;
+  if (periodType === 'MONTHLY') return `${start.slice(0, 7)}-${String(new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()).padStart(2, '0')}`;
+  if (periodType === 'WEEKLY') {
+    date.setUTCDate(date.getUTCDate() + 6);
+    return date.toISOString().slice(0, 10);
+  }
+  return start;
+};
+
 /** Per employee AND per year annual working-time range (OWNER/ADMIN write). */
 export function AnnualTargetModal({
   isOpen, onClose, employeeId, employeeName, year, current, canEdit, onSaved,
@@ -37,6 +54,13 @@ export function AnnualTargetModal({
   const [maximum, setMaximum] = useState('');
   const [notes, setNotes] = useState('');
   const [includedShiftTypes, setIncludedShiftTypes] = useState<string[]>(['Regular']);
+  const [targetKind, setTargetKind] = useState<'CONTRACTUAL' | 'OPERATIONAL'>('CONTRACTUAL');
+  const [periodType, setPeriodType] = useState<'ANNUAL' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM'>('ANNUAL');
+  const [periodStart, setPeriodStart] = useState(`${year}-01-01`);
+  const [periodEnd, setPeriodEnd] = useState(`${year}-12-31`);
+  const [effectiveFrom, setEffectiveFrom] = useState(localDate());
+  const [target, setTarget] = useState('');
+  const [history, setHistory] = useState<RemoteAnnualTarget[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,8 +70,15 @@ export function AnnualTargetModal({
     setMaximum(current ? toHoursText(current.maximumAnnualMinutes) : '');
     setNotes(current?.notes ?? '');
     setIncludedShiftTypes(current?.includedShiftTypes?.length ? current.includedShiftTypes : ['Regular']);
+    setTargetKind(current?.targetKind ?? 'CONTRACTUAL');
+    setPeriodType(current?.periodType ?? 'ANNUAL');
+    setPeriodStart(current?.periodStart ?? `${year}-01-01`);
+    setPeriodEnd(current?.periodEnd ?? `${year}-12-31`);
+    setEffectiveFrom(localDate());
+    setTarget(current?.targetMinutes ? toHoursText(current.targetMinutes) : '');
     setError(null);
-  }, [isOpen, current]);
+    loadWorktimeTargets(employeeId, { history: true }).then(setHistory).catch(() => setHistory([]));
+  }, [isOpen, current, employeeId, year]);
 
   const minimumMinutes = parseHours(minimum);
   const maximumMinutes = parseHours(maximum);
@@ -71,12 +102,18 @@ export function AnnualTargetModal({
       setError(t('annualTarget.invalidTypes'));
       return;
     }
+    const targetMinutes = target.trim() === '' ? null : parseHours(target);
+    if (target.trim() !== '' && (targetMinutes === null || targetMinutes < minimumMinutes || targetMinutes > maximumMinutes)) {
+      setError(t('annualTarget.invalidCenter'));
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      const saved = await saveAnnualTarget({
-        employeeId, year, minimumAnnualMinutes: minimumMinutes, maximumAnnualMinutes: maximumMinutes,
-        includedShiftTypes, notes,
+      const saved = await createWorktimeTargetVersion({
+        employeeId, targetKind, periodType, periodStart, periodEnd,
+        minimumMinutes, targetMinutes, maximumMinutes, effectiveFrom,
+        includedWorkBuckets: includedShiftTypes, notes,
       });
       onSaved(saved);
       onClose();
@@ -116,9 +153,44 @@ export function AnnualTargetModal({
       <form className="eff-form" onSubmit={(event) => void handleSubmit(event)} data-testid="annual-target-form">
         <p className="eff-form__intro">{t('annualTarget.description', { name: employeeName })}</p>
         {!canEdit && <p role="note" className="eff-form__note">{t('annualTarget.readOnly')}</p>}
-        <label className="eff-form__field">
-          <span>{t('annualTarget.yearLabel')}</span>
-          <input type="number" value={year} readOnly aria-readonly="true" />
+        <label className="eff-form__field"><span>{t('annualTarget.kindLabel')}</span>
+          <select value={targetKind} onChange={(event) => setTargetKind(event.target.value as typeof targetKind)} disabled={!canEdit || saving}>
+            <option value="CONTRACTUAL">{t('annualTarget.contractual')}</option><option value="OPERATIONAL">{t('annualTarget.operational')}</option>
+          </select>
+        </label>
+        <label className="eff-form__field"><span>{t('annualTarget.periodLabel')}</span>
+          <select value={periodType} onChange={(event) => {
+            const next = event.target.value as typeof periodType;
+            setPeriodType(next);
+            if (next === 'ANNUAL') {
+              const start = `${periodStart.slice(0, 4)}-01-01`;
+              setPeriodStart(start);
+              setPeriodEnd(periodEndFor(next, start));
+            } else if (next === 'MONTHLY') {
+              const start = `${periodStart.slice(0, 7)}-01`;
+              setPeriodStart(start);
+              setPeriodEnd(periodEndFor(next, start));
+            } else if (next === 'WEEKLY') setPeriodEnd(periodEndFor(next, periodStart));
+          }} disabled={!canEdit || saving}>
+            <option value="ANNUAL">{t('annualTarget.annual')}</option><option value="WEEKLY">{t('annualTarget.weekly')}</option>
+            <option value="MONTHLY">{t('annualTarget.monthly')}</option><option value="CUSTOM">{t('annualTarget.custom')}</option>
+          </select>
+        </label>
+        <div className="eff-form__field">
+          <span>{t('annualTarget.periodDates')}</span>
+          <div className="eff-form__inline-fields">
+            <input aria-label={t('annualTarget.periodStart')} type="date" value={periodStart} onChange={(event) => {
+              const requested = event.target.value;
+              const nextStart = periodType === 'ANNUAL' ? `${requested.slice(0, 4)}-01-01`
+                : periodType === 'MONTHLY' ? `${requested.slice(0, 7)}-01` : requested;
+              setPeriodStart(nextStart);
+              if (periodType !== 'CUSTOM') setPeriodEnd(periodEndFor(periodType, nextStart));
+            }} disabled={!canEdit || saving} />
+            <input aria-label={t('annualTarget.periodEnd')} type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} disabled={!canEdit || saving || periodType !== 'CUSTOM'} />
+          </div>
+        </div>
+        <label className="eff-form__field"><span>{t('annualTarget.effectiveFrom')}</span>
+          <input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} disabled={!canEdit || saving} />
         </label>
         <label className="eff-form__field">
           <span>{t('annualTarget.minimumLabel')}</span>
@@ -129,6 +201,9 @@ export function AnnualTargetModal({
             disabled={!canEdit || saving}
             data-testid="annual-target-minimum"
           />
+        </label>
+        <label className="eff-form__field"><span>{t('annualTarget.targetLabel')}</span>
+          <input inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} disabled={!canEdit || saving} />
         </label>
         <label className="eff-form__field">
           <span>{t('annualTarget.maximumLabel')}</span>
@@ -174,6 +249,20 @@ export function AnnualTargetModal({
             disabled={!canEdit || saving}
           />
         </label>
+        {history.length > 0 && <section className="annual-target__history" aria-label={t('annualTarget.history')}>
+          <h3>{t('annualTarget.history')}</h3>
+          <ul>{history.map((item) => <li key={item.id}>
+            <strong>{t(item.targetKind === 'OPERATIONAL' ? 'annualTarget.operational' : 'annualTarget.contractual')}</strong>
+            <span>{item.periodStart} – {item.periodEnd}</span>
+            <span>{t('annualTarget.effectiveVersion', { date: item.effectiveFrom, revision: item.revision })}</span>
+            <span>{toHoursText(item.minimumMinutes)}–{toHoursText(item.maximumMinutes)} h</span>
+            {item.targetMinutes !== null && item.targetMinutes !== item.minimumMinutes && item.targetMinutes !== item.maximumMinutes
+              && <span>{t('annualTarget.centerTarget', { hours: toHoursText(item.targetMinutes) })}</span>}
+            <span>{t('annualTarget.countingPolicy', { buckets: item.includedWorkBuckets.join(', ') })}</span>
+            <span>{t('annualTarget.versionSource', { source: t(`annualTarget.source${item.source === 'IMPORT' ? 'Import' : item.source === 'MIGRATION' ? 'Migration' : item.source === 'SYSTEM' ? 'System' : 'Admin'}`) })}</span>
+            {item.notes && <span>{item.notes}</span>}
+          </li>)}</ul>
+        </section>}
         {error && <p role="alert" className="eff-form__error">{error}</p>}
         <div className="eff-form__actions">
           <button type="button" className="eff-button" onClick={onClose} disabled={saving}>

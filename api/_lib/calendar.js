@@ -14,6 +14,7 @@ import {
   resolveDay,
   resolveProvisionalReviewRows,
 } from '../../src/lib/effective-calendar.js';
+import { evaluateWorktimeTarget, resolveWorktimeTargets, validateWorktimeTarget } from '../../src/lib/worktime-targets.js';
 import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
 import {
@@ -52,21 +53,42 @@ function badRequest(message, code) {
 
 function mapTargetRow(row) {
   if (!row) return null;
+  const dateOnly = (value, fallback) => value instanceof Date
+    ? value.toISOString().slice(0, 10)
+    : String(value ?? fallback).slice(0, 10);
+  const periodStart = dateOnly(row.period_start, `${row.year}-01-01`);
+  const year = Number(periodStart.slice(0, 4));
+  const minimum = row.minimum_minutes ?? row.minimum_annual_minutes;
+  const maximum = row.maximum_minutes ?? row.maximum_annual_minutes;
+  const includedWorkBuckets = Array.isArray(row.included_work_buckets) && row.included_work_buckets.length
+    ? row.included_work_buckets
+    : Array.isArray(row.included_shift_types) && row.included_shift_types.length
+      ? row.included_shift_types : DEFAULT_OBJECTIVE_SHIFT_TYPES;
   return {
     id: row.id,
     employeeId: row.employee_id,
-    year: row.year,
-    minimumAnnualMinutes: row.minimum_annual_minutes,
-    maximumAnnualMinutes: row.maximum_annual_minutes,
-    includedShiftTypes: Array.isArray(row.included_shift_types) && row.included_shift_types.length
-      ? row.included_shift_types
-      : DEFAULT_OBJECTIVE_SHIFT_TYPES,
+    organizationId: row.organization_id,
+    year,
+    targetKind: row.target_kind ?? 'CONTRACTUAL',
+    periodType: row.period_type ?? 'ANNUAL',
+    periodStart,
+    periodEnd: dateOnly(row.period_end, `${row.year}-12-31`),
+    minimumMinutes: minimum,
+    targetMinutes: row.target_minutes ?? null,
+    maximumMinutes: maximum,
+    effectiveFrom: dateOnly(row.effective_from ?? row.created_at, `${row.year}-01-01`),
+    revision: Number(row.revision ?? 1),
+    includedWorkBuckets,
+    minimumAnnualMinutes: minimum,
+    maximumAnnualMinutes: maximum,
+    includedShiftTypes: includedWorkBuckets,
     // Derived, never stored twice.
-    marginMinutes: row.maximum_annual_minutes - row.minimum_annual_minutes,
+    marginMinutes: maximum - minimum,
     notes: row.notes ?? '',
     source: row.source,
-    updatedAt: row.updated_at,
-    updatedByUserId: row.updated_by_user_id ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.created_at ?? row.updated_at,
+    updatedByUserId: row.created_by_user_id ?? row.updated_by_user_id ?? null,
   };
 }
 
@@ -88,13 +110,26 @@ export async function listAnnualTargets(sql, ctx, employeeId) {
     throw new HttpError(403, 'Not allowed to view annual targets for this employee');
   }
   const rows = await sql`
-    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
-           notes, source, updated_at, updated_by_user_id
-    FROM employee_annual_targets
+    SELECT id, organization_id, employee_id, target_kind, period_type,
+      TO_CHAR(period_start, 'YYYY-MM-DD') AS period_start, TO_CHAR(period_end, 'YYYY-MM-DD') AS period_end,
+      minimum_minutes, target_minutes, maximum_minutes,
+      TO_CHAR(effective_from, 'YYYY-MM-DD') AS effective_from, revision, source, notes,
+      included_work_buckets, created_by_user_id, created_at
+    FROM employee_worktime_targets
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
-    ORDER BY year DESC
+      AND target_kind = 'CONTRACTUAL' AND period_type = 'ANNUAL'
+    ORDER BY period_start DESC, effective_from DESC, revision DESC, created_at DESC
   `;
-  return rows.map(mapTargetRow);
+  const targets = rows.map(mapTargetRow);
+  const today = getOperationalDate();
+  const periods = [...new Set(targets.map((target) => `${target.periodStart}|${target.periodEnd}`))];
+  return periods.flatMap((period) => {
+    const [periodStart, periodEnd] = period.split('|');
+    const asOf = today < periodStart ? periodStart : today > periodEnd ? periodEnd : today;
+    return resolveWorktimeTargets(targets, { asOf, employeeId: targetEmployeeId })
+      .filter((target) => target.targetKind === 'CONTRACTUAL' && target.periodType === 'ANNUAL'
+        && target.periodStart === periodStart && target.periodEnd === periodEnd);
+  }).sort((a, b) => b.year - a.year);
 }
 
 function assertMinutes(value, label) {
@@ -103,78 +138,147 @@ function assertMinutes(value, label) {
   }
 }
 
-/** Creates or replaces one employee/year target. OWNER/ADMIN only, audited. */
-export async function setAnnualTarget(sql, ctx, input) {
+/** Adds one immutable worktime target revision. OWNER/ADMIN only, tenant scoped and audited. */
+export async function createWorktimeTargetVersion(sql, ctx, input) {
   if (!can(actorFromContext(ctx), ACTIONS.MANAGE_ANNUAL_TARGET, {})) {
-    throw new HttpError(403, 'Only an owner or administrator can configure annual targets');
+    throw new HttpError(403, 'Only an owner or administrator can configure worktime targets');
   }
   const employeeId = String(input?.employeeId ?? '').trim();
-  const year = Number(input?.year);
   if (!employeeId) throw badRequest('employeeId is required', 'EMPLOYEE_REQUIRED');
-  if (!Number.isInteger(year) || year < 2000 || year > 2200) throw badRequest('year is invalid', 'INVALID_YEAR');
-  const minimum = Number(input?.minimumAnnualMinutes);
-  const maximum = Number(input?.maximumAnnualMinutes);
-  assertMinutes(minimum, 'minimumAnnualMinutes');
-  assertMinutes(maximum, 'maximumAnnualMinutes');
-  if (maximum < minimum) throw badRequest('maximum must not be lower than minimum', 'INVALID_ANNUAL_TARGET');
-  const notes = String(input?.notes ?? '').trim().slice(0, 2000);
-  const rawIncludedTypes = input?.includedShiftTypes ?? DEFAULT_OBJECTIVE_SHIFT_TYPES;
-  if (!Array.isArray(rawIncludedTypes)) throw badRequest('includedShiftTypes must be an array', 'INVALID_ANNUAL_TARGET_TYPES');
-  const includedShiftTypes = [...new Set(rawIncludedTypes
-    .map((type) => String(type).trim())
-    .filter((type) => type.length > 0 && type.length <= 80))];
-  if (!includedShiftTypes.length || includedShiftTypes.length !== rawIncludedTypes.length) {
-    throw badRequest('Select at least one valid shift type', 'INVALID_ANNUAL_TARGET_TYPES');
+  let target;
+  try {
+    target = validateWorktimeTarget({
+      ...input,
+      targetKind: input?.targetKind ?? 'CONTRACTUAL',
+      periodType: input?.periodType ?? 'ANNUAL',
+      periodStart: input?.periodStart ?? `${Number(input?.year)}-01-01`,
+      periodEnd: input?.periodEnd ?? `${Number(input?.year)}-12-31`,
+      effectiveFrom: input?.effectiveFrom ?? getOperationalDate(),
+      minimumMinutes: input?.minimumMinutes ?? input?.minimumAnnualMinutes,
+      maximumMinutes: input?.maximumMinutes ?? input?.maximumAnnualMinutes,
+      targetMinutes: input?.targetMinutes,
+      includedWorkBuckets: input?.includedWorkBuckets ?? input?.includedShiftTypes ?? DEFAULT_OBJECTIVE_SHIFT_TYPES,
+    });
+  } catch (error) {
+    throw badRequest(error.message, 'INVALID_WORKTIME_TARGET');
   }
-
+  if (Number(target.periodStart.slice(0, 4)) < 2000 || Number(target.periodStart.slice(0, 4)) > 2200) {
+    throw badRequest('period year is invalid', 'INVALID_WORKTIME_TARGET');
+  }
+  const notes = String(input?.notes ?? '').trim().slice(0, 2000);
   await assertEmployeeInScope(sql, ctx, employeeId);
-  const previousRows = await sql`
-    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
-           notes, source, updated_at, updated_by_user_id
-    FROM employee_annual_targets
-    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND year = ${year}
-  `;
-  const previous = mapTargetRow(previousRows[0]);
-  const saved = await sql`
-    INSERT INTO employee_annual_targets (
-      organization_id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes,
-      included_shift_types, notes, source, created_by_user_id, updated_by_user_id
-    ) VALUES (
-      ${ctx.organizationId}, ${employeeId}, ${year}, ${minimum}, ${maximum},
-      ${includedShiftTypes}::text[], ${notes}, 'ADMIN_UI', ${ctx.user.id}, ${ctx.user.id}
+  const lockKey = `${ctx.organizationId}:${employeeId}:${target.targetKind}`;
+  const savedRows = await sql`
+    WITH lock AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
+    ),
+    conflicts AS MATERIALIZED (
+      SELECT id, minimum_minutes, target_minutes, maximum_minutes, effective_from, revision
+      FROM employee_worktime_targets, lock
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+        AND target_kind = ${target.targetKind}
+        AND daterange(period_start, period_end, '[]') && daterange(${target.periodStart}::date, ${target.periodEnd}::date, '[]')
+        AND (period_start, period_end) <> (${target.periodStart}::date, ${target.periodEnd}::date)
+      LIMIT 1
+    ),
+    previous AS MATERIALIZED (
+      SELECT id, minimum_minutes, target_minutes, maximum_minutes, effective_from, revision
+      FROM employee_worktime_targets, lock
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+        AND target_kind = ${target.targetKind} AND period_start = ${target.periodStart}::date AND period_end = ${target.periodEnd}::date
+      ORDER BY revision DESC, effective_from DESC, created_at DESC LIMIT 1
+    ),
+    next_revision AS MATERIALIZED (
+      SELECT COALESCE(MAX(revision), 0) + 1 AS revision FROM employee_worktime_targets, lock
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+        AND target_kind = ${target.targetKind} AND period_start = ${target.periodStart}::date AND period_end = ${target.periodEnd}::date
+    ),
+    inserted AS (
+      INSERT INTO employee_worktime_targets (
+        organization_id, employee_id, target_kind, period_type, period_start, period_end,
+        minimum_minutes, target_minutes, maximum_minutes, effective_from, revision, source,
+        notes, included_work_buckets, created_by_user_id
+      )
+      SELECT ${ctx.organizationId}, ${employeeId}, ${target.targetKind}, ${target.periodType},
+        ${target.periodStart}::date, ${target.periodEnd}::date, ${target.minimumMinutes}, ${target.targetMinutes},
+        ${target.maximumMinutes}, ${target.effectiveFrom}::date, next_revision.revision, 'ADMIN_UI', ${notes},
+        ${target.includedWorkBuckets}::text[], ${ctx.user.id}
+      FROM next_revision, lock WHERE NOT EXISTS (SELECT 1 FROM conflicts)
+      RETURNING *
     )
-    ON CONFLICT (organization_id, employee_id, year) DO UPDATE SET
-      minimum_annual_minutes = EXCLUDED.minimum_annual_minutes,
-      maximum_annual_minutes = EXCLUDED.maximum_annual_minutes,
-      included_shift_types = EXCLUDED.included_shift_types,
-      notes = EXCLUDED.notes,
-      updated_by_user_id = EXCLUDED.updated_by_user_id,
-      updated_at = NOW()
-    RETURNING id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
-              notes, source, updated_at, updated_by_user_id
+    SELECT inserted.*, (SELECT id FROM previous) AS previous_version_id,
+           (SELECT minimum_minutes FROM previous) AS previous_minimum_minutes,
+           (SELECT target_minutes FROM previous) AS previous_target_minutes,
+           (SELECT maximum_minutes FROM previous) AS previous_maximum_minutes,
+           (SELECT effective_from FROM previous) AS previous_effective_from,
+           (SELECT revision FROM previous) AS previous_revision,
+           EXISTS (SELECT 1 FROM conflicts) AS conflicting_series
+    FROM (SELECT 1) AS anchor LEFT JOIN inserted ON TRUE
   `;
-  const target = mapTargetRow(saved[0]);
+  const saved = savedRows[0];
+  if (saved?.conflicting_series) throw badRequest('This target overlaps another series of the same kind', 'OVERLAPPING_WORKTIME_TARGET');
+  if (!saved?.id) throw new HttpError(409, 'A concurrent target version could not be assigned safely');
+  const savedTarget = mapTargetRow(saved);
   await recordAuditEvent(sql, ctx, {
-    eventType: previous ? 'EMPLOYEE_ANNUAL_TARGET_UPDATED' : 'EMPLOYEE_ANNUAL_TARGET_SET',
+    eventType: 'EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED',
     targetType: 'EMPLOYEE',
     targetId: employeeId,
     metadata: {
-      year,
-      before: previous
-        ? {
-          minimumAnnualMinutes: previous.minimumAnnualMinutes,
-          maximumAnnualMinutes: previous.maximumAnnualMinutes,
-          includedShiftTypes: previous.includedShiftTypes,
-        }
-        : null,
-      after: {
-        minimumAnnualMinutes: minimum,
-        maximumAnnualMinutes: maximum,
-        includedShiftTypes,
-      },
+      targetId: savedTarget.id,
+      kind: savedTarget.targetKind,
+      period: { type: savedTarget.periodType, start: savedTarget.periodStart, end: savedTarget.periodEnd },
+      effectiveFrom: savedTarget.effectiveFrom,
+      revision: savedTarget.revision,
+      previousVersionId: saved.previous_version_id ?? null,
+      before: saved.previous_version_id ? {
+        minimumMinutes: saved.previous_minimum_minutes,
+        targetMinutes: saved.previous_target_minutes,
+        maximumMinutes: saved.previous_maximum_minutes,
+        effectiveFrom: saved.previous_effective_from,
+        revision: saved.previous_revision,
+      } : null,
+      after: { minimumMinutes: savedTarget.minimumMinutes, targetMinutes: savedTarget.targetMinutes,
+        maximumMinutes: savedTarget.maximumMinutes, includedWorkBuckets: savedTarget.includedWorkBuckets },
     },
   });
-  return target;
+  return savedTarget;
+}
+
+/** Compatibility adapter: annual target writes append a revision in the new authority. */
+export async function setAnnualTarget(sql, ctx, input) {
+  const year = Number(input?.year);
+  if (!Number.isInteger(year) || year < 2000 || year > 2200) throw badRequest('year is invalid', 'INVALID_YEAR');
+  return createWorktimeTargetVersion(sql, ctx, {
+    ...input,
+    targetKind: 'CONTRACTUAL', periodType: 'ANNUAL',
+    periodStart: `${year}-01-01`, periodEnd: `${year}-12-31`,
+    minimumMinutes: input?.minimumAnnualMinutes, maximumMinutes: input?.maximumAnnualMinutes,
+    includedWorkBuckets: input?.includedShiftTypes ?? DEFAULT_OBJECTIVE_SHIFT_TYPES,
+  });
+}
+
+export async function listWorktimeTargets(sql, ctx, employeeId, { asOf = getOperationalDate(), history = true } = {}) {
+  const targetEmployeeId = ctx.role === 'EMPLOYEE' ? ctx.employeeId : employeeId;
+  if (!targetEmployeeId) throw badRequest('employeeId is required', 'EMPLOYEE_REQUIRED');
+  await assertEmployeeInScope(sql, ctx, targetEmployeeId);
+  const areaId = await loadEmployeeArea(sql, ctx, targetEmployeeId);
+  if (!can(actorFromContext(ctx), ACTIONS.VIEW_ANNUAL_TARGET, { employeeId: targetEmployeeId, areaId })) {
+    throw new HttpError(403, 'Not allowed to view worktime targets for this employee');
+  }
+  const rows = await sql`
+    SELECT id, organization_id, employee_id, target_kind, period_type,
+      TO_CHAR(period_start, 'YYYY-MM-DD') AS period_start, TO_CHAR(period_end, 'YYYY-MM-DD') AS period_end,
+      minimum_minutes, target_minutes, maximum_minutes,
+      TO_CHAR(effective_from, 'YYYY-MM-DD') AS effective_from, revision, source, notes,
+      included_work_buckets, created_by_user_id, created_at
+    FROM employee_worktime_targets
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+    ORDER BY period_start DESC, target_kind, effective_from DESC, revision DESC, created_at DESC
+  `;
+  const targets = rows.map(mapTargetRow);
+  if (history) return targets;
+  const active = resolveWorktimeTargets(targets, { asOf, employeeId: targetEmployeeId });
+  return active;
 }
 
 function snapshotRows(rows) {
@@ -457,21 +561,34 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
   if (!Number.isInteger(numericYear) || numericYear < 2000 || numericYear > 2200) throw badRequest('year is invalid', 'INVALID_YEAR');
   await assertEmployeeInScope(sql, ctx, targetEmployeeId);
   const targetRows = await sql`
-    SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, included_shift_types,
-           notes, source, updated_at, updated_by_user_id
-    FROM employee_annual_targets
-    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId} AND year = ${numericYear}
+    SELECT id, organization_id, employee_id, target_kind, period_type,
+      TO_CHAR(period_start, 'YYYY-MM-DD') AS period_start, TO_CHAR(period_end, 'YYYY-MM-DD') AS period_end,
+      minimum_minutes, target_minutes, maximum_minutes, TO_CHAR(effective_from, 'YYYY-MM-DD') AS effective_from,
+      revision, source, notes, included_work_buckets, created_by_user_id, created_at
+    FROM employee_worktime_targets
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
+    ORDER BY period_start DESC, effective_from DESC, revision DESC, created_at DESC
   `;
-  const target = mapTargetRow(targetRows[0]);
+  const allTargets = targetRows.map(mapTargetRow);
+  const yearStart = `${numericYear}-01-01`;
+  const yearEnd = `${numericYear}-12-31`;
+  const asOfInYear = today < yearStart ? yearStart : today > yearEnd ? yearEnd : today;
+  const yearTargets = resolveWorktimeTargets(allTargets, { asOf: asOfInYear, employeeId: targetEmployeeId });
+  const target = yearTargets.find((item) => item.targetKind === 'CONTRACTUAL'
+    && item.periodType === 'ANNUAL' && item.periodStart === yearStart && item.periodEnd === yearEnd) ?? null;
+  const activeOperationalTarget = resolveWorktimeTargets(allTargets, { asOf: today, employeeId: targetEmployeeId })
+    .find((item) => item.targetKind === 'OPERATIONAL') ?? null;
   const from = `${numericYear}-01-01`;
   const to = `${numericYear}-12-31`;
+  const dataFrom = activeOperationalTarget && activeOperationalTarget.periodStart < from ? activeOperationalTarget.periodStart : from;
+  const dataTo = activeOperationalTarget && activeOperationalTarget.periodEnd > to ? activeOperationalTarget.periodEnd : to;
   const rows = await sql`
     SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location,
            counts_as_work, layer, provenance, legacy_origin, duty_role, effective_state, plan_revision,
            created_at, import_id, change_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
-      AND date BETWEEN ${from} AND ${to}
+      AND date BETWEEN ${dataFrom} AND ${dataTo}
       AND (effective_state IN ('EFFECTIVE', 'REQUIRES_REVIEW')
            OR (effective_state = 'METADATA_ONLY' AND shift_type = 'JT'))
       AND (schedule_version_id IS NULL OR NOT EXISTS (
@@ -493,7 +610,7 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date, after_state, created_at
     FROM calendar_changes
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
-      AND date BETWEEN ${from} AND ${to}
+      AND date BETWEEN ${dataFrom} AND ${dataTo}
     ORDER BY created_at ASC
   `;
   const rowsWithAudit = attachAuditCurrentEvidence(rows, auditChanges);
@@ -543,6 +660,10 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     monthSummary = { month: monthNumber, ...monthStats };
     delete monthSummary.days;
   }
+  const rawSummary = { ...rawStats };
+  delete rawSummary.days;
+  const creditedSummary = { ...stats };
+  delete creditedSummary.days;
   return {
     employeeId: targetEmployeeId,
     year: numericYear,
@@ -550,13 +671,38 @@ export async function getEffectiveStats(sql, ctx, employeeId, year, { today = ge
     ...summary,
     monthStats: monthSummary,
     target,
-    contract: evaluateAnnualTarget(employeeTargetMinutes(stats.realized, target?.includedShiftTypes), target, { calendarRows: stats.calendarRows }),
+    contract: evaluateAnnualTarget(employeeTargetMinutes(stats.realized, target?.includedWorkBuckets), target, { calendarRows: stats.calendarRows }),
     projection: {
-      realizedMinutes: employeeTargetMinutes(stats.realized, target?.includedShiftTypes),
-      plannedMinutes: employeeTargetMinutes(stats.planned, target?.includedShiftTypes),
-      projectedMinutes: employeeTargetMinutes(stats.total, target?.includedShiftTypes),
-      contract: evaluateAnnualTarget(employeeTargetMinutes(stats.total, target?.includedShiftTypes), target, { calendarRows: stats.calendarRows }),
+      realizedMinutes: employeeTargetMinutes(stats.realized, target?.includedWorkBuckets),
+      plannedMinutes: employeeTargetMinutes(stats.planned, target?.includedWorkBuckets),
+      projectedMinutes: employeeTargetMinutes(stats.realized, target?.includedWorkBuckets)
+        + employeeTargetMinutes(stats.planned, target?.includedWorkBuckets),
+      contract: evaluateAnnualTarget(employeeTargetMinutes(stats.realized, target?.includedWorkBuckets)
+        + employeeTargetMinutes(stats.planned, target?.includedWorkBuckets), target, { calendarRows: stats.calendarRows }),
     },
+    primaryTarget: target,
+    activeOperationalTarget,
+    rawStats: rawSummary,
+    creditedStats: creditedSummary,
+    balance: evaluateWorktimeTarget({
+      target,
+      realizedMinutes: employeeTargetMinutes(stats.realized, target?.includedWorkBuckets),
+      plannedMinutes: employeeTargetMinutes(stats.planned, target?.includedWorkBuckets),
+      asOf: today,
+      calendarRows: stats.calendarRows,
+    }),
+    operationalBalance: activeOperationalTarget ? (() => {
+      const opRaw = computeEffectiveStats(rowsWithAudit, {
+        from: activeOperationalTarget.periodStart, to: activeOperationalTarget.periodEnd, today,
+      });
+      return evaluateWorktimeTarget({
+        target: activeOperationalTarget,
+        realizedMinutes: employeeTargetMinutes(opRaw.realized, activeOperationalTarget.includedWorkBuckets),
+        plannedMinutes: employeeTargetMinutes(opRaw.planned, activeOperationalTarget.includedWorkBuckets),
+        asOf: today,
+        calendarRows: opRaw.calendarRows,
+      });
+    })() : null,
   };
 }
 

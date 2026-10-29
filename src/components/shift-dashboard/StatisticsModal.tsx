@@ -18,8 +18,14 @@ import './CalendarModals.css';
 
 export interface AnnualTargetValue {
   minimumAnnualMinutes: number;
+  targetMinutes?: number | null;
   maximumAnnualMinutes: number;
   includedShiftTypes?: string[];
+  effectiveFrom?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  revision?: number;
+  source?: string;
 }
 
 type Tab = 'month' | 'year' | 'target';
@@ -30,6 +36,9 @@ interface StatsData {
   year: { realized: StatsBucket; planned: StatsBucket; provisionalReviewDays: number };
   calendarRows: number;
   contract: ContractEvaluation;
+  operationalTarget?: RemoteCalendarStats['activeOperationalTarget'];
+  operationalBalance?: RemoteCalendarStats['operationalBalance'];
+  balance?: RemoteCalendarStats['balance'];
 }
 
 interface StatisticsModalProps {
@@ -117,7 +126,9 @@ function PeriodPanel({
 }
 
 function TargetPanel({
-  year, target, evaluation, plannedMinutes, extrasMinutes, regularOnly, provisionalReviewDays = 0, canConfigure, onConfigure, t, locale,
+  year, target, evaluation, plannedMinutes, extrasMinutes, regularOnly, provisionalReviewDays = 0, canConfigure, onConfigure,
+  operationalTarget, operationalBalance, t, locale,
+  balance,
 }: {
   year: number;
   target: AnnualTargetValue | null;
@@ -128,6 +139,9 @@ function TargetPanel({
   provisionalReviewDays?: number;
   canConfigure: boolean;
   onConfigure?: () => void;
+  operationalTarget?: RemoteCalendarStats['activeOperationalTarget'];
+  operationalBalance?: RemoteCalendarStats['operationalBalance'];
+  balance?: RemoteCalendarStats['balance'];
   t: Translate;
   locale: string;
 }) {
@@ -142,6 +156,18 @@ function TargetPanel({
     <MetricCard icon={<Star size={ICON} />} label={t('effectiveStats.extras')} value={hours(extrasMinutes)} style={shiftAccentStyle('Extras')} testId="eff-contract-extras" />
   );
 
+  const hoursText = (minutes: number) => Math.round(minutes / 60).toLocaleString(locale === 'en' ? 'en-GB' : 'es-ES');
+  const operationalSummary = operationalTarget && operationalBalance && (
+    <div className="annual-target__operational" data-testid="eff-operational-target">
+      <strong>{t('annualTarget.operational')} · {operationalTarget.periodStart} – {operationalTarget.periodEnd}</strong>
+      <span>{t('annualTarget.targetRangeSummary', { min: hoursText(operationalTarget.minimumMinutes), max: hoursText(operationalTarget.maximumMinutes) })}</span>
+      <span>{t('annualTarget.operationalBalance', {
+        realized: hours(operationalBalance.realizedMinutes ?? 0), planned: hours(operationalBalance.plannedMinutes ?? 0),
+        projected: hours(operationalBalance.projectedMinutes ?? 0),
+      })}</span>
+    </div>
+  );
+
   if (!target || evaluation.status === 'UNCONFIGURED') {
     return (
       <section className="stats-modal__panel" aria-label={heading} data-testid="eff-contract-card">
@@ -154,12 +180,20 @@ function TargetPanel({
           {configureButton(false, t('statsModal.configureTarget'), 'eff-contract-configure')}
         </div>
         {extrasMetric && <div className="metric-grid metric-grid--target">{extrasMetric}</div>}
+        {operationalSummary}
       </section>
     );
   }
 
-  const hoursText = (minutes: number) => Math.round(minutes / 60).toLocaleString(locale === 'en' ? 'en-GB' : 'es-ES');
-  const range = t('statsModal.targetRange', { min: hoursText(target.minimumAnnualMinutes), max: hoursText(target.maximumAnnualMinutes) });
+  const range = target.minimumAnnualMinutes === target.maximumAnnualMinutes
+    ? t('annualTarget.exactTarget', { hours: hoursText(target.minimumAnnualMinutes) })
+    : t('statsModal.targetRange', { min: hoursText(target.minimumAnnualMinutes), max: hoursText(target.maximumAnnualMinutes) });
+  const targetMetadata = <>
+    {target.effectiveFrom && <p className="eff-form__note">{t('annualTarget.activeFrom', { date: target.effectiveFrom })}</p>}
+    {target.targetMinutes !== null && target.targetMinutes !== undefined
+      && target.targetMinutes !== target.minimumAnnualMinutes && target.targetMinutes !== target.maximumAnnualMinutes
+      && <p className="eff-form__note">{t('annualTarget.centerTarget', { hours: hoursText(target.targetMinutes) })}</p>}
+  </>;
 
   if (evaluation.status === 'NO_DATA') {
     return (
@@ -168,12 +202,14 @@ function TargetPanel({
           <Target size={30} aria-hidden="true" className="target-hero__icon" />
           <span className="hero-metric__label">{heading}</span>
           <strong className="target-hero__value" data-testid="eff-contract-range">{range}</strong>
+          {targetMetadata}
           <p className="eff-status eff-status--no_data" data-testid="eff-contract-status" data-status="NO_DATA">
             <span className="eff-status__label">{t('effectiveStats.statusLabel')}:</span> {t('statsModal.statusNoData')}
           </p>
           {configureButton(true, t('effectiveStats.editTarget'), 'eff-contract-edit')}
         </div>
         {extrasMetric && <div className="metric-grid metric-grid--target">{extrasMetric}</div>}
+        {operationalSummary}
       </section>
     );
   }
@@ -199,7 +235,9 @@ function TargetPanel({
         context={range}
         valueTestId="eff-contract-effective"
       />
+      {targetMetadata}
       {provisionalReviewDays > 0 && <p className="stats-modal__provisional" role="note" data-testid="eff-contract-provisional-notice">{t('statsModal.provisionalNotice', { count: provisionalReviewDays })}</p>}
+      {target.includedShiftTypes?.length && <p className="eff-form__note">{t('annualTarget.countingPolicy', { buckets: target.includedShiftTypes.join(', ') })}</p>}
       <div
         className="eff-progress"
         role="progressbar"
@@ -216,6 +254,8 @@ function TargetPanel({
         <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.minimum')} value={hours(minimum)} style={NEUTRAL_ACCENT} testId="eff-contract-minimum" />
         <MetricCard icon={<Gauge size={ICON} />} label={t('effectiveStats.maximum')} value={hours(maximum)} style={NEUTRAL_ACCENT} testId="eff-contract-maximum" />
         {extrasMetric}
+        {balance?.projectedGapToMinimum ? <MetricCard icon={<Target size={ICON} />} label={t('annualTarget.projectedGap')} value={hours(balance.projectedGapToMinimum)} style={NEUTRAL_ACCENT} testId="eff-contract-projected-gap" /> : null}
+        {balance?.additionalAveragePerRemainingWeek ? <MetricCard icon={<CalendarClock size={ICON} />} label={t('annualTarget.averageNeeded')} value={hours(balance.additionalAveragePerRemainingWeek)} style={NEUTRAL_ACCENT} testId="eff-contract-average-needed" /> : null}
         <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginUsed')} value={hours(evaluation.marginUsedMinutes ?? 0)} style={shiftAccentStyle('Regular')} testId="eff-contract-margin-used" />
         <MetricCard icon={<Clock size={ICON} />} label={t('effectiveStats.marginRemaining')} value={hours(evaluation.marginRemainingMinutes ?? 0)} style={shiftAccentStyle('Vacaciones')} testId="eff-contract-margin-remaining" />
         <div className="metric-card metric-card--status metric-card--wide">
@@ -233,6 +273,7 @@ function TargetPanel({
         />
       )}
       {configureButton(true, t('effectiveStats.editTarget'), 'eff-contract-edit')}
+      {operationalSummary}
     </section>
   );
 }
@@ -323,6 +364,9 @@ export function StatisticsModal({
       },
       calendarRows: remote.calendarRows,
       contract: evaluateAnnualTarget(employeeTargetMinutes(realized, target?.includedShiftTypes), target, { calendarRows: remote.calendarRows }),
+      operationalTarget: remote.activeOperationalTarget,
+      operationalBalance: remote.operationalBalance,
+      balance: remote.balance,
     };
   }, [employeeId, local, remote, target, year]);
 
@@ -420,6 +464,9 @@ export function StatisticsModal({
               provisionalReviewDays={data.year.provisionalReviewDays}
               canConfigure={canConfigureTarget}
               onConfigure={onConfigureTarget}
+              operationalTarget={data.operationalTarget}
+              operationalBalance={data.operationalBalance}
+              balance={data.balance}
               t={t}
               locale={locale}
             />

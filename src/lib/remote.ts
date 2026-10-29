@@ -1371,7 +1371,18 @@ export async function resetOrganization(): Promise<{ reset: boolean; deleted: { 
 export interface RemoteAnnualTarget {
   id: string;
   employeeId: string;
+  organizationId?: string;
   year: number;
+  targetKind: 'CONTRACTUAL' | 'OPERATIONAL';
+  periodType: 'ANNUAL' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM';
+  periodStart: string;
+  periodEnd: string;
+  effectiveFrom: string;
+  revision: number;
+  minimumMinutes: number;
+  targetMinutes: number | null;
+  maximumMinutes: number;
+  includedWorkBuckets: string[];
   minimumAnnualMinutes: number;
   maximumAnnualMinutes: number;
   includedShiftTypes: string[];
@@ -1396,9 +1407,32 @@ export async function saveAnnualTarget(input: {
   includedShiftTypes: string[];
   notes?: string;
 }): Promise<RemoteAnnualTarget> {
-  const payload = await apiFetch<{ target: RemoteAnnualTarget }>('/api/calendar/annual-targets', {
-    method: 'PUT',
-    body: JSON.stringify(input),
+  const payload = await apiFetch<{ target: RemoteAnnualTarget }>('/api/calendar/annual-targets', { method: 'PUT', body: JSON.stringify(input) });
+  return payload.target;
+}
+
+export async function loadWorktimeTargets(employeeId: string, { asOf, history = true }: { asOf?: string; history?: boolean } = {}) {
+  const params = new URLSearchParams({ employeeId, history: String(history) });
+  if (asOf) params.set('asOf', asOf);
+  const payload = await apiFetch<{ targets: RemoteAnnualTarget[] }>(`/api/calendar/worktime-targets?${params}`);
+  return payload.targets;
+}
+
+export async function createWorktimeTargetVersion(input: {
+  employeeId: string;
+  targetKind: RemoteAnnualTarget['targetKind'];
+  periodType: RemoteAnnualTarget['periodType'];
+  periodStart: string;
+  periodEnd: string;
+  minimumMinutes: number;
+  targetMinutes: number | null;
+  maximumMinutes: number;
+  effectiveFrom: string;
+  includedWorkBuckets: string[];
+  notes?: string;
+}): Promise<RemoteAnnualTarget> {
+  const payload = await apiFetch<{ target: RemoteAnnualTarget }>('/api/calendar/worktime-targets', {
+    method: 'POST', body: JSON.stringify(input),
   });
   return payload.target;
 }
@@ -1459,6 +1493,22 @@ export async function reconcileCalendarDayRemote(input: {
   });
 }
 
+export interface RemoteWorktimeBalance {
+  status?: string;
+  realizedMinutes?: number;
+  plannedMinutes?: number;
+  projectedMinutes?: number;
+  minimumMinutes?: number;
+  targetMinutes?: number | null;
+  maximumMinutes?: number;
+  marginMinutes?: number;
+  remainingToMinimumFromRealized?: number;
+  projectedGapToMinimum?: number;
+  distanceToTarget?: number | null;
+  projectedExcessOverMaximum?: number;
+  additionalAveragePerRemainingWeek?: number | null;
+}
+
 export interface RemoteCalendarStats {
   employeeId: string;
   year: number;
@@ -1484,6 +1534,12 @@ export interface RemoteCalendarStats {
   plannedProvisionalReviewMinutes: number;
   monthStats: { month: number; realized: StatsBucket; planned: StatsBucket; totalReviewDays: number; provisionalReviewDays: number; provisionalReviewMinutes: number; unresolvedUncountedDays: number; realizedProvisionalReviewDays: number; plannedProvisionalReviewDays: number; realizedProvisionalReviewMinutes: number; plannedProvisionalReviewMinutes: number } | null;
   target: RemoteAnnualTarget | null;
+  primaryTarget?: RemoteAnnualTarget | null;
+  activeOperationalTarget?: RemoteAnnualTarget | null;
+  balance?: RemoteWorktimeBalance;
+  operationalBalance?: RemoteWorktimeBalance | null;
+  rawStats?: Record<string, unknown>;
+  creditedStats?: Record<string, unknown>;
   contract: ContractEvaluation;
   projection: { realizedMinutes: number; plannedMinutes: number; projectedMinutes: number };
 }

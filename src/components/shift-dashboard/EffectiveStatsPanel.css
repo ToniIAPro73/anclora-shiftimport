@@ -295,8 +295,48 @@
   accent-color: var(--color-gold, #d4af37);
 }
 
+.eff-form__inline-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.annual-target__history {
+  border-top: 1px solid var(--glass-border);
+  padding-top: 0.75rem;
+}
+
+.annual-target__history h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.annual-target__history ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.annual-target__history li {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.875rem;
+}
+
+.annual-target__operational {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+}
+
 .eff-form__field input,
-.eff-form__field textarea {
+.eff-form__field textarea,
+.eff-form__field select {
   min-height: 40px;
   padding: 8px 10px;
   border-radius: 10px;

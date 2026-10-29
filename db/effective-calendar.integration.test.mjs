@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { createTaggedSql, isLocalConnection } from './connection.mjs';
+import { connect as connectCanonical, databaseUrl, PROTECTED_SOURCE_ORG_ID, resolveSourceOrganization } from '../scripts/qa/qa-lib.mjs';
+import { sourceFingerprint } from '../scripts/qa/refresh-qa-mirror.mjs';
 import {
   applyCalendarChange,
   getDayHistory,
@@ -11,12 +13,16 @@ import {
 } from '../api/_lib/calendar.js';
 
 /**
- * Real PostgreSQL integration for the effective calendar (migration 0041).
- * Only runs against a local Docker database; every row is synthetic and
- * removed in afterAll.
+ * Canonical integration coverage against Neon Production main using isolated,
+ * runId-scoped synthetic tenants. An explicit Docker URL remains an optional
+ * local fallback. The protected ShiftImport source is fingerprinted and must
+ * remain unchanged; all created rows are removed in afterAll.
  */
-describe('effective calendar integration (local PostgreSQL)', () => {
+describe('effective calendar PostgreSQL integration (Neon main; optional Docker fallback)', () => {
   let sql;
+  let fingerprintClient;
+  let sourceId;
+  let sourceBefore;
   const run = randomUUID().slice(0, 8);
   const ids = { org: randomUUID(), otherOrg: randomUUID() };
   const users = {};
@@ -44,13 +50,19 @@ describe('effective calendar integration (local PostgreSQL)', () => {
   }
 
   beforeAll(async () => {
-    const url = process.env.EFFECTIVE_CALENDAR_DATABASE_URL;
-    if (!url || !isLocalConnection(url)) {
-      throw new Error('EFFECTIVE_CALENDAR_DATABASE_URL must point at a local Docker PostgreSQL');
+    const fallbackUrl = process.env.EFFECTIVE_CALENDAR_DATABASE_URL;
+    const url = fallbackUrl || databaseUrl();
+    if (fallbackUrl && (!isLocalConnection(fallbackUrl) || process.env.QA_ALLOW_LOCAL_DOCKER !== '1')) {
+      throw new Error('Docker fallback requires a local EFFECTIVE_CALENDAR_DATABASE_URL and QA_ALLOW_LOCAL_DOCKER=1');
     }
     sql = createTaggedSql(url);
-    await sql`INSERT INTO organizations (id, name, plan, type) VALUES (${ids.org}, ${`EFFCAL-${run}`}, 'team', 'company')`;
-    await sql`INSERT INTO organizations (id, name, plan, type) VALUES (${ids.otherOrg}, ${`EFFCAL-OTHER-${run}`}, 'team', 'company')`;
+    fingerprintClient = await connectCanonical();
+    const source = await resolveSourceOrganization(fingerprintClient);
+    if (source.id !== PROTECTED_SOURCE_ORG_ID) throw new Error('Unexpected protected ShiftImport source organization');
+    sourceId = source.id;
+    sourceBefore = await sourceFingerprint(fingerprintClient, sourceId);
+    await sql`INSERT INTO organizations (id, name, plan, type) VALUES (${ids.org}, ${`E2E-SHIFT-${run}-EFFCAL`}, 'team', 'company')`;
+    await sql`INSERT INTO organizations (id, name, plan, type) VALUES (${ids.otherOrg}, ${`E2E-SHIFT-${run}-OTHER`}, 'team', 'company')`;
     for (const key of ['owner', 'admin', 'planner', 'employee']) {
       users[key] = randomUUID();
       await sql`INSERT INTO users (id, email, password_hash, display_name) VALUES (${users[key]}, ${`effcal-${key}-${run}@example.test`}, 'x', ${`Effcal ${key}`})`;
@@ -66,32 +78,45 @@ describe('effective calendar integration (local PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    if (!sql) return;
-    await sql`DELETE FROM organizations WHERE id IN (${ids.org}, ${ids.otherOrg})`;
-    for (const key of Object.keys(users)) await sql`DELETE FROM users WHERE id = ${users[key]}`;
-    const residue = await sql`SELECT COUNT(*)::int AS n FROM organizations WHERE id IN (${ids.org}, ${ids.otherOrg})`;
-    expect(residue[0].n).toBe(0);
-    await sql.end();
+    if (sql) {
+      await sql`DELETE FROM organizations WHERE id IN (${ids.org}, ${ids.otherOrg})`;
+      for (const key of Object.keys(users)) await sql`DELETE FROM users WHERE id = ${users[key]}`;
+      const residue = await sql`SELECT COUNT(*)::int AS n FROM organizations WHERE id IN (${ids.org}, ${ids.otherOrg})`;
+      expect(residue[0].n).toBe(0);
+      if (typeof sql.end === 'function') await sql.end();
+    }
+    if (fingerprintClient && sourceBefore) {
+      const sourceAfter = await sourceFingerprint(fingerprintClient, sourceId);
+      expect(sourceAfter).toEqual(sourceBefore);
+      await fingerprintClient.end();
+    }
   });
 
   describe('annual targets (per employee, per year)', () => {
     it('OWNER and ADMIN can configure, with before/after audit', async () => {
       const created = await setAnnualTarget(sql, ctxOf('admin'), {
-        employeeId: employees.admin, year: 2025, minimumAnnualMinutes: 91740, maximumAnnualMinutes: 92400, notes: 'pilot',
+        employeeId: employees.admin, year: 2025, minimumAnnualMinutes: 91740, maximumAnnualMinutes: 92400, notes: 'pilot', effectiveFrom: '2025-01-01',
       });
       expect(created.marginMinutes).toBe(660);
       await setAnnualTarget(sql, ctxOf('owner'), {
-        employeeId: employees.admin, year: 2025, minimumAnnualMinutes: 91740, maximumAnnualMinutes: 92500,
+        employeeId: employees.admin, year: 2025, minimumAnnualMinutes: 91740, maximumAnnualMinutes: 92500, effectiveFrom: '2025-01-01',
       });
       const events = await sql`
         SELECT event_type, metadata FROM organization_audit_events
         WHERE organization_id = ${ids.org} AND target_id = ${employees.admin}
-          AND event_type IN ('EMPLOYEE_ANNUAL_TARGET_SET', 'EMPLOYEE_ANNUAL_TARGET_UPDATED')
+          AND event_type = 'EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED'
         ORDER BY created_at ASC
       `;
-      expect(events.map((e) => e.event_type)).toEqual(['EMPLOYEE_ANNUAL_TARGET_SET', 'EMPLOYEE_ANNUAL_TARGET_UPDATED']);
-      expect(events[1].metadata.before.maximumAnnualMinutes).toBe(92400);
-      expect(events[1].metadata.after.maximumAnnualMinutes).toBe(92500);
+      expect(events).toHaveLength(2);
+      const updatedEvent = events.find((event) => event.metadata.after.maximumMinutes === 92500);
+      expect(updatedEvent.metadata.before.maximumMinutes).toBe(92400);
+      expect(updatedEvent.event_type).toBe('EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED');
+      const versions = await sql`
+        SELECT revision, maximum_minutes FROM employee_worktime_targets
+        WHERE organization_id = ${ids.org} AND employee_id = ${employees.admin}
+          AND target_kind = 'CONTRACTUAL' AND period_start = '2025-01-01' ORDER BY revision
+      `;
+      expect(versions.map((version) => version.maximum_minutes)).toEqual([92400, 92500]);
     });
 
     it('does not infer a 2026 target from 2025', async () => {
@@ -154,10 +179,11 @@ describe('effective calendar integration (local PostgreSQL)', () => {
       expect(change.original_shift_id).toBe(libre.id);
 
       const history = await getDayHistory(sql, ctxOf('admin'), employees.admin, date);
-      expect(history.provenance.companyOriginal.map((r) => r.shiftType)).toEqual(['Libre']);
+      expect(history.rows.map((row) => [row.shiftType, row.effectiveState])).toEqual([
+        ['Libre', 'SUPERSEDED'], ['Regular', 'EFFECTIVE'],
+      ]);
       expect(history.provenance.effective.map((r) => r.shiftType)).toEqual(['Regular']);
       expect(history.changes).toHaveLength(1);
-      expect(history.provenance.hasChangesFromPlan).toBe(true);
 
       const stats = await getEffectiveStats(sql, ctxOf('admin'), employees.admin, 2026, { today: '2026-10-16' });
       expect(stats.realized.effectiveMinutes).toBe(480);

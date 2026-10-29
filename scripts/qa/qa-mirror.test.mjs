@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { QA_IDENTITY, assertQaOrganization, deterministicUuid } from './qa-lib.mjs';
 import { buildMirror } from './refresh-qa-mirror.mjs';
+import { legacyAnnualTargetVersion } from './worktime-target-backfill.mjs';
 
 const SRC = 'a4cf0768-f08d-49e6-bb81-0d3635d58028';
 const TARGET = '3bfba3fb-1f18-4309-8ffa-c151c46e5de9';
@@ -19,6 +20,7 @@ const source = {
   calendar_changes: [{ id: 'chg-1', date: '2026-01-01', organization_id: SRC, employee_id: 'emp-1', actor_user_id: 'real-user', approved_by_user_id: 'real-user', approval_request_id: 'x', change_request_id: 'y', original_shift_id: 'sh-1' }],
   shifts: [{ id: 'sh-1', organization_id: SRC, employee_id: 'emp-1', import_id: 'imp-1', area_id: 'area-1', schedule_version_id: 'ver-1', change_id: 'chg-1', semantic_fingerprint: 'fp', date: '2026-01-01', shift_type: 'Regular' }],
   employee_annual_targets: [{ id: 't-1', organization_id: SRC, employee_id: 'emp-1', year: 2026, minimum_annual_minutes: 1, maximum_annual_minutes: 2, created_by_user_id: 'real-user', updated_by_user_id: 'real-user' }],
+  employee_worktime_targets: [],
   format_profiles: [],
 };
 
@@ -40,7 +42,13 @@ describe('buildMirror', () => {
     expect(mirror.employees.map((e) => e.name)).toEqual(['Sebastián Pozo Mendoza — QA', 'Empleado QA 002']);
     expect(mirror.employees[0].external_employee_id).toBe('84881'); // business key preserved
     expect(mirror.employee_annual_targets).toHaveLength(1);
-    expect(mirror.employee_annual_targets[0]).toMatchObject({ year: 2026, minimum_annual_minutes: 91740, maximum_annual_minutes: 92400, employee_id: mirror.employees[0].id });
+    expect(mirror.employee_annual_targets[0]).toMatchObject({ year: 2026, minimum_annual_minutes: 91740, maximum_annual_minutes: 92400, included_shift_types: ['Regular'], employee_id: mirror.employees[0].id });
+    expect(mirror.employee_worktime_targets).toHaveLength(1);
+    expect(mirror.employee_worktime_targets[0]).toMatchObject({
+      target_kind: 'CONTRACTUAL', period_type: 'ANNUAL', minimum_minutes: 91740, maximum_minutes: 92400,
+      target_minutes: null, included_work_buckets: ['Regular'], employee_id: mirror.employees[0].id,
+    });
+    expect(mirror.employee_worktime_targets[0].legacy_annual_target_id).not.toBe('t-1');
     expect(mirror.employees[1].external_employee_id).toBeNull();
     expect(mirror.employees.every((e) => e.user_id === null)).toBe(true);
     expect(mirror.imports[0].file_name).toBe('qa-import-001.xlsx');
@@ -128,6 +136,7 @@ describe('2026-only mirror', () => {
       { id: 'x26', date: new Date(2026, 0, 1), import_id: 'i25', schedule_version_id: 'v25', change_id: 'c26' },
     ],
     employee_annual_targets: [{ id: 't25', year: 2025 }, { id: 't26', year: 2026 }],
+    employee_worktime_targets: [{ id: 'w25', period_start: '2025-01-01', period_end: '2025-12-31' }, { id: 'w26', period_start: '2026-01-01', period_end: '2026-12-31' }],
   };
   const scoped = scopeToYear(base, 2026);
 
@@ -136,6 +145,7 @@ describe('2026-only mirror', () => {
     expect(scoped.calendar_changes.map((r) => r.id)).toEqual(['c26']);
     expect(scoped.shift_assignments.map((r) => r.id)).toEqual(['a26']);
     expect(scoped.employee_annual_targets.map((r) => r.id)).toEqual(['t26']);
+    expect(scoped.employee_worktime_targets.map((r) => r.id)).toEqual(['w26']);
     expect(scoped.schedules.map((r) => r.id)).toEqual(['s26']);
     expect(scoped.imports.map((r) => r.id)).toEqual(['i25', 'i26']); // i25 stays only because a kept shift references it
   });
@@ -154,9 +164,25 @@ describe('pilot annual target', () => {
   });
 });
 
+describe('legacy annual target backfill conversion', () => {
+  it('preserves persisted limits, policy, source, notes, and creation date without rewriting the source row', () => {
+    const row = legacyAnnualTargetVersion({
+      id: 'legacy-1', year: 2026, employee_id: 'employee-1', minimum_annual_minutes: 91740,
+      maximum_annual_minutes: 92400, included_shift_types: ['Regular'], source: 'ADMIN_UI', notes: 'fixture',
+      created_at: '2026-02-03T10:30:00.000Z',
+    }, { id: 'version-1', organizationId: TARGET });
+    expect(row).toMatchObject({
+      id: 'version-1', legacy_annual_target_id: 'legacy-1', organization_id: TARGET,
+      target_kind: 'CONTRACTUAL', period_type: 'ANNUAL', period_start: '2026-01-01', period_end: '2026-12-31',
+      minimum_minutes: 91740, target_minutes: null, maximum_minutes: 92400, effective_from: '2026-02-03', revision: 1,
+      included_work_buckets: ['Regular'], source: 'ADMIN_UI', notes: 'fixture',
+    });
+  });
+});
+
 describe('synthetic EMPLOYEE QA link', () => {
   const src = {
-    areas: [], imports: [], schedules: [], schedule_versions: [], shift_assignments: [], calendar_changes: [], shifts: [], employee_annual_targets: [], format_profiles: [],
+    areas: [], imports: [], schedules: [], schedule_versions: [], shift_assignments: [], calendar_changes: [], shifts: [], employee_annual_targets: [], employee_worktime_targets: [], format_profiles: [],
     employees: [
       { id: 'a', organization_id: SRC, name: 'Pilot', external_employee_id: '84881', status: 'active', created_at: 1 },
       { id: 'b', organization_id: SRC, name: 'Other', external_employee_id: '11111', status: 'active', created_at: 2 },

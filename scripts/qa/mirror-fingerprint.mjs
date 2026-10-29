@@ -13,6 +13,7 @@ export async function mirrorFingerprint(client) {
     changes: "SELECT id, employee_id, TO_CHAR(date,'YYYY-MM-DD') d, change_type, original_shift_id FROM calendar_changes WHERE organization_id = $1 ORDER BY id",
     imports: 'SELECT id, file_name, period_year, shift_count FROM imports WHERE organization_id = $1 ORDER BY id',
     targets: 'SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes FROM employee_annual_targets WHERE organization_id = $1 ORDER BY id',
+    worktimeTargets: 'SELECT id, employee_id, target_kind, period_type, period_start, period_end, minimum_minutes, target_minutes, maximum_minutes, effective_from, revision, included_work_buckets, legacy_annual_target_id FROM employee_worktime_targets WHERE organization_id = $1 ORDER BY id',
     members: 'SELECT user_id, role FROM memberships WHERE organization_id = $1 ORDER BY user_id',
   };
   const parts = {};

@@ -17,4 +17,13 @@ describe('annual target shift type accounting', () => {
     expect(applyEmployeeStatisticsPolicy(bucket, null)).toBe(bucket);
     expect(employeeTargetMinutes(bucket, null)).toBe(600);
   });
+
+  it('applies the same persisted counting policy to unrelated employees and other work buckets', () => {
+    const work = { effectiveMinutes: 630, byType: { Regular: 480, Extras: 120, Other: 30 } };
+    const firstEmployee = applyEmployeeStatisticsPolicy(work, ['Regular', 'Other']);
+    const secondEmployee = applyEmployeeStatisticsPolicy(work, ['Regular', 'Other']);
+    expect(firstEmployee.effectiveMinutes).toBe(510);
+    expect(secondEmployee.effectiveMinutes).toBe(firstEmployee.effectiveMinutes);
+    expect(work.effectiveMinutes).toBe(630);
+  });
 });

@@ -2339,7 +2339,12 @@ function App() {
             year={currentYear}
             current={currentYearTarget}
             canEdit={Boolean(canConfigureTarget)}
-            onSaved={(saved) => setAnnualTargets((targets) => [...targets.filter((target) => target.year !== saved.year), saved])}
+            onSaved={(saved) => {
+              if (saved.targetKind === 'CONTRACTUAL' && saved.periodType === 'ANNUAL') {
+                setAnnualTargets((targets) => [...targets.filter((target) => target.year !== saved.year), saved]);
+              }
+              setCalendarDataVersion((value) => value + 1);
+            }}
           />
         )}
           </>

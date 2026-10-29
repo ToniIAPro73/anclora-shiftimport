@@ -26,8 +26,25 @@
 - `PREVIEW_REQUIRED_FOR_DEVELOPMENT=false`; `PREVIEW_REQUIRED_FOR_PROMOTION=false`; `DOCKER_REQUIRED_FOR_QA=false`.
 - La suite E2E amplia de importación no se repitió por instrucción de Toni. Su timeout anterior queda fuera del scope contractual y de la aceptación del Worktime Target Engine.
 
+## Worktime Target Engine
+
+| Comprobación | Resultado |
+| --- | --- |
+| Migración | PASS — Neon `main`, 48/48, `UP_TO_DATE`. |
+| DB integration | PASS — 12/12 casos sobre Neon `main`, fixtures sintéticos con `runId`, limpieza verificada y fingerprint fuente inmutable. |
+| QA Mirror | PASS — refresco idempotente, target del piloto presente y fuente sin cambios. |
+| Escenarios de targets | PASS — piloto, exact/range, central, semanal, mensual, personalizado, revisiones históricas/futuras, política Regular-only, Extras visibles, solapamiento y balance sin revisión nueva. |
+| CURRENT/PROPOSED | PASS — datos actuales del mirror, proyección y balance; mirror restaurada después de los casos con escritura. |
+| QA visual focal | PASS — resumen y editor de Sebastián; rango 1529–1540 h, Regular-only, Extras separados, historial; empleado sin objetivo; configuración operativa mensual; ES/EN; desktop y móvil claro/oscuro. No se guardaron cambios desde la UI. El contenido inferior y los botones del editor son alcanzables por scroll; overflow horizontal no observado en 390 px. |
+| E2E focal de targets | PASS — cubierto por `npm run qa:current-proposed`; no quedó caso UI focal pendiente. |
+| Suite completa | PASS — 2196 tests passed y 2 skips existentes. |
+| TypeScript / lint / build | PASS — `npm run build` (incluye `tsc`), `npm run lint`; reusados sin cambios posteriores que los invaliden. |
+| Diff check | PASS — `git diff --check`. |
+
+`SOURCE_UNCHANGED=true`; `REAL_SHIFTIMPORT_WRITES=0`; `QA_RESTORED=true`. El timeout E2E anterior de importación permanece como observación fuera de scope y no altera la aceptación de esta feature.
+
 ## Git
 
 - Cambios contractuales preparados archivo por archivo y revisados en `git diff --cached`.
-- El commit contractual se publica en `origin/development`; el Worktime Target Engine permanece fuera de este commit.
+- El commit contractual se publica en `origin/development`; el Worktime Target Engine se publica en un commit independiente.
 - No se promovió a Preview, staging, production ni `main`; la rama de respaldo Neon no se eliminó.

@@ -28,6 +28,9 @@
 - `D-EC-09` (2026-10-28): cada objetivo anual por empleado/año define qué tipos de turno de trabajo
   suman a sus totales. Por defecto solo se incluye `Regular`; otros tipos de trabajo, como `Extras`,
   se pueden activar en la edición del objetivo. Las métricas individuales por tipo siguen visibles.
+- `D-EC-10` (2026-10-29): los objetivos son versiones inmutables por empleado, tipo y periodo, con fechas efectivas. `employee_worktime_targets` es la autoridad activa; `employee_annual_targets` se conserva como compatibilidad histórica.
+- `D-EC-11` (2026-10-29): los objetivos CONTRACTUAL y OPERATIONAL son series separadas. Los cambios de Calendar y Planning recalculan el balance sin crear revisiones del objetivo. El crédito computable procede de la política guardada en cada versión.
+- `D-EC-12` (2026-10-29): la migración de esquema no inserta filas de política en la organización real. QA Mirror transforma los objetivos históricos; el backfill productivo se difiere a una operación de release revisada.
 
 ## Alternativas descartadas
 

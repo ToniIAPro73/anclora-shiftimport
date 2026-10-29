@@ -1,5 +1,13 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-10-29 · objetivos de jornada
+
+- Los objetivos pueden ser contractuales u operativos y cubrir periodos anuales, semanales, mensuales o personalizados. Pueden indicar un valor exacto o un rango, y una fecha desde la que entran en vigor.
+- Guardar cambios crea una versión nueva; el historial conserva las anteriores y las programadas para el futuro.
+- Statistics presenta realizado, planificado y proyección. La brecha se recalcula cuando cambia Calendar o Planning y no crea otra versión del objetivo.
+- Las categorías incluidas se muestran en el objetivo. Extras y otros tipos de trabajo siguen visibles aunque no computen para la meta seleccionada.
+- Referencia funcional: [`EFFECTIVE_CALENDAR_CONTRACT.md`](../product/EFFECTIVE_CALENDAR_CONTRACT.md).
+
 ## Actualización 2026-10-18 (c) · turnos futuros
 
 - Si el archivo (cualquiera de los tres tipos) contiene turnos futuros, OWNER, ADMIN y PLANNER eligen entre **Importar solo los turnos anteriores** e **Importar también los turnos futuros** (que se añaden a Planificación como borrador; no se publican). Si todo el archivo es futuro: **Añadir los turnos a Planificación**.

@@ -16,7 +16,7 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       ...(process.env.TEMPORAL_MODEL_DATABASE_URL ? [] : ['**/temporal-org-model.integration.test.mjs']),
-      ...(process.env.EFFECTIVE_CALENDAR_DATABASE_URL ? [] : ['**/effective-calendar.integration.test.mjs']),
+      ...(process.env.EFFECTIVE_CALENDAR_DATABASE_URL || process.env.QA_USE_CANONICAL_DB === '1' ? [] : ['**/effective-calendar.integration.test.mjs']),
     ],
   },
 });

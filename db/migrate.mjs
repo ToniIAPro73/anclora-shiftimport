@@ -601,6 +601,14 @@ export const MIGRATION_SENTINELS = {
   '0045_import_effect_plan_revision_key.sql': (cat) => cat.indexes.has('import_effects_resource_idx'),
   '0046_confirmed_full_day_shift_override.sql': (cat) =>
     Boolean(cat.constraintDefs?.get('shifts_provenance_check')?.includes('MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE')),
+  '0047_annual_target_shift_types.sql': (cat) => cat.columns.has('employee_annual_targets.included_shift_types'),
+  '0048_versioned_worktime_targets.sql': (cat) =>
+    cat.tables.has('employee_worktime_targets') &&
+    cat.columns.has('employee_worktime_targets.effective_from') &&
+    cat.columns.has('employee_worktime_targets.included_work_buckets') &&
+    cat.constraints.has('employee_worktime_targets_series_revision_unique') &&
+    cat.indexes.has('employee_worktime_targets_active_idx') &&
+    Boolean(cat.constraintDefs?.get('organization_audit_events_event_type_check')?.includes('EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED')),
 };
 
 /**

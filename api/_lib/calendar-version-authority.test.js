@@ -13,11 +13,11 @@ describe('day-scoped published schedule authority', () => {
       if (text.startsWith('SELECT id, status FROM employees')) return [{ id: 'employee-1', status: 'active' }];
       if (text.includes('FROM shifts')) return shifts;
       if (text.includes('FROM calendar_changes')) return [];
-      if (text.includes('FROM employee_annual_targets')) return [{
-        id: 'target-1', employee_id: 'employee-1', year: 2026,
-        minimum_annual_minutes: 450, maximum_annual_minutes: 500,
-        included_shift_types: ['Regular'],
-        source: 'ADMIN_UI', notes: '',
+      if (text.includes('FROM employee_worktime_targets')) return [{
+        id: 'target-1', organization_id: organizationId, employee_id: 'employee-1',
+        target_kind: 'CONTRACTUAL', period_type: 'ANNUAL', period_start: '2026-01-01', period_end: '2026-12-31',
+        minimum_minutes: 450, target_minutes: null, maximum_minutes: 500, effective_from: '2026-01-01', revision: 1,
+        included_work_buckets: ['Regular'], source: 'ADMIN_UI', notes: '', created_at: '2026-01-01T00:00:00Z',
       }];
       return [];
     };
@@ -26,6 +26,8 @@ describe('day-scoped published schedule authority', () => {
     expect(result.realized).toMatchObject({ effectiveMinutes: 420, regularMinutes: 420, extrasMinutes: 60 });
     expect(result.contract).toMatchObject({ status: 'BELOW_MINIMUM', effectiveMinutes: 420 });
     expect(result.projection.projectedMinutes).toBe(420);
+    expect(result.balance).toMatchObject({ realizedMinutes: 420, projectedGapToMinimum: 30, projectedMinutes: 420 });
+    expect(result.rawStats.realized.effectiveMinutes).toBe(480);
   });
 
   it('keeps all worked types in statistics when no annual objective exists', async () => {

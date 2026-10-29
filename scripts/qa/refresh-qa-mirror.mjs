@@ -19,8 +19,9 @@ import {
   PROTECTED_SOURCE_ORG_ID, QA_DOMAIN, QA_EMPLOYEE_IDENTITY, QA_IDENTITY, assertNotProtectedSource, assertQaOrganization, connect, deterministicUuid, findQaUser,
   resolveSourceOrganization, sha256, targetNameFor,
 } from './qa-lib.mjs';
+import { legacyAnnualTargetVersion } from './worktime-target-backfill.mjs';
 
-const COPIED = ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'shift_assignments', 'calendar_changes', 'shifts', 'employee_annual_targets', 'format_profiles'];
+const COPIED = ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'shift_assignments', 'calendar_changes', 'shifts', 'employee_annual_targets', 'employee_worktime_targets', 'format_profiles'];
 
 export async function sourceFingerprint(client, sourceId) {
   const queries = {
@@ -30,6 +31,7 @@ export async function sourceFingerprint(client, sourceId) {
     imports: 'SELECT id, file_name, status, shift_count, updated_at FROM imports WHERE organization_id = $1 ORDER BY id',
     schedules: 'SELECT id, area_id, period_start, period_end FROM schedules WHERE organization_id = $1 ORDER BY id',
     annual_targets: 'SELECT id, employee_id, year, minimum_annual_minutes, maximum_annual_minutes, updated_at FROM employee_annual_targets WHERE organization_id = $1 ORDER BY id',
+    worktime_targets: 'SELECT id, employee_id, target_kind, period_type, period_start, period_end, minimum_minutes, target_minutes, maximum_minutes, effective_from, revision, included_work_buckets, legacy_annual_target_id FROM employee_worktime_targets WHERE organization_id = $1 ORDER BY id',
     memberships: 'SELECT user_id, role FROM memberships WHERE organization_id = $1 ORDER BY user_id',
     areas: 'SELECT id, name, code, active FROM areas WHERE organization_id = $1 ORDER BY id',
   };
@@ -53,6 +55,7 @@ async function readSource(client, sourceId) {
     calendar_changes: await q('SELECT * FROM calendar_changes WHERE organization_id = $1 ORDER BY created_at, id'),
     shifts: await q('SELECT * FROM shifts WHERE organization_id = $1 ORDER BY date, id'),
     employee_annual_targets: await q('SELECT * FROM employee_annual_targets WHERE organization_id = $1 ORDER BY id'),
+    employee_worktime_targets: await q('SELECT * FROM employee_worktime_targets WHERE organization_id = $1 ORDER BY id'),
     format_profiles: await q('SELECT * FROM format_profiles WHERE organization_id = $1 ORDER BY id'),
   };
 }
@@ -101,6 +104,8 @@ export function scopeToYear(source, year = MIRROR_YEAR) {
       change_id: changeIds.has(r.change_id) ? r.change_id : null,
     })),
     employee_annual_targets: source.employee_annual_targets.filter((r) => r.year === year),
+    employee_worktime_targets: (source.employee_worktime_targets ?? []).filter((r) => isoDate(r.period_end) >= `${year}-01-01`
+      && isoDate(r.period_start) < `${year + 1}-01-01`),
   };
 }
 
@@ -118,7 +123,7 @@ export function buildMirror(rawSource, { targetId, qaUserId, qaEmployeeUserId = 
   };
   const area = map('area'); const employee = map('employee'); const imp = map('import'); const schedule = map('schedule');
   const version = map('schedule_version'); const shift = map('shift'); const change = map('change');
-  const assignment = map('assignment'); const target = map('target'); const profile = map('format_profile');
+  const assignment = map('assignment'); const target = map('target'); const worktimeTarget = map('worktime_target'); const profile = map('format_profile');
 
   const employeeIndex = new Map(source.employees.map((row, index) => [row.id, index + 1]));
   const importIndex = new Map(source.imports.map((row, index) => [row.id, index + 1]));
@@ -190,6 +195,18 @@ export function buildMirror(rawSource, { targetId, qaUserId, qaEmployeeUserId = 
   out.employee_annual_targets = source.employee_annual_targets.map((r) => ({
     ...r, id: target(r.id), organization_id: targetId, employee_id: employee(r.employee_id), created_by_user_id: null, updated_by_user_id: null,
   }));
+  out.employee_worktime_targets = (source.employee_worktime_targets ?? []).map((r) => ({
+    ...r, id: worktimeTarget(r.id), organization_id: targetId, employee_id: employee(r.employee_id),
+    legacy_annual_target_id: target(r.legacy_annual_target_id), created_by_user_id: null,
+  }));
+  const copiedLegacyIds = new Set(out.employee_worktime_targets.map((row) => row.legacy_annual_target_id).filter(Boolean));
+  for (const legacy of source.employee_annual_targets) {
+    if (copiedLegacyIds.has(target(legacy.id))) continue;
+    out.employee_worktime_targets.push(legacyAnnualTargetVersion(legacy, {
+      organizationId: targetId, employeeId: employee(legacy.employee_id), id: worktimeTarget(legacy.id),
+      legacyAnnualTargetId: target(legacy.id), createdByUserId: null,
+    }));
+  }
   // The pilot employee must have exactly one 2026 target (1529–1540 h); created in the mirror only if the source lacks it.
   const pilot = source.employees.find((r) => r.external_employee_id === PILOT_EXTERNAL_ID);
   if (pilot) {
@@ -198,8 +215,19 @@ export function buildMirror(rawSource, { targetId, qaUserId, qaEmployeeUserId = 
     out.employee_annual_targets.push({
       id: target(`pilot-${MIRROR_YEAR}`), organization_id: targetId, employee_id: pilotId, year: MIRROR_YEAR,
       minimum_annual_minutes: PILOT_TARGET_MINUTES.minimum, maximum_annual_minutes: PILOT_TARGET_MINUTES.maximum,
+      included_shift_types: ['Regular'],
       notes: 'QA mirror target', source: 'QA_MIRROR', created_by_user_id: null, updated_by_user_id: null,
       created_at: new Date('2026-01-01T00:00:00Z').toISOString(), updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    });
+    out.employee_worktime_targets = out.employee_worktime_targets.filter((t) => !(t.employee_id === pilotId
+      && t.target_kind === 'CONTRACTUAL' && t.period_type === 'ANNUAL' && String(t.period_start).startsWith('2026-')));
+    out.employee_worktime_targets.push({
+      id: worktimeTarget(`pilot-${MIRROR_YEAR}`), organization_id: targetId, employee_id: pilotId,
+      target_kind: 'CONTRACTUAL', period_type: 'ANNUAL', period_start: `${MIRROR_YEAR}-01-01`, period_end: `${MIRROR_YEAR}-12-31`,
+      minimum_minutes: PILOT_TARGET_MINUTES.minimum, target_minutes: null, maximum_minutes: PILOT_TARGET_MINUTES.maximum,
+      effective_from: `${MIRROR_YEAR}-01-01`, revision: 1, source: 'QA_MIRROR', notes: 'QA mirror target',
+      included_work_buckets: ['Regular'], legacy_annual_target_id: target(`pilot-${MIRROR_YEAR}`),
+      created_by_user_id: null, created_at: new Date(`${MIRROR_YEAR}-01-01T00:00:00Z`).toISOString(),
     });
   }
   out.format_profiles = source.format_profiles.map((r) => ({
@@ -236,6 +264,7 @@ const WIPE_ORDER = [
   ['imports', 'organization_id = $1'],
   ['import_reversions', 'organization_id = $1'],
   ['employee_annual_targets', 'organization_id = $1'],
+  ['employee_worktime_targets', 'organization_id = $1'],
   ['employees', 'organization_id = $1'],
   ['format_profiles', 'organization_id = $1'],
   ['areas', 'organization_id = $1'],
@@ -293,7 +322,7 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
     }
     const mirror = buildMirror(data, { targetId, qaUserId: qaUser.id, qaEmployeeUserId: qaEmployeeUser?.id ?? null });
     const inserted = {};
-    for (const table of ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'calendar_changes', 'shifts', 'shift_assignments', 'employee_annual_targets', 'format_profiles']) {
+    for (const table of ['areas', 'employees', 'imports', 'schedules', 'schedule_versions', 'calendar_changes', 'shifts', 'shift_assignments', 'employee_annual_targets', 'employee_worktime_targets', 'format_profiles']) {
       inserted[table] = await insertRows(client, table, mirror[table]);
     }
     for (const link of mirror.calendar_change_original_shift) {
@@ -307,6 +336,7 @@ export async function refreshQaMirror(client, { apply = false, log = console.log
       `SELECT (SELECT COUNT(*) FROM shifts WHERE organization_id = $1 AND date NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS shifts,
               (SELECT COUNT(*) FROM calendar_changes WHERE organization_id = $1 AND date NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS changes,
               (SELECT COUNT(*) FROM employee_annual_targets WHERE organization_id = $1 AND year <> 2026)::int AS targets,
+              (SELECT COUNT(*) FROM employee_worktime_targets WHERE organization_id = $1 AND period_start NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS worktime_targets,
               (SELECT COUNT(*) FROM shift_assignments a JOIN schedule_versions sv ON sv.id = a.schedule_version_id JOIN schedules s ON s.id = sv.schedule_id
                  WHERE s.organization_id = $1 AND a.date NOT BETWEEN '2026-01-01' AND '2026-12-31')::int AS assignments`, [targetId],
     )).rows[0];

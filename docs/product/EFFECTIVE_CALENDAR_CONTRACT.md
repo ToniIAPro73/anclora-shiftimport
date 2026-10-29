@@ -5,8 +5,9 @@
 Este contrato sustituye como modelo operacional las referencias anteriores a Plan Empresa, revisiones y baseline. El estado `CURRENT` del calendario es la única base que cuenta. Una importación distinta crea una `PROPOSED` alternativa; mientras siga pendiente, no reemplaza ni suma al estado actual.
 
 ```text
-CURRENT → Calendar → Statistics → Annual target
+CURRENT → Calendar → Worktime → Counting policy → Target evaluation → Balance
 PROPOSED → Differences → user decision
+Planning → future worktime projection
 CURRENT + accepted PROPOSED → History
 ```
 
@@ -57,9 +58,23 @@ Un duplicado exacto no suma dos veces. Solapes entre intervalos y dos estados de
 
 `layer='COMPANY_PLAN'` y `plan_revision` se conservan como `LEGACY_STORAGE_METADATA`; no identifican CURRENT ni otorgan autoridad. No se borran filas históricas ni se elimina `company_plan_revisions`. El runtime activo de calendario, estadísticas y diferencias no consulta esa tabla. Solo la compatibilidad de auditoría/reversión de importaciones antiguas puede leerla.
 
-Las tablas `calendar_changes` y `employee_annual_targets` mantienen su función de auditoría y objetivos por empleado/año en minutos. Cada objetivo guarda los tipos de turno de trabajo que cuentan en sus totales; por defecto se incluye `Regular` y las métricas por tipo, como `Extras`, siguen visibles aunque no formen parte del total.
+`calendar_changes` conserva la auditoría del calendario. `employee_annual_targets` queda como compatibilidad histórica; la autoridad activa pasa a `employee_worktime_targets`, cuyas filas son versiones inmutables.
 
-## 6. Terminología visible
+## 6. Objetivos de jornada y saldo
+
+- Cada versión guarda su tipo (`CONTRACTUAL` u `OPERATIONAL`), periodo (`ANNUAL`, `WEEKLY`, `MONTHLY` o `CUSTOM`), fechas explícitas, mínimo, objetivo central opcional, máximo, `effective_from`, revisión, procedencia, notas y categorías de trabajo computables.
+- Editar crea una revisión nueva. La revisión anterior permanece consultable y las versiones futuras no se activan antes de `effective_from`.
+- Las series del mismo tipo no pueden solaparse con fechas distintas para el mismo empleado. Un objetivo operativo puede coexistir con el contractual.
+- El objetivo puede ser exacto (`mínimo = objetivo = máximo`), un rango o un rango con objetivo central. El margen se deriva en minutos.
+- Las categorías que computan proceden de cada versión del objetivo. Regular sigue incluido por defecto; Extras y otros trabajos permanecen visibles aunque no computen para ese objetivo.
+- Realizado y planificado conservan sus métricas de trabajo bruto. El crédito computable se deriva de la política del objetivo. `proyección = realizado computable + planificado computable`.
+- El saldo faltante, la brecha proyectada, el exceso y la media adicional por semana son cálculos derivados. Cambios de Calendar, resolución CURRENT/PROPOSED o Planning no crean revisiones del objetivo.
+- Planning sigue siendo la única fuente de horas futuras. Una revisión del objetivo no publica ni duplica Planning.
+- Las estadísticas sin objetivo siguen funcionando y no infieren una jornada contractual.
+
+La migration `0048_versioned_worktime_targets.sql` añade la autoridad versionada sin borrar la tabla histórica ni modificar filas de la organización real. La conversión de filas del mirror conserva notas, fuente, periodo y política almacenada. El backfill de política productiva se realiza en una operación de release revisada; no se ejecuta durante QA.
+
+## 7. Terminología visible
 
 | Español | English |
 | --- | --- |
@@ -69,4 +84,4 @@ Las tablas `calendar_changes` y `employee_annual_targets` mantienen su función 
 | Usar propuesta | Use proposal |
 | Diferencia pendiente | Pending difference |
 
-La interfaz no muestra nombres internos de estados, `COMPANY_PLAN`, huellas, revisiones ni UUIDs. El disclosure estadístico identifica cuántos días pendientes se cuentan provisionalmente con el calendario actual y aclara que las horas se actualizarán al resolverlos.
+La interfaz no muestra nombres internos de estados, `COMPANY_PLAN`, huellas ni UUIDs. El historial puede identificar una versión con un número legible y muestra su vigencia, periodo, límites, política y procedencia. El disclosure estadístico identifica cuántos días pendientes se cuentan provisionalmente con el calendario actual y aclara que las horas se actualizarán al resolverlos.

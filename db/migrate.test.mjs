@@ -395,7 +395,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         constraints: [
           { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
           { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
-          { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
+          { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created', 'EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED'))" },
         ],
       });
 
@@ -445,6 +445,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'user_preferences',
           'calendar_changes',
           'employee_annual_targets',
+          'employee_worktime_targets',
           'company_plan_revisions',
           'calendar_annotations',
           'employee_source_identifiers',
@@ -455,6 +456,9 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         columns: [
           'organizations.plan',
           'employees.deactivated_at',
+          'employee_worktime_targets.effective_from',
+          'employee_worktime_targets.included_work_buckets',
+          'employee_annual_targets.included_shift_types',
           'imports.import_mode',
           'imports.employee_id',
           'memberships.scoped_area_id',
@@ -488,6 +492,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         ],
         indexes: [
           'import_effects_resource_idx',
+          'employee_worktime_targets_active_idx',
           'format_profiles_org_structurehash_active_idx',
           'memberships_one_owner_per_org_idx',
           'shifts_id_employee_unique_idx',
@@ -496,13 +501,14 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         constraints: [
           { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
           { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
-          { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created'))" },
+          { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created', 'EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED'))" },
           { conname: '_migrations_checksum_format_chk', def: "CHECK (checksum ~ '^[0-9a-f]{64}$')" },
           { conname: 'users_account_status_check', def: "CHECK (account_status IN ('PENDING_INVITATION', 'ACTIVE', 'SUSPENDED'))" },
           { conname: 'organizations_type_check', def: "CHECK (type IN ('personal', 'company'))", table_name: 'organizations' },
           { conname: 'user_access_invitations_token_hash_key', def: 'UNIQUE (token_hash)' },
           { conname: 'user_access_invitations_person_org_fkey', def: 'FOREIGN KEY (organization_person_id, organization_id)' },
           { conname: 'employee_annual_targets_unique', def: 'UNIQUE (organization_id, employee_id, year)' },
+          'employee_worktime_targets_series_revision_unique',
           { conname: 'company_plan_revisions_unique', def: 'UNIQUE (organization_id, scope_key, revision_number)' },
           { conname: 'calendar_annotations_unique', def: 'UNIQUE (organization_id, employee_id, date, kind, origin)' },
           { conname: 'employee_source_identifiers_unique', def: 'UNIQUE (organization_id, source_system, external_identifier)' },
