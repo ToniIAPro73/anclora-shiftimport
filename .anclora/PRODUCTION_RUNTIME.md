@@ -5,10 +5,13 @@ COMMIT_PUSH_REQUIRES_EXPLICIT_USER_VALIDATION=true
 AUTO_COMMIT_AFTER_VALIDATION=false
 AUTO_PUSH_DEVELOPMENT=false
 AUTO_PUSH_WORK_BRANCH=false
-PREVIEW_VALIDATION_REQUIRED_BEFORE_PROMOTION=true
+PREVIEW_VALIDATION_REQUIRED_BEFORE_PROMOTION=false
+PREVIEW_VALIDATION_REQUIRED_FOR_DEVELOPMENT=false
+PREVIEW_REQUIRED_FOR_DEVELOPMENT=false
+PREVIEW_REQUIRED_FOR_PROMOTION=false
 PROMOTION_AUTHORIZATION_TOKEN=PROMOTE=FULL
 PROMOTION_DISPATCH_FULL_CHAIN_ONCE=true
-PROMOTION_REQUIRES_PREVIEW_REVIEWED_SHA=true
+PROMOTION_REQUIRES_PREVIEW_REVIEWED_SHA=false
 PROMOTION_AGENT_WAITS_FOR_SOURCE_CI=false
 PROMOTION_WAIT_FOR_WORKFLOW_COMPLETION=false
 PROMOTION_AGENT_POLLS_CI_OR_DEPLOYMENT=false
@@ -16,13 +19,13 @@ PROMOTION_AGENT_PER_HOP_VERIFICATION=false
 PROMOTION_USER_VERIFIES_EACH_BRANCH=true
 PROMOTION_DISPATCH_IMMEDIATELY=true
 PROMOTION_FORCE_PUSH_ALLOWED=false
-PROMOTION_PROTOCOL=Local changes -> explicit Toni validation in development -> commit/push development -> Toni Preview review -> PROMOTE=FULL + exact reviewed SHA -> one asynchronous full-chain workflow
+PROMOTION_PROTOCOL=Local changes -> QA and explicit Toni validation in development -> commit/push development -> STOP; separately authorized PROMOTE=FULL + exact validated development SHA -> one asynchronous full-chain workflow
 
-Toni validates every change in the development environment before the agent commits or pushes it. After the push, the agent waits for Toni to review Preview. Only Toni's exact PROMOTE=FULL token authorizes the complete ordered staging -> production -> main chain, using the exact SHA reviewed in Preview. The agent dispatches one full-chain workflow per repository, does not wait for or poll CI/deployment/workflow completion, and does not verify individual target branches. That workflow rejects failed source status and branch divergence, permits pending checks, validates all target branches before writing, and updates all three refs sequentially with fast-forward pushes, and stops if development moved after Preview review. Toni reviews the resulting environments.
+Toni validates every change in the development environment before the agent commits or pushes it. After pushing the validated change to `development`, the agent stops. Development acceptance does not require a Vercel Preview or a Preview-reviewed SHA. Promotion is a separate task: only Toni's exact `PROMOTE=FULL` token authorizes the ordered `development` -> `staging` -> `production` -> `main` workflow, using the exact development SHA already validated by Toni. The agent dispatches one full-chain workflow per repository, does not wait for or poll CI/deployment/workflow completion, and does not verify individual target branches. That workflow rejects failed source status and branch divergence, permits pending checks, validates all target branches before writing, and updates all three refs sequentially with fast-forward pushes. Toni reviews the promoted environments.
 
 # Anclora ShiftImport — Production Runtime Manifest
 
-PRODUCTION_RUNTIME_MANIFEST_VERSION=2.0
+PRODUCTION_RUNTIME_MANIFEST_VERSION=2.1.0
 PROMOTION_REPORT=SINGLE_SUMMARY_AT_END
 PROMOTION_PARALLEL_ACROSS_REPOS=true
 PROMOTION_MULTI_REPO_SCOPE_ALLOWED=true
@@ -54,6 +57,13 @@ RUNTIME_CONTRACT_AUTHORITY=CANONICAL
 STATUS=PRODUCTION_RUNTIME_CONFIRMED
 LOCAL_RUNTIME_MODEL=PRODUCTION_BACKED
 DO_NOT_CREATE_DEVELOPMENT_DATABASE=true
+DEVELOPMENT_DATABASE_ALLOWED=false
+DOCKER_REQUIRED_FOR_QA=false
+VERCEL_PROJECT_ID=prj_ZY5DO2T5dxlDSqFefWEVdVSJenLW
+QA_IDENTITY=qa.shiftimport@anclora.test
+QA_TARGET_ORGANIZATION=ShiftImport — QA Mirror
+QA_SOURCE_ORGANIZATION=ShiftImport
+QA_SOURCE_READ_ONLY=true
 
 Runtime, environment, database, migration, QA and Git rules declared in this
 manifest override generic agent defaults or home-directory agent policies.
@@ -110,8 +120,8 @@ LOCAL_DATABASE_SCOPE=production
 MIGRATION_SYSTEM=Custom forward-only SQL runner (db/migrate.mjs tracking _migrations)
 MIGRATION_STRATEGY=CUSTOM_FORWARD_ONLY
 MIGRATION_DIRECTORY=./db/migrations
-MIGRATION_RUNNER=npm run db:migrate (node --env-file=.env.local db/migrate.mjs)
-MIGRATION_STATUS_CHECK=npm run db:migrate:status (node --env-file=.env.local db/migrate.mjs --status)
+MIGRATION_RUNNER=npm run db:migrate (scripts/qa/db-migrate-runtime.mjs loads Vercel Development env -> Neon Production main; does not load repo .env.local)
+MIGRATION_STATUS_CHECK=npm run db:migrate:status (same production-backed runtime; strictly read-only; does not load repo .env.local)
 
 SCHEMA_CHANGES_ALLOWED=true
 PRODUCTION_MIGRATIONS_ALLOWED=true
@@ -261,6 +271,8 @@ CREATE_FEATURE_BRANCH=false
 EXPLICIT_PROMOTION_ALLOWED=true
 PROMOTION_ORDER=development->staging->production->main
 PROMOTION_OLD_AUTHORIZATION_PERSISTS=false
+PREVIEW_VALIDATION_REQUIRED_BEFORE_PROMOTION=false
+PROMOTION_REQUIRES_PREVIEW_REVIEWED_SHA=false
 
 ```text
 development local
@@ -303,6 +315,8 @@ Before executing tasks, the agent must read and apply in order:
 
 - Do not create Development DB by default.
 - Do not create Preview DB by default.
+- Do not require a Preview deployment or reviewed Preview SHA for development acceptance or general promotion.
+- Keep `qa:preview:smoke` optional; it is an additional check, not an ordinary development gate.
 - Do not create temporary feature branches.
 - Do not replace Production env with Development env.
 - Do not delete persistent QA user after testing.
@@ -315,7 +329,7 @@ Before executing tasks, the agent must read and apply in order:
 ## 15. Machine-Readable Contract
 
 ```text
-PRODUCTION_RUNTIME_MANIFEST_VERSION=2.0
+PRODUCTION_RUNTIME_MANIFEST_VERSION=2.1.0
 RUNTIME_CONTRACT_AUTHORITY=CANONICAL
 
 STATUS=PRODUCTION_RUNTIME_CONFIRMED
@@ -354,12 +368,15 @@ LOCAL_DEV_COMMAND=npm run dev (Neon canonical via scripts/qa/dev-runtime.mjs; DO
 LOCAL_DOCKER_FALLBACK=npm run dev:docker (explicit opt-in only)
 QA_MIRROR_REFRESH=npm run qa:mirror:refresh [-- --dry-run|--apply]
 QA_LOCAL_LOGIN_REQUIRED=true
-QA_DEVELOPMENT_PREVIEW_LOGIN_REQUIRED=true
+QA_DEVELOPMENT_PREVIEW_LOGIN_REQUIRED=false
 QA_DATABASE_TARGET_SAME_FOR_LOCAL_AND_PREVIEW=true
 QA_CANONICAL_DATABASE=Neon holy-cake-85660318 / branch main / neondb (endpoint ep-lingering-dew-b1atfd0w)
 QA_DATABASE_RESOLUTION=QA_DATABASE_URL or the Vercel Development environment; NEVER the repo .env*.local files (they point at the local Docker Postgres)
 QA_PLAINTEXT_PASSWORD_IN_VERCEL=false (Vercel only needs the password_hash stored in PostgreSQL)
-QA_SMOKE=npm run qa:local:smoke / npm run qa:preview:smoke (login, session, mirror, stats, reconciliation)
+QA_SMOKE_REQUIRED=npm run qa:local:smoke (login, session, mirror, stats, reconciliation)
+QA_PREVIEW_SMOKE=OPTIONAL: npm run qa:preview:smoke
+DB_INTEGRATION_PRIMARY=QA_MIRROR_ON_NEON_MAIN
+DB_INTEGRATION_DOCKER_FALLBACK=OPTIONAL_ONLY
 QA_BOOTSTRAP=node scripts/qa/ensure-qa-identity.mjs && node scripts/qa/refresh-qa-mirror.mjs --apply
 QA_E2E=npm --prefix qa/e2e-acceptance run test:qa-mirror (needs `npm run qa:dev-runtime` on :5173)
 

@@ -1,10 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Effective calendar acceptance (local Docker PostgreSQL only).
- * Seeds its own synthetic organization inside the spec and removes it after.
+ * Optional fallback: effective calendar acceptance on local Docker PostgreSQL.
+ * It is not a required development QA gate; ordinary QA uses the persistent
+ * QA Mirror on Neon Production main. The spec's synthetic tenant is removed.
  *
- * Run: npm run dev   # vercel dev on :5173 against the Docker database
+ * Run only when the local Docker fallback is explicitly enabled. The default
+ * `npm run dev` remains connected to Neon Production main.
  *      EFFECTIVE_CALENDAR_DATABASE_URL=<local docker url> \
  *      npx playwright test --config qa/e2e-acceptance/playwright.effective-calendar.config.ts
  */

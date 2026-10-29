@@ -34,11 +34,11 @@ No asumir infraestructura compartida entre productos. Validar siempre hosting, b
 - `src/lib/shifts.ts`: lógica de negocio de turnos y métricas.
 - `src/ingestion/`: ingesta de cuadrantes PDF — `core/` (primitivas puras: items de texto, normalización, tokens, clustering, detección de fila, construcción de turnos), `profiles/` (perfiles declarativos TYPE_A/TYPE_B con umbrales y tokens), `parsers/` (pipeline puro sobre items + API de fichero con PDF.js), `analysis.ts` + `assistant.ts` (análisis de calidad y asistente de formato posicional, Phase 1A), `tabular-assistant.ts` (fallback del asistente para CSV roster/grid sin layout posicional), `diagnostics.ts` (Phase 1B: modelo canónico de estados de importación READY/NEEDS_USER_INPUT/PARTIAL/BLOCKED/UNSUPPORTED/FAILED + diagnósticos estructurados con recuperación guiada; la UI consume esto, nunca excepciones crudas), `vlm-trigger.ts` + `vlm-client.ts` + `vlm-raster.ts` (fallback visual server-side `/api/ingestion/vlm` para pdf/image cuando el pipeline determinista no puede leer el documento: solo con sesión activa, resultado siempre con techo REVIEW, fallos como diagnósticos VLM_* no bloqueantes — nunca sustituye un resultado determinista usable).
 - `sdd/`: especificaciones de producto.
-- `db/migrations/` + `db/migrate.mjs`: esquema PostgreSQL versionado (Fase 1). Aplicar con `node --env-file=.env.local db/migrate.mjs`.
-- **Antes de diagnosticar contra la base de datos real, lee `docs/db-environments.md`**: todas las ramas Git usan exclusivamente la rama Neon `main` de producción (`holy-cake-85660318`, `br-solitary-thunder-b1hm9low`). Nunca imprimas una connection string; valida el fingerprint seguro del endpoint.
+- `db/migrations/` + `db/migrate.mjs`: esquema PostgreSQL versionado (Fase 1). Aplicar mediante `npm run db:migrate`, que usa el entorno Vercel Development contractual para conectar a Neon Production `main`.
+- **Antes de diagnosticar contra la base de datos real, lee `docs/db-environments.md`**: todas las ramas Git usan exclusivamente la rama Neon `main` de producción (`holy-cake-85660318`, `br-shy-smoke-b1lyvv58`). Nunca imprimas una connection string; valida el fingerprint seguro del endpoint.
 - `api/`: Vercel Functions multi-tenant sobre Neon (Fase 1). `_lib/auth.js` (sesiones cookie + contexto de seguridad multi-org sin fallback silencioso), `_lib/data.js` (data-access org-scoped, tests con sql fake), `auth/`, `session/`, `employees/`, `imports/`, `shifts/`, `memberships/` (gestión B2B mínima, solo ADMIN), `organizations/reset.js` (restaurar datos operativos de la org, solo ADMIN, transaccional), `ingestion/vlm.js` (fallback VLM autenticado + rate-limited; SOLO con `VLM_PROVIDER=fake` acepta los headers dev/test `x-vlm-fake-behavior`/`x-vlm-fake-delay-ms` para QA sin reiniciar — con provider real se ignoran). Aislamiento por `organization_id` forzado en backend, nunca en frontend.
 - `src/components/AuthScreen.tsx`: pantalla de login contractual (ANCLORA_AUTH_LOGIN_SCREEN_CONTRACT v1.3.0). `src/components/ui/ModalShell.tsx`: primitive modal común (ESC, click-outside, focus trap, ARIA, modo blocking) para modales nuevos; variante `workspace` (shell de altura fija sin scroll exterior, usada por `MembersModal`: header/tabs/toolbar fijos y scroll solo en la región interna que lo necesita).
-- E2E local: `qa/e2e-acceptance/playwright.local.config.ts` (contra `vercel dev` + Neon `main`, seed/teardown automático y aislamiento por `runId` en `local-setup.ts`/`local-teardown.ts`).
+- QA E2E funcional contractual: `npm --prefix qa/e2e-acceptance run test:qa-mirror` contra código `development` local + Neon `main` + QA Mirror. Las suites de aislamiento multi-tenant pueden usar fixtures sintéticos con `runId` y teardown; la integración PostgreSQL Docker de calendario efectivo es un fallback opcional.
 - Backend legacy en saneamiento: `server.mjs`, `server-export.mjs`, `proxy-server.mjs`. El antiguo `/api/shifts` global sin auth fue reemplazado por la API autenticada.
 - Modelo multi-tenant: Organization (personal=B2C / company=B2B), User (acceso), Membership (rol OWNER/ADMIN/PLANNER/EMPLOYEE + scopes ORGANIZATION/AREA/SELF), Employee (persona del cuadrante, user_id opcional), Import (documento), Shift (siempre con organization_id + employee_id). Ver `docs/fase1-multitenant.md` y `docs/roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md`.
 - Modo invitado local-first intacto: sin sesión, todo sigue en `localStorage`. Con sesión, persistencia remota por empleado; migración one-shot local→remoto (sin borrar la copia local).
@@ -50,7 +50,7 @@ No asumir infraestructura compartida entre productos. Validar siempre hosting, b
 - `npm run lint`: linting estricto (`--max-warnings 0`).
 - `npm test`: Vitest (src + api).
 - `npm run db:migrate:status`: inspeccionar estado de migraciones en modo solo lectura (detecta pendientes, huecos de secuencia y alteraciones).
-- `npm run db:migrate`: aplicar migraciones Neon de forma secuencial y controlada (usa `.env.local`).
+- `npm run db:migrate`: aplicar migraciones Neon de forma secuencial y controlada (usa el entorno Vercel Development y las acreditaciones de rama requeridas por el runner; no carga `.env.local`).
 - `node --env-file=.env.local scripts/smoke-api.mjs`: smoke test E2E de la API (crea y limpia datos sintéticos con runId).
 
 ## Convenciones del proyecto
@@ -88,7 +88,7 @@ No asumir infraestructura compartida entre productos. Validar siempre hosting, b
 - Si cambias `ImportModal`, verifica que siga permitiendo editar y borrar filas antes de confirmar.
 - **Obligaciones estrictas de base de datos**:
   - Antes de realizar cualquier tarea sobre base de datos, ejecutar `npm run db:migrate:status`.
-  - Identificar explícitamente el proyecto Neon (`holy-cake-85660318`) y la rama única de destino `main` (`br-solitary-thunder-b1hm9low`).
+  - Identificar explícitamente el proyecto Neon (`holy-cake-85660318`) y la rama única de destino `main` (`br-shy-smoke-b1lyvv58`).
   - Comprobar que el comando de estado es de solo lectura y verificar el ledger de migraciones.
   - **NUNCA** ejecutar migraciones a mano ni ejecutar scripts DDL destructivos en la rama Neon `main` persistente.
   - Para pruebas, suites y validaciones de integración, usar exclusivamente organizaciones, usuarios y external IDs sintéticos con `runId` único dentro de Neon `main`; el teardown debe ejecutarse siempre y verificar cero residuos.

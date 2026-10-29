@@ -21,8 +21,10 @@ navegación y cambio de vista. Los tests que necesitan datos comparten el setup/
 runner seleccionado. Todos los runners usan exclusivamente Neon `main` de producción y aíslan sus
 fixtures con un `runId` único; el teardown elimina y verifica todos los residuos sintéticos.
 
-La batería se ejecuta contra la única rama Neon autorizada (`main`) mediante organizaciones
-sintéticas. La batería histórica sigue disponible con:
+Las pruebas automatizadas aisladas que necesitan escenarios multi-tenant pueden usar organizaciones
+sintéticas con `runId` en Neon `main` y teardown verificado. La validación funcional y visual autenticada
+de `development` usa la identidad dedicada y `ShiftImport — QA Mirror`; `ShiftImport` se mantiene
+READ ONLY. La batería histórica sigue disponible con:
 
 ```bash
 npx playwright test --config playwright.local.config.ts
@@ -38,7 +40,8 @@ node scripts/qa/ensure-qa-identity.mjs          # crea/valida la identidad; rota
 node scripts/qa/refresh-qa-mirror.mjs --dry-run # inventario
 node scripts/qa/refresh-qa-mirror.mjs --apply   # reconstruye el baseline (idempotente, ids deterministas)
 npm run qa:dev-runtime                          # app local sobre la BD canónica (Neon) — NO `vercel dev` a secas: usaría el Postgres Docker de .env.local
-npm run qa:local:smoke && npm run qa:preview:smoke   # login QA en local y en el Preview de development
+npm run qa:local:smoke                          # gate de QA funcional sobre development local + Neon main + QA Mirror
+npm run qa:preview:smoke                        # OPTIONAL: smoke adicional contra el Preview de development
 npm --prefix qa/e2e-acceptance run test:qa-mirror
 ```
 
@@ -47,3 +50,13 @@ El origen sólo se lee (huella SHA-256 idéntica antes/después). Toda escritura
 miembro y todos los miembros sean `@anclora.test`. Tras tests destructivos, vuelve a ejecutar `--apply`.
 Las rutas `.env*.local` del repo apuntan al Postgres Docker: los scripts QA resuelven la BD canónica desde el entorno Development de Vercel (o `QA_DATABASE_URL`) y abortan si el destino no es el endpoint canónico.
 El `storageState` de login es temporal (`.qa-state/`, ignorado por Git) y se destruye en el teardown.
+
+Preview no es un gate de aceptación de `development` ni un requisito general de promoción. La promoción
+es independiente y explícita; usa el SHA de `development` que Toni ya validó según los contratos canónicos.
+
+### Integración PostgreSQL local opcional (Docker)
+
+`db/effective-calendar.integration.test.mjs` y `playwright.effective-calendar.config.ts` son una
+alternativa local opcional que exige un PostgreSQL Docker. No forman parte del gate ordinario y no se
+deben ejecutar para desbloquear QA contractual: la cobertura de integración ordinaria usa la aplicación
+local conectada a Neon Production `main` y escribe únicamente en `ShiftImport — QA Mirror`.

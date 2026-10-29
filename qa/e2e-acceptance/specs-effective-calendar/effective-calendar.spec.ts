@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { hashPassword } from '../../../api/_lib/passwords.js';
 
 /**
- * Seeds a synthetic organization (admin who is also an employee + a plain
- * employee) directly in the local Docker PostgreSQL and removes it afterwards.
- * Data mirrors the canonical acceptance days without using real people.
+ * Optional Docker fallback: seeds a synthetic organization (admin who is also
+ * an employee + a plain employee) directly in local PostgreSQL and removes it.
+ * Ordinary development QA uses Neon Production main + QA Mirror. Seed data is
+ * synthetic and mirrors acceptance days without using real people.
  */
 type Sql = ((strings: TemplateStringsArray, ...values: unknown[]) => Promise<Record<string, unknown>[]>) & { end?: () => Promise<void> };
 

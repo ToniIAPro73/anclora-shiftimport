@@ -20,10 +20,10 @@ y queda fuera de cualquier fixture.
 
 Antes de cualquier consulta o escritura:
 
-1. Ejecutar `npm run db:migrate:status`.
+1. Ejecutar `npm run db:migrate:status`, que usa el entorno Vercel Development y Neon Production `main`; no usar `.env.local` para el status canónico porque apunta al fallback Docker.
 2. Confirmar el proyecto, `main`, el branch ID y el fingerprint seguro.
-3. Confirmar `39/39` migraciones aplicadas y cero pendientes.
-4. Capturar invariantes de Groundforce antes de una prueba con escritura.
+3. Confirmar mediante `db:migrate:status` que todas las migraciones canónicas están aplicadas, sin pendientes, huecos ni diferencias de checksum. No fijar un recuento histórico en esta guía.
+4. Capturar el fingerprint de la organización fuente protegida `ShiftImport` antes de QA con escritura; cualquier escritura QA se limita a `ShiftImport — QA Mirror`. Groundforce queda fuera de los fixtures.
 5. No imprimir nunca `DATABASE_URL`, passwords, cookies ni tokens.
 
 El estado de migraciones es solo lectura. No se ejecutan DDL manuales ni se
@@ -44,6 +44,8 @@ el teardown; nunca usa `DELETE ... LIKE` sobre datos ajenos al run.
   directorio temporal; no se usa Docker. Las variables de Preview/Production son sensibles y no se pueden leer.
 - **Fallback explícito** (`npm run dev:docker`): PostgreSQL local de Docker (`127.0.0.1:5433`). Los ficheros `.env`,
   `.env.local` y `.env.development.local` del repo apuntan a ese Docker; cualquier script que los lea opera sobre Docker, no sobre Neon.
+- Docker no es requisito de QA ni de integración. Las pruebas funcionales y de integración ordinarias se ejecutan con código `development` local, Neon Production `main` y la identidad dedicada en `ShiftImport — QA Mirror`; la organización real `ShiftImport` permanece `READ ONLY`.
+- La prueba DB que requiere Docker es un fallback opcional para probar directamente PostgreSQL local. No forma parte de los gates de aceptación de `development`.
 - `scripts/qa/*` resuelven siempre la BD canónica (o `QA_DATABASE_URL`) y abortan si el destino no es el endpoint canónico.
 - La organización real `ShiftImport` (`a4cf0768-f08d-49e6-bb81-0d3635d58028`) es **READ ONLY** para cualquier agente: toda escritura
   QA va a `ShiftImport — QA Mirror` (clon pseudonimizado, solo 2026).

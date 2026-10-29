@@ -12,6 +12,8 @@ import pg from 'pg';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const QA_IDENTITY = 'qa.shiftimport@anclora.test';
+/** Vercel project for this repository; public project identifier, not a credential. */
+export const VERCEL_PROJECT_ID = 'prj_ZY5DO2T5dxlDSqFefWEVdVSJenLW';
 export const QA_DOMAIN = '@anclora.test';
 /** Synthetic EMPLOYEE-role identity used only to prove that employees can never plan (lives in the QA mirror). */
 export const QA_EMPLOYEE_IDENTITY = 'qa.employee@anclora.test';
@@ -52,7 +54,7 @@ export function pullVercelDevelopmentEnv() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'qa-env-'));
   const file = path.join(dir, 'development.env');
   try {
-    execFileSync('vercel', ['env', 'pull', file, '--environment=development', '--yes'], { cwd: ROOT, stdio: 'ignore' });
+    execFileSync('vercel', ['env', 'pull', file, '--environment=development', '--yes', '--project', VERCEL_PROJECT_ID], { cwd: ROOT, stdio: 'ignore' });
     const parsed = {};
     for (const line of readFileSync(file, 'utf8').split('\n')) {
       const match = /^([A-Z0-9_]+)=(.*)$/.exec(line);
