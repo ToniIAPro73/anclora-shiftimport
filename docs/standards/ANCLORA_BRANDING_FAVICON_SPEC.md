@@ -17,6 +17,8 @@ related:
 
 Definir el paquete de favicons que cada aplicación del ecosistema debe generar e implementar. Garantizar reconocimiento y diferenciación a todos los tamaños.
 
+> **Favicons por tier (CHG-0014, 2026-09-25):** todos los favicons, `favicon.ico` multirresolución, apple-touch, iconos PWA/maskable y SVG con raster embebido se generan desde el logo del tier de la app (o de su app de origen, en showcases), conservando nombres, prefijos, rutas y dimensiones existentes. Ver `ANCLORA_BRANDING_ICON_SYSTEM.md` § "Sistema de logos por tier".
+
 ## Paquete obligatorio por app
 
 | Archivo | Formato | Tamaño | Uso |
