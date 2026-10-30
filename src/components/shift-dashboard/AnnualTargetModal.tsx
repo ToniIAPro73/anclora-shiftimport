@@ -147,12 +147,29 @@ export function AnnualTargetModal({
       title={t('annualTarget.title')}
       closeAriaLabel={t('teamWorkspace.close')}
       closeTestId="close-annual-target-modal"
-      maxWidth="460px"
-      width="min(94vw, 460px)"
+      maxWidth="1000px"
+      width="min(94vw, 1000px)"
+      height="calc(100dvh - 48px)"
+      workspace
+      className="annual-target-modal"
+      footer={(
+        <div className="annual-target__footer">
+          <button type="button" className="eff-button" onClick={onClose} disabled={saving}>
+            {t('annualTarget.cancel')}
+          </button>
+          {canEdit && (
+            <button type="submit" form="annual-target-form" className="eff-button eff-button--primary" disabled={saving} data-testid="annual-target-save">
+              {saving ? t('annualTarget.saving') : t('annualTarget.save')}
+            </button>
+          )}
+        </div>
+      )}
     >
-      <form className="eff-form" onSubmit={(event) => void handleSubmit(event)} data-testid="annual-target-form">
+      <form id="annual-target-form" className="eff-form annual-target__form" onSubmit={(event) => void handleSubmit(event)} data-testid="annual-target-form">
         <p className="eff-form__intro">{t('annualTarget.description', { name: employeeName })}</p>
         {!canEdit && <p role="note" className="eff-form__note">{t('annualTarget.readOnly')}</p>}
+        <div className="annual-target__grid">
+          <section className="annual-target__column" aria-label={t('annualTarget.periodLabel')}>
         <label className="eff-form__field"><span>{t('annualTarget.kindLabel')}</span>
           <select value={targetKind} onChange={(event) => setTargetKind(event.target.value as typeof targetKind)} disabled={!canEdit || saving}>
             <option value="CONTRACTUAL">{t('annualTarget.contractual')}</option><option value="OPERATIONAL">{t('annualTarget.operational')}</option>
@@ -192,6 +209,9 @@ export function AnnualTargetModal({
         <label className="eff-form__field"><span>{t('annualTarget.effectiveFrom')}</span>
           <input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} disabled={!canEdit || saving} />
         </label>
+          </section>
+          <section className="annual-target__column" aria-label={t('annualTarget.targetLabel')}>
+        <div className="annual-target__range">
         <label className="eff-form__field">
           <span>{t('annualTarget.minimumLabel')}</span>
           <input
@@ -215,6 +235,7 @@ export function AnnualTargetModal({
             data-testid="annual-target-maximum"
           />
         </label>
+        </div>
         <p className="eff-form__margin" data-testid="annual-target-margin">
           {t('annualTarget.marginLabel')}: <strong>{marginText}</strong>
         </p>
@@ -249,8 +270,8 @@ export function AnnualTargetModal({
             disabled={!canEdit || saving}
           />
         </label>
-        {history.length > 0 && <section className="annual-target__history" aria-label={t('annualTarget.history')}>
-          <h3>{t('annualTarget.history')}</h3>
+        {history.length > 0 && <details className="annual-target__history">
+          <summary>{t('annualTarget.history')}</summary>
           <ul>{history.map((item) => <li key={item.id}>
             <strong>{t(item.targetKind === 'OPERATIONAL' ? 'annualTarget.operational' : 'annualTarget.contractual')}</strong>
             <span>{item.periodStart} – {item.periodEnd}</span>
@@ -262,18 +283,10 @@ export function AnnualTargetModal({
             <span>{t('annualTarget.versionSource', { source: t(`annualTarget.source${item.source === 'IMPORT' ? 'Import' : item.source === 'MIGRATION' ? 'Migration' : item.source === 'SYSTEM' ? 'System' : 'Admin'}`) })}</span>
             {item.notes && <span>{item.notes}</span>}
           </li>)}</ul>
-        </section>}
-        {error && <p role="alert" className="eff-form__error">{error}</p>}
-        <div className="eff-form__actions">
-          <button type="button" className="eff-button" onClick={onClose} disabled={saving}>
-            {t('annualTarget.cancel')}
-          </button>
-          {canEdit && (
-            <button type="submit" className="eff-button eff-button--primary" disabled={saving} data-testid="annual-target-save">
-              {saving ? t('annualTarget.saving') : t('annualTarget.save')}
-            </button>
-          )}
+        </details>}
+          </section>
         </div>
+        {error && <p role="alert" className="eff-form__error">{error}</p>}
       </form>
     </ModalShell>
   );

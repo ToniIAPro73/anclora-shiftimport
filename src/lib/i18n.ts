@@ -46,6 +46,8 @@ type TranslationTree = { [key: string]: string | string[] | TranslationTree };
 const translations: Record<Locale, TranslationTree> = {
   es: {
     common: {
+      success: 'Correcto',
+      notice: 'Aviso',
       close: 'Cerrar',
       cancel: 'Cancelar',
       save: 'Guardar',
@@ -2205,6 +2207,8 @@ const translations: Record<Locale, TranslationTree> = {
   },
   en: {
     common: {
+      success: 'Success',
+      notice: 'Notice',
       close: 'Close',
       cancel: 'Cancel',
       save: 'Save',

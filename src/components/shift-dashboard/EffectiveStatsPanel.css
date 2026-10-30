@@ -257,6 +257,100 @@
   gap: 12px;
 }
 
+.modal-content--workspace.annual-target-modal {
+  padding: clamp(16px, 2vw, 28px);
+}
+
+.annual-target__form {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 2px 2px 0;
+}
+
+.annual-target__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: clamp(18px, 2.4vw, 30px);
+}
+
+.annual-target__column {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.annual-target__range {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 10px;
+}
+
+.annual-target__range .eff-form__field {
+  min-width: 0;
+}
+
+.annual-target__history {
+  border-top: 1px solid var(--glass-border);
+  padding-top: 10px;
+}
+
+.annual-target__history summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.annual-target__history ul {
+  max-height: 170px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 12px 0 24px;
+}
+
+.annual-target__footer {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+@media (max-width: 720px) {
+  .annual-target__grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  /* Minimum | Maximum side by side; the optional central target takes its own row below. */
+  .annual-target__range {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .annual-target__range .eff-form__field:nth-child(2) {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+
+  /* The form scrolls inside the modal: fade its bottom edge and separate the footer so the cut reads as scroll. */
+  .annual-target__form {
+    padding-bottom: 20px;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
+  }
+
+  .annual-target__footer {
+    justify-content: flex-end;
+    padding-top: 12px;
+    border-top: 1px solid var(--glass-border);
+  }
+}
+
 .eff-form__intro,
 .eff-form__note {
   margin: 0;
@@ -369,4 +463,30 @@
   background: var(--color-gold, #d4af37);
   border-color: var(--color-gold, #d4af37);
   color: var(--text-on-accent, #101733);
+}
+
+/* "Horas que computan": a contained group, not a legend crossing the border. */
+.annual-target__column fieldset.eff-form__field {
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  gap: 8px;
+}
+
+.annual-target__column fieldset.eff-form__field legend {
+  padding: 0 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.annual-target__column fieldset.eff-form__field .eff-form__note {
+  margin: 0 0 8px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.annual-target__shift-types {
+  gap: 8px 20px;
 }

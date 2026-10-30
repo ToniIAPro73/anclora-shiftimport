@@ -165,7 +165,12 @@ interface ImportResolutionState {
 }
 
 interface AppFeedback {
-  kind: 'status' | 'alert';
+  kind: 'security' | 'alert';
+  message: string;
+}
+
+interface AppToast {
+  tone: 'success' | 'review';
   message: string;
 }
 
@@ -252,6 +257,7 @@ function App() {
   const [importResult, setImportResult] = useState<(ReconciliationReport | ImportOutcomeReport | TemporalImportReport) | null>(null);
   const [importResolutionState, setImportResolutionState] = useState<ImportResolutionState | null>(null);
   const [appFeedback, setAppFeedback] = useState<AppFeedback | null>(null);
+  const [appToast, setAppToast] = useState<AppToast | null>(null);
   const [pendingImportRetry, setPendingImportRetry] = useState<PendingImportRetry | null>(null);
   const importFailureRef = useRef<ImportFailure | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -263,6 +269,12 @@ function App() {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [pendingWholeDayOverride, setPendingWholeDayOverride] = useState<{ shift: Shift; fullDayType: string } | null>(null);
+
+  useEffect(() => {
+    if (!appToast) return undefined;
+    const timeout = window.setTimeout(() => setAppToast(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [appToast]);
   const [importConflictState, setImportConflictState] = useState<ImportConflictState | null>(null);
   const isImporting = appOperation === 'importing';
   const isSavingShift = appOperation === 'saving-shift';
@@ -504,7 +516,7 @@ function App() {
       await hydrateAuthenticated(result.session);
       if (result.adminCredentials) {
         setAppFeedback({
-          kind: 'status',
+          kind: 'security',
           message: `${t('onboardingChoice.adminCredentialsNotice')} ${result.adminCredentials.email} · ${result.adminCredentials.temporaryPassword}`,
         });
       }
@@ -983,7 +995,7 @@ function App() {
       setIsModalOpen(false);
       setEditingShiftId(null);
       setDraftShiftDate(null);
-      setAppFeedback({ kind: 'status', message: t('shiftModal.saveSuccess') });
+      setAppToast({ tone: 'success', message: t('shiftModal.saveSuccess') });
       void refreshCalendarData();
     } catch (error) {
       console.error('Failed to persist shift', error);
@@ -1511,7 +1523,7 @@ function App() {
         return false;
       }
       await persistAnnotations(targetEmployeeId ?? selectedEmployeeId ?? '', importId);
-      setAppFeedback({ kind: 'status', message: t('importModal.alreadyImported', { count: identicalCount }) });
+      setAppToast({ tone: 'review', message: t('importModal.alreadyImported', { count: identicalCount }) });
       return false;
     }
 
@@ -2227,7 +2239,7 @@ function App() {
         />
         {appFeedback && (
           <div
-            role={appFeedback.kind}
+            role={appFeedback.kind === 'alert' ? 'alert' : 'status'}
             aria-live={appFeedback.kind === 'alert' ? 'assertive' : 'polite'}
             style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px', padding: '10px 12px', borderRadius: '10px', border: `1px solid ${appFeedback.kind === 'alert' ? 'var(--danger-border)' : 'var(--glass-border)'}`, background: appFeedback.kind === 'alert' ? 'var(--danger-bg)' : 'var(--panel-muted-bg)' }}
           >
@@ -2351,6 +2363,20 @@ function App() {
         )}
       </div>
     </AppShell>
+
+      {appToast && (
+        <div className="ac-toast-stack" aria-live="polite" aria-atomic="false" data-testid="app-toast-stack">
+          <section className="ac-toast" data-tone={appToast.tone} role="status" data-testid="app-toast">
+            <div className="ac-toast__header">
+              <p className="ac-toast__title">{t(appToast.tone === 'success' ? 'common.success' : 'common.notice')}</p>
+              <button type="button" className="ac-toast__dismiss btn-outline" onClick={() => setAppToast(null)} aria-label={t('common.close')}>
+                {t('common.close')}
+              </button>
+            </div>
+            <p className="ac-toast__summary">{appToast.message}</p>
+          </section>
+        </div>
+      )}
 
       {(isImporting || isSavingShift) && (
         <div className="app-operation-lock" role="presentation" aria-busy="true">
