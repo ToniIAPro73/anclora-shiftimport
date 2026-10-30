@@ -1,6 +1,8 @@
 # Historical Import and Future Planning Draft Contract
 
-**Estado**: vigente · actualizado 2026-10-19
+**Estado**: vigente · actualizado 2026-10-30 (enmienda F0 aprobada: auto-publicación condicionada; **no implementada hasta F1**, por lo que el runtime actual sigue sin publicar)
+
+Autoridad de implementación de la enmienda: `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (§0.3, §4.1).
 
 Este documento describe el flujo vigente de importación. El modelo de Plan Empresa versionado y el bootstrap de un baseline quedan retirados del runtime activo.
 
@@ -19,7 +21,7 @@ Un nuevo conflicto conserva las filas actuales `EFFECTIVE` y crea sus alternativ
 
 La decisión `historical-and-plan` autoriza el efecto histórico descrito arriba y la creación o actualización de borradores futuros de Planning. El destino futuro es `schedules` / `schedule_versions` / `shift_assignments`.
 
-- La importación nunca publica un borrador.
+- `historical-and-plan` **nunca publica** un borrador; conserva exactamente su semántica. El valor legado `publish` se acepta en el cable como `historical-and-plan` y **jamás** auto-publica.
 - No se crea `company_plan_revisions`, un baseline ni una revisión N+1.
 - La planificación se revisa y publica desde Planning.
 - Reimportaciones idénticas son idempotentes.
@@ -39,3 +41,20 @@ Anotaciones DCF y observaciones permanecen separadas de los turnos. DCF no inven
 ## QA
 
 Los fixtures son sintéticos. La integración persistente usa exclusivamente `ShiftImport — QA Mirror`; la organización `ShiftImport` se mantiene de solo lectura. Los escenarios de aceptación cubren importación idéntica, diferencia con CURRENT preservado, borrador futuro sin publicación y reversión de importaciones legacy.
+
+## Auto-publicación condicionada (`historical-and-auto-publish`)
+
+Existen tres decisiones y siguen diferenciadas: `historical-only` (por defecto y seguro), `historical-and-plan` (borradores) e `historical-and-auto-publish`.
+
+La regla **no** es «toda importación publica». Una importación puede auto-publicar únicamente bajo las condiciones de seguridad, scope, fecha, granularidad, atribución y ausencia de conflicto siguientes; si falla cualquiera, esa fila queda en borrador o revisión (fail closed):
+
+1. el actor tiene permiso efectivo de planificación/publicación sobre ese empleado o área (scope real: `ORGANIZATION`, `AREAS` o `EMPLOYEES`);
+2. el turno es válido (sin solape, sin conflicto de día completo, sin violar el descanso mínimo vigente);
+3. la fecha es hoy o futura en `Europe/Madrid` (lo anterior sigue la ruta histórica);
+4. el par `(empleado, fecha)` forma parte de la propia importación; nunca se publican borradores de otros empleados o fechas;
+5. no existe conflicto bloqueante (`REQUIRES_REVIEW`, vacación aprobada);
+6. no existe procedencia manual protegida: la auto-publicación nunca sobrescribe ni absorbe turnos manuales, borradores manuales ni procedencias que no puedan atribuirse inequívocamente a la importación;
+7. no existe modificación pendiente incompatible;
+8. cualquier ambigüedad degrada a borrador/revisión.
+
+La publicación es granular por par, no de versión completa, y todo lo retenido aparece en el resultado con su motivo. Es reversible 1:1 mientras nada la haya tocado (`IMPORT_REVERSION_CONTRACT.md`). EMPLOYEE no importa futuro. Detalle, máquina de estados y códigos de motivo: spec canónica §2.2 y §4.1.

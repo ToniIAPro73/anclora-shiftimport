@@ -937,7 +937,7 @@ Valores por defecto de fase (aplican salvo override en la microtarea): DO_NOT_BR
 - GOAL: Fijar el estado verificable antes de tocar nada
 - FILES_LIKELY_AFFECTED: (lectura) `docs/specs/…` (campo `VERIFIED_AGAINST`)
 - PRECONDITIONS: Ninguna
-- CHANGES: `git status`, `git diff`, `git branch --show-current`, `git fetch origin`, `git rev-parse HEAD origin/development`; `npm run db:migrate:status` (solo lectura, con autorización de Toni) para confirmar que `0049`/`0050` siguen libres; leer el `CHECK` vigente de `organization_audit_events` y de `shifts.provenance`
+- CHANGES: **Hecha el 2026-10-30** (evidencia en el registro de §20.1). Procedimiento: `git status`, `git diff`, `git branch --show-current`, `git fetch origin`, `git rev-parse HEAD origin/development`; `npm run db:migrate:status` (solo lectura, con autorización de Toni) para confirmar que `0049`/`0050` siguen libres; leer el `CHECK` vigente de `organization_audit_events` y de `shifts.provenance`
 - DO_NOT_BREAK: Código, BD y runtime intactos (solo documentación); contratos no enmendados siguen vigentes
 - TESTS: Validación documental; `git diff --stat` sin cambios en `src/`, `api/`, `db/`
 - VISUAL_QA: N/A (documentación)
@@ -950,7 +950,7 @@ Valores por defecto de fase (aplican salvo override en la microtarea): DO_NOT_BR
 - GOAL: Que los contratos autoricen lo que la spec exige antes de codificar
 - FILES_LIKELY_AFFECTED: `docs/product/{FUTURE_IMPORT_DRAFT_CONTRACT,EFFECTIVE_CALENDAR_CONTRACT,SCHEDULING_DOMAIN,IMPORT_REVERSION_CONTRACT,OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT,RBAC_SCOPE_MATRIX}.md` (UPDATE); `docs/product/TIME_OFF_REQUEST_CONTRACT.md` (CREATE, solo si no hay equivalente)
 - PRECONDITIONS: F0-M01; proceso Governance → Vault → Infrastructure → docs de producto (clasificación documental `UPDATE_EXISTING`; el único `CREATE` se justifica: dominio nuevo sin fuente)
-- CHANGES: Aplicar la redacción objetivo de §0.3, incluida la regla condicionada de auto-publicación (OD-01) y la protección manual (OD-05); escribir `TIME_OFF_REQUEST_CONTRACT` desde §3 y §4.4
+- CHANGES: **Hecha el 2026-10-30** (6 `UPDATE` + 1 `CREATE`; registro en §20.1). Procedimiento: aplicar la redacción objetivo de §0.3, incluida la regla condicionada de auto-publicación (OD-01) y la protección manual (OD-05); escribir `TIME_OFF_REQUEST_CONTRACT` desde §3 y §4.4
 - DO_NOT_BREAK: Código, BD y runtime intactos (solo documentación); contratos no enmendados siguen vigentes
 - TESTS: `rg` de contradicciones («nunca publica», «Aprobaciones», `PLANNER … scoped_area_id`) = 0 vigentes
 - VISUAL_QA: N/A (documentación)
@@ -1839,6 +1839,18 @@ Criterios: `FUNCTIONAL, DATA_INTEGRITY, AUTHORIZATION, TENANT_ISOLATION, SECURIT
 | Condicionales | — | MIGRATION_VALIDATION (0049), ROLLBACK | MIGRATION_VALIDATION (0050), ROLLBACK, FLAGS | CONCURRENCY, IDEMPOTENCY | — | ROLE_MATRIX |
 
 **Resultados**: `PASS` (todo requerido con evidencia); `PASS_WITH_GAPS` (seguro y usable; gap nombrado, acotado, no bloqueante, con propietario y fase de absorción); `FAIL` (cualquier criterio obligatorio, o degradación de seguridad/aislamiento/autorización/integridad, sin compensación); `BLOCKED` (dependencia externa o decisión pendiente). Una fase no es `PASS` solo porque `npm test` y `npm run build` estén verdes: el gate verifica comportamiento observado. No se inicia una fase sin el gate de la anterior en `PASS`/`PASS_WITH_GAPS`, salvo F1-M00 (lectura) que puede ejecutarse en F0. «Verificado manualmente» sin los cuatro elementos de §16 no es evidencia.
+
+### 20.1 Registro de gates
+
+**F0 — `PASS` (2026-10-30).** Evidencia:
+
+- **Baseline**: `development` = `origin/development` = `52bc98a` antes de F0; el código no cambia desde `d580b25` (solo documentación). `git fetch --prune` sin divergencia.
+- **Migraciones** (`npm run db:migrate:status`, solo lectura): 48 en el repo, 48 aplicadas, 0 pendientes, `UP_TO_DATE`. Última: `0048`; `0049` y `0050` siguen libres y no se renumeran.
+- **CHECKs vigentes** leídos de las migraciones: `organization_audit_events` (`0048`) coincide con la base del superset de §3; `shifts.provenance` (`0046`) = `COMPANY_IMPORT, MANUAL_ADMIN_CHANGE, MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE, EMPLOYEE_REQUEST, SCHEDULE_PUBLICATION, MIGRATION, SYSTEM` (F1-M05 fija la lista blanca a partir de aquí; candidata: `COMPANY_IMPORT`, y `SCHEDULE_PUBLICATION` solo si el ledger la atribuye a la misma importación); `imports.import_decision` (`0042`) = `historical-only, historical-and-plan` (§3 lo amplía en `0049`).
+- **Contratos** (F0-M02): `UPDATE` de `FUTURE_IMPORT_DRAFT_CONTRACT`, `EFFECTIVE_CALENDAR_CONTRACT`, `SCHEDULING_DOMAIN`, `IMPORT_REVERSION_CONTRACT`, `OPERATIONAL_NAVIGATION_TIME_SCOPE_CONTRACT`, `RBAC_SCOPE_MATRIX`; `CREATE` de `TIME_OFF_REQUEST_CONTRACT` (no existía equivalente). Los contratos declaran que la enmienda **no está implementada** hasta F1/F2.
+- **Validación documental**: `git diff --check` limpio; `rg` de contradicciones («nunca publica», «Aprobaciones», `scoped_area_id`) = 0 vigentes (las coincidencias son la redacción nueva o historia de migraciones); enlaces del contrato nuevo resueltos; 0 specs/roadmaps competidores.
+- **`N/A¹`** verificado: `git diff --stat` sin cambios en `src/`, `api/`, `db/` ni `.anclora/`.
+- **Diagnóstico móvil**: F1-M00 es de F1 y no forma parte de F0; no se ejecutó.
 
 ---
 

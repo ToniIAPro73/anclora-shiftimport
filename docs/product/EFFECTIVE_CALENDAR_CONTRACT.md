@@ -17,7 +17,7 @@ CURRENT + accepted PROPOSED → History
 - **PROPOSED**: información importada que difiere de CURRENT y espera decisión.
 - **PENDING_DIFFERENCE**: CURRENT sigue vigente; PROPOSED no cuenta.
 - **HISTORY**: trazabilidad de qué cambió, cuándo y por qué.
-- **Planning**: borradores futuros gestionados mediante schedules, schedule versions y shift assignments. Nunca se publican automáticamente.
+- **Planning**: borradores futuros gestionados mediante schedules, schedule versions y shift assignments. No se publican automáticamente salvo la decisión explícita `historical-and-auto-publish` bajo las condiciones de `FUTURE_IMPORT_DRAFT_CONTRACT.md`. `historical-and-plan` nunca publica.
 
 La importación histórica idéntica a CURRENT es un noop. Si difiere, conserva CURRENT y registra PROPOSED como `REQUIRES_REVIEW`. Al mantener CURRENT, las estadísticas no cambian. Al usar PROPOSED, el estado anterior queda superseded, la propuesta pasa a `EFFECTIVE` y todos los totales se recalculan.
 
@@ -85,3 +85,7 @@ La migration `0048_versioned_worktime_targets.sql` añade la autoridad versionad
 | Diferencia pendiente | Pending difference |
 
 La interfaz no muestra nombres internos de estados, `COMPANY_PLAN`, huellas ni UUIDs. El historial puede identificar una versión con un número legible y muestra su vigencia, periodo, límites, política y procedencia. El disclosure estadístico identifica cuántos días pendientes se cuentan provisionalmente con el calendario actual y aclara que las horas se actualizarán al resolverlos.
+
+## 8. Ausencias aprobadas protegen el calendario (`APPROVED_VACATION_CONFLICT`)
+
+Una vacación aprobada (`TIME_OFF_REQUEST_CONTRACT.md`) se materializa como un turno de día completo `Vacaciones` `EFFECTIVE` con `provenance='EMPLOYEE_REQUEST'` y referencia a su solicitud. Una importación nunca la sustituye en silencio: si la propuesta difiere, el resultado es `REQUIRES_REVIEW` con motivo `APPROVED_VACATION_CONFLICT` — **sea el día pasado, hoy o futuro** — y la ausencia sigue siendo CURRENT. Si la propuesta coincide, es un noop. Solo OWNER o ADMIN pueden resolver a favor de la propuesta, con auditoría. `Baja` conserva su significado de baja médica y no se usa para vacaciones ni permisos.

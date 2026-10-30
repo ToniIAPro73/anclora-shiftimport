@@ -51,10 +51,10 @@ No separate dependency table exists (documented decision: it would only duplicat
 | plan revision insert | mark `reverted_at` (history kept, never renumbered; baselines ignore reverted revisions) |
 | calendar change insert | delete only if no shift still references it |
 | annotation insert/update | delete / restore; a DCF whose hours a human completed becomes an independent `MANUAL` annotation |
-| schedule version / assignments | only drafts; a version that is no longer DRAFT is `PUBLISHED_DEPENDENCY` |
+| schedule version / assignments | drafts; **or** a `PUBLISHED` version if and only if the same import published it, it has not changed since, and its materialised shifts have no dependents (amendment F0, applies from F1); otherwise `PUBLISHED_DEPENDENCY` |
 
 Anything a human changed afterwards (row differs from AFTER) is **never overwritten**: the plan is `BLOCKED` (`LATER_MANUAL_CHANGE_UNSAFE`).
-Published history is never rewritten; no compensating draft is generated (blocked instead). `employee_source_identifiers` is never touched.
+Published history is never rewritten except to invert a publication performed by the same import under the rule above; no compensating draft is generated (blocked instead). `employee_source_identifiers` is never touched.
 
 ## 5. Import state and idempotency
 
@@ -75,3 +75,7 @@ changes, untouched since (`updated_at` ≈ `created_at`). Synthetic effects make
 * Published planning is never reconstructed: blocked.
 * Preview is the authoritative reversibility check; the history list only carries a light hint.
 * The reversion ledger stores only structured row states, never document content.
+
+## 4.1 Auto-published imports (amendment F0, applies from F1)
+
+Reversal is **complete or `BLOCKED`**, never silently partial. A shift materialised by an auto-publication is inverted only if it still equals the ledger AFTER state and nothing depends on it: a `change_requests`, `shift_acknowledgements` or `shift_comments` row referencing it yields `PUBLISHED_SHIFT_HAS_DEPENDENTS`; a later version of the same schedule yields `PUBLISHED_DEPENDENCY`; a later manual edit yields `LATER_MANUAL_CHANGE_UNSAFE`. Unread `SHIFT_PUBLISHED` notifications pointing at deleted shifts are removed in the same transaction. Specification: canonical spec §4.1.5.

@@ -99,7 +99,7 @@ No transition goes backwards. There is no `CHANGE_REQUESTED` state on a schedule
 Scheduling consumes the R2 RBAC contract server-side:
 
 - `OWNER` and `ADMIN`: organization scope, including schedules in any area.
-- `PLANNER`: organization scope when `scoped_area_id` is null, or area scope when assigned to an area.
+- `PLANNER`: scope resolved by `resolveEffectiveAccessScope`: `ORGANIZATION`, `AREAS` or `EMPLOYEES` (see `RBAC_SCOPE_MATRIX.md`). `scoped_area_id` alone is not the scope.
 - `EMPLOYEE`: self scope for published turns only; no draft mutation or publication.
 
 The UI may hide unavailable controls, but every read and mutation must re-check authentication, organization membership, role, scope, resource ownership, and version state in the API.
@@ -132,8 +132,14 @@ The following are intentionally left to their scheduled microphases:
 - publication materialization columns and transaction (`R3-M10`);
 - future-import routing into drafts (`R3-M14`).
 
-## Importing the company plan (2026-10-16)
+## Importing future rows (2026-10-30)
 
-Importing future rows creates or updates the **plan**: weekly `DRAFT` versions with `ShiftAssignment`s,
-versioned as company-plan revisions. It never publishes; publication stays an explicit Planning action that
-materialises assignments into `shifts`. See [`FUTURE_IMPORT_DRAFT_CONTRACT.md`](FUTURE_IMPORT_DRAFT_CONTRACT.md).
+Importing future rows (`date >= today`) with `historical-and-plan` creates or updates weekly `DRAFT` versions with
+`ShiftAssignment`s; it never publishes, and publication stays an explicit Planning action that materialises
+assignments into `shifts`. The explicit decision `historical-and-auto-publish` may publish under the conditions
+of the import contract (see below). Company-plan revisions are retired from the active runtime. See
+[`FUTURE_IMPORT_DRAFT_CONTRACT.md`](FUTURE_IMPORT_DRAFT_CONTRACT.md).
+
+## Auto-published versions (amendment F0, not implemented until F1)
+
+A version may end up `PUBLISHED` because an import published it, but only through the granular operation described in the canonical spec (§4.1): only the `(employee, date)` pairs present in that import are materialised; everything else is retained in a new draft with a reason code. A week that holds a foreign draft (assignments for pairs not in the file) is retained as a draft entirely. No new `schedule_versions.status` or `shifts.effective_state` values are introduced. Approved time off protects planning: an assignment on a protected absence day is rejected (`PROTECTED_ABSENCE_DAY`), excluded on publication and not copied into a new draft (`TIME_OFF_REQUEST_CONTRACT.md`).

@@ -148,3 +148,16 @@ canApproveRequest(actor, request):
     return isEmployeeInPlannerScope(actor, request.targetEmployeeId)
   return false
 ```
+
+## 6. Time-off requests (amendment F0; applies from F2)
+
+Time-off requests (`TIME_OFF_REQUEST_CONTRACT.md`) reuse the existing actions `CREATE_REQUEST`, `VIEW_REQUEST`, `APPROVE_REQUEST`, `REJECT_REQUEST` with target type `TIME_OFF_REQUEST` (`{ type, organizationId, employeeId, areaId }`), under the same matrix and the same scopes:
+
+- `EMPLOYEE` (and any role with a linked active Employee): `CREATE_REQUEST`/`VIEW_REQUEST` on `SELF` only.
+- `OWNER`/`ADMIN`: `VIEW_REQUEST`/`APPROVE_REQUEST`/`REJECT_REQUEST` on `ORGANIZATION`, subject to the organization's `approval_policy`.
+- `PLANNER`: only for target employees inside the resolved scope (`AREAS` or `EMPLOYEES`).
+- **Anti-self-approval** (section 5) applies by `userId` **and** `employeeId`, even for `OWNER`/`ADMIN`/`PLANNER` with a linked Employee.
+
+**New endpoints must not inherit legacy area-only authorization (D-01, blocking requirement).** Every new request, vacation or approval endpoint authorizes through `resolveEffectiveAccessScope` → `isTargetInScope` → `can(actor, action, target)` against the real scope (`ORGANIZATION`, `AREAS`, `EMPLOYEES`, `SELF`). `scoped_area_id` alone is never a substitute for the effective scope; ids sent by the client are never trusted; every query is `organization_id`-scoped; list endpoints filter by scope on the server. The existing legacy behaviour of the `change_requests` approval endpoints is tracked as separate debt and is not changed by this initiative.
+
+**Protected absence override.** Resolving a conflict in favour of an import proposal over an approved absence (`APPROVED_VACATION_CONFLICT`) is allowed only for `OWNER` and `ADMIN`. `PLANNER` and `EMPLOYEE` receive `403 PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN`. The override is audited (`time_off_request.manual_override`).
