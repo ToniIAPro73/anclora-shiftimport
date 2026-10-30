@@ -68,6 +68,36 @@ QA_SOURCE_READ_ONLY=true
 Runtime, environment, database, migration, QA and Git rules declared in this
 manifest override generic agent defaults or home-directory agent policies.
 
+## 0. Runtime Semantics (AOS_ADOPTION_STANDARD, D-2026-0042)
+
+Git branch ≠ execution location ≠ deployment provider ≠ provider env-var scope ≠ database target ≠ QA tenant.
+
+```text
+SOURCE_BRANCH=development
+
+EXECUTION_LOCATION=LOCAL
+LOCAL_COMMAND=npm run dev
+DEPLOYMENT_PROVIDER=Vercel
+VERCEL_IS_QA_EXECUTION_TARGET=false
+
+DATABASE_PROVIDER=Neon
+DATABASE_TARGET=Production main
+DATABASE_CREDENTIAL_SOURCE=VERCEL_PROJECT_ENV
+VERCEL_ENV_SCOPE_FOR_CREDENTIALS=development
+
+QA_IDENTITY=qa.shiftimport@anclora.test
+QA_TARGET=ShiftImport — QA Mirror
+QA_SOURCE=ShiftImport
+QA_SOURCE_ACCESS=READ_ONLY
+QA_TARGET_ACCESS=READ_WRITE
+
+PREVIEW_REQUIRED=false
+PREVIEW_PURPOSE=NOT_APPLICABLE
+DOCKER_ROLE=FALLBACK
+```
+
+Reading: source code is `development`; execution is local (`npm run dev`, or `vercel dev` as a local Vercel-Functions-compatible mechanism — it is not execution on Vercel); the database is Neon Production `main`; the mutable QA tenant is `ShiftImport — QA Mirror`; credentials come from the Vercel project env vars and `VERCEL_ENV_SCOPE_FOR_CREDENTIALS=development` is only the variable scope used to obtain them, not a database environment. Vercel is never the QA execution target.
+
 ## 1. Application Identity
 
 APPLICATION_NAME=Anclora ShiftImport
@@ -120,7 +150,7 @@ LOCAL_DATABASE_SCOPE=production
 MIGRATION_SYSTEM=Custom forward-only SQL runner (db/migrate.mjs tracking _migrations)
 MIGRATION_STRATEGY=CUSTOM_FORWARD_ONLY
 MIGRATION_DIRECTORY=./db/migrations
-MIGRATION_RUNNER=npm run db:migrate (scripts/qa/db-migrate-runtime.mjs loads Vercel Development env -> Neon Production main; does not load repo .env.local)
+MIGRATION_RUNNER=npm run db:migrate (scripts/qa/db-migrate-runtime.mjs loads credentials from the Vercel project env vars (scope development, see section 0) -> Neon Production main; does not load repo .env.local)
 MIGRATION_STATUS_CHECK=npm run db:migrate:status (same production-backed runtime; strictly read-only; does not load repo .env.local)
 
 SCHEMA_CHANGES_ALLOWED=true
@@ -304,8 +334,8 @@ authorization from an older task.
 
 Before executing tasks, the agent must read and apply in order:
 1. Current explicit instructions from Toni
-2. Workspace agent policy (`../../ANCLORA_WORKSPACE_AGENT_POLICY.md` when installed, `../../AGENTS.md` interim)
-3. Repository agent rules (`../AGENTS.md`)
+2. Canonical Governance (`AUTHORITY=anclora-governance`; the workspace policy file is a compatibility projection)
+3. Repository bootstrap (`../AGENTS.md`)
 4. `.anclora/AGENT_PROJECT_CONTEXT.md` (bootstrap, task routing, and authority map)
 5. `.anclora/PRODUCTION_RUNTIME.md` (this manifest as operative runtime contract)
 6. `.anclora/AOS_ADOPTION.md` (governance, decisions, exceptions)
@@ -371,7 +401,7 @@ QA_LOCAL_LOGIN_REQUIRED=true
 QA_DEVELOPMENT_PREVIEW_LOGIN_REQUIRED=false
 QA_DATABASE_TARGET_SAME_FOR_LOCAL_AND_PREVIEW=true
 QA_CANONICAL_DATABASE=Neon holy-cake-85660318 / branch main / neondb (endpoint ep-lingering-dew-b1atfd0w)
-QA_DATABASE_RESOLUTION=QA_DATABASE_URL or the Vercel Development environment; NEVER the repo .env*.local files (they point at the local Docker Postgres)
+QA_DATABASE_RESOLUTION=QA_DATABASE_URL or the Vercel project env vars (credential scope development, see section 0); NEVER the repo .env*.local files (they point at the local Docker Postgres)
 QA_PLAINTEXT_PASSWORD_IN_VERCEL=false (Vercel only needs the password_hash stored in PostgreSQL)
 QA_SMOKE_REQUIRED=npm run qa:local:smoke (login, session, mirror, stats, reconciliation)
 QA_PREVIEW_SMOKE=OPTIONAL: npm run qa:preview:smoke
@@ -387,7 +417,7 @@ PROMOTION_ORDER=development->staging->production->main
 PROMOTION_OLD_AUTHORIZATION_PERSISTS=false
 ```
 
-<!-- ANCLORA-MODS:START -->
-ANCLORA_MODS_COMMON_CONTRACT_VERSION=1.0.0
-Canonical shared rules: [Anclora Common Agent Contract](../anclora-mods/contracts/ANCLORA_COMMON_AGENT_CONTRACT_V1.md) and [Flow Amendment v2](../anclora-mods/ANCLORA_FLUJO_UNICO_V2.md). Repository-specific facts remain in this repository's `.anclora/` contracts.
-<!-- ANCLORA-MODS:END -->
+<!-- ANCLORA-AOS:START -->
+ANCLORA_AOS_AUTHORITY=anclora-governance
+Canonical rules: [AOS Adoption Standard](../../anclora-governance/standards/AOS_ADOPTION_STANDARD.md). Repository-specific facts remain in this repository's `.anclora/` contracts.
+<!-- ANCLORA-AOS:END -->

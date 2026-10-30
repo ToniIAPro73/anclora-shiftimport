@@ -52,7 +52,8 @@ Anclora ShiftImport: importador inteligente de cuadrantes para trabajadores por 
 - CAVEMAN_TASK_LEVEL_REEVALUATION=true
 - CAVEMAN_OVERRIDE_MODEL_ADOPTED=true
 
-- WORKSPACE_POLICY_AUTHORITY=ANCLORA_WORKSPACE_AGENT_POLICY.md
+- AUTHORITY=anclora-governance
+- WORKSPACE_POLICY_STATUS=DEPRECATED_COMPATIBILITY_PROJECTION (ANCLORA_WORKSPACE_AGENT_POLICY.md; not an authority)
 
 ## Política de decisiones locales
 
@@ -86,7 +87,7 @@ Revisar nuevas versiones de AOS al inicio de cada fase de producto (Phase 1, Pha
 - [`../sdd/`](../sdd/)
 - Dossier canónico: [`../../anclora-vault/20-products/shiftimport/dossier.md`](../../anclora-vault/20-products/shiftimport/dossier.md)
 
-<!-- ANCLORA-MODS:START -->
-ANCLORA_MODS_COMMON_CONTRACT_VERSION=1.0.0
-Canonical shared rules: [Anclora Common Agent Contract](../anclora-mods/contracts/ANCLORA_COMMON_AGENT_CONTRACT_V1.md) and [Flow Amendment v2](../anclora-mods/ANCLORA_FLUJO_UNICO_V2.md). Repository-specific facts remain in this repository's `.anclora/` contracts.
-<!-- ANCLORA-MODS:END -->
+<!-- ANCLORA-AOS:START -->
+ANCLORA_AOS_AUTHORITY=anclora-governance
+Canonical rules: [AOS Adoption Standard](../../anclora-governance/standards/AOS_ADOPTION_STANDARD.md). Repository-specific facts remain in this repository's `.anclora/` contracts.
+<!-- ANCLORA-AOS:END -->
