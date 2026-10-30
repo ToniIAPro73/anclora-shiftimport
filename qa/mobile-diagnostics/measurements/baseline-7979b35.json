@@ -1,0 +1,2687 @@
+[
+  {
+    "screen": "calendar",
+    "width": 360,
+    "innerWidth": 360,
+    "scrollWidth": 360,
+    "liftedScrollWidth": 360,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "DIV",
+        "className": "month-grid-root",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekdays-row",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 453,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 565,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 678,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-grid-cells",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 454,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-history-button",
+        "testId": "day-history-btn-2026-10-01",
+        "position": "static",
+        "right": 421,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 417,
+        "width": 13
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 415,
+        "width": 10
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 408,
+        "width": 3
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 413,
+        "width": 2
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-add-button",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 445,
+        "width": 14
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 442,
+        "width": 8
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-sections",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-origin-section",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-shift-badge",
+        "testId": null,
+        "position": "relative",
+        "right": 448,
+        "width": 96
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-grid",
+    "width": 360,
+    "innerWidth": 360,
+    "scrollWidth": 360,
+    "liftedScrollWidth": 360,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__grid",
+        "testId": null,
+        "position": "static",
+        "right": 877,
+        "width": 880
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 877,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 877,
+        "width": 880
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 384,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 482,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 581,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 679,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 778,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 877,
+        "width": 99
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 877,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 877,
+        "width": 880
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 384,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 377,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 482,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 475,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 581,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 574,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 679,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 672,
+        "width": 86
+      },
+      {
+        "tag": "BUTTON",
+        "className": "weekly-planner__add-cell",
+        "testId": null,
+        "position": "static",
+        "right": 645,
+        "width": 30
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-table",
+    "width": 360,
+    "innerWidth": 360,
+    "scrollWidth": 360,
+    "liftedScrollWidth": 360,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__table",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 431,
+        "width": 301
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 431,
+        "width": 301
+      },
+      {
+        "tag": "SPAN",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 416,
+        "width": 272
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TIME",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 510,
+        "width": 65
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 610,
+        "width": 55
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 730,
+        "width": 82
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__table-actions",
+        "testId": null,
+        "position": "static",
+        "right": 976,
+        "width": 204
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "calendar",
+    "width": 375,
+    "innerWidth": 375,
+    "scrollWidth": 375,
+    "liftedScrollWidth": 375,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "DIV",
+        "className": "month-grid-root",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekdays-row",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 453,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 565,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 678,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-grid-cells",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 454,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-history-button",
+        "testId": "day-history-btn-2026-10-01",
+        "position": "static",
+        "right": 421,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 417,
+        "width": 13
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 415,
+        "width": 10
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 408,
+        "width": 3
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 413,
+        "width": 2
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-add-button",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 445,
+        "width": 14
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 442,
+        "width": 8
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-sections",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-origin-section",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-shift-badge",
+        "testId": null,
+        "position": "relative",
+        "right": 448,
+        "width": 96
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-grid",
+    "width": 375,
+    "innerWidth": 375,
+    "scrollWidth": 375,
+    "liftedScrollWidth": 375,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__grid",
+        "testId": null,
+        "position": "static",
+        "right": 884,
+        "width": 880
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 884,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 884,
+        "width": 880
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 391,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 489,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 588,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 686,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 785,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 884,
+        "width": 99
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 884,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 884,
+        "width": 880
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 391,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 384,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 489,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 482,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 588,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 581,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 686,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 679,
+        "width": 86
+      },
+      {
+        "tag": "BUTTON",
+        "className": "weekly-planner__add-cell",
+        "testId": null,
+        "position": "static",
+        "right": 652,
+        "width": 30
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-table",
+    "width": 375,
+    "innerWidth": 375,
+    "scrollWidth": 375,
+    "liftedScrollWidth": 375,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__table",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 431,
+        "width": 301
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 431,
+        "width": 301
+      },
+      {
+        "tag": "SPAN",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 416,
+        "width": 272
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TIME",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 510,
+        "width": 65
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 610,
+        "width": 55
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 730,
+        "width": 82
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__table-actions",
+        "testId": null,
+        "position": "static",
+        "right": 976,
+        "width": 204
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "calendar",
+    "width": 390,
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "liftedScrollWidth": 390,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "DIV",
+        "className": "month-grid-root",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekdays-row",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 453,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 565,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 678,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-grid-cells",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 454,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-history-button",
+        "testId": "day-history-btn-2026-10-01",
+        "position": "static",
+        "right": 421,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 417,
+        "width": 13
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 415,
+        "width": 10
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 408,
+        "width": 3
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 413,
+        "width": 2
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-add-button",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 445,
+        "width": 14
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 442,
+        "width": 8
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-sections",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-origin-section",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-shift-badge",
+        "testId": null,
+        "position": "relative",
+        "right": 448,
+        "width": 96
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-grid",
+    "width": 390,
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "liftedScrollWidth": 390,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__grid",
+        "testId": null,
+        "position": "static",
+        "right": 892,
+        "width": 880
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 892,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 892,
+        "width": 880
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 399,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 497,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 596,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 694,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 793,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 892,
+        "width": 99
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 892,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 892,
+        "width": 880
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 399,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 392,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 497,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 490,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 596,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 589,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 694,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 687,
+        "width": 86
+      },
+      {
+        "tag": "BUTTON",
+        "className": "weekly-planner__add-cell",
+        "testId": null,
+        "position": "static",
+        "right": 660,
+        "width": 30
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-table",
+    "width": 390,
+    "innerWidth": 390,
+    "scrollWidth": 390,
+    "liftedScrollWidth": 390,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__table",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 431,
+        "width": 301
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 431,
+        "width": 301
+      },
+      {
+        "tag": "SPAN",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 416,
+        "width": 272
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TIME",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 510,
+        "width": 65
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 610,
+        "width": 55
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 730,
+        "width": 82
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__table-actions",
+        "testId": null,
+        "position": "static",
+        "right": 976,
+        "width": 204
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "calendar",
+    "width": 412,
+    "innerWidth": 412,
+    "scrollWidth": 412,
+    "liftedScrollWidth": 412,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "DIV",
+        "className": "month-grid-root",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekdays-row",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 453,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 565,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 678,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-grid-cells",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 454,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-history-button",
+        "testId": "day-history-btn-2026-10-01",
+        "position": "static",
+        "right": 421,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 417,
+        "width": 13
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 415,
+        "width": 10
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-add-button",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 445,
+        "width": 14
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 442,
+        "width": 8
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-sections",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-origin-section",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-shift-badge",
+        "testId": null,
+        "position": "relative",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 566,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 560,
+        "width": 96
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-grid",
+    "width": 412,
+    "innerWidth": 412,
+    "scrollWidth": 412,
+    "liftedScrollWidth": 412,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__grid",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 508,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 607,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 705,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 804,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 903,
+        "width": 99
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 508,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 501,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 607,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 600,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 705,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 698,
+        "width": 86
+      },
+      {
+        "tag": "BUTTON",
+        "className": "weekly-planner__add-cell",
+        "testId": null,
+        "position": "static",
+        "right": 671,
+        "width": 30
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 664,
+        "width": 16
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 660,
+        "width": 9
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 804,
+        "width": 99
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-table",
+    "width": 412,
+    "innerWidth": 412,
+    "scrollWidth": 412,
+    "liftedScrollWidth": 412,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__grid",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 508,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 607,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 705,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 804,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 903,
+        "width": 99
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 903,
+        "width": 880
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 508,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 501,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 607,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 600,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 705,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 698,
+        "width": 86
+      },
+      {
+        "tag": "BUTTON",
+        "className": "weekly-planner__add-cell",
+        "testId": null,
+        "position": "static",
+        "right": 671,
+        "width": 30
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 664,
+        "width": 16
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 660,
+        "width": 9
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 804,
+        "width": 99
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "calendar",
+    "width": 430,
+    "innerWidth": 430,
+    "scrollWidth": 430,
+    "liftedScrollWidth": 430,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "DIV",
+        "className": "month-grid-root",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekdays-row",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 453,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 565,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 678,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-weekday-cell",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 106
+      },
+      {
+        "tag": "DIV",
+        "className": "month-grid-cells",
+        "testId": null,
+        "position": "static",
+        "right": 790,
+        "width": 780
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 454,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-add-button",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 445,
+        "width": 14
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 442,
+        "width": 8
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-sections",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-origin-section",
+        "testId": null,
+        "position": "static",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-shift-badge",
+        "testId": null,
+        "position": "relative",
+        "right": 448,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-cell",
+        "testId": null,
+        "position": "static",
+        "right": 566,
+        "width": 108
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-header",
+        "testId": null,
+        "position": "static",
+        "right": 560,
+        "width": 96
+      },
+      {
+        "tag": "DIV",
+        "className": "month-day-number",
+        "testId": null,
+        "position": "static",
+        "right": 471,
+        "width": 7
+      },
+      {
+        "tag": "BUTTON",
+        "className": "month-day-history-button",
+        "testId": "day-history-btn-2026-10-02",
+        "position": "static",
+        "right": 533,
+        "width": 21
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 529,
+        "width": 13
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-grid",
+    "width": 430,
+    "innerWidth": 430,
+    "scrollWidth": 430,
+    "liftedScrollWidth": 430,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__grid",
+        "testId": null,
+        "position": "static",
+        "right": 912,
+        "width": 880
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 912,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 912,
+        "width": 880
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 517,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 616,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 714,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 813,
+        "width": 99
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 912,
+        "width": 99
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 912,
+        "width": 880
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 912,
+        "width": 880
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 517,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 510,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 616,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 609,
+        "width": 86
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 714,
+        "width": 99
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__cell",
+        "testId": null,
+        "position": "static",
+        "right": 707,
+        "width": 86
+      },
+      {
+        "tag": "BUTTON",
+        "className": "weekly-planner__add-cell",
+        "testId": null,
+        "position": "static",
+        "right": 680,
+        "width": 30
+      },
+      {
+        "tag": "svg",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 673,
+        "width": 16
+      },
+      {
+        "tag": "path",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 669,
+        "width": 9
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 813,
+        "width": 99
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-table",
+    "width": 430,
+    "innerWidth": 430,
+    "scrollWidth": 430,
+    "liftedScrollWidth": 430,
+    "rootOverflow": {
+      "html": "auto",
+      "body": "auto"
+    },
+    "offenders": [
+      {
+        "tag": "TABLE",
+        "className": "weekly-planner__table",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "THEAD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "TH",
+        "className": "",
+        "testId": null,
+        "position": "sticky",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "TBODY",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TIME",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 510,
+        "width": 65
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 635,
+        "width": 93
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 610,
+        "width": 55
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 758,
+        "width": 123
+      },
+      {
+        "tag": "SPAN",
+        "className": "weekly-planner__table-muted",
+        "testId": null,
+        "position": "static",
+        "right": 730,
+        "width": 82
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 232
+      },
+      {
+        "tag": "DIV",
+        "className": "weekly-planner__table-actions",
+        "testId": null,
+        "position": "static",
+        "right": 976,
+        "width": 204
+      },
+      {
+        "tag": "TR",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 990,
+        "width": 860
+      },
+      {
+        "tag": "TD",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 541,
+        "width": 111
+      },
+      {
+        "tag": "TIME",
+        "className": "",
+        "testId": null,
+        "position": "static",
+        "right": 515,
+        "width": 70
+      }
+    ],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "calendar",
+    "width": 1440,
+    "innerWidth": 1440,
+    "scrollWidth": 1440,
+    "liftedScrollWidth": 1440,
+    "rootOverflow": {
+      "html": "hidden",
+      "body": "hidden"
+    },
+    "offenders": [],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-grid",
+    "width": 1440,
+    "innerWidth": 1440,
+    "scrollWidth": 1440,
+    "liftedScrollWidth": 1440,
+    "rootOverflow": {
+      "html": "hidden",
+      "body": "hidden"
+    },
+    "offenders": [],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  },
+  {
+    "screen": "planner-table",
+    "width": 1440,
+    "innerWidth": 1440,
+    "scrollWidth": 1440,
+    "liftedScrollWidth": 1440,
+    "rootOverflow": {
+      "html": "hidden",
+      "body": "hidden"
+    },
+    "offenders": [],
+    "unclippedOffenders": [],
+    "unclippedCount": 0,
+    "documentOverflow": false
+  }
+]

@@ -270,3 +270,15 @@
   .app-shell__nav-item,
   .app-shell__user-trigger { transition: none; }
 }
+
+/* OD-06 — compact TopBar (≤640px): only the organization stays on the main line. Role and employee move to the account menu,
+   so no information is lost and the authorization context is unchanged. >640px is untouched. */
+.app-shell__user-menu-context { display: none; }
+
+@media (max-width: 640px) {
+  .app-shell__context-summary-item:nth-child(n+2) { display: none; }
+  .app-shell__user-menu-context { display: grid; gap: 8px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border-soft); }
+  .app-shell__user-menu-context .app-shell__context-summary-item:first-child { display: none; }
+  .app-shell__user-menu-context .app-shell__context-summary-item { display: grid; }
+  .app-shell__user-menu-context .app-shell__context-summary-item strong { max-width: 240px; }
+}

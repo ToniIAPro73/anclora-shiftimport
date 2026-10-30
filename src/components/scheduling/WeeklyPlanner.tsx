@@ -544,7 +544,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
               <span className={`weekly-planner__status weekly-planner__status--${snapshot.version.status.toLowerCase()}`}>
                 {snapshot.version.status === 'DRAFT' ? t('planner.statusDraft') : t('planner.statusReadOnly')}
               </span>
-              <span className="weekly-planner__meta">{t('planner.assignmentCount', { count: snapshot.assignments.length })}</span>
+              <span className="weekly-planner__meta">{t(snapshot.assignments.length === 1 ? 'planner.assignmentCountOne' : 'planner.assignmentCount', { count: snapshot.assignments.length })}</span>
             </div>
             <div className="weekly-planner__employee-filter">
               <SearchableSelect

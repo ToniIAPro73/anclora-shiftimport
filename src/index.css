@@ -2900,6 +2900,10 @@ select:disabled {
   z-index: 1;
 }
 
+.month-shift-badge__short {
+  display: none;
+}
+
 .month-shift-badge.is-draft {
   border: 1px dashed color-mix(in srgb, currentColor 55%, transparent);
 }
@@ -3852,6 +3856,7 @@ button[aria-busy='true'] {
   border-radius: 14px;
   font-size: 0.82rem;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .weekly-planner__toolbar > div {
@@ -3883,7 +3888,7 @@ button[aria-busy='true'] {
 .weekly-planner__day-focus {
   display: flex;
   align-items: center;
-  gap: 2px !important;
+  gap: 2px;
   max-width: 100%;
   padding: 3px;
   overflow-x: auto;
@@ -3891,6 +3896,15 @@ button[aria-busy='true'] {
   border: 1px solid var(--glass-border);
   border-radius: 10px;
   scrollbar-width: thin;
+}
+
+/* `.weekly-planner__toolbar > div` (0,1,1) used to win over `.weekly-planner__day-focus` (0,1,0):
+   the group wrapped and shrank to ~10px, stacking its buttons vertically. (0,2,0) fixes the root cause. */
+.weekly-planner__toolbar > .weekly-planner__day-focus {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .weekly-planner__day-focus-button,
@@ -4532,16 +4546,23 @@ button[aria-busy='true'] {
 
 .weekly-planner__grid-region {
   display: flex;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
 }
 
+.weekly-planner__grid-region > .weekly-planner__overflow-hint {
+  flex: 0 0 auto;
+}
+
 .weekly-planner__grid-region > .weekly-planner__grid-wrap,
 .weekly-planner__grid-region > .weekly-planner__table-wrap {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .weekly-planner__editor {
@@ -4576,6 +4597,21 @@ button[aria-busy='true'] {
 
   .weekly-planner__overflow-hint {
     display: flex;
+    min-height: 24px;
+    padding: 3px 10px;
+  }
+
+  .weekly-planner__toolbar > .weekly-planner__day-focus {
+    flex: 1 1 100%;
+    order: 5;
+    width: 100%;
+  }
+
+  .weekly-planner__day-focus-button,
+  .weekly-planner__day-focus-nav {
+    flex: 0 0 auto;
+    min-width: 40px;
+    min-height: 40px;
   }
 }
 
@@ -4785,6 +4821,22 @@ button[aria-busy='true'] {
     width: 100%;
     justify-content: flex-start;
   }
+}
+
+@media (max-width: 640px) {
+  .weekly-planner__toolbar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .weekly-planner__toolbar-summary { grid-column: 1 / -1; order: 1; min-width: 0; }
+  .weekly-planner__employee-filter { grid-column: 1; order: 2; min-width: 0; max-width: none; }
+  .weekly-planner__week-start { grid-column: 2; order: 2; min-width: 0; }
+  .weekly-planner__toolbar > .weekly-planner__day-focus { grid-column: 1 / -1; order: 3; }
+  .weekly-planner__toolbar > .weekly-planner__view-switcher { grid-column: 1 / -1; order: 4; }
+  .weekly-planner__toolbar > .weekly-planner__toolbar-actions { grid-column: 1 / -1; order: 5; justify-content: space-between; }
 }
 
 @media (max-width: 560px) {
@@ -5023,13 +5075,74 @@ button[aria-busy='true'] {
     white-space: nowrap;
   }
 
+  /* Compact month (F1-M03): seven fluid columns, short chips, detail in the day panel (MonthDayAgenda). */
   .month-grid-root {
-    min-width: 780px;
+    min-width: 0;
+  }
+
+  .month-weekdays-row,
+  .month-grid-cells {
+    gap: 3px;
+  }
+
+  .month-grid-cells {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-auto-rows: minmax(52px, auto);
   }
 
   .month-day-cell {
-    padding: 5px;
-    border-radius: 10px;
+    padding: 4px 3px;
+    border-radius: 8px;
+    min-width: 0;
+  }
+
+  .month-day-cell[data-selected='true'] {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+  }
+
+  .month-day-header .month-day-add-button,
+  .month-day-header .month-day-history-button,
+  .month-day-annotations {
+    display: none;
+  }
+
+  .month-day-select {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .month-day-select[aria-pressed='true'] {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .month-shift-badge__origin,
+  .month-shift-badge__label,
+  .month-shift-badge__times {
+    display: none;
+  }
+
+  .month-shift-badge__short {
+    display: inline;
+  }
+
+  .month-shift-badge {
+    padding: 2px 3px;
+    font-size: 0.54rem;
+    min-height: 16px;
+  }
+
+  .month-day-more-button {
+    min-height: 16px;
+    padding: 0 2px;
+    font-size: 0.54rem;
   }
 
   .month-day-header {
@@ -7344,4 +7457,75 @@ button[aria-busy='true'] {
    Same gradient with the opaque theme surfaces; light mode keeps the canonical (translucent) surface. */
 :root:not([data-theme='light']) .ac-toast {
   background: linear-gradient(180deg, var(--surface-panel-strong) 0%, var(--surface-panel) 100%);
+}
+
+/* Day panel of the compact month (F1-M03) */
+.month-day-agenda {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+.month-day-agenda__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.month-day-agenda__title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.month-day-agenda__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.month-day-agenda__action,
+.month-day-agenda__detail {
+  min-height: 40px;
+  min-width: 40px;
+  padding: 0 12px;
+  display: inline-grid;
+  place-items: center;
+  color: var(--text-primary);
+  background: var(--panel-muted-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.month-day-agenda__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.month-day-agenda__list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.month-day-agenda__shift {
+  min-height: 36px;
+  font-size: 0.78rem;
+  white-space: normal;
+}
+
+.month-day-agenda__empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-subtle);
 }

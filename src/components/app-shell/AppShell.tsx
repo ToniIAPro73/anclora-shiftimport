@@ -193,7 +193,8 @@ function UserMenu({
   userRole,
   onSignIn,
   onLogout,
-}: Pick<AppShellProps, 'userName' | 'userRole' | 'onSignIn' | 'onLogout'>) {
+  contextSummary,
+}: Pick<AppShellProps, 'userName' | 'userRole' | 'onSignIn' | 'onLogout' | 'contextSummary'>) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -280,6 +281,12 @@ function UserMenu({
       </button>
       {open && (
         <div id="app-shell-user-menu" className="app-shell__user-menu ac-menu__content" role="menu" aria-label={t('shell.userMenu')} onKeyDown={onMenuKeyDown}>
+          {contextSummary && (
+            // ≤640px the TopBar keeps only the organization; role and employee stay reachable here (OD-06).
+            <div className="app-shell__user-menu-context" role="group" aria-label={t('shell.contextGroup')} data-testid="app-shell-menu-context">
+              {contextSummary}
+            </div>
+          )}
           {onLogout && (
             <button ref={(element) => { if (element) menuItemsRef.current[0] = element; }} className="ac-menu__item" type="button" role="menuitem" onClick={() => { closeMenu(); onLogout(); }}>
               <LogOut size={16} aria-hidden="true" />
@@ -524,7 +531,7 @@ export function AppShell({
             )}
             {themeControl}
             {languageControl}
-            <UserMenu userName={userName} userRole={userRole} onSignIn={onSignIn} onLogout={onLogout} />
+            <UserMenu userName={userName} userRole={userRole} onSignIn={onSignIn} onLogout={onLogout} contextSummary={hasContext ? contextSummary : undefined} />
           </div>
         </header>
 
