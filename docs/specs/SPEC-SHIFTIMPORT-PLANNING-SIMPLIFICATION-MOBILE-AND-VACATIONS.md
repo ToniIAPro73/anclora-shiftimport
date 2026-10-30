@@ -218,7 +218,7 @@ Regla de semana (precede a la tabla): si el `schedule` tiene un `DRAFT` con **al
 
 Notas de diseño:
 - **Orden de aceptación** (filas 5-6): se procesan ordenadas por `(date, start_time, employee_id)`; un par entra si no choca con los ya aceptados. Determinista y testeable.
-- **Lista blanca (INV-15)**: F1-M05 fija la lista exacta leyendo el `CHECK` vigente de `shifts.provenance` y el ledger (`import_effects`). Un valor nuevo o desconocido cae por defecto en la fila 3b. Las filas 3, 3b y 4 son lo que OD-05 exige: el subconjunto afectado queda fuera de la auto-publicación y aparece en el resultado (INV-08) para revisión; el resto del fichero sí puede publicarse.
+- **Lista blanca (INV-15)**: F1-M05 fija la lista exacta leyendo el `CHECK` vigente de `shifts.provenance` y el ledger (`import_effects`). Un valor nuevo o desconocido cae por defecto en la fila 3b. Implementación de la fila 4: una asignación de borrador editada a mano para un par del fichero vive en el mismo borrador que se publicaría; por eso la semana entera queda `RETAIN_DRAFT` con motivo `MANUAL_DRAFT_PROTECTED` (más conservador que decidirlo par a par). Las filas 3, 3b y 4 son lo que OD-05 exige: el subconjunto afectado queda fuera de la auto-publicación y aparece en el resultado (INV-08) para revisión; el resto del fichero sí puede publicarse.
 - **Descanso entre semanas**: igual que hoy, `publishScheduleVersionTx` solo valida dentro de la versión (`scheduling.js:859-900`). La spec **no** amplía esa limitación (R-08; decisión `MINIMUM_REST_11H=KEEP_CURRENT_BEHAVIOUR`).
 - **Aceptado ≠ publicado hasta que pasa el gate SQL**: el planificador puro decide; el SQL revalida (defensa en profundidad).
 
@@ -1000,6 +1000,8 @@ Valores por defecto de fase (aplican salvo override en la microtarea): DO_NOT_BR
 
 ### F1 — Planning simplification + import auto-publication + mobile remediation (P0: C-01, C-02, C-03)
 
+**Estado de ejecución (2026-10-30, `development`)**: F1-M00…M05, M07…M11 **implementadas y verificadas**; F1-M06 (`0049`) **preparada y validada en local, sin aplicar a Neon**; F1-M12 (puerta) `WAITING_MIGRATION_AUTHORIZATION`. Desviaciones respecto al texto de las microtareas: (1) se añade el switch `IMPORT_AUTO_PUBLISH_ENABLED` (§17.3) para que el código desplegable sea compatible con una BD sin `0049`; (2) la fila 4 de §2.2 retiene la semana entera (nota en §2.2); (3) el selector de día del calendario compacto usa `aria-pressed` (botón alternable) en lugar de `aria-selected`, porque la celda no es un `gridcell`; (4) F1-M00 se ejecuta con la API simulada en el navegador (sin Neon): `qa/mobile-diagnostics/`.
+
 Valores por defecto de fase (aplican salvo override en la microtarea): DO_NOT_BREAK = INV-03/04/05/06/07/15/16; `historical-and-plan` y `historical-only` con su semántica actual; EMPLOYEE sin futuro; ledger y reversión 1:1; paridad i18n; `ModalShell`; descanso de 11 h tal cual (`KEEP_CURRENT_BEHAVIOUR`). SECURITY = INV-01/13/18; `can(PUBLISH)` por empleado; todo `organization_id`-scoped; sin PII en logs/evidencias. MIGRATION_IMPACT = 0049 solo en F1-M06 (aditiva, idempotente, compatible con código desplegado). VISUAL_QA = agent-browser / anclora-visual-qa; 360·375·390·412·430 retrato; claro/oscuro; ES/EN en muestra (§12). GATE = F1 (§20).
 
 **F1-M00 — Diagnóstico de zoom-out (evidencia primero)**
@@ -1780,7 +1782,9 @@ Validación de sintaxis; aplicación incremental sobre la base existente; aplica
 | `TIME_OFF_ENABLED` (servidor) | Toni (responsable de producto) | `false` en todos los entornos | 1) migrar 0050; 2) desplegar con flags apagados; 3) activar en `development`; 4) validar F3; 5) staging/production solo por decisión de Toni | Apagar ⇒ los endpoints responden `404`; los datos existentes permanecen |
 | `VITE_TIME_OFF_ENABLED` (build) | Toni | `false` | Después del servidor (es de build: requiere nuevo despliegue del entorno) | Apagar ⇒ la UI desaparece; sin pérdida de datos |
 
-La BD de vacaciones puede estar aplicada y la UI/API apagadas sin efecto visible (INV-12). Las variables viven en la configuración de cada entorno de Vercel; el agente no las cambia.
+| `IMPORT_AUTO_PUBLISH_ENABLED` (servidor, F1) | Toni | `false` en todos los entornos | 1) aplicar `0049` (autorización de Toni); 2) desplegar con el switch apagado; 3) activar en `development` y validar en QA Mirror; 4) staging/production solo por decisión de Toni | Apagar ⇒ `historical-and-auto-publish` responde `409 AUTO_PUBLISH_UNAVAILABLE`, `plan-preview` devuelve `autoPublish:false` y la UI no ofrece la opción; el comportamiento es el de `historical-and-plan`. Las importaciones ya auto-publicadas siguen siendo revertibles |
+
+La BD de vacaciones puede estar aplicada y la UI/API apagadas sin efecto visible (INV-12). El switch de importación existe por la misma razón: la rama Neon es compartida y el `CHECK` de `imports.import_decision` solo admite el valor nuevo tras `0049`; el cliente descubre la capacidad por `plan-preview` (no por una variable de build). Las variables viven en la configuración de cada entorno de Vercel; el agente no las cambia.
 
 ### 17.4 Reversión
 
@@ -1851,6 +1855,16 @@ Criterios: `FUNCTIONAL, DATA_INTEGRITY, AUTHORIZATION, TENANT_ISOLATION, SECURIT
 - **Validación documental**: `git diff --check` limpio; `rg` de contradicciones («nunca publica», «Aprobaciones», `scoped_area_id`) = 0 vigentes (las coincidencias son la redacción nueva o historia de migraciones); enlaces del contrato nuevo resueltos; 0 specs/roadmaps competidores.
 - **`N/A¹`** verificado: `git diff --stat` sin cambios en `src/`, `api/`, `db/` ni `.anclora/`.
 - **Diagnóstico móvil**: F1-M00 es de F1 y no forma parte de F0; no se ejecutó.
+
+**F1 — `WAITING_MIGRATION_AUTHORIZATION` (2026-10-30).** Todo lo previo a `0049` está hecho; la puerta no puede ser `PASS` hasta aplicar y validar `0049` en el entorno autorizado.
+
+- **F1-M00 (mobile)**: 360–430 px sin desbordamiento del documento ni elementos sin recorte; las capturas Samsung equivalen a un layout de ~980 px (no es un defecto de la app); defectos reales reproducidos a ≤980 px y corregidos (`day-focus`, pista de scroll, toolbar, «1 turnos»). Evidencia: `qa/mobile-diagnostics/` y §5.1.0.
+- **F1-M03**: calendario compacto ≤640 px + `MonthDayAgenda`; TopBar compacto (OD-06) con Rol/Empleado en el menú de cuenta.
+- **F1-M05/M07/M08**: planificador puro (17 tests), `publishImportedPairsTx` y SPLIT **verificados contra PostgreSQL 16 local descartable** (15 escenarios de integración: PUBLISH, SPLIT, `FOREIGN_DRAFT_PRESENT`, descanso, manual protegido, procedencia NULL/desconocida, fallo del gate SQL por condición de carrera, reintento idempotente, PLANNER por `EMPLOYEES`, aislamiento de tenant, `plan-preview` sin escrituras). La verificación real encontró un fallo (NULL en la lista blanca) ya corregido con `COALESCE`.
+- **F1-M09**: reversión 1:1 de importaciones auto-publicadas (limpia y SPLIT), `PUBLISHED_SHIFT_HAS_DEPENDENTS`, bloqueo por borrador posterior y por edición manual; verificada contra PostgreSQL local.
+- **F1-M10**: una `SHIFT_PUBLISHED` por empleado y lote (OD-07), verificado con dos semanas.
+- **F1-M11**: consentimiento con tres opciones, `ImportResultModal` con publicados/retenidos/revisión y CTAs condicionales, i18n ES/EN.
+- **`0049`**: `db/migrations/0049_import_auto_publish_decision.sql` + centinela en `db/migrate.mjs` + 3 tests estáticos (superset exacto del `CHECK` de `0048`). Aplicada y registrada en el ledger de un PostgreSQL local descartable (idempotente al re-ejecutar). `db:migrate:status` en Neon antes de aplicar: 48 aplicadas, 0 pendientes.
 
 ---
 
