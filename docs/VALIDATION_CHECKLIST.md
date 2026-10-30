@@ -27,10 +27,10 @@
 | Mirror refrescado (`--apply`) tras el QA | PASS, origen sin cambios |
 
 ## 3. NOT_RUN / gaps
-- Suite histórica completa de `specs-qa-mirror`: no completada (1 h, 18 fallos sin diagnosticar uno a uno). `import-layout-identity` (desktop) falla por un test desfasado desde `851e846` (anterior a F1); el resto, timeouts de 90 s. Pendiente de saneamiento antes de F2.
+**F1_GATE=PASS** (validación humana de Toni, 2026-10-30). Lo siguiente es deuda técnica NO bloqueante:
+- Suite histórica completa de `specs-qa-mirror`: no completada (1 h, 18 fallos sin diagnosticar uno a uno). `import-layout-identity` (desktop) falla por un test desfasado desde `851e846` (anterior a F1); el resto, timeouts de 90 s. Deuda técnica no bloqueante; no se re-ejecuta ni se sanea en F1.
 - `test:a11y` del paquete E2E (usa `vercel dev` + Postgres Docker): no es el runtime contractual.
 - Specs que exigen documentos reales: no ejecutados.
 
 ## 4. Para Toni
 - Confirmar en el móvil si el navegador estaba en «Sitio de escritorio» (`innerWidth` real).
-- Decidir si el saneamiento de la suite histórica del mirror va antes de F2.
