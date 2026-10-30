@@ -4,7 +4,7 @@
 
 Este documento es un snapshot de progreso, no una spec. Para continuar el programa posterior a la
 auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
-[`00-ROADMAP-MASTER.md`](./00-ROADMAP-MASTER.md) y el [roadmap P0–P8](../ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md).
+[`00-ROADMAP-MASTER.md`](./00-ROADMAP-MASTER.md) y la [spec canónica vigente](../../specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md) (roadmap F0–F5 incluido).
 
 ## Baseline verificado
 
@@ -106,8 +106,7 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
   explícito. El calendario conserva únicamente realidad publicada y EMPLOYEE no crea futuro. Suite completa,
   lint, build y E2E compacto pasan. P5.5-R01 valida los ficheros PDF/XLSX reales del caso, cierra G-20
   y mantiene P6 sin iniciar.
-- P8 — CRC Tryp Research: BLOCKED desde el origen porque el NotebookLM redirige a login y no
-  existe una exportación accesible. No se inventará contenido de esa fuente.
+- Referencia CRC Tryp: validada con el manual PDF/PPTX (spec canónica §5.5); ya no hay fase bloqueada.
 
 ## Por hacer en el roadmap MVP v2 histórico
 
@@ -135,5 +134,4 @@ auditoría UX/UI, léase junto con [`00-BASELINE.md`](./00-BASELINE.md),
 
 - **D-03, D-04 y D-05**: aprobadas, implementadas y cerradas con `PHASE_P5_GATE = PASS`; evidencia
   en `docs/roadmap/P5-ROLE-REALITY-GATE.md`.
-- **D-07 / P8**: la fuente CRC Tryp sigue inaccesible; se requiere exportación, fuentes originales,
-  acceso autenticado autorizado o cancelación explícita de P8.
+- **D-07 / P8**: cerrada; Trip se validó con el manual PDF/PPTX (spec canónica §5.5).

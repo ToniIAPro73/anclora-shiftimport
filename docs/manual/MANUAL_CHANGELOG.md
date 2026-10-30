@@ -77,7 +77,7 @@ Viewport de captura: 1440 × 900 CSS px, densidad 1,5, español y modo oscuro. L
 - Importación: `src/ingestion/`, `src/lib/format-profiles.ts`, `src/lib/format-profile-store.ts`, almacenamiento, tipos y lógica de turnos; API de imports/shifts/ingestion y pruebas asociadas.
 - Planificación, solicitudes y autoridad: componentes y API de schedules, change-requests, approval-requests, memberships y employees; `api/_lib/auth.js`, `api/_lib/data.js` y pruebas asociadas.
 - Altas y credenciales: `MembersModal`, `MembersModal`/bulk tests, alta masiva de empleados y usuarios, auth/request-reset, transferencia y reset de organización.
-- Documentación actual: `docs/product/RBAC_SCOPE_MATRIX.md`, `docs/roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md`, `docs/specs/P5.7-MASTER-SPEC.md`, especificaciones de `sdd/`, documentación multitenant y planes.
+- Documentación actual: `docs/product/RBAC_SCOPE_MATRIX.md`, `docs/roadmap/shiftimport-mvp-v2/R0/RBAC-MODEL.md`, `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md`, especificaciones de `sdd/`, documentación multitenant y planes.
 - Contratos AOS y locales: marca, colores, tipografía, modal, aplicación premium, consentimiento de cookies y localización en `docs/standards/`.
 - Inventariados `src/`, `api/`, `db/`, `qa/`, `scripts/`, `docs/`, especificaciones, roadmap y `public/`. Las pruebas están junto al código y en `qa/`; no había directorios raíz `tests/` ni `docs/governance/`.
 

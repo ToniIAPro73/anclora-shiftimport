@@ -42,6 +42,5 @@ idempotencia y `ImportOutcome` persistente.
 
 ## Documentos relacionados
 
-- `docs/specs/SPEC-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md` — D-04.
-- `docs/roadmap/ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md` — P5-M05.
+- `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` — D-04.
 - `docs/product/IMPORT_OUTCOME_CONTRACT.md`.

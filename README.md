@@ -121,7 +121,7 @@ El producto opera en español e inglés, con selector de idioma y paridad de cla
 
 ## Roadmap
 
-R0–R5 del MVP v2 están implementados. El programa de verificación y mejoras posterior a la auditoría UX se ejecuta en [`docs/roadmap/ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md`](./docs/roadmap/ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md), con la spec normativa en [`docs/specs/SPEC-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md`](./docs/specs/SPEC-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md). El backlog post-MVP R6–R9 sigue en [`docs/roadmap/shiftimport-mvp-v2/POST-MVP/`](./docs/roadmap/shiftimport-mvp-v2/POST-MVP/).
+R0–R5 del MVP v2 están implementados. La iniciativa vigente (simplificación de planificación, auto-publicación en importación, mobile-first y vacaciones) se rige por una única spec canónica: [`docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md`](./docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md). El backlog post-MVP R6–R9 sigue en [`docs/roadmap/shiftimport-mvp-v2/POST-MVP/`](./docs/roadmap/shiftimport-mvp-v2/POST-MVP/).
 
 ## Documentación y gobernanza
 

@@ -39,6 +39,5 @@ aislamiento tenant siguen siendo server-side y fail-closed.
 
 ## Documentos relacionados
 
-- `docs/specs/SPEC-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md` — D-05.
-- `docs/roadmap/ROADMAP-SHIFTIMPORT-POST-UX-AUDIT-CRC-TRYP-END-TO-END.md` — P5-M03.
+- `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` — D-05.
 - `api/_lib/auth.js`.
