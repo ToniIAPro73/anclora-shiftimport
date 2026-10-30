@@ -50,7 +50,7 @@ export interface RemoteImport {
   /** Light, server-side hint for the history list (the preview is authoritative). */
   reversibility?: 'REVERSIBLE' | 'LEGACY_SAFE_CANDIDATE' | 'BLOCKED_LEGACY' | 'NO_EFFECTS' | 'REVERTED' | 'DELETED' | null;
   deduplicated?: boolean;
-  importDecision?: 'historical-only' | 'historical-and-plan' | null;
+  importDecision?: 'historical-only' | 'historical-and-plan' | 'historical-and-auto-publish' | null;
   documentClass?: ImportDocumentClass | null;
   temporalClass?: 'HISTORICAL' | 'FUTURE' | 'MIXED' | null;
   duplicateKind?: 'DUPLICATE_FILE' | 'DUPLICATE_DOCUMENT' | 'DUPLICATE_PLAN' | null;
@@ -234,19 +234,38 @@ export interface FutureImportResult {
     draftWeekCount?: number;
     publishedWeekCount: number;
     publishedShiftCount: number;
-    publicationResults: Array<{ periodStart: string; status: string; createdShiftCount: number }>;
+    publicationResults: Array<{ periodStart: string; areaId?: string | null; status: string; createdShiftCount: number; errorCode?: string }>;
+    /** Pairs that were NOT published (auto-publication only), each with its reason (INV-08). */
+    retained?: AutoPublishPair[];
   };
   plan?: {
-    autoPublished: false;
+    /** True only when `historical-and-auto-publish` published at least one week. */
+    autoPublished: boolean;
     changes: PlanChangeCounts;
+    protectedConflicts?: number;
   };
   sourceKind?: string;
   annotations?: { submitted: number };
   import: RemoteImport;
 }
 
-/** `historical-and-plan` = also create/update the planning from the future rows (never publishes). */
-export type FutureImportConsent = 'historical-and-plan';
+/**
+ * `historical-and-plan` = also create/update the planning from the future rows (never publishes).
+ * `historical-and-auto-publish` = publish only what is provably the import's own and valid; the rest stays a draft / review.
+ */
+export type FutureImportConsent = 'historical-and-plan' | 'historical-and-auto-publish';
+
+export interface AutoPublishPair { employeeId: string; date: string; reason: string }
+
+/** Read-only simulation returned by plan-preview. The legacy shape is the boolean `false` (deployment switch off). */
+export interface AutoPublishPreview {
+  eligible: boolean;
+  reasons?: string[];
+  willPublishShiftCount: number;
+  weeks: Array<{ periodStart: string; areaId: string | null; mode: 'PUBLISH' | 'SPLIT' | 'RETAIN_DRAFT' | 'NONE'; publishCount: number; retainCount: number }>;
+  willRetain: AutoPublishPair[];
+  reviewConflicts: AutoPublishPair[];
+}
 
 export interface PlanImportPreview {
   classification: 'HISTORICAL' | 'FUTURE' | 'MIXED';
@@ -256,7 +275,7 @@ export interface PlanImportPreview {
   futureCount: number;
   employeeCount: number;
   plan: { changes: PlanChangeCounts; weeksAffected: string[] };
-  autoPublish: false;
+  autoPublish: false | AutoPublishPreview;
 }
 
 export interface NewScheduleDraftResult {

@@ -34,9 +34,10 @@ import { classifyImportChanges, semanticShiftFingerprint } from '../../lib/impor
 import { AssistantCompletion, ProfileAssistantPanel } from './ProfileAssistantPanel';
 import { AssistantAnswers, buildProfileFromTokenMeanings, buildCodeOverridesFromAnswers } from '../../ingestion/assistant';
 import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
-import { RemoteArea } from '../../lib/remote';
+import { previewPlanImport, RemoteArea } from '../../lib/remote';
+import type { PlanImportPreview } from '../../lib/remote';
 import { fingerprintFile } from '../../lib/file-fingerprint';
-import { deriveEffectiveTemporalSummary, splitImportByOperationalDate } from '../../lib/import-temporal';
+import { decisionIncludesFuture, deriveEffectiveTemporalSummary, splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
 import { FutureImportConsent } from './FutureImportConsent';
 import { SourceIdentityPanel, type ResolvedSourceEmployee } from './SourceIdentityPanel';
@@ -377,6 +378,16 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
   const [selfAmbiguous, setSelfAmbiguous] = useState(false);
   const [selfImportSummary, setSelfImportSummary] = useState<SelfImportSummary | null>(null);
   const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
+  const [planPreview, setPlanPreview] = useState<PlanImportPreview | null>(null);
+  const [planPreviewLoading, setPlanPreviewLoading] = useState(false);
+  // Auto-publication is offered (and pre-selected, F1 defaults) only when the server simulated it for this actor and file.
+  const decisionTouchedRef = useRef(false);
+  const chooseDecision = (decision: FutureImportDecision) => { decisionTouchedRef.current = true; setFutureImportDecision(decision); };
+  useEffect(() => {
+    const eligible = Boolean(planPreview && typeof planPreview.autoPublish === 'object' && planPreview.autoPublish.eligible);
+    if (eligible && !decisionTouchedRef.current && futureImportDecision === 'historical-only') setFutureImportDecision('historical-and-auto-publish');
+    if (!eligible && !planPreviewLoading && futureImportDecision === 'historical-and-auto-publish') setFutureImportDecision('historical-and-plan');
+  }, [planPreview, planPreviewLoading, futureImportDecision]);
   // CX-F01: on narrow viewports the file/identity block ate all the fixed
   // modal height, leaving 0px for the shifts list (audit: five rows in the
   // DOM, list measuring 0px). Collapsed by default so review has room;
@@ -457,9 +468,30 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     };
   }, [parsedShifts]);
 
+  // Read-only simulation of what confirming would do for the employee the document resolves to (planning roles only, never self-import).
+  useEffect(() => {
+    let cancelled = false;
+    if (identityLocked || !file || !sourceEmployee || temporalSummary.future === 0) { setPlanPreview(null); return undefined; }
+    const rows = [...temporalSummary.historicalRows, ...temporalSummary.futureRows].map((row) => ({ ...toDomainShift(row), employeeId: sourceEmployee.id, areaId: importAreaId ?? null }));
+    setPlanPreviewLoading(true);
+    void (async () => {
+      try {
+        const result = await previewPlanImport({
+          fileFingerprint: await fingerprintFile(file), employeeId: sourceEmployee.id, shifts: rows, areaId: importAreaId ?? null, importMode: 'individual',
+        });
+        if (!cancelled) setPlanPreview(result);
+      } catch {
+        if (!cancelled) setPlanPreview(null); // no planning capability or preview unavailable: only the plan option is offered
+      } finally {
+        if (!cancelled) setPlanPreviewLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [identityLocked, file, sourceEmployee, temporalSummary, importAreaId]);
+
   const importDiff = useMemo(() => {
     if (!diffReady) return null;
-    const accepted = futureImportDecision === 'historical-and-plan' && !identityLocked
+    const accepted = decisionIncludesFuture(futureImportDecision) && !identityLocked
       ? [...temporalSummary.historicalRows, ...temporalSummary.futureRows]
       : temporalSummary.historicalRows;
     const seen = new Set<string>();
@@ -638,6 +670,8 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
     setAuthError(false);
     setSelfNotFound(false);
     setSelfAmbiguous(false);
+    decisionTouchedRef.current = false;
+    setPlanPreview(null);
     setFutureImportDecision('historical-only');
     setColorResolutions({});
     setScanTime(null);
@@ -1957,10 +1991,12 @@ export const ImportModal = ({ isOpen, onClose, onConfirmImport, initialContext, 
               ) : (
                 <FutureImportConsent
                   decision={futureImportDecision}
-                  onChange={setFutureImportDecision}
+                  onChange={chooseDecision}
                   testId="import-future-consent"
                   historicalCount={temporalSummary.historical}
                   futureCount={temporalSummary.future}
+                  preview={planPreview}
+                  previewLoading={planPreviewLoading}
                 />
               )
             )}

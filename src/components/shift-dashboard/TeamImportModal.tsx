@@ -47,7 +47,7 @@ import { STATE_CHIP_STYLES, STATE_I18N_KEYS } from './import-state-copy';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference } from '../../lib/week';
 import { FutureImportConsent } from './FutureImportConsent';
-import { splitImportByOperationalDate } from '../../lib/import-temporal';
+import { decisionIncludesFuture, splitImportByOperationalDate } from '../../lib/import-temporal';
 import type { FutureImportDecision } from '../../lib/import-temporal';
 
 /** No employee identity is known yet when the team-roster detectors can't
@@ -194,6 +194,14 @@ export const TeamImportModal = ({
   const [planPreview, setPlanPreview] = useState<PlanImportPreview | null>(null);
   const [planPreviewLoading, setPlanPreviewLoading] = useState(false);
   const [futureImportDecision, setFutureImportDecision] = useState<FutureImportDecision>('historical-only');
+  // Auto-publication is offered (and pre-selected, F1 defaults) only when the server simulated it for this actor and file.
+  const decisionTouchedRef = useRef(false);
+  const chooseDecision = (decision: FutureImportDecision) => { decisionTouchedRef.current = true; setFutureImportDecision(decision); };
+  useEffect(() => {
+    const eligible = Boolean(planPreview && typeof planPreview.autoPublish === 'object' && planPreview.autoPublish.eligible);
+    if (eligible && !decisionTouchedRef.current && futureImportDecision === 'historical-only') setFutureImportDecision('historical-and-auto-publish');
+    if (!eligible && !planPreviewLoading && futureImportDecision === 'historical-and-auto-publish') setFutureImportDecision('historical-and-plan');
+  }, [planPreview, planPreviewLoading, futureImportDecision]);
   const [outcomes, setOutcomes] = useState<ImportOutcome[]>([]);
   const [importing, setImporting] = useState(false);
   // Fase 1.2F-PDF §12: PDF batches share ONE Import record across every
@@ -732,6 +740,7 @@ export const TeamImportModal = ({
         };
       }));
       setPreview(entries);
+      decisionTouchedRef.current = false;
       setFutureImportDecision('historical-only');
       setStep('preview');
     } catch (err) {
@@ -747,7 +756,7 @@ export const TeamImportModal = ({
       return;
     }
     const decision = decisionOverride ?? futureImportDecision;
-    const planMode = decision === 'historical-and-plan';
+    const planMode = decisionIncludesFuture(decision);
     // Plan decision: the plan is the WHOLE document (existing rows are recognised server-side, never duplicated).
     const rowsOf = (entry: PreviewEntry) => (planMode ? entry.allShifts : entry.newShifts);
     onImportStateChange?.(true);
@@ -801,7 +810,7 @@ export const TeamImportModal = ({
         periodLabel: periodKeys.size > 1
           ? t('importModal.multiPeriod')
           : `${monthNames[firstPeriod.month] ?? firstPeriod.month} ${firstPeriod.year}`,
-        futureConsent: 'historical-and-plan',
+        futureConsent: decision === 'historical-and-auto-publish' ? 'historical-and-auto-publish' : 'historical-and-plan',
         weekStart: getPlannerWeekStartPreference(),
       });
       // Only rows that are NEW for the calendar get planning drafts; rows that already exist are recognised, not duplicated.
@@ -1287,7 +1296,7 @@ export const TeamImportModal = ({
             {(splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).future.length) > 0 && (
               <FutureImportConsent
                 decision={futureImportDecision}
-                onChange={(decision) => { setError(''); setFutureImportDecision(decision); }}
+                onChange={(decision) => { setError(''); chooseDecision(decision); }}
                 testId="team-import-future-consent"
                 historicalCount={splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).historical.length}
                 futureCount={splitImportByOperationalDate(preview.flatMap((entry) => entry.newShifts)).future.length}

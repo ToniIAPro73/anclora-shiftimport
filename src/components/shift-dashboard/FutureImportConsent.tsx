@@ -25,6 +25,9 @@ export const FutureImportConsent = ({
   const { t } = useI18n();
   const mixed = historicalCount > 0;
   const changes = preview?.plan.changes;
+  // The third option exists only when the server simulated auto-publication for this actor and file (deployment switch + scope).
+  const autoPublish = preview && typeof preview.autoPublish === 'object' && preview.autoPublish.eligible ? preview.autoPublish : null;
+  const plural = (count: number, many: string, one: string) => t(count === 1 ? one : many, { count });
 
   return (
     <fieldset
@@ -51,6 +54,18 @@ export const FutureImportConsent = ({
           <span>{t('importModal.planOptionHistoricalOnly')}</span>
         </label>
       )}
+      {autoPublish && (
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+          <input
+            type="radio"
+            name={`${testId}-decision`}
+            value="historical-and-auto-publish"
+            checked={decision === 'historical-and-auto-publish'}
+            onChange={() => onChange('historical-and-auto-publish')}
+          />
+          <span>{t('importModal.planOptionAutoPublish')}</span>
+        </label>
+      )}
       <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
         <input
           type="radio"
@@ -61,6 +76,23 @@ export const FutureImportConsent = ({
         />
         <span>{mixed ? t('importModal.planOptionHistoricalAndPlan') : t('importModal.planOptionPlanOnly')}</span>
       </label>
+      {decision === 'historical-and-auto-publish' && autoPublish && (
+        <div data-testid={`${testId}-auto-publish-summary`} style={{ display: 'grid', gap: '6px', padding: '10px', borderRadius: '8px', background: 'var(--panel-muted-bg)', fontSize: '0.82rem' }}>
+          <span>{t('importModal.autoPublishNote')}</span>
+          {autoPublish.willPublishShiftCount === 0 ? (
+            <span role="status" data-testid={`${testId}-auto-publish-nothing`}>{t('importModal.autoPublishNothing')}</span>
+          ) : (
+            <span data-testid={`${testId}-auto-publish-counts`} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', color: 'var(--text-muted)' }}>
+              <span>{plural(autoPublish.willPublishShiftCount, 'importModal.autoPublishWillPublish', 'importModal.autoPublishWillPublishOne')}</span>
+              {autoPublish.willRetain.length > 0 && <span>{plural(autoPublish.willRetain.length, 'importModal.autoPublishWillRetain', 'importModal.autoPublishWillRetainOne')}</span>}
+              {autoPublish.reviewConflicts.length > 0 && (
+                <span style={{ color: 'var(--color-gold)', fontWeight: 700 }}>{plural(autoPublish.reviewConflicts.length, 'importModal.autoPublishWillReview', 'importModal.autoPublishWillReviewOne')}</span>
+              )}
+            </span>
+          )}
+          {previewLoading && <span role="status" style={{ color: 'var(--text-subtle)' }}>{t('importModal.planPreviewLoading')}</span>}
+        </div>
+      )}
       {decision === 'historical-and-plan' && (
         <div data-testid={`${testId}-plan-summary`} style={{ display: 'grid', gap: '6px', padding: '10px', borderRadius: '8px', background: 'var(--panel-muted-bg)', fontSize: '0.82rem' }}>
           <span>{t(mixed ? 'importModal.planDraftNote' : 'importModal.planDraftNoteFutureOnly')}</span>

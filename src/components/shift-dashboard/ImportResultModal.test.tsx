@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
 
 afterEach(cleanup);
 import { ImportOutcomeReport, ImportResultModal } from './ImportResultModal';
@@ -146,5 +147,54 @@ describe('ImportResultModal', () => {
     expect(screen.getByTestId('import-result-duplicate')).toBeTruthy();
     expect(screen.queryByTestId('import-result-revision')).toBeNull();
     expect(screen.getByTestId('import-result-pending').textContent).toContain('Ninguna diferencia pendiente');
+  });
+});
+
+describe('ImportResultModal — temporal result with auto-publication (F1-M11)', () => {
+  const base = {
+    status: 'COMPLETED' as const,
+    historical: { submittedCount: 0, persistedCount: 0, existingCount: 0 },
+    duplicate: null,
+  };
+  const future = (over: Record<string, unknown> = {}) => ({
+    submittedCount: 5, createdAssignmentCount: 5, existingAssignmentCount: 0, affectedWeekCount: 1, publishedWeekCount: 1, publishedShiftCount: 4,
+    publicationResults: [{ periodStart: '2026-11-02', status: 'SPLIT', createdShiftCount: 4 }], draftWeekCount: 1, ...over,
+  });
+  const renderResult = (report: Parameters<typeof ImportResultModal>[0]['report'], extra: { onOpenPlanner?: () => void; onResolveDifferences?: () => void } = {}) => render(
+    <I18nProvider><ImportResultModal isOpen onClose={vi.fn()} report={report} {...extra} /></I18nProvider>,
+  );
+
+  it('separates published, kept back (with reasons) and review; offers only actionable CTAs', () => {
+    const onOpenPlanner = vi.fn();
+    const onResolveDifferences = vi.fn();
+    renderResult({
+      ...base,
+      future: future({ retained: [{ employeeId: 'e1', date: '2026-11-03', reason: 'REST_RULE_VIOLATION' }, { employeeId: 'e2', date: '2026-11-03', reason: 'REST_RULE_VIOLATION' }] }),
+      plan: { autoPublished: true, changes: { new: 3, unchanged: 0, modified: 0, requiresReview: 2 } },
+    }, { onOpenPlanner, onResolveDifferences });
+    expect(screen.getByTestId('import-result-published')).toHaveTextContent('Turnos publicados: 4 (semanas: 1).');
+    expect(screen.getByTestId('import-result-retained')).toHaveTextContent('2 × No respetan el descanso mínimo');
+    screen.getByTestId('import-result-resolve').click();
+    screen.getByTestId('import-result-open-planner').click();
+    expect(onResolveDifferences).toHaveBeenCalledTimes(1);
+    expect(onOpenPlanner).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Resolver 2 diferencias')).toBeInTheDocument();
+  });
+
+  it('a fully published import has no "Open in Planning" CTA and says the shifts are visible', () => {
+    renderResult({
+      ...base,
+      future: future({ draftWeekCount: 0, publicationResults: [{ periodStart: '2026-11-02', status: 'PUBLISHED', createdShiftCount: 4 }], retained: [] }),
+      plan: { autoPublished: true, changes: { new: 4, unchanged: 0, modified: 0, requiresReview: 0 } },
+    }, { onOpenPlanner: vi.fn(), onResolveDifferences: vi.fn() });
+    expect(screen.queryByTestId('import-result-open-planner')).toBeNull();
+    expect(screen.queryByTestId('import-result-resolve')).toBeNull();
+    expect(screen.getByText('Los turnos ya son visibles para los empleados afectados.')).toBeInTheDocument();
+  });
+
+  it('a plain draft import keeps the "not published automatically" copy and opens Planning', () => {
+    renderResult({ ...base, future: future({ publishedWeekCount: 0, publishedShiftCount: 0, publicationResults: [] }), plan: { changes: { new: 5, unchanged: 0, modified: 0, requiresReview: 0 } } }, { onOpenPlanner: vi.fn() });
+    expect(screen.getByText(/no se publica sola/)).toBeInTheDocument();
+    expect(screen.getByTestId('import-result-open-planner')).toBeInTheDocument();
   });
 });

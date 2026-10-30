@@ -32,3 +32,14 @@
   .import-result__columns { grid-template-columns: minmax(0, 1fr); }
   .import-result__next { flex-direction: column; align-items: stretch; }
 }
+
+/* Auto-publication result (F1-M11): retained reasons and the actionable CTAs next to "Entendido". */
+.import-result__retained-title { margin: 6px 0 0; font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-subtle); }
+.import-result__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: 0 0 auto; }
+.import-result__actions .btn-outline,
+.import-result__actions .btn-gold { min-height: 42px; padding-inline: 16px; }
+
+@media (max-width: 640px) {
+  .import-result__actions { justify-content: stretch; }
+  .import-result__actions > * { flex: 1 1 100%; }
+}

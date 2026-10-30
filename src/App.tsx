@@ -1462,7 +1462,7 @@ function App() {
     ) ? schedulingIncoming.length : 0;
     // Mixed planning imports use the server reconciliation endpoint so historical differences remain proposals.
     const usesSmartServerReconciliation = session.role !== 'EMPLOYEE'
-      && futureImportDecision === 'historical-and-plan'
+      && futureImportDecision !== 'historical-only'
       && schedulingIncoming.length > 0;
     const classified = await classifyHistoricalIncoming({
       incoming: eligibleIncoming,
@@ -1527,7 +1527,7 @@ function App() {
       return false;
     }
 
-    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision === 'historical-and-plan'
+    const futureUpserts = session.role !== 'EMPLOYEE' && futureImportDecision !== 'historical-only'
       ? schedulingIncoming
       : [];
     const historicalUpserts = upserts;
@@ -1630,7 +1630,7 @@ function App() {
             importMode: 'individual',
             periodKind: targetPeriod.kind,
             periodLabel: formatImportPeriodLabel(targetPeriod, tl('calendar.months')),
-            futureConsent: 'historical-and-plan',
+            futureConsent: futureImportDecision === 'historical-and-auto-publish' ? 'historical-and-auto-publish' : 'historical-and-plan',
             weekStart: getPlannerWeekStartPreference(),
             sourceKind: importSource?.kind,
             sourceSystem: importSource?.system ?? null,
@@ -1669,6 +1669,7 @@ function App() {
               publishedShiftCount: futureResult.future.publishedShiftCount,
               publicationResults: futureResult.future.publicationResults,
               draftWeekCount: futureResult.future.draftWeekCount,
+              retained: futureResult.future.retained,
             },
             duplicate: futureResult.duplicate ?? null,
             plan: futureResult.plan,
@@ -2690,6 +2691,8 @@ function App() {
             setEquipoRecoveryResult(null);
           }}
           report={importResult}
+          onOpenPlanner={session && session.role !== 'EMPLOYEE' ? () => { setImportResult(null); navigate('/app/schedule'); } : undefined}
+          onResolveDifferences={session && activeEmployeeId ? () => { setImportResult(null); setReconciliationOpen(true); } : undefined}
           onCompleteEmployee={(employeeId) => {
             if (importResult && 'status' in importResult && importResult.status !== 'PASS' && importResult.status !== 'FAIL') {
               setEquipoRecoveryResult(importResult as ImportOutcomeReport);
