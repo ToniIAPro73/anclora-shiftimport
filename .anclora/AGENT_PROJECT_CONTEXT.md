@@ -96,3 +96,8 @@ MEMORY_CLASSIFICATION=HISTORICAL_NON_NORMATIVE
 INFRASTRUCTURE_INFERENCE_ALLOWED=false
 CROSS_PRODUCT_INFRASTRUCTURE_ASSUMPTION_ALLOWED=false
 ```
+
+<!-- ANCLORA-AOS:START -->
+ANCLORA_AOS_AUTHORITY=anclora-governance
+Canonical rules: [AOS Adoption Standard](../../anclora-governance/standards/AOS_ADOPTION_STANDARD.md). Repository-specific facts remain in this repository's `.anclora/` contracts.
+<!-- ANCLORA-AOS:END -->

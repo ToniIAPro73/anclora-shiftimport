@@ -1,9 +1,5 @@
 # AGENTS.md — Anclora ShiftImport
 
-## Bootstrap de agentes
-
-Este repositorio sigue AOS (`AUTHORITY=anclora-governance`). Resolver la gobernanza canónica ([`../anclora-governance/standards/AOS_ADOPTION_STANDARD.md`](../anclora-governance/standards/AOS_ADOPTION_STANDARD.md)) y el contrato de runtime del repositorio: [`.anclora/PRODUCTION_RUNTIME.md`](.anclora/PRODUCTION_RUNTIME.md) (ejecución, base de datos, migraciones, QA, Git). [`.anclora/AGENT_PROJECT_CONTEXT.md`](.anclora/AGENT_PROJECT_CONTEXT.md) es el router mínimo de tareas y [`.anclora/AOS_ADOPTION.md`](.anclora/AOS_ADOPTION.md) recoge adopción y excepciones; cargarlos solo cuando la tarea lo requiera. No asumir defaults genéricos de proveedor cuando existe un contrato, ni infraestructura compartida entre productos.
-
 ## Resumen del repositorio
 - Plataforma dual: Producto Premium B2C (modo invitado y plan Personal local-first en `localStorage`) y suite multi-tenant B2B/B2B2E (gestión operativa de turnos por organización, área y empleado con backend Neon).
 - App Vite + React + TypeScript. Persistencia dual: local-first en `localStorage` (invitado/personal) y PostgreSQL multi-tenant remota vía Vercel Functions (con sesión).
@@ -81,3 +77,9 @@ Este repositorio sigue AOS (`AUTHORITY=anclora-governance`). Resolver la goberna
   - **NUNCA** ejecutar migraciones a mano ni ejecutar scripts DDL destructivos en la rama Neon `main` persistente.
   - Para pruebas, suites y validaciones de integración, usar exclusivamente organizaciones, usuarios y external IDs sintéticos con `runId` único dentro de Neon `main`; el teardown debe ejecutarse siempre y verificar cero residuos.
   - Consultar siempre `docs/db-environments.md` y `docs/database/NEON_MAIN_MIGRATION_BASELINE.md` antes de diagnosticar o planificar cambios de esquema.
+
+<!-- ANCLORA-AOS:START -->
+## AOS bootstrap
+
+This repository follows AOS (`AUTHORITY=anclora-governance`). Resolve canonical Governance ([AOS Adoption Standard](../anclora-governance/standards/AOS_ADOPTION_STANDARD.md)) and this repository's runtime contract `.anclora/PRODUCTION_RUNTIME.md`. Use `.anclora/AGENT_PROJECT_CONTEXT.md` as the minimal task router and `.anclora/AOS_ADOPTION.md` for adoption and exceptions, loading each only as the task requires. Do not assume generic defaults when a contract exists.
+<!-- ANCLORA-AOS:END -->
