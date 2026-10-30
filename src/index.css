@@ -7339,3 +7339,9 @@ button[aria-busy='true'] {
 .month-day-comment-chip { color: var(--text-muted); border-color: var(--glass-border); background: var(--panel-muted-bg); }
 .month-day-dcf-chip:focus-visible,
 .month-day-comment-chip:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+/* Toast surface in dark mode: the canonical gradient is 88-92% alpha, which lets header controls show through.
+   Same gradient with the opaque theme surfaces; light mode keeps the canonical (translucent) surface. */
+:root:not([data-theme='light']) .ac-toast {
+  background: linear-gradient(180deg, var(--surface-panel-strong) 0%, var(--surface-panel) 100%);
+}
