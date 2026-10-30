@@ -6,7 +6,7 @@ import { getOperationalDate } from './operational-date';
  */
 /**
  * `historical-and-plan` = also CREATE / UPDATE the planning (schedule drafts) from the future rows.
- * It never means "publish": publication is a separate, explicit Scheduling action.
+ * It does not publish: publication is the separate, explicit decision `historical-and-auto-publish` (or a manual Planning action).
  */
 export type FutureImportDecision = 'historical-only' | 'historical-and-plan' | 'historical-and-auto-publish';
 

@@ -3,33 +3,34 @@
 > Se sobrescribe en cada entrega; el historial queda en Git.
 
 **Repositorio:** anclora-shiftimport
-**Rama:** development (`64b4390`, `9e0f0a6`, `f956210`, `69217b1` sobre `7979b35`)
+**Rama:** development (F1 sobre `7979b35`)
 **Spec canónica:** `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (F1)
-**Entorno de validación del agente:** navegador con la API **simulada** (0 contacto con Neon) y un PostgreSQL 16 **local descartable** (contenedor propio, ya eliminado). Neon: solo lectura (`db:migrate:status`).
-**Datos:** sintéticos. 0 escrituras en Neon, 0 en la organización `ShiftImport`, 0 despliegues manuales, 0 promociones.
+**Entorno de validación:** runtime local (`qa:dev-runtime`, `IMPORT_AUTO_PUBLISH_ENABLED=true`) → Neon `main`; escrituras solo en `ShiftImport — QA Mirror` y tenants sintéticos `E2E-SHIFT-<runId>`.
+**Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce; 0 despliegues manuales; 0 promociones.
 
 ## 1. Qué cambia
 - **Móvil**: `day-focus` rediseñado (era una tira de ~10 px por especificidad CSS), pista de scroll encima de la rejilla, barra del planificador en rejilla ≤640, «1 turno», calendario mensual compacto con panel del día (`MonthDayAgenda`), TopBar compacto con Rol/Empleado en el menú de cuenta (OD-06).
 - **Importación**: nueva decisión `historical-and-auto-publish` (publica solo lo válido, de hoy en adelante, atribuible a la propia importación y sin pisar trabajo manual). Detrás de `IMPORT_AUTO_PUBLISH_ENABLED` (**apagado por defecto**): con el switch apagado todo se comporta como hoy.
 - **Reversión** de importaciones auto-publicadas (1:1 o bloqueada) y notificación única por empleado y lote.
-- **Migración `0049` preparada y NO aplicada** (`db/migrations/0049_import_auto_publish_decision.sql`, sha256 `550cc2042877…`).
+- **Migración `0049` aplicada en Neon `main`** con tu autorización (`db/migrations/0049_import_auto_publish_decision.sql`, sha256 `550cc2042877…`); el switch sigue apagado por defecto.
 
 ## 2. Ya comprobado por el agente
 | Comprobación | Resultado |
 | --- | --- |
-| Diagnóstico de desbordamiento a 360/375/390/412/430/1440 (calendario, planificador cuadrícula y tabla) | sin desbordamiento del documento; las capturas Samsung equivalen a un layout de ~980 px (no es un defecto de la app) |
-| Defectos reproducidos a ≤980 px y corregidos | `day-focus`, pista de scroll, barra del planificador, plural |
-| Superficies de importación a 360–430 y 1440, ES/EN, claro/oscuro | sin desbordamiento |
-| SQL de publicación granular y flujo completo contra PostgreSQL local | 20 escenarios PASS (publica, SPLIT, semana con borrador ajeno, descanso, manual protegido, procedencia NULL, carrera que rompe el gate, reintento, PLANNER `EMPLOYEES`, otro tenant, `plan-preview` sin escrituras, reversión limpia y SPLIT, dependientes, edición posterior, borrador posterior) |
-| Migración `0049` en PostgreSQL local | aplica, queda en el ledger con centinela, idempotente |
-| Suite completa (`vitest`) | 2240 PASS, 2 omitidas (integración local) |
-| `eslint` / `tsc` / `build` | PASS |
-| `db:migrate:status` (Neon, solo lectura) | 48 aplicadas, 1 pendiente (`0049`) |
+| `0049` en Neon `main` (autorizada) | aplicada: 49 aplicadas, 0 pendientes, `0050` sin aplicar |
+| Huella de la organización real `ShiftImport` antes/después de migrar y de todo el QA | idéntica; Groundforce no existe en esta BD; 0 escrituras en ambas |
+| E2E real (`auto-publish.spec.ts`, runtime local → Neon `main`, tenants sintéticos `E2E-SHIFT-<runId>`, residuo 0) | 8/8: MIXED y FUTURE limpios, SPLIT, manual/NULL/pendiente retenidos, reversión 1:1 y bloqueada, PLANNER ORG/AREAS/EMPLOYEES, EMPLOYEE 403, cross-tenant, INV-06 |
+| `qa:local:smoke` (QA Mirror) | PASS |
+| Accesibilidad en runtime real (`a11y-f1.spec.ts`) | 4/4 (teclado, `aria-pressed`, foco devuelto al menú, `day-focus`, pista); corregido un fallo de contraste real |
+| Accesibilidad consentimiento y resultado (`harness/a11y.mjs`) | 92/92 (axe, teclado, foco, trampa de foco, Esc, `role=status`) |
+| Suite completa `vitest`, `eslint`, `tsc`, `build` | PASS |
+| Mirror refrescado (`--apply`) tras el QA | PASS, origen sin cambios |
 
-## 3. NOT_RUN
-E2E Playwright contra `vercel dev`/Neon (requieren escribir en la base compartida); verificación de `0049` en Neon; revisión visual manual del consentimiento de importación con datos reales.
+## 3. NOT_RUN / gaps
+- Suite histórica completa de `specs-qa-mirror`: no completada (1 h, 18 fallos sin diagnosticar uno a uno). `import-layout-identity` (desktop) falla por un test desfasado desde `851e846` (anterior a F1); el resto, timeouts de 90 s. Pendiente de saneamiento antes de F2.
+- `test:a11y` del paquete E2E (usa `vercel dev` + Postgres Docker): no es el runtime contractual.
+- Specs que exigen documentos reales: no ejecutados.
 
 ## 4. Para Toni
-- **Bloqueante para cerrar F1:** autorizar la aplicación de `0049` en Neon (aditiva e idempotente; compatible con el código ya desplegado). Hasta entonces F1 queda `WAITING_MIGRATION_AUTHORIZATION`.
-- Confirmar en el móvil si el navegador estaba en «Sitio de escritorio»: las capturas encajan con un layout de ~980 px (`innerWidth` real en `javascript:alert(innerWidth)`).
-- Revisar el calendario compacto y el menú de cuenta (Rol/Empleado) en el móvil.
+- Confirmar en el móvil si el navegador estaba en «Sitio de escritorio» (`innerWidth` real).
+- Decidir si el saneamiento de la suite histórica del mirror va antes de F2.

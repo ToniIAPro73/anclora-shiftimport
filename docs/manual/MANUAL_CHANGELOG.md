@@ -25,7 +25,7 @@
 
 ## Actualización 2026-10-18 · modelo visible simplificado
 
-- La aplicación se explica con cinco ideas: **Calendario** (lo que hay ahora), **Planificación** (lo que se prepara para el futuro; importar nunca publica), **Importar** (traer un PDF o Excel), **Diferencias** (lo que necesita una decisión) e **Historial** (qué cambió, cuándo y por qué).
+- La aplicación se explica con cinco ideas: **Calendario** (lo que hay ahora), **Planificación** (lo que se prepara para el futuro; importar no publica salvo que elijas explícitamente «Importar y publicar lo válido»), **Importar** (traer un PDF o Excel), **Diferencias** (lo que necesita una decisión) e **Historial** (qué cambió, cuándo y por qué).
 - Los documentos se nombran como **Cuadrante de empresa**, **Mensual publicado** y **Calendario del empleado**. (Sustituido por la actualización (b): ya no hay «referencia inicial».)
 - Desaparece de la interfaz el vocabulario interno (Plan Empresa, revisión, baseline, calendario efectivo, reconciliación). No cambia el modelo de datos ni ninguna regla: solo la representación.
 - Contrato: mapeo interno↔visible en `docs/product/EFFECTIVE_CALENDAR_CONTRACT.md`. Las capturas del manual que muestren textos antiguos deben regenerarse (`scripts/capture-manual-screenshots.mjs`).

@@ -49,8 +49,8 @@ describe('user-facing vocabulary (ES + EN)', () => {
     expect(translate('es', 'importModal.sourceDescription.TEAM_SCHEDULE_EXPORT')).toBe('Contiene turnos de uno o varios empleados.');
   });
 
-  it('T9: future shifts go to Planning as a draft and are never published automatically', () => {
-    expect(translate('es', 'importModal.sourceUsageFuture')).toContain('No se publicarán automáticamente');
+  it('T9: future shifts go to Planning as a draft; they are published only through the explicit auto-publish choice', () => {
+    expect(translate('es', 'importModal.sourceUsageFuture')).toContain('solo si eliges');
     expect(translate('es', 'importModal.planDraftNote')).toBe('Los turnos futuros se añadirán a Planificación como borrador. No se publicarán automáticamente.');
     expect(translate('es', 'importModal.planDraftNoteFutureOnly')).toBe('Se crearán como borrador para que puedas revisarlos antes de publicarlos.');
     expect(translate('es', 'importModal.selfFutureMixed')).toBe('Este archivo también contiene turnos futuros. Solo se importarán los turnos anteriores a hoy.');

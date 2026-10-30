@@ -282,3 +282,6 @@
   .app-shell__user-menu-context .app-shell__context-summary-item { display: grid; }
   .app-shell__user-menu-context .app-shell__context-summary-item strong { max-width: 240px; }
 }
+
+/* Contrast (WCAG 1.4.3): the small labels inside the account menu sit on the menu surface, not on the TopBar. */
+.app-shell__user-menu-context .app-shell__context-summary-item small { color: var(--text-muted); font-size: 0.68rem; }

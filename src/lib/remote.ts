@@ -230,7 +230,7 @@ export interface FutureImportResult {
     createdAssignmentCount: number;
     existingAssignmentCount: number;
     affectedWeekCount: number;
-    /** Weeks whose DRAFT plan was created/updated. Import never publishes. */
+    /** Weeks that still hold a DRAFT plan (created/updated by the import). */
     draftWeekCount?: number;
     publishedWeekCount: number;
     publishedShiftCount: number;
@@ -250,7 +250,7 @@ export interface FutureImportResult {
 }
 
 /**
- * `historical-and-plan` = also create/update the planning from the future rows (never publishes).
+ * `historical-and-plan` = also create/update the planning from the future rows (drafts; it does not publish).
  * `historical-and-auto-publish` = publish only what is provably the import's own and valid; the rest stays a draft / review.
  */
 export type FutureImportConsent = 'historical-and-plan' | 'historical-and-auto-publish';

@@ -35,7 +35,7 @@ function Surface() {
   return (
     <ImportResultModal
       isOpen
-      onClose={() => undefined}
+      onClose={() => { document.body.dataset.closed = '1'; }}
       onOpenPlanner={published ? undefined : () => undefined}
       onResolveDifferences={() => undefined}
       report={{

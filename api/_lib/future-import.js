@@ -480,10 +480,11 @@ export async function previewFutureImport(sql, ctx, input = {}) {
 /**
  * Confirm a FUTURE or MIXED import that includes the planning decision, as one database transaction.
  *
- * - Creates / updates the PLAN: schedule DRAFT versions + assignments. It NEVER publishes; publication is
+ * - Creates / updates the PLAN: schedule DRAFT versions + assignments. `historical-and-plan` (and the legacy `publish`) NEVER publish; publication is
  *   an explicit, separate Scheduling action.
  * - Historical rows are compared with CURRENT shifts; differences remain proposals until a user decides.
- * - Future rows create or update Planning drafts. This operation never publishes and creates no plan revisions.
+ * - Future rows create or update Planning drafts and create no plan revisions. Only the explicit `historical-and-auto-publish`
+ *   decision (behind IMPORT_AUTO_PUBLISH_ENABLED) publishes, granularly, through publishImportedPairsTx; everything else stays a draft.
  * - Idempotency of the EFFECT: the same file with a DIFFERENT decision still applies what is pending.
  */
 export async function confirmFutureImport(sql, ctx, input = {}) {
