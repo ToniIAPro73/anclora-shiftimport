@@ -37,6 +37,10 @@ Anclora ShiftImport: importador inteligente de cuadrantes para trabajadores por 
 | Specs de producto (SDD) | [`../sdd/`](../sdd/) | ShiftImport | PD local |
 | Copias de contratos de marca | [`../docs/standards/`](../docs/standards/) | Vault (canónico) | Copia local de referencia; el canónico vive en la vault |
 
+## Resolución de alcance UI transversal
+
+Desde 2026-10-30, `anclora-shiftimport` queda formalmente cubierto por `MODAL_CONTRACT`: su registro AOS lo clasifica como consumidor de contratos y del Design System. La incertidumbre documentada en la especificación histórica `sdd/features/ux-remediation-codex-2026-09/00_PRODUCT_SPEC.md` queda resuelta por la regla de alcance vigente en la fuente canónica de Vault y su validador; los documentos históricos conservan el contexto de su fecha.
+
 ## Adopción de Gobernanza QA Proporcional y Economía Adaptativa
 
 - PROPORTIONAL_QA_CONTRACT_ADOPTED=true
