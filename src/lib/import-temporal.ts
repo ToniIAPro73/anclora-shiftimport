@@ -8,7 +8,10 @@ import { getOperationalDate } from './operational-date';
  * `historical-and-plan` = also CREATE / UPDATE the planning (schedule drafts) from the future rows.
  * It never means "publish": publication is a separate, explicit Scheduling action.
  */
-export type FutureImportDecision = 'historical-only' | 'historical-and-plan';
+export type FutureImportDecision = 'historical-only' | 'historical-and-plan' | 'historical-and-auto-publish';
+
+/** True for the decisions that write the future rows into Planning (drafts, or published when auto-publish is chosen). */
+export const decisionIncludesFuture = (decision: FutureImportDecision): boolean => decision !== 'historical-only';
 
 export interface TemporalImportSplit<T> {
   historical: T[];

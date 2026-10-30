@@ -212,6 +212,46 @@ describe('inverse planning', () => {
   });
 });
 
+describe('inverse planning of an auto-published import (F1-M09)', () => {
+  const version = (status) => ({ id: 'v1', schedule_id: 'sc1', version_number: 1, status });
+  const assignment = { id: 'a1', schedule_version_id: 'v1', employee_id: 'e', date: '2026-03-03', start_time: '10:00:00', end_time: '18:00:00' };
+  const published = shift('s1', { schedule_version_id: 'v1', provenance: 'SCHEDULE_PUBLICATION' });
+  const effects = [
+    fx(1, 'A', 'SCHEDULE_VERSION_INSERT', 'schedule_versions', 'v1', null, version('DRAFT'), 'sched:sc1'),
+    fx(2, 'A', 'ASSIGNMENT_INSERT', 'shift_assignments', 'a1', null, assignment),
+    fx(3, 'A', 'SCHEDULE_VERSION_UPDATE', 'schedule_versions', 'v1', version('DRAFT'), version('PUBLISHED'), 'sched:sc1'),
+    fx(4, 'A', 'SHIFT_INSERT', 'shifts', 's1', null, published),
+  ];
+  const rows = { 'schedule_versions:v1': version('PUBLISHED'), 'shift_assignments:a1': assignment, 'shifts:s1': published };
+  const common = { versions: new Map([['v1', { id: 'v1', schedule_id: 'sc1', status: 'PUBLISHED' }]]), assignmentsByVersion: new Map([['v1', new Set(['a1'])]]), versionsBySchedule: new Map([['sc1', new Set(['v1'])]]) };
+
+  it('un-publishes in ledger order: shift deleted, version restored to DRAFT, then its assignment removable (no PUBLISHED_DEPENDENCY)', () => {
+    const result = plan(['A'], effects, rows, common);
+    expect(result.blockers).toEqual([]);
+    expect(result.ops.map((o) => `${o.op}:${o.table}`)).toEqual(['DELETE:shifts', 'RESTORE:schedule_versions', 'DELETE:shift_assignments', 'DELETE:schedule_versions']);
+  });
+
+  it('PUBLISHED_SHIFT_HAS_DEPENDENTS blocks the whole plan; nothing is planned as partial work for that shift', () => {
+    const result = plan(['A'], effects, rows, { ...common, shiftDependents: new Map([['s1', 2]]) });
+    expect(result.blockers.map((b) => b.code)).toContain(BLOCKER.PUBLISHED_SHIFT_HAS_DEPENDENTS);
+    expect(result.ops.some((o) => o.op === 'DELETE' && o.table === 'shifts')).toBe(false);
+  });
+
+  it('a draft created after the publication blocks undoing it (one DRAFT per schedule)', () => {
+    const later = { id: 'v2', schedule_id: 'sc1', status: 'DRAFT' };
+    const result = plan(['A'], effects, { ...rows, 'schedule_versions:v2': later }, {
+      versions: new Map([...common.versions, ['v2', later]]), assignmentsByVersion: common.assignmentsByVersion,
+      versionsBySchedule: new Map([['sc1', new Set(['v1', 'v2'])]]),
+    });
+    expect(result.blockers.map((b) => b.code)).toContain(BLOCKER.PUBLISHED_DEPENDENCY);
+  });
+
+  it('a manual edit of the published shift afterwards blocks (LATER_MANUAL_CHANGE_UNSAFE)', () => {
+    const result = plan(['A'], effects, { ...rows, 'shifts:s1': { ...published, start_time: '11:00' } }, common);
+    expect(result.blockers.map((b) => b.code)).toContain(BLOCKER.LATER_MANUAL_CHANGE_UNSAFE);
+  });
+});
+
 describe('plan hash (stale detection) and legacy classification', () => {
   it('the same state gives the same hash; any difference in what an operation expects changes it', () => {
     const op = { importId: 'A', op: 'DELETE', table: 'shifts', id: 's1', expected: shift('s1'), payload: null };

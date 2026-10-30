@@ -11,7 +11,11 @@ export const DOCUMENT_CLASS = Object.freeze({
   HISTORICAL_CALENDAR: 'HISTORICAL_CALENDAR',
   UNDETERMINED: 'UNDETERMINED',
 });
-export const IMPORT_DECISION = Object.freeze({ HISTORICAL_ONLY: 'historical-only', HISTORICAL_AND_PLAN: 'historical-and-plan' });
+export const IMPORT_DECISION = Object.freeze({
+  HISTORICAL_ONLY: 'historical-only',
+  HISTORICAL_AND_PLAN: 'historical-and-plan',
+  HISTORICAL_AND_AUTO_PUBLISH: 'historical-and-auto-publish',
+});
 export const RECONCILIATION_OUTCOME = Object.freeze({
   UNCHANGED: 'UNCHANGED',
   NEW: 'NEW',
@@ -19,8 +23,12 @@ export const RECONCILIATION_OUTCOME = Object.freeze({
   REQUIRES_REVIEW: 'REQUIRES_REVIEW',
 });
 
-/** `publish` is the pre-rename wire value: it always meant "include the future", never "auto-publish". */
+/**
+ * `publish` is the pre-rename wire value: it always meant "include the future", never "auto-publish" (INV-06).
+ * Only the explicit `historical-and-auto-publish` value reaches the auto-publication path.
+ */
 export function normalizeImportDecision(value) {
+  if (value === IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH) return value;
   if (value === IMPORT_DECISION.HISTORICAL_AND_PLAN || value === 'publish') return IMPORT_DECISION.HISTORICAL_AND_PLAN;
   return IMPORT_DECISION.HISTORICAL_ONLY;
 }
@@ -64,9 +72,20 @@ export function classifyDocument({ temporal, employeeCount, hasExistingSchedule 
  * Which effects a user may choose for a document, derived from role + temporal class.
  * Server-side authority: this is validated again by the API, hiding buttons is not security.
  */
-export function resolveImportOptions({ canPlan, temporal }) {
+export function resolveImportOptions({ canPlan, temporal, autoPublish = false }) {
   if (temporal === TEMPORAL_CLASS.HISTORICAL) return { options: [IMPORT_DECISION.HISTORICAL_ONLY], default: IMPORT_DECISION.HISTORICAL_ONLY, futureAllowed: false };
   if (!canPlan) return { options: [IMPORT_DECISION.HISTORICAL_ONLY], default: IMPORT_DECISION.HISTORICAL_ONLY, futureAllowed: false };
+  // Auto-publication is offered only where the deployment enables it (see IMPORT_AUTO_PUBLISH_ENABLED); the server re-checks.
+  if (autoPublish && temporal === TEMPORAL_CLASS.FUTURE) {
+    return { options: [IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH, IMPORT_DECISION.HISTORICAL_AND_PLAN], default: IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH, futureAllowed: true };
+  }
+  if (autoPublish) {
+    return {
+      options: [IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH, IMPORT_DECISION.HISTORICAL_AND_PLAN, IMPORT_DECISION.HISTORICAL_ONLY],
+      default: IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH,
+      futureAllowed: true,
+    };
+  }
   if (temporal === TEMPORAL_CLASS.FUTURE) return { options: [IMPORT_DECISION.HISTORICAL_AND_PLAN], default: IMPORT_DECISION.HISTORICAL_AND_PLAN, futureAllowed: true };
   return { options: [IMPORT_DECISION.HISTORICAL_ONLY, IMPORT_DECISION.HISTORICAL_AND_PLAN], default: IMPORT_DECISION.HISTORICAL_ONLY, futureAllowed: true };
 }

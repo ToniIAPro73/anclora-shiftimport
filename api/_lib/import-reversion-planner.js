@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 export const BLOCKER = Object.freeze({
   LATER_MANUAL_CHANGE_UNSAFE: 'LATER_MANUAL_CHANGE_UNSAFE',
   PUBLISHED_DEPENDENCY: 'PUBLISHED_DEPENDENCY',
+  PUBLISHED_SHIFT_HAS_DEPENDENTS: 'PUBLISHED_SHIFT_HAS_DEPENDENTS',
   LEGACY_PROVENANCE_INSUFFICIENT: 'LEGACY_PROVENANCE_INSUFFICIENT',
   ALREADY_REVERTED: 'ALREADY_REVERTED',
   NO_REVERSIBLE_EFFECTS: 'NO_REVERSIBLE_EFFECTS',
@@ -120,10 +121,14 @@ export const emptyImpact = () => ({
  * @param {Map<string, Set<string>>} input.assignmentsByVersion  current assignment ids per version
  * @param {Map<string, Set<string>>} input.versionsBySchedule    current version ids per schedule
  * @param {Set<string>} input.manualAnnotationKeys  `ann:employee:date:kind:MANUAL` rows that exist now
+ * @param {Map<string, number>} input.shiftDependents  published shifts that change requests, acknowledgements or comments reference (shiftId -> count)
  * @returns {{ ops: object[], blockers: object[], warnings: object[], impact: object, perImport: Map<string, object> }}
  */
-export function planInverse({ order, effectsByImport, rows, versions = new Map(), assignmentsByVersion = new Map(), versionsBySchedule = new Map(), manualAnnotationKeys = new Set() }) {
+export function planInverse({ order, effectsByImport, rows, versions = new Map(), assignmentsByVersion = new Map(), versionsBySchedule = new Map(), manualAnnotationKeys = new Set(), shiftDependents = new Map() }) {
   const sim = new Map(rows);
+  // Version status as the simulation advances: undoing a publication (RESTORE of the version) makes its assignments deletable again.
+  const simVersionStatus = new Map([...versions].map(([id, version]) => [id, version.status]));
+  const statusOfVersion = (id) => simVersionStatus.get(id) ?? 'DRAFT';
   const simAssignments = new Map([...assignmentsByVersion].map(([k, v]) => [k, new Set(v)]));
   const simVersions = new Map([...versionsBySchedule].map(([k, v]) => [k, new Set(v)]));
   const ops = [];
@@ -210,12 +215,18 @@ export function planInverse({ order, effectsByImport, rows, versions = new Map()
         if (!now) { warn('ALREADY_ABSENT'); impact.alreadyAbsent += 1; continue; }
         if (!sameState(now, after)) {
           const published = (table === 'schedule_versions' && now.status !== 'DRAFT')
-            || (table === 'shift_assignments' && (versions.get(now.schedule_version_id)?.status ?? 'DRAFT') !== 'DRAFT');
+            || (table === 'shift_assignments' && statusOfVersion(now.schedule_version_id) !== 'DRAFT');
           block(published ? BLOCKER.PUBLISHED_DEPENDENCY : BLOCKER.LATER_MANUAL_CHANGE_UNSAFE, importId, effect);
           continue;
         }
-        if (table === 'shift_assignments' && (versions.get(now.schedule_version_id)?.status ?? 'DRAFT') !== 'DRAFT') {
+        if (table === 'shift_assignments' && statusOfVersion(now.schedule_version_id) !== 'DRAFT') {
           block(BLOCKER.PUBLISHED_DEPENDENCY, importId, effect);
+          continue;
+        }
+        // A shift materialised by a publication that something still points at (change request, acknowledgement, comment) is never
+        // deleted: the whole reversal is BLOCKED, never partial (FKs would otherwise cascade-delete the dependents).
+        if (table === 'shifts' && now.schedule_version_id && (shiftDependents.get(id) ?? 0) > 0) {
+          block(BLOCKER.PUBLISHED_SHIFT_HAS_DEPENDENTS, importId, effect, { dependents: shiftDependents.get(id) });
           continue;
         }
         if (table === 'schedule_versions') {
@@ -235,16 +246,22 @@ export function planInverse({ order, effectsByImport, rows, versions = new Map()
         if (table === 'shifts' && now.effective_state === 'REQUIRES_REVIEW') impact.reviewCleared += 1;
         setCurrent(table, id, null);
         if (table === 'shift_assignments') simAssignments.get(now.schedule_version_id)?.delete(id);
-        if (table === 'schedule_versions') simVersions.get(now.schedule_id)?.delete(id);
+        if (table === 'schedule_versions') { simVersions.get(now.schedule_id)?.delete(id); simVersionStatus.delete(id); }
         continue;
       }
 
       if (kind.endsWith('_UPDATE') || kind === 'SHIFT_STATE_TRANSITION') {
         if (!now) { warn('ALREADY_ABSENT'); impact.alreadyAbsent += 1; continue; }
         if (!sameState(now, after)) { block(BLOCKER.LATER_MANUAL_CHANGE_UNSAFE, importId, effect); continue; }
+        if (table === 'schedule_versions' && before?.status === 'DRAFT' && now.status !== 'DRAFT') {
+          // Undoing a publication: only one DRAFT per schedule may exist, so a draft created since (by anyone) blocks the reversal.
+          const laterDraft = [...(simVersions.get(now.schedule_id) ?? [])].some((other) => other !== id && statusOfVersion(other) === 'DRAFT');
+          if (laterDraft) { block(BLOCKER.PUBLISHED_DEPENDENCY, importId, effect, { reason: 'LATER_DRAFT_EXISTS' }); continue; }
+        }
         push({ op: 'RESTORE', table, id, expected: now, payload: before });
         if (stats) impact[stats.restored] += 1;
         setCurrent(table, id, before);
+        if (table === 'schedule_versions' && before?.status) simVersionStatus.set(id, before.status);
         continue;
       }
 

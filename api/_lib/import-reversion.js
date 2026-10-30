@@ -152,13 +152,34 @@ async function loadCurrentState(sql, organizationId, effects) {
       assignmentsByVersion.get(row.schedule_version_id).add(row.id);
     }
   }
-  const scheduleIds = [...(idsByTable.get('schedules') ?? [])];
+  // Every version of every schedule the import touched (created or merely published): undoing a publication must know whether a later
+  // draft exists, and the simulation needs each version's status.
+  const scheduleIds = [...new Set([
+    ...(idsByTable.get('schedules') ?? []),
+    ...[...versions.values()].map((row) => row.schedule_id).filter(Boolean),
+  ])];
   const versionsBySchedule = new Map();
   if (scheduleIds.length) {
-    for (const row of await sql`SELECT id, schedule_id FROM schedule_versions WHERE schedule_id = ANY(${scheduleIds}::uuid[])`) {
+    for (const row of await sql`SELECT id, schedule_id, status FROM schedule_versions WHERE schedule_id = ANY(${scheduleIds}::uuid[])`) {
       if (!versionsBySchedule.has(row.schedule_id)) versionsBySchedule.set(row.schedule_id, new Set());
       versionsBySchedule.get(row.schedule_id).add(row.id);
+      if (!versions.has(row.id)) versions.set(row.id, row);
     }
+  }
+
+  // Shifts materialised by a publication that something references (FKs cascade: deleting them would silently destroy the dependents).
+  const publishedShiftIds = effects
+    .filter((e) => e.resource_type === 'shifts' && String(e.effect_kind).endsWith('_INSERT') && e.after_state?.schedule_version_id)
+    .map((e) => e.resource_id);
+  const shiftDependents = new Map();
+  if (publishedShiftIds.length) {
+    for (const row of await sql`
+      SELECT shift_id, SUM(n)::int AS n FROM (
+        SELECT shift_id, COUNT(*) AS n FROM change_requests WHERE shift_id = ANY(${publishedShiftIds}::uuid[]) GROUP BY shift_id
+        UNION ALL SELECT shift_id, COUNT(*) FROM shift_acknowledgements WHERE shift_id = ANY(${publishedShiftIds}::uuid[]) GROUP BY shift_id
+        UNION ALL SELECT shift_id, COUNT(*) FROM shift_comments WHERE shift_id = ANY(${publishedShiftIds}::uuid[]) GROUP BY shift_id
+      ) d GROUP BY shift_id
+    `) shiftDependents.set(row.shift_id, Number(row.n));
   }
 
   const annotationEffects = effects.filter((e) => e.resource_type === 'calendar_annotations');
@@ -171,7 +192,7 @@ async function loadCurrentState(sql, organizationId, effects) {
       WHERE organization_id = ${organizationId} AND origin = 'MANUAL' AND employee_id = ANY(${employeeIds}::uuid[]) AND date = ANY(${dates}::date[])
     `) manualAnnotationKeys.add(`ann:${row.employee_id}:${row.date}:${row.kind}:MANUAL`);
   }
-  return { rows, versions, assignmentsByVersion, versionsBySchedule, manualAnnotationKeys };
+  return { rows, versions, assignmentsByVersion, versionsBySchedule, manualAnnotationKeys, shiftDependents };
 }
 
 /** Imports (not yet in the set) that touched, LATER, a resource the set touched: they depend on it and must go first. */
@@ -283,7 +304,7 @@ export async function computeReversionPlan(sql, ctx, rawIds) {
   const state = await loadCurrentState(sql, ctx.organizationId, allEffects);
   const plan = planInverse({
     order, effectsByImport, rows: state.rows, versions: state.versions, assignmentsByVersion: state.assignmentsByVersion,
-    versionsBySchedule: state.versionsBySchedule, manualAnnotationKeys: state.manualAnnotationKeys,
+    versionsBySchedule: state.versionsBySchedule, manualAnnotationKeys: state.manualAnnotationKeys, shiftDependents: state.shiftDependents,
   });
   const allBlockers = [...blockers, ...plan.blockers];
   void imports;

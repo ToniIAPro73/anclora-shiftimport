@@ -4,11 +4,16 @@ import {
   mapImportRow,
   normalizeShiftInput,
   assertShiftTimeSemantics,
+  recordAuditEvent,
+  createImportPublicationNotifications,
 } from './data.js';
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
 import { getOperationalDate } from './operational-date.js';
-import { createNewDraftFromVersionTx } from './scheduling.js';
+import { createNewDraftFromVersionTx, publishImportedPairsTx } from './scheduling.js';
+import { ACTIONS, can } from './authorization.js';
+import { WEEK_MODE, planAutoPublication } from './import-auto-publish-planner.js';
+import { isImportAutoPublishEnabled } from './import-flags.js';
 import { normalizeAnnotationItems } from './annotations.js';
 import { assertSourceIdentifierTarget } from './employee-identifiers.js';
 import { documentFingerprint } from './import-fingerprints.js';
@@ -44,6 +49,16 @@ function requestError(status, message, code) {
   if (code) error.code = code;
   return error;
 }
+
+const actorFromContext = (ctx) => ({
+  userId: ctx.user?.id ?? null,
+  role: ctx.role,
+  employeeId: ctx.employeeId ?? null,
+  plannerScopeType: ctx.plannerScopeType,
+  scopedAreaId: ctx.scopedAreaId,
+  scopedAreaIds: ctx.scopedAreaIds,
+  scopedEmployeeIds: ctx.scopedEmployeeIds,
+});
 
 /**
  * Same frontier as classifyImportDates: `date >= cutoff` is FUTURE, `date < cutoff` is HISTORICAL. Dates are ISO
@@ -143,9 +158,13 @@ async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
     );
   }
 
-  // "publish" is the pre-rename wire value; both mean: include the future rows in the PLAN (drafts).
+  // "publish" is the pre-rename wire value; it means: include the future rows in the PLAN (drafts), NEVER auto-publish (INV-06).
   const decision = normalizeImportDecision(input.futureConsent ?? input.importDecision);
-  if (requireDecision && decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN) {
+  const autoPublish = decision === IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH;
+  if (autoPublish && !isImportAutoPublishEnabled()) {
+    throw requestError(409, 'Auto-publication is not enabled for this deployment; import as a planning draft instead', 'AUTO_PUBLISH_UNAVAILABLE');
+  }
+  if (requireDecision && decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN && !autoPublish) {
     throw requestError(
       409,
       'Future rows need the explicit decision to create or update the planning',
@@ -214,6 +233,14 @@ async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
     employees.set(employeeId, rows[0]);
   }
 
+  // Auto-publication needs the effective PUBLISH capability over EVERY employee of the file (real scope, never role alone).
+  const actor = actorFromContext(ctx);
+  const unpublishable = employeeIds.filter((employeeId) => !can(actor, ACTIONS.PUBLISH, { employeeId, areaId: employees.get(employeeId)?.area_id ?? null }));
+  const canAutoPublish = unpublishable.length === 0;
+  if (autoPublish && !canAutoPublish) {
+    throw requestError(403, 'You cannot publish the planning of every employee in this file', 'AUTO_PUBLISH_FORBIDDEN');
+  }
+
   if (employeeIds.length > 1 && !canUseFeature(ctx.plan, 'multiEmployeeImport')) {
     requireFeature(ctx.plan, 'multiEmployeeImport', 'This plan cannot import future shifts for multiple employees');
   }
@@ -244,7 +271,7 @@ async function prepareImport(sql, ctx, input, { requireDecision = true } = {}) {
   }
 
   return {
-    dated, decision, weekStart, scope, requestedAreaId, areaNameSnapshot, employeeIds, employees,
+    dated, decision, autoPublish, canAutoPublish, weekStart, scope, requestedAreaId, areaNameSnapshot, employeeIds, employees,
     normalized, fileFingerprint, sourceKind, annotationsByEmployee,
     future: normalized.filter((shift) => shift.temporalClass === 'FUTURE'),
     historical: normalized.filter((shift) => shift.temporalClass === 'HISTORICAL'),
@@ -264,7 +291,7 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
   // Effective = what the operation currently has: draft assignments (incl. planner edits) win over published shifts.
   const keyByEmployee = new Map(normalized.map((shift) => [shift.employeeId, shift.employeeKey]));
   const shiftRows = await sql`
-    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role, layer, provenance
+    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role, layer, provenance, import_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ANY(${employeeIds}::uuid[])
       AND date BETWEEN ${from} AND ${to} AND effective_state = 'EFFECTIVE'
@@ -308,11 +335,29 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
       AND date BETWEEN ${from} AND ${to} AND effective_state = 'REQUIRES_REVIEW'
   `;
   const reviewDays = new Set(pending.map((row) => `${keyByEmployee.get(row.employee_id)}\u001f${row.date}`));
+  // Auto-publication inputs (read-only): provenance of CURRENT per pair and pending change requests on those pairs (OD-05).
+  const currentByDay = new Map();
+  for (const row of shiftRows) {
+    const key = `${row.employee_id}|${row.date}`;
+    if (!currentByDay.has(key)) currentByDay.set(key, []);
+    currentByDay.get(key).push({ provenance: row.provenance ?? null, importId: row.import_id ?? null });
+  }
+  let pendingModificationDays = new Set();
+  if (prepared.canAutoPublish && isImportAutoPublishEnabled()) {
+    const pendingRequests = await sql`
+      SELECT DISTINCT cr.employee_id, TO_CHAR(sh.date, 'YYYY-MM-DD') AS date
+      FROM change_requests cr
+      JOIN shifts sh ON sh.id = cr.shift_id AND sh.employee_id = cr.employee_id
+      WHERE cr.organization_id = ${ctx.organizationId} AND cr.status = 'PENDING'
+        AND cr.employee_id = ANY(${employeeIds}::uuid[]) AND sh.date BETWEEN ${from} AND ${to}
+    `;
+    pendingModificationDays = new Set(pendingRequests.map((row) => `${row.employee_id}|${row.date}`));
+  }
   const outcomes = reconcileCurrentProposal({ proposed: next, current: effective, today: dated.cutoff, reviewDays });
   const summary = summarizeOutcomes(outcomes);
   // Future rows feed Planning drafts; historical candidates remain separate.
   return {
-    from, to, outcomes, summary, planEntryCount: normalized.length, effectiveRowIdsByDay,
+    from, to, outcomes, summary, planEntryCount: normalized.length, effectiveRowIdsByDay, currentByDay, pendingModificationDays,
     hasExistingSchedule: effective.length > 0,
     documentFingerprint: documentFingerprint(next, { importMode: prepared.importMode, periodKind: prepared.periodKind, periodYear: null, periodMonth: null }),
   };
@@ -323,6 +368,68 @@ const outcomeCounts = (summary) => ({
   new: summary.new, unchanged: summary.unchanged, modified: summary.modified,
   requiresReview: summary.requiresReview,
 });
+
+
+/**
+ * Auto-publication plan per planning week. Read-only: loads the week's DRAFT and latest published base, runs the pure planner
+ * and returns `Map<weekKey, { periodStart, areaId, mode, publishPairs, retainPairs, reviewPairs, scheduleId, ... }>`.
+ */
+async function planAutoPublishWeeks(sql, ctx, prepared, evaluation) {
+  const { normalized, weekStart, dated } = prepared;
+  const employeeByKey = new Map(normalized.map((shift) => [shift.employeeKey, shift]));
+  const byWeek = new Map();
+  for (const item of evaluation.outcomes) {
+    if (item.retrospective || item.date < dated.cutoff) continue; // INV-05: the past never goes through Planning
+    const sample = employeeByKey.get(item.employeeKey);
+    if (!sample) continue;
+    const periodStart = startOfSchedulingWeek(item.date, weekStart);
+    const areaId = sample.areaId ?? null;
+    const key = `${periodStart}:${areaId ?? 'global'}`;
+    if (!byWeek.has(key)) byWeek.set(key, { periodStart, areaId, fileDays: [] });
+    byWeek.get(key).fileDays.push({ employeeId: sample.employeeId, date: item.date, outcome: item.outcome, rows: item.next ?? [] });
+  }
+  const plans = new Map();
+  for (const [key, week] of byWeek) {
+    const versions = await sql`
+      SELECT sv.id AS version_id, sv.status, s.id AS schedule_id
+      FROM schedules s
+      JOIN schedule_versions sv ON sv.schedule_id = s.id
+      WHERE s.organization_id = ${ctx.organizationId} AND s.area_id IS NOT DISTINCT FROM ${week.areaId}
+        AND s.period_start = ${week.periodStart}
+      ORDER BY sv.version_number DESC
+    `;
+    const draft = versions.find((row) => row.status === 'DRAFT') ?? null;
+    const base = versions.find((row) => row.status !== 'DRAFT') ?? null;
+    const versionIds = [draft?.version_id, base?.version_id].filter(Boolean);
+    const assignments = versionIds.length
+      ? await sql`
+        SELECT schedule_version_id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, import_id, start_time, end_time, shift_type, counts_as_work
+        FROM shift_assignments WHERE schedule_version_id = ANY(${versionIds}::uuid[])
+      `
+      : [];
+    const result = planAutoPublication({
+      periodStart: week.periodStart,
+      areaId: week.areaId,
+      fileDays: week.fileDays,
+      draftAssignments: assignments.filter((row) => row.schedule_version_id === draft?.version_id),
+      baseAssignments: assignments.filter((row) => row.schedule_version_id === base?.version_id),
+      currentByDay: evaluation.currentByDay,
+      pendingModificationDays: evaluation.pendingModificationDays,
+    });
+    plans.set(key, { periodStart: week.periodStart, areaId: week.areaId, ...result });
+  }
+  return plans;
+}
+
+const pairKeyOf = (employeeId, date) => `${employeeId}|${date}`;
+
+/** Compact, serialisable view of a week plan for the API (preview and result). */
+function summarizeWeekPlan(plan) {
+  return {
+    periodStart: plan.periodStart, areaId: plan.areaId, mode: plan.mode,
+    publishCount: plan.publishPairs.length, retainCount: plan.retainPairs.length,
+  };
+}
 
 /**
  * Read-only preview of what confirming this document would do: classification, counts and the
@@ -338,6 +445,23 @@ export async function previewFutureImport(sql, ctx, input = {}) {
     hasExistingSchedule: evaluation.hasExistingSchedule, rowCount: prepared.normalized.length,
   });
   const weeks = distinct(prepared.future.map((shift) => startOfSchedulingWeek(shift.date, prepared.weekStart)));
+  // `autoPublish` stays the boolean `false` (legacy shape) while the deployment keeps auto-publication off; clients tolerate both.
+  let autoPublish = false;
+  if (isImportAutoPublishEnabled()) {
+    if (!prepared.canAutoPublish) {
+      autoPublish = { eligible: false, reasons: ['AUTO_PUBLISH_FORBIDDEN'], willPublishShiftCount: 0, weeks: [], willRetain: [], reviewConflicts: [] };
+    } else {
+      const plans = [...(await planAutoPublishWeeks(sql, ctx, prepared, evaluation)).values()];
+      autoPublish = {
+        eligible: true,
+        // Rows of the file that would become published shifts (a day may hold more than one row).
+        willPublishShiftCount: prepared.future.filter((shift) => plans.some((plan) => plan.publishPairs.some((pair) => pair.employeeId === shift.employeeId && pair.date === shift.date))).length,
+        weeks: plans.map(summarizeWeekPlan),
+        willRetain: plans.flatMap((plan) => plan.retainPairs),
+        reviewConflicts: plans.flatMap((plan) => plan.reviewPairs),
+      };
+    }
+  }
   return {
     classification: prepared.dated.classification,
     cutoff: prepared.dated.cutoff,
@@ -349,7 +473,7 @@ export async function previewFutureImport(sql, ctx, input = {}) {
       changes: outcomeCounts(evaluation.summary),
       weeksAffected: weeks,
     },
-    autoPublish: false,
+    autoPublish,
   };
 }
 
@@ -425,7 +549,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       AND file_fingerprint = ${fileFingerprint} AND deleted_at IS NULL AND reverted_at IS NULL
     ORDER BY created_at ASC LIMIT 1
   `)[0] ?? null;
-  const sameFileDifferentDecision = Boolean(priorSameFile) && !planApplied && priorSameFile.import_decision !== IMPORT_DECISION.HISTORICAL_AND_PLAN;
+  const sameFileDifferentDecision = Boolean(priorSameFile) && !planApplied && ![IMPORT_DECISION.HISTORICAL_AND_PLAN, IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH].includes(priorSameFile.import_decision);
   const hasPlanRows = evaluation.planEntryCount > 0;
   const planChanged = hasPlanRows && hasImportDifferences(evaluation.outcomes);
   let duplicateKind = null;
@@ -434,7 +558,7 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     const sameDocument = (await sql`
       SELECT 1 AS found FROM imports
       WHERE organization_id = ${ctx.organizationId} AND document_fingerprint = ${evaluation.documentFingerprint}
-        AND import_decision = ${IMPORT_DECISION.HISTORICAL_AND_PLAN} AND deleted_at IS NULL AND reverted_at IS NULL LIMIT 1
+        AND import_decision IN (${IMPORT_DECISION.HISTORICAL_AND_PLAN}, ${IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH}) AND deleted_at IS NULL AND reverted_at IS NULL LIMIT 1
     `).length > 0;
     duplicateKind = sameDocument ? 'DUPLICATE_DOCUMENT' : 'DUPLICATE_PLAN';
   }
@@ -449,8 +573,25 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   // Which rows are written: only the safe outcomes become plan / effective rows.
   const outcomeByDay = new Map(evaluation.outcomes.map((item) => [`${item.employeeKey}\u001f${item.date}`, item.outcome]));
   const outcomeOf = (shift) => outcomeByDay.get(`${shift.employeeKey}\u001f${shift.date}`);
-  const futureToDraft = duplicateKind === 'DUPLICATE_FILE' ? [] : future.filter((shift) => WRITES_TO_DRAFT.has(outcomeOf(shift)));
-  const replaceDays = duplicateKind === 'DUPLICATE_FILE' ? [] : evaluation.outcomes.filter((item) => item.outcome === OUTCOME.MODIFIED);
+  const candidateFuture = duplicateKind === 'DUPLICATE_FILE' ? [] : future.filter((shift) => WRITES_TO_DRAFT.has(outcomeOf(shift)));
+  // Auto-publication: the pure planner decides per week which pairs may be published; the rest is retained (spec §2.2, §4.1.3).
+  const autoPlans = prepared.autoPublish && duplicateKind !== 'DUPLICATE_FILE'
+    ? await planAutoPublishWeeks(sql, ctx, prepared, evaluation)
+    : new Map();
+  const weekKeyOf = (shift) => `${startOfSchedulingWeek(shift.date, weekStart)}:${shift.areaId ?? 'global'}`;
+  const publishesWeek = (plan) => Boolean(plan) && (plan.mode === WEEK_MODE.PUBLISH || plan.mode === WEEK_MODE.SPLIT);
+  const isPublishPair = (shift) => {
+    const plan = autoPlans.get(weekKeyOf(shift));
+    return !publishesWeek(plan) || plan.publishPairs.some((pair) => pair.employeeId === shift.employeeId && pair.date === shift.date);
+  };
+  // `futureToDraft` feeds the draft that is published (PUBLISH/SPLIT weeks) or kept as a plain draft (every other mode).
+  const futureToDraft = candidateFuture.filter(isPublishPair);
+  // Retained pairs of a SPLIT week are NEVER inserted into the version being published (no insert-then-delete, reversible).
+  const futureRetained = candidateFuture.filter((shift) => !isPublishPair(shift));
+  const allModifiedDays = duplicateKind === 'DUPLICATE_FILE' ? [] : evaluation.outcomes.filter((item) => item.outcome === OUTCOME.MODIFIED);
+  const sampleOfDay = (day) => future.find((shift) => shift.employeeKey === day.employeeKey && shift.date === day.date);
+  const replaceDays = allModifiedDays.filter((day) => { const sample = sampleOfDay(day); return sample && isPublishPair(sample); });
+  const replaceRetainedDays = allModifiedDays.filter((day) => { const sample = sampleOfDay(day); return sample && !isPublishPair(sample); });
   const reviewRows = duplicateKind === 'DUPLICATE_FILE' ? [] : normalized.filter((shift) => outcomeOf(shift) === OUTCOME.REQUIRES_REVIEW);
   const historicalToWrite = duplicateKind === 'DUPLICATE_FILE' ? [] : historical.filter((shift) => outcomeOf(shift) === OUTCOME.NEW);
   // Historical differences are pending proposals; no current calendar rows are superseded during import.
@@ -481,11 +622,13 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       versionId: row?.status === 'DRAFT' ? row.version_id : randomUUID(),
       existingDraft: row?.status === 'DRAFT',
       sourceVersionId: row && row.status !== 'DRAFT' ? row.version_id : null,
+      nextDraftId: randomUUID(),
     });
   }
 
   const importId = randomUUID();
-  const importDecisionToStore = IMPORT_DECISION.HISTORICAL_AND_PLAN;
+  const importDecisionToStore = prepared.autoPublish ? IMPORT_DECISION.HISTORICAL_AND_AUTO_PUBLISH : IMPORT_DECISION.HISTORICAL_AND_PLAN;
+  const importRef = { employeeId: effectiveImportEmployeeId, fileFingerprint, contextFingerprint };
   const labels = [];
   const queries = [];
   labels.push('import');
@@ -741,6 +884,67 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
     `);
   }
 
+  // Publication (granular, gated by SQL) + SPLIT remainder. Each week degrades to a draft by itself if its gate fails.
+  const publishIndex = new Map();
+  for (const group of groupList) {
+    const key = `${group.periodStart}:${group.areaId ?? 'global'}`;
+    const plan = autoPlans.get(key);
+    if (!publishesWeek(plan)) continue;
+    const ids = scheduleIds.get(key);
+    labels.push(`publish:${key}`);
+    publishIndex.set(key, queries.length);
+    queries.push((txn) => publishImportedPairsTx(txn, ctx, { scheduleId: ids.scheduleId, versionId: ids.versionId, pairs: plan.publishPairs, importRef }));
+    if (plan.mode !== WEEK_MODE.SPLIT) continue;
+    labels.push(`split-draft:${key}`);
+    queries.push((txn) => createNewDraftFromVersionTx(
+      txn, ctx, ids.scheduleId, ids.versionId, ids.nextDraftId, scope.type === 'AREA', scope.type === 'AREA' ? scope.areaId : null,
+    ));
+    // Target of the retained pairs: the new draft N+1 when the publication succeeded, else the still-DRAFT original (gate failed).
+    for (const day of replaceRetainedDays) {
+      const sample = sampleOfDay(day);
+      if (weekKeyOf(sample) !== key) continue;
+      labels.push(`retained-replace:${sample.employeeId}:${day.date}`);
+      queries.push((txn) => txn`
+        DELETE FROM shift_assignments
+        WHERE schedule_version_id = COALESCE(
+                (SELECT id FROM schedule_versions WHERE id = ${ids.nextDraftId} AND status = 'DRAFT'),
+                (SELECT id FROM schedule_versions WHERE id = ${ids.versionId} AND status = 'DRAFT'))
+          AND employee_id = ${sample.employeeId} AND date = ${day.date}
+        RETURNING id
+      `);
+    }
+    for (const shift of futureRetained.filter((item) => weekKeyOf(item) === key)) {
+      labels.push(`retained:${assignmentIdentity(shift)}`);
+      queries.push((txn) => txn`
+        INSERT INTO shift_assignments (
+          schedule_version_id, import_id, employee_id, date, start_time, end_time, location,
+          shift_type, counts_as_work, updated_at
+        )
+        SELECT sv.id,
+               (SELECT id FROM imports WHERE organization_id = ${ctx.organizationId}
+                 AND employee_id = ${effectiveImportEmployeeId} AND file_fingerprint = ${fileFingerprint}
+                 AND context_fingerprint = ${contextFingerprint} ORDER BY created_at ASC LIMIT 1),
+               ${shift.employeeId}, ${shift.date}, ${shift.startTime}, ${shift.endTime}, ${shift.location},
+               ${shift.shiftType}, ${shift.countsAsWork}, NOW()
+        FROM schedule_versions sv
+        JOIN schedules s ON s.id = sv.schedule_id
+        WHERE sv.id = COALESCE(
+                (SELECT id FROM schedule_versions WHERE id = ${ids.nextDraftId} AND status = 'DRAFT'),
+                (SELECT id FROM schedule_versions WHERE id = ${ids.versionId} AND status = 'DRAFT'))
+          AND s.organization_id = ${ctx.organizationId}
+          AND sv.status = 'DRAFT'
+          AND NOT EXISTS (
+            SELECT 1 FROM shift_assignments existing
+            WHERE existing.schedule_version_id = sv.id AND existing.employee_id = ${shift.employeeId} AND existing.date = ${shift.date}
+              AND existing.start_time IS NOT DISTINCT FROM ${shift.startTime} AND existing.end_time IS NOT DISTINCT FROM ${shift.endTime}
+              AND existing.shift_type IS NOT DISTINCT FROM ${shift.shiftType} AND existing.counts_as_work IS NOT DISTINCT FROM ${shift.countsAsWork}
+              AND existing.location IS NOT DISTINCT FROM ${shift.location}
+          )
+        RETURNING id, schedule_version_id
+      `);
+    }
+  }
+
   labels.push('import-metadata');
   const metadataOffset = queries.length;
   queries.push((txn) => txn`
@@ -786,6 +990,65 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
   const assignmentCount = futureResults.reduce((count, rows) => count + rows.length, 0);
   const updatedImport = transactionResult[metadataOffset]?.[0];
 
+  // --- publication outcome per week (a failed gate degrades that week to a draft; the import itself never fails) ---------
+  const publicationResults = [];
+  const retained = [];
+  const reviewConflicts = [];
+  let publishedShiftCount = 0;
+  for (const [key, plan] of autoPlans) {
+    const ids = scheduleIds.get(key);
+    reviewConflicts.push(...plan.reviewPairs);
+    if (plan.mode === WEEK_MODE.NONE) continue;
+    if (!publishesWeek(plan)) {
+      publicationResults.push({ periodStart: plan.periodStart, areaId: plan.areaId, status: 'RETAINED_DRAFT', versionId: null, draftVersionId: ids?.versionId ?? null, createdShiftCount: 0 });
+      retained.push(...plan.retainPairs);
+      continue;
+    }
+    const row = transactionResult[publishIndex.get(key)]?.[0];
+    const published = Boolean(row) && !row.error_code && Boolean(row.published_at);
+    if (published) {
+      const created = Number(row.created_shift_count ?? 0);
+      publishedShiftCount += created;
+      publicationResults.push({
+        periodStart: plan.periodStart, areaId: plan.areaId, status: plan.mode === WEEK_MODE.SPLIT ? 'SPLIT' : 'PUBLISHED',
+        versionId: ids.versionId, draftVersionId: plan.mode === WEEK_MODE.SPLIT ? ids.nextDraftId : null, createdShiftCount: created,
+      });
+      retained.push(...plan.retainPairs);
+    } else {
+      publicationResults.push({
+        periodStart: plan.periodStart, areaId: plan.areaId, status: 'RETAINED_DRAFT', versionId: null, draftVersionId: ids.versionId,
+        createdShiftCount: 0, errorCode: row?.error_code ?? 'PUBLICATION_FAILED',
+      });
+      retained.push(
+        ...plan.publishPairs.map((pair) => ({ ...pair, reason: 'PUBLICATION_VALIDATION_FAILED' })),
+        ...plan.retainPairs,
+      );
+    }
+  }
+  const publishedWeeks = publicationResults.filter((item) => item.status === 'PUBLISHED' || item.status === 'SPLIT');
+  if (prepared.autoPublish && publicationResults.length > 0) {
+    // Informational metadata and side effects: never able to fail the already-committed import.
+    try {
+      await sql`
+        UPDATE imports SET publication_summary = ${JSON.stringify({ publicationResults, retained, reviewConflicts })}::jsonb
+        WHERE id = ${importRow.id} AND organization_id = ${ctx.organizationId}
+      `;
+    } catch (error) {
+      console.error('[import] publication_summary write failed', { organizationId: ctx.organizationId, error: error instanceof Error ? error.message : 'unknown' });
+    }
+    for (const week of publishedWeeks) {
+      await recordAuditEvent(sql, ctx, {
+        eventType: 'schedule.auto_published_on_import', targetType: 'SCHEDULE', targetId: week.versionId,
+        metadata: { importId: importRow.id, periodStart: week.periodStart, status: week.status, createdShiftCount: week.createdShiftCount },
+      });
+    }
+    if (publishedWeeks.length > 0) {
+      try { await createImportPublicationNotifications(sql, ctx, importRow.id); } catch (error) {
+        console.error('[notifications] SHIFT_PUBLISHED generation failed', { organizationId: ctx.organizationId, error: error instanceof Error ? error.message : 'unknown' });
+      }
+    }
+  }
+
   return {
     classification: dated.classification,
     cutoff: dated.cutoff,
@@ -807,15 +1070,18 @@ export async function confirmFutureImport(sql, ctx, input = {}) {
       createdAssignmentCount: assignmentCount,
       existingAssignmentCount: Math.max(0, future.length - assignmentCount),
       affectedWeekCount: weeks.size,
-      draftWeekCount: groupList.length,
-      // Import never publishes. The keys below are kept (always 0) for older clients.
-      publishedWeekCount: 0,
-      publishedShiftCount: 0,
-      publicationResults: [],
+      // Weeks that still hold a draft: every week except those fully published (a SPLIT week keeps the draft N+1).
+      draftWeekCount: Math.max(0, groupList.length - publicationResults.filter((item) => item.status === 'PUBLISHED').length),
+      // Only `historical-and-auto-publish` publishes; every other decision keeps these keys at 0 (older clients).
+      publishedWeekCount: publishedWeeks.length,
+      publishedShiftCount,
+      publicationResults,
+      retained,
     },
     plan: {
-      autoPublished: false,
+      autoPublished: publishedWeeks.length > 0,
       changes: outcomeCounts(evaluation.summary),
+      protectedConflicts: reviewConflicts.filter((item) => item.reason === 'APPROVED_VACATION_CONFLICT').length,
     },
     annotations: { submitted: annotationStatementCount },
     import: updatedImport ? mapImportRow(updatedImport) : { id: importRow.id },

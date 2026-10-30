@@ -164,3 +164,28 @@ describe('semantic day change (history is not a change)', () => {
     expect(hasSemanticHistoryChange([r('Vacaciones')], [])).toBe(false);
   });
 });
+
+describe('auto-publish decision (F1-M04, INV-06)', () => {
+  it('only the explicit value reaches auto-publication; the legacy `publish` stays a plan decision', () => {
+    expect(normalizeImportDecision('historical-and-auto-publish')).toBe('historical-and-auto-publish');
+    expect(normalizeImportDecision('publish')).toBe(IMPORT_DECISION.HISTORICAL_AND_PLAN);
+    expect(normalizeImportDecision('auto-publish')).toBe(IMPORT_DECISION.HISTORICAL_ONLY);
+    expect(normalizeImportDecision('PUBLISH ')).toBe(IMPORT_DECISION.HISTORICAL_ONLY);
+  });
+
+  it('options without the deployment switch are exactly today\'s', () => {
+    expect(resolveImportOptions({ canPlan: true, temporal: 'FUTURE' })).toEqual({ options: ['historical-and-plan'], default: 'historical-and-plan', futureAllowed: true });
+    expect(resolveImportOptions({ canPlan: true, temporal: 'MIXED' }).default).toBe('historical-only');
+  });
+
+  it('with auto-publication enabled: FUTURE offers [auto, plan], MIXED [auto, plan, historical-only], default auto; no capability or history => historical-only', () => {
+    expect(resolveImportOptions({ canPlan: true, temporal: 'FUTURE', autoPublish: true })).toEqual({
+      options: ['historical-and-auto-publish', 'historical-and-plan'], default: 'historical-and-auto-publish', futureAllowed: true,
+    });
+    expect(resolveImportOptions({ canPlan: true, temporal: 'MIXED', autoPublish: true })).toEqual({
+      options: ['historical-and-auto-publish', 'historical-and-plan', 'historical-only'], default: 'historical-and-auto-publish', futureAllowed: true,
+    });
+    expect(resolveImportOptions({ canPlan: false, temporal: 'MIXED', autoPublish: true }).options).toEqual(['historical-only']);
+    expect(resolveImportOptions({ canPlan: true, temporal: 'HISTORICAL', autoPublish: true }).options).toEqual(['historical-only']);
+  });
+});

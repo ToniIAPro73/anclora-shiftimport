@@ -493,3 +493,33 @@ describe('0036 temporal organizational model migration contract', () => {
     expect(sql).toContain('valid_to >= CURRENT_DATE');
   });
 });
+
+describe('0049_import_auto_publish_decision.sql (static)', () => {
+  const dir = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations');
+  const eventList = (sql) => {
+    const block = sql.match(/organization_audit_events_event_type_check CHECK \(event_type IN \(([\s\S]*?)\)\);/)?.[1] ?? '';
+    return [...block.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  };
+
+  it('is additive, idempotent and free of transaction control (the runner owns transactions)', async () => {
+    const sql = await readFile(resolve(dir, '0049_import_auto_publish_decision.sql'), 'utf8');
+    expect(sql).not.toMatch(/\b(BEGIN|COMMIT|ROLLBACK)\b/i);
+    expect(sql).not.toMatch(/\b(DROP\s+TABLE|DROP\s+COLUMN|TRUNCATE|DELETE\s+FROM|UPDATE\s+\w+\s+SET)\b/i);
+    expect(sql).toContain('DROP CONSTRAINT IF EXISTS imports_import_decision_check');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS publication_summary JSONB');
+    expect(sql).toContain('DROP CONSTRAINT IF EXISTS organization_audit_events_event_type_check');
+  });
+
+  it('keeps the two existing decisions valid and adds exactly the new one', async () => {
+    const sql = await readFile(resolve(dir, '0049_import_auto_publish_decision.sql'), 'utf8');
+    const values = [...(sql.match(/import_decision IN \(([^)]*)\)/)?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(values).toEqual(['historical-only', 'historical-and-plan', 'historical-and-auto-publish']);
+  });
+
+  it('the audit CHECK is an exact superset of the one in 0048 plus schedule.auto_published_on_import (older code keeps working)', async () => {
+    const previous = eventList(await readFile(resolve(dir, '0048_versioned_worktime_targets.sql'), 'utf8'));
+    const next = eventList(await readFile(resolve(dir, '0049_import_auto_publish_decision.sql'), 'utf8'));
+    expect(previous.length).toBeGreaterThan(20);
+    expect(next).toEqual([...previous, 'schedule.auto_published_on_import']);
+  });
+});

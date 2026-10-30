@@ -609,6 +609,10 @@ export const MIGRATION_SENTINELS = {
     cat.constraints.has('employee_worktime_targets_series_revision_unique') &&
     cat.indexes.has('employee_worktime_targets_active_idx') &&
     Boolean(cat.constraintDefs?.get('organization_audit_events_event_type_check')?.includes('EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED')),
+  '0049_import_auto_publish_decision.sql': (cat) =>
+    cat.columns.has('imports.publication_summary') &&
+    Boolean(cat.constraintDefs?.get('imports_import_decision_check')?.includes('historical-and-auto-publish')) &&
+    Boolean(cat.constraintDefs?.get('organization_audit_events_event_type_check')?.includes('schedule.auto_published_on_import')),
 };
 
 /**

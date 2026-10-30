@@ -2832,6 +2832,32 @@ export async function createShiftPublishedNotifications(sql, ctx, scheduleVersio
   return rows.length;
 }
 
+/**
+ * OD-07: an auto-publishing import notifies each linked employee AT MOST ONCE per import batch (not per shift, not per week).
+ * `resource_id` is the employee's earliest shift published by the batch; historical, unchanged, retained and review-only rows
+ * never reach this query because only `SCHEDULE_PUBLICATION` shifts stamped with the import id qualify. Idempotent through the
+ * (user_id, type, resource_id) uniqueness: replaying the batch finds the same earliest shift and inserts nothing.
+ */
+export async function createImportPublicationNotifications(sql, ctx, importId) {
+  if (!ctx?.organizationId || !importId) return 0;
+  const rows = await sql`
+    INSERT INTO notifications (user_id, organization_id, type, resource_type, resource_id)
+    SELECT DISTINCT ON (e.user_id) e.user_id, s.organization_id, 'SHIFT_PUBLISHED', 'SHIFT', s.id
+    FROM shifts s
+    JOIN employees e ON e.id = s.employee_id AND e.organization_id = s.organization_id
+    WHERE s.organization_id = ${ctx.organizationId}
+      AND s.import_id = ${importId}
+      AND s.provenance = 'SCHEDULE_PUBLICATION'
+      AND s.effective_state = 'EFFECTIVE'
+      AND e.user_id IS NOT NULL
+      AND e.status = 'active'
+    ORDER BY e.user_id, s.date, s.start_time, s.id
+    ON CONFLICT (user_id, type, resource_id) DO NOTHING
+    RETURNING id
+  `;
+  return rows.length;
+}
+
 export async function listEmployeeNotifications(sql, ctx) {
   assertEmployeePortalContext(ctx);
   const rows = await sql`

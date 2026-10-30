@@ -987,6 +987,160 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
   `;
 }
 
+/**
+ * GRANULAR publication performed by an auto-publishing import (spec §4.1.3). Unlike `publishScheduleVersionTx` it materializes ONLY the
+ * `(employee, date)` pairs of the import, never the carried-over assignments of the base version, and it never supersedes anything that
+ * is not provably the import's own work. Everything is one gated CTE statement (Neon batches are static): if any gate fails the
+ * statement writes nothing and reports `error_code`; the caller degrades the week to a draft instead of aborting the import.
+ *
+ * Gates (defence in depth, the pure planner already filtered): the version is a DRAFT of this organization, every pair has an active
+ * assignment in the version, no overlap / rest violation inside the version, and no EFFECTIVE shift of the pairs has a provenance
+ * outside the import white list (`COMPANY_IMPORT`, `SYSTEM`, or `SCHEDULE_PUBLICATION` that already belongs to an import).
+ *
+ * `importRef` resolves the import row inside the same transaction (the import is inserted earlier in the batch).
+ */
+export function publishImportedPairsTx(txn, ctx, { scheduleId, versionId, pairs, importRef }) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  }
+  if (!Array.isArray(pairs) || pairs.length === 0) throw new HttpError(400, 'At least one (employee, date) pair is required');
+  for (const pair of pairs) {
+    if (!UUID_RE.test(pair.employeeId) || !/^\d{4}-\d{2}-\d{2}$/.test(String(pair.date))) {
+      throw new HttpError(400, 'Every pair needs a valid employeeId and ISO date');
+    }
+  }
+  const pairsJson = JSON.stringify(pairs.map((pair) => ({ employeeId: pair.employeeId, date: pair.date })));
+  return txn`
+    WITH pair_list AS MATERIALIZED (
+      SELECT (p->>'employeeId')::uuid AS employee_id, (p->>'date')::date AS date
+      FROM jsonb_array_elements(${pairsJson}::jsonb) AS p
+    ),
+    import_row AS MATERIALIZED (
+      SELECT id FROM imports
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${importRef.employeeId}
+        AND file_fingerprint = ${importRef.fileFingerprint} AND context_fingerprint = ${importRef.contextFingerprint}
+      ORDER BY created_at ASC LIMIT 1
+    ),
+    target AS MATERIALIZED (
+      SELECT sv.id AS version_id, sv.schedule_id, sv.status, s.organization_id, s.area_id
+      FROM schedule_versions sv
+      JOIN schedules s ON s.id = sv.schedule_id
+      WHERE sv.id = ${versionId} AND sv.schedule_id = ${scheduleId} AND s.organization_id = ${ctx.organizationId}
+      FOR UPDATE
+    ),
+    all_assignments AS MATERIALIZED (
+      SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date, sa.start_time, sa.end_time, sa.location,
+             sa.shift_type, sa.counts_as_work, e.status AS employee_status
+      FROM shift_assignments sa
+      JOIN target t ON t.version_id = sa.schedule_version_id
+      JOIN employees e ON e.id = sa.employee_id AND e.organization_id = t.organization_id
+    ),
+    active_assignments AS MATERIALIZED (SELECT * FROM all_assignments WHERE employee_status = 'active'),
+    publish_assignments AS MATERIALIZED (
+      SELECT a.* FROM active_assignments a JOIN pair_list pl ON pl.employee_id = a.employee_id AND pl.date = a.date
+    ),
+    assignment_intervals AS MATERIALIZED (
+      SELECT a.*, (a.date + a.start_time) AS start_at,
+             (a.date + a.end_time + CASE WHEN a.end_time <= a.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AS end_at
+      FROM active_assignments a
+      WHERE a.counts_as_work = TRUE AND a.start_time IS NOT NULL AND a.end_time IS NOT NULL
+    ),
+    overlap_conflicts AS (
+      SELECT a.id AS conflicting_assignment_id
+      FROM assignment_intervals a JOIN assignment_intervals b ON a.employee_id = b.employee_id AND a.id < b.id
+      WHERE a.start_at < b.end_at AND b.start_at < a.end_at
+      ORDER BY a.id, b.id LIMIT 1
+    ),
+    rest_conflicts AS (
+      SELECT a.id AS conflicting_assignment_id
+      FROM assignment_intervals a JOIN assignment_intervals b ON a.employee_id = b.employee_id AND a.id < b.id
+      WHERE NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
+        AND ((b.start_at >= a.end_at AND b.start_at - a.end_at < INTERVAL '11 hours')
+          OR (a.start_at >= b.end_at AND a.start_at - b.end_at < INTERVAL '11 hours'))
+      ORDER BY a.id, b.id LIMIT 1
+    ),
+    missing_pairs AS (
+      SELECT 1 AS found FROM pair_list pl
+      WHERE NOT EXISTS (SELECT 1 FROM active_assignments a WHERE a.employee_id = pl.employee_id AND a.date = pl.date)
+      LIMIT 1
+    ),
+    protected_current AS (
+      SELECT sh.id AS conflicting_assignment_id
+      FROM shifts sh
+      JOIN pair_list pl ON pl.employee_id = sh.employee_id AND pl.date = sh.date
+      WHERE sh.organization_id = ${ctx.organizationId} AND sh.effective_state = 'EFFECTIVE'
+        -- COALESCE: a NULL provenance must evaluate to "not attributable", never to NULL (which would hide the row).
+        AND NOT (COALESCE(sh.provenance, '') IN ('COMPANY_IMPORT', 'SYSTEM')
+                 OR (COALESCE(sh.provenance, '') = 'SCHEDULE_PUBLICATION' AND sh.import_id IS NOT NULL))
+      LIMIT 1
+    ),
+    conflicts AS (
+      SELECT 'VERSION_NOT_FOUND'::text AS error_code, NULL::uuid AS conflicting_assignment_id, NULL::integer AS minimum_rest_hours, 0 AS priority
+      WHERE NOT EXISTS (SELECT 1 FROM target) OR NOT EXISTS (SELECT 1 FROM import_row)
+      UNION ALL SELECT 'NOT_DRAFT'::text, NULL::uuid, NULL::integer, 1 FROM target WHERE status <> 'DRAFT'
+      UNION ALL SELECT 'MISSING_PAIR'::text, NULL::uuid, NULL::integer, 2 FROM missing_pairs
+      UNION ALL SELECT 'PROTECTED_CURRENT'::text, conflicting_assignment_id, NULL::integer, 3 FROM protected_current
+      UNION ALL SELECT 'OVERLAP'::text, conflicting_assignment_id, NULL::integer, 4 FROM overlap_conflicts
+      UNION ALL SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 5 FROM rest_conflicts
+    ),
+    validation AS (
+      SELECT (SELECT error_code FROM conflicts ORDER BY priority LIMIT 1) AS error_code,
+             (SELECT conflicting_assignment_id FROM conflicts ORDER BY priority LIMIT 1) AS conflicting_assignment_id,
+             (SELECT minimum_rest_hours FROM conflicts ORDER BY priority LIMIT 1) AS minimum_rest_hours
+    ),
+    updated AS (
+      UPDATE schedule_versions sv
+      SET status = 'PUBLISHED', published_at = NOW(), published_by_user_id = ${ctx.user.id}
+      FROM target t, validation v
+      WHERE sv.id = t.version_id AND t.status = 'DRAFT' AND v.error_code IS NULL
+      RETURNING sv.id, sv.published_at
+    ),
+    superseded AS (
+      UPDATE shifts current_shift
+      SET effective_state = 'SUPERSEDED', superseded_at = NOW(), updated_at = NOW()
+      FROM pair_list pl, updated u
+      WHERE current_shift.organization_id = ${ctx.organizationId}
+        AND current_shift.employee_id = pl.employee_id AND current_shift.date = pl.date
+        AND current_shift.effective_state = 'EFFECTIVE'
+      RETURNING current_shift.id
+    ),
+    materialized AS (
+      INSERT INTO shifts (
+        organization_id, employee_id, import_id, area_id, date, start_time, end_time, location, origin,
+        schedule_version_id, shift_type, counts_as_work, effective_state, provenance
+      )
+      SELECT t.organization_id, a.employee_id, (SELECT id FROM import_row), t.area_id, a.date,
+             TO_CHAR(a.start_time, 'HH24:MI'), TO_CHAR(a.end_time, 'HH24:MI'), COALESCE(a.location, ''), 'schedule',
+             a.schedule_version_id, a.shift_type, a.counts_as_work, 'EFFECTIVE', 'SCHEDULE_PUBLICATION'
+      FROM publish_assignments a
+      JOIN target t ON TRUE
+      JOIN updated u ON u.id = t.version_id
+      CROSS JOIN (SELECT COUNT(*) FROM superseded) retired
+      WHERE NOT EXISTS (
+        SELECT 1 FROM shifts existing
+        WHERE existing.schedule_version_id = a.schedule_version_id AND existing.organization_id = t.organization_id
+          AND existing.employee_id = a.employee_id AND existing.date = a.date
+          AND existing.start_time IS NOT DISTINCT FROM TO_CHAR(a.start_time, 'HH24:MI')
+          AND existing.end_time IS NOT DISTINCT FROM TO_CHAR(a.end_time, 'HH24:MI')
+          AND lower(btrim(COALESCE(existing.shift_type, ''))) = lower(btrim(COALESCE(a.shift_type, '')))
+          AND existing.counts_as_work IS NOT DISTINCT FROM a.counts_as_work
+          AND existing.location IS NOT DISTINCT FROM COALESCE(a.location, '')
+          AND existing.area_id IS NOT DISTINCT FROM t.area_id
+      )
+      RETURNING id
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      (SELECT status FROM target LIMIT 1) AS current_status,
+      validation.error_code, validation.conflicting_assignment_id, validation.minimum_rest_hours,
+      (SELECT published_at FROM updated LIMIT 1) AS published_at,
+      (SELECT COUNT(*)::integer FROM materialized) AS created_shift_count,
+      (SELECT COUNT(*)::integer FROM superseded) AS superseded_shift_count
+    FROM validation
+  `;
+}
+
 export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
   requireRole(ctx, 'PLANNER');
   if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {

@@ -182,3 +182,25 @@ describe('delete guard uses the product frontier on ISO dates (cutoff 2026-10-17
     expect(classifyImportDates([{ ...base, date: '2026-10-17' }], now).classification).toBe('FUTURE');
   });
 });
+
+describe('F1 auto-publication guards (no database)', () => {
+  const ctx = { user: { id: USER }, organizationId: ORG, role: 'OWNER', plan: 'team', employeeId: null };
+  const sqlWith = (transaction) => { const sql = () => Promise.resolve([]); sql.transaction = transaction; return sql; };
+
+  it('refuses the auto-publish value while the deployment switch is off, before reading or writing anything', async () => {
+    delete process.env.IMPORT_AUTO_PUBLISH_ENABLED;
+    const transaction = vi.fn();
+    await expect(confirmFutureImport(sqlWith(transaction), ctx, { ...request(FUTURE_DATE), futureConsent: 'historical-and-auto-publish' }))
+      .rejects.toMatchObject({ status: 409, code: 'AUTO_PUBLISH_UNAVAILABLE' });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('the legacy `publish` wire value is a plan decision and never reaches the switch (INV-06)', async () => {
+    delete process.env.IMPORT_AUTO_PUBLISH_ENABLED;
+    const transaction = vi.fn();
+    // It is accepted as a plan consent: the call proceeds past the decision check and only then fails on the unresolved employee lookup.
+    const outcome = await confirmFutureImport(sqlWith(transaction), ctx, { ...request(FUTURE_DATE), futureConsent: 'publish' }).catch((error) => error);
+    expect(outcome.code).not.toBe('AUTO_PUBLISH_UNAVAILABLE');
+    expect(outcome.code).not.toBe('FUTURE_IMPORT_CONSENT_REQUIRED');
+  });
+});

@@ -459,6 +459,7 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
           'employee_worktime_targets.effective_from',
           'employee_worktime_targets.included_work_buckets',
           'employee_annual_targets.included_shift_types',
+          'imports.publication_summary',
           'imports.import_mode',
           'imports.employee_id',
           'memberships.scoped_area_id',
@@ -501,7 +502,8 @@ describe('db/migrate.mjs Hardened Safety & Reconciliation Tooling', () => {
         constraints: [
           { conname: 'employees_status_check', def: "CHECK (status IN ('pending_access', 'active', 'inactive'))" },
           { conname: 'memberships_role_check', def: "CHECK (role IN ('OWNER', 'ADMIN', 'PLANNER', 'EMPLOYEE'))" },
-          { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created', 'EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED'))" },
+          { conname: 'organization_audit_events_event_type_check', def: "CHECK (event_type IN ('approval_request.created', 'EMPLOYEE_WORKTIME_TARGET_VERSION_CREATED', 'schedule.auto_published_on_import'))" },
+          { conname: 'imports_import_decision_check', def: "CHECK (import_decision IN ('historical-only', 'historical-and-plan', 'historical-and-auto-publish'))" },
           { conname: '_migrations_checksum_format_chk', def: "CHECK (checksum ~ '^[0-9a-f]{64}$')" },
           { conname: 'users_account_status_check', def: "CHECK (account_status IN ('PENDING_INVITATION', 'ACTIVE', 'SUSPENDED'))" },
           { conname: 'organizations_type_check', def: "CHECK (type IN ('personal', 'company'))", table_name: 'organizations' },
