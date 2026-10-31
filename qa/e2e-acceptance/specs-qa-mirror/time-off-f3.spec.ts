@@ -302,7 +302,7 @@ test('unified feed: kind × status for SHIFT_CHANGE, TIME_OFF and ALL, merged ne
     const id = created.json.request.id as string;
     return { id, envelope: (await withDb((q) => q(`SELECT id FROM approval_requests WHERE time_off_request_id = $1`, [id])))[0].id as string };
   };
-  const tPending = await ask(10, 11); const tApproved = await ask(20, 21); const tRejected = await ask(30, 31);
+  await ask(10, 11); const tApproved = await ask(20, 21); const tRejected = await ask(30, 31);
   const owner = await login('owner', T.orgA);
   expect((await post(owner, `/api/approval-requests/${tApproved.envelope}/approve`)).status).toBe(200);
   const planner = await login('plannerEmps', T.orgA);
@@ -312,11 +312,12 @@ test('unified feed: kind × status for SHIFT_CHANGE, TIME_OFF and ALL, merged ne
     await q(`UPDATE time_off_requests SET resolved_at = '2026-11-02T10:00:00.000Z' WHERE id = $1`, [tRejected.id]);
   });
 
+  type FeedItem = Record<string, unknown> & { id: string; kind: string; status: string; sortAt: string; changeRequestId?: string };
   const feed = async (api: APIRequestContext, query: string) => {
     const response = await api.get(`/api/approval-requests?${query}`);
-    return { status: response.status(), body: await response.json().catch(() => ({})) as { requests: Array<Record<string, any>>; nextCursor: string | null } };
+    return { status: response.status(), body: await response.json().catch(() => ({})) as { requests: FeedItem[]; nextCursor: string | null } };
   };
-  const labels = (items: Array<Record<string, any>>) => items.map((r) => `${r.kind}:${r.status}`);
+  const labels = (items: FeedItem[]) => items.map((r) => `${r.kind}:${r.status}`);
 
   expect(labels((await feed(owner, 'kind=SHIFT_CHANGE&status=PENDING')).body.requests)).toEqual(['SHIFT_CHANGE:PENDING']);
   expect(labels((await feed(owner, 'kind=SHIFT_CHANGE&status=HISTORY')).body.requests)).toEqual(['SHIFT_CHANGE:APPROVED', 'SHIFT_CHANGE:REJECTED', 'SHIFT_CHANGE:CANCELLED']);
@@ -333,7 +334,7 @@ test('unified feed: kind × status for SHIFT_CHANGE, TIME_OFF and ALL, merged ne
   // the cursor pages every item exactly once, in the same order
   const seen: string[] = []; let cursor: string | null = null;
   for (let guard = 0; guard < 10; guard += 1) {
-    const page: { status: number; body: { requests: Array<Record<string, any>>; nextCursor: string | null } } = await feed(owner, `kind=ALL&status=HISTORY&limit=2${cursor ? `&cursor=${cursor}` : ''}`);
+    const page: { status: number; body: { requests: FeedItem[]; nextCursor: string | null } } = await feed(owner, `kind=ALL&status=HISTORY&limit=2${cursor ? `&cursor=${cursor}` : ''}`);
     expect(page.status).toBe(200);
     seen.push(...page.body.requests.map((r) => String(r.id)));
     cursor = page.body.nextCursor;
