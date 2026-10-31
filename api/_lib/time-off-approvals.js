@@ -61,13 +61,14 @@ async function resolveApproverScope(sql, ctx) {
   return { scope, filter: scopeFilter(scope) };
 }
 
-const encodeCursor = (createdAt, id) => Buffer.from(JSON.stringify([new Date(createdAt).toISOString(), id])).toString('base64url');
+/** Keyset cursor shared by every approval feed: the sort instant (creation for PENDING, resolution for HISTORY) and the envelope id. */
+export const encodeApprovalCursor = (at, id) => Buffer.from(JSON.stringify([new Date(at).toISOString(), id])).toString('base64url');
 function decodeCursor(raw) {
   if (!raw) return null;
   try {
-    const [createdAt, id] = JSON.parse(Buffer.from(String(raw), 'base64url').toString('utf8'));
-    if (Number.isNaN(Date.parse(createdAt)) || !/^[0-9a-f-]{36}$/i.test(String(id))) throw new Error('bad cursor');
-    return { createdAt, id };
+    const [at, id] = JSON.parse(Buffer.from(String(raw), 'base64url').toString('utf8'));
+    if (Number.isNaN(Date.parse(at)) || !/^[0-9a-f-]{36}$/i.test(String(id))) throw new Error('bad cursor');
+    return { at, id };
   } catch {
     throw timeOffError(400, 'Invalid cursor', 'INVALID_INPUT');
   }
@@ -103,39 +104,42 @@ export async function listTimeOffApprovals(sql, ctx, query, { today = getOperati
   const actor = actorFromContext(ctx);
   const pattern = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
   const rows = await sql`
-    SELECT ar.id AS approval_request_id, ar.policy_snapshot, o.approval_policy,
-           t.id AS id, t.employee_id, t.request_type,
-           TO_CHAR(t.start_date, 'YYYY-MM-DD') AS start_date, TO_CHAR(t.end_date, 'YYYY-MM-DD') AS end_date,
-           t.requested_days, t.comment, t.status, t.created_at, t.resolved_at, t.rejection_reason, t.cancelled_at,
-           TO_CHAR(t.applied_start_date, 'YYYY-MM-DD') AS applied_start_date, t.applied_days,
-           resolver.display_name AS resolved_by_name,
-           e.name AS employee_name, e.area_id, e.user_id AS employee_user_id, a.name AS area_name
-    FROM approval_requests ar
-    JOIN time_off_requests t ON t.id = ar.time_off_request_id AND t.organization_id = ar.organization_id
-    JOIN employees e ON e.id = t.employee_id AND e.organization_id = ar.organization_id
-    JOIN organizations o ON o.id = ar.organization_id
-    LEFT JOIN areas a ON a.id = e.area_id AND a.organization_id = ar.organization_id
-    LEFT JOIN users resolver ON resolver.id = t.resolved_by_user_id
-    WHERE ar.organization_id = ${ctx.organizationId}
-      AND ar.time_off_request_id IS NOT NULL
-      AND (
-        (${status} = 'PENDING' AND t.status = 'PENDING')
-        OR (${status} = 'HISTORY' AND t.status IN ('APPROVED', 'REJECTED', 'CANCELLED'))
-      )
-      AND (
-        ${filter.kind} = 'ORGANIZATION'
-        OR (${filter.kind} = 'AREAS' AND e.area_id = ANY(${filter.areaIds}::uuid[]))
-        OR (${filter.kind} = 'EMPLOYEES' AND t.employee_id = ANY(${filter.employeeIds}::uuid[]))
-      )
-      AND (${areaId}::uuid IS NULL OR e.area_id = ${areaId}::uuid)
-      AND (${employeeId}::uuid IS NULL OR t.employee_id = ${employeeId}::uuid)
-      AND (${pattern}::text IS NULL OR e.name ILIKE ${pattern}::text ESCAPE '\\')
-      AND (${cursor?.createdAt ?? null}::timestamptz IS NULL OR (t.created_at, ar.id) < (${cursor?.createdAt ?? null}::timestamptz, ${cursor?.id ?? null}::uuid))
-    ORDER BY t.created_at DESC, ar.id DESC
+    SELECT * FROM (
+      SELECT ar.id AS approval_request_id, ar.policy_snapshot, o.approval_policy,
+             t.id AS id, t.employee_id, t.request_type,
+             TO_CHAR(t.start_date, 'YYYY-MM-DD') AS start_date, TO_CHAR(t.end_date, 'YYYY-MM-DD') AS end_date,
+             t.requested_days, t.comment, t.status, t.created_at, t.resolved_at, t.rejection_reason, t.cancelled_at,
+             TO_CHAR(t.applied_start_date, 'YYYY-MM-DD') AS applied_start_date, t.applied_days,
+             resolver.display_name AS resolved_by_name,
+             e.name AS employee_name, e.area_id, e.user_id AS employee_user_id, a.name AS area_name,
+             CASE WHEN ${status} = 'HISTORY' THEN COALESCE(t.resolved_at, t.cancelled_at, t.created_at) ELSE t.created_at END AS sort_at
+      FROM approval_requests ar
+      JOIN time_off_requests t ON t.id = ar.time_off_request_id AND t.organization_id = ar.organization_id
+      JOIN employees e ON e.id = t.employee_id AND e.organization_id = ar.organization_id
+      JOIN organizations o ON o.id = ar.organization_id
+      LEFT JOIN areas a ON a.id = e.area_id AND a.organization_id = ar.organization_id
+      LEFT JOIN users resolver ON resolver.id = t.resolved_by_user_id
+      WHERE ar.organization_id = ${ctx.organizationId}
+        AND ar.time_off_request_id IS NOT NULL
+        AND (
+          (${status} = 'PENDING' AND t.status = 'PENDING')
+          OR (${status} = 'HISTORY' AND t.status IN ('APPROVED', 'REJECTED', 'CANCELLED'))
+        )
+        AND (
+          ${filter.kind} = 'ORGANIZATION'
+          OR (${filter.kind} = 'AREAS' AND e.area_id = ANY(${filter.areaIds}::uuid[]))
+          OR (${filter.kind} = 'EMPLOYEES' AND t.employee_id = ANY(${filter.employeeIds}::uuid[]))
+        )
+        AND (${areaId}::uuid IS NULL OR e.area_id = ${areaId}::uuid)
+        AND (${employeeId}::uuid IS NULL OR t.employee_id = ${employeeId}::uuid)
+        AND (${pattern}::text IS NULL OR e.name ILIKE ${pattern}::text ESCAPE '\\')
+    ) feed
+    WHERE (${cursor?.at ?? null}::timestamptz IS NULL OR (feed.sort_at, feed.approval_request_id) < (${cursor?.at ?? null}::timestamptz, ${cursor?.id ?? null}::uuid))
+    ORDER BY feed.sort_at DESC, feed.approval_request_id DESC
     LIMIT ${limit + 1}
   `;
   const page = rows.slice(0, limit);
-  const nextCursor = rows.length > limit ? encodeCursor(page[page.length - 1].created_at, page[page.length - 1].approval_request_id) : null;
+  const hasMore = rows.length > limit;
 
   // Second line of defence (INV-13): the scope predicate already ran in the query, the canonical check runs on every element.
   const visible = page.filter((row) => isTargetInScope(actor, { employeeId: row.employee_id, areaId: row.area_id }));
@@ -209,6 +213,7 @@ export async function listTimeOffApprovals(sql, ctx, query, { today = getOperati
       status: row.status,
       createdAt: iso(row.created_at),
       resolvedAt: iso(row.resolved_at),
+      sortAt: iso(row.sort_at),
       resolvedByName: row.resolved_by_name ?? null,
       rejectionReason: row.rejection_reason ?? null,
       overlapping: overlapRows.filter((entry) => entry.for_id === row.id).map((entry) => ({
@@ -224,7 +229,7 @@ export async function listTimeOffApprovals(sql, ctx, query, { today = getOperati
       ...(row.status === 'APPROVED' ? { appliedStartDate: row.applied_start_date ?? null, appliedDays: row.applied_days ?? null } : {}),
     });
   }
-  return { requests, nextCursor };
+  return { requests, hasMore };
 }
 
 /** Everything a decision needs, read inside the tenant. `null` when the envelope is not a time-off one (the legacy code continues). */

@@ -278,6 +278,95 @@ test('import over an approved vacation: APPROVED_VACATION_CONFLICT, the absence 
   await Promise.all([owner.dispose(), planner.dispose()]);
 });
 
+test('unified feed: kind × status for SHIFT_CHANGE, TIME_OFF and ALL, merged newest-resolution first, paged exactly once, tenant-isolated, legacy untouched', async () => {
+  const base = freshMonday();
+  // four shift changes of e1 in every state, with fixed resolution instants (legacy tables, as the app writes them)
+  const shiftChange = async (offset: number, state: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED', resolvedAt: string | null) => withDb(async (q) => {
+    const shiftId = (await q(`INSERT INTO shifts (organization_id, employee_id, area_id, date, start_time, end_time, location, origin, shift_type, counts_as_work, layer, provenance, effective_state)
+                              VALUES ($1, $2, $3, $4, '05:00', '13:00', '', 'MAN', 'Regular', TRUE, 'CHANGE', 'MANUAL_ADMIN_CHANGE', 'EFFECTIVE') RETURNING id`, [T.orgA, T.e1, T.areaA1, addDays(base, offset)]))[0].id as string;
+    const cr = (await q(`INSERT INTO change_requests (shift_id, employee_id, organization_id, request_type, reason, status, resolved_at, resolved_by_user_id)
+                         VALUES ($1, $2, $3, 'OTHER', 'Necesito cambiar', $4, $5, $6) RETURNING id`, [shiftId, T.e1, T.orgA, state, resolvedAt, resolvedAt ? T.users.admin.id : null]))[0].id as string;
+    await q(`INSERT INTO approval_requests (organization_id, change_request_id, status, policy_snapshot, approved_at, rejected_at, rejection_reason)
+             VALUES ($1, $2, $3, 'AREA_RESPONSIBLE', $4, $5, $6)`, [T.orgA, cr, state === 'CANCELLED' ? 'PENDING' : state, state === 'APPROVED' ? resolvedAt : null, state === 'REJECTED' ? resolvedAt : null, state === 'REJECTED' ? 'No hay cobertura' : null]);
+    return cr;
+  });
+  const sPending = await shiftChange(1, 'PENDING', null);
+  await shiftChange(2, 'APPROVED', '2026-11-05T10:00:00.000Z');
+  await shiftChange(3, 'REJECTED', '2026-11-03T10:00:00.000Z');
+  await shiftChange(4, 'CANCELLED', '2026-11-01T10:00:00.000Z');
+  // three vacations of e1: one pending, one approved (OWNER), one rejected (planner of that employee)
+  const employee = await login('employee', T.orgA);
+  const ask = async (from: number, to: number) => {
+    const created = await post(employee, '/api/me/time-off-requests', { requestType: 'VACATION', startDate: addDays(base, from), endDate: addDays(base, to) });
+    expect(created.status).toBe(201);
+    const id = created.json.request.id as string;
+    return { id, envelope: (await withDb((q) => q(`SELECT id FROM approval_requests WHERE time_off_request_id = $1`, [id])))[0].id as string };
+  };
+  const tPending = await ask(10, 11); const tApproved = await ask(20, 21); const tRejected = await ask(30, 31);
+  const owner = await login('owner', T.orgA);
+  expect((await post(owner, `/api/approval-requests/${tApproved.envelope}/approve`)).status).toBe(200);
+  const planner = await login('plannerEmps', T.orgA);
+  expect((await post(planner, `/api/approval-requests/${tRejected.envelope}/reject`, { reason: 'Cobertura mínima' })).status).toBe(200);
+  await withDb(async (q) => {
+    await q(`UPDATE time_off_requests SET resolved_at = '2026-11-04T10:00:00.000Z' WHERE id = $1`, [tApproved.id]);
+    await q(`UPDATE time_off_requests SET resolved_at = '2026-11-02T10:00:00.000Z' WHERE id = $1`, [tRejected.id]);
+  });
+
+  const feed = async (api: APIRequestContext, query: string) => {
+    const response = await api.get(`/api/approval-requests?${query}`);
+    return { status: response.status(), body: await response.json().catch(() => ({})) as { requests: Array<Record<string, any>>; nextCursor: string | null } };
+  };
+  const labels = (items: Array<Record<string, any>>) => items.map((r) => `${r.kind}:${r.status}`);
+
+  expect(labels((await feed(owner, 'kind=SHIFT_CHANGE&status=PENDING')).body.requests)).toEqual(['SHIFT_CHANGE:PENDING']);
+  expect(labels((await feed(owner, 'kind=SHIFT_CHANGE&status=HISTORY')).body.requests)).toEqual(['SHIFT_CHANGE:APPROVED', 'SHIFT_CHANGE:REJECTED', 'SHIFT_CHANGE:CANCELLED']);
+  expect(labels((await feed(owner, 'kind=TIME_OFF&status=PENDING')).body.requests)).toEqual(['TIME_OFF:PENDING']);
+  expect(labels((await feed(owner, 'kind=TIME_OFF&status=HISTORY')).body.requests).sort()).toEqual(['TIME_OFF:APPROVED', 'TIME_OFF:REJECTED']);
+  expect(labels((await feed(owner, 'kind=ALL&status=PENDING')).body.requests).sort()).toEqual(['SHIFT_CHANGE:PENDING', 'TIME_OFF:PENDING']);
+  const all = (await feed(owner, 'kind=ALL&status=HISTORY')).body;
+  expect(all.requests.map((r) => `${r.kind}:${r.status}:${r.sortAt}`)).toEqual([
+    'SHIFT_CHANGE:APPROVED:2026-11-05T10:00:00.000Z', 'TIME_OFF:APPROVED:2026-11-04T10:00:00.000Z',
+    'SHIFT_CHANGE:REJECTED:2026-11-03T10:00:00.000Z', 'TIME_OFF:REJECTED:2026-11-02T10:00:00.000Z', 'SHIFT_CHANGE:CANCELLED:2026-11-01T10:00:00.000Z',
+  ]);
+  expect(all.requests.find((r) => r.status === 'REJECTED' && r.kind === 'SHIFT_CHANGE')).toMatchObject({ rejectionReason: 'No hay cobertura', resolvedByName: expect.any(String) });
+  expect(all.requests.find((r) => r.status === 'REJECTED' && r.kind === 'TIME_OFF')).toMatchObject({ rejectionReason: 'Cobertura mínima' });
+  // the cursor pages every item exactly once, in the same order
+  const seen: string[] = []; let cursor: string | null = null;
+  for (let guard = 0; guard < 10; guard += 1) {
+    const page: { status: number; body: { requests: Array<Record<string, any>>; nextCursor: string | null } } = await feed(owner, `kind=ALL&status=HISTORY&limit=2${cursor ? `&cursor=${cursor}` : ''}`);
+    expect(page.status).toBe(200);
+    seen.push(...page.body.requests.map((r) => String(r.id)));
+    cursor = page.body.nextCursor;
+    if (!cursor) break;
+  }
+  expect(seen).toEqual(all.requests.map((r) => String(r.id)));
+  expect(new Set(seen).size).toBe(5);
+
+  // legacy: no `kind` ⇒ shift changes, PENDING, the old shape (no `kind`, no `sortAt`)
+  const legacy = (await feed(owner, 'status=pending')).body.requests;
+  // (the legacy list is untouched on purpose, including its known quirk of keeping a cancelled request's envelope PENDING: D-01/V-07)
+  expect(legacy.map((r) => r.changeRequestId)).toContain(sPending);
+  expect(legacy.every((r) => r.status === 'PENDING')).toBe(true);
+  expect(legacy[0]).not.toHaveProperty('kind');
+  expect(legacy[0]).not.toHaveProperty('sortAt');
+  expect((await feed(owner, 'status=history')).status).toBe(400); // history only exists in the unified API
+
+  // tenant, scope and role
+  const otherTenant = await login('ownerB', T.orgB);
+  for (const kind of ['SHIFT_CHANGE', 'TIME_OFF', 'ALL']) for (const status of ['PENDING', 'HISTORY']) {
+    const result = await feed(otherTenant, `kind=${kind}&status=${status}`);
+    expect(result.status, `${kind}/${status}`).toBe(200);
+    expect(result.body.requests).toEqual([]);
+  }
+  const otherArea = await login('plannerA2', T.orgA);
+  expect((await feed(otherArea, 'kind=TIME_OFF&status=HISTORY')).body.requests).toEqual([]); // time off keeps the real scope (area A2 ≠ the employee's area)
+  const emps = await login('plannerEmps', T.orgA);
+  expect((await feed(emps, 'kind=TIME_OFF&status=HISTORY')).body.requests).toHaveLength(2);
+  expect((await feed(employee, 'kind=ALL&status=HISTORY')).status).toBe(403);
+  expect((await feed(owner, 'kind=NOPE&status=HISTORY')).status).toBe(400);
+  await Promise.all([employee.dispose(), owner.dispose(), planner.dispose(), otherTenant.dispose(), otherArea.dispose(), emps.dispose()]);
+});
+
 test('REGRESSION: a shift-change request is still listed and approved exactly as before (with and without `kind`)', async () => {
   const day = addDays(freshMonday(), 4);
   const shiftId = (await withDb((q) => q(`INSERT INTO shifts (organization_id, employee_id, area_id, date, start_time, end_time, location, origin, shift_type, counts_as_work, layer, provenance, effective_state)

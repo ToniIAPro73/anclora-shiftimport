@@ -21,12 +21,16 @@ const { default: approve } = await import('./[id]/approve.js');
 const { default: reject } = await import('./[id]/reject.js');
 
 function makeSql() {
-  const calls = [];
+  const calls = []; calls.feedQueries = [];
   const sql = (strings, ...values) => {
     const text = strings.join(' ? ').replace(/\s+/g, ' ').trim();
     calls.push({ text, values });
     if (text.includes('FROM sessions')) return Promise.resolve(values[0] === hash(TOKEN) ? [{ id: 'admin-1', email: 'a@test', display_name: 'Admin' }] : []);
-    if (text.includes('FROM memberships')) return Promise.resolve([{ organization_id: ORG, role: 'ADMIN', scoped_area_id: null, organization_name: 'Org', organization_plan: 'team' }]);
+    if (text.includes('FROM memberships m JOIN') || text.includes('FROM memberships') && text.includes('organization_plan')) return Promise.resolve([{ organization_id: ORG, role: 'ADMIN', scoped_area_id: null, organization_name: 'Org', organization_plan: 'team' }]);
+    if (text.includes('FROM approval_requests ar') && text.includes('JOIN change_requests cr')) {
+      calls.feedQueries.push({ text, values });
+      return Promise.resolve(state.shiftRows ?? []);
+    }
     return Promise.resolve([]);
   };
   sql.transaction = async (build) => Promise.all(build((s, ...v) => { calls.push({ text: s.join(' ? '), values: v, transaction: true }); return Promise.resolve([]); }));
@@ -39,7 +43,7 @@ const call = async (handler, req) => { const res = response(); await handler({ h
 beforeEach(() => {
   state = { sql: makeSql() };
   Object.values(timeOff).forEach((fn) => fn.mockReset());
-  timeOff.listTimeOffApprovals.mockResolvedValue({ requests: [{ kind: 'TIME_OFF', id: 'e1', createdAt: '2026-11-03T10:00:00.000Z' }], nextCursor: null });
+  timeOff.listTimeOffApprovals.mockResolvedValue({ requests: [{ kind: 'TIME_OFF', id: 'e1', createdAt: '2026-11-03T10:00:00.000Z', sortAt: '2026-11-03T10:00:00.000Z' }], hasMore: false });
 });
 afterEach(() => { delete process.env.TIME_OFF_ENABLED; });
 
@@ -128,5 +132,63 @@ describe('approve / reject dispatch by subject', () => {
     process.env.TIME_OFF_ENABLED = 'true';
     expect((await post(reject, { reason: '   ' })).statusCode).toBe(400);
     expect(timeOff.rejectTimeOffRequest).not.toHaveBeenCalled();
+  });
+});
+
+const shiftRow = (id, createdAt, sortAt, status = 'APPROVED') => ({
+  id, organization_id: ORG, change_request_id: `cr-${id}`, status, policy_snapshot: 'ORGANIZATION_ADMIN', created_at: createdAt,
+  request_type: 'OTHER', reason: 'r', employee_id: 'emp-1', shift_id: 'sh-1', employee_name: 'Ana', area_id: null, area_name: null,
+  shift_date: '2026-11-10', shift_start_time: '09:00', shift_end_time: '17:00', shift_location: '', resolved_at: sortAt, resolved_by_name: 'Admin', rejection_reason: null, sort_at: sortAt,
+});
+
+describe('GET /api/approval-requests — SHIFT_CHANGE history in the unified API (spec §4.3.1)', () => {
+  it('kind=SHIFT_CHANGE&status=HISTORY reads the history of shift changes (APPROVED/REJECTED/CANCELLED), tagged and without touching time off', async () => {
+    state.shiftRows = [shiftRow('s1', '2026-11-01T09:00:00.000Z', '2026-11-03T10:00:00.000Z', 'REJECTED')];
+    const res = await call(index, { method: 'GET', query: { kind: 'SHIFT_CHANGE', status: 'history' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.requests).toEqual([expect.objectContaining({ kind: 'SHIFT_CHANGE', id: 's1', status: 'REJECTED', resolvedByName: 'Admin', sortAt: '2026-11-03T10:00:00.000Z' })]);
+    expect(res.body.nextCursor).toBeNull();
+    const [q] = state.sql.calls.feedQueries;
+    expect(q.text).toContain("cr.status IN ('APPROVED', 'REJECTED', 'CANCELLED')");
+    expect(q.values).toContain(true); // history flag
+    expect(q.values).toContain(ORG); // tenant
+    expect(timeOff.listTimeOffApprovals).not.toHaveBeenCalled();
+  });
+
+  it('kind=SHIFT_CHANGE&status=PENDING is the pending feed (history flag off), also without a flag', async () => {
+    state.shiftRows = [shiftRow('s2', '2026-11-04T09:00:00.000Z', '2026-11-04T09:00:00.000Z', 'PENDING')];
+    const res = await call(index, { method: 'GET', query: { kind: 'SHIFT_CHANGE', status: 'PENDING' } });
+    expect(res.body.requests[0]).toMatchObject({ kind: 'SHIFT_CHANGE', status: 'PENDING' });
+    expect(state.sql.calls.feedQueries[0].values).toContain(false);
+  });
+
+  it('kind=ALL&status=HISTORY merges both kinds newest-first with a deterministic cursor, and the same query pages both', async () => {
+    process.env.TIME_OFF_ENABLED = 'true';
+    state.shiftRows = [shiftRow('s-new', '2026-11-01T09:00:00.000Z', '2026-11-05T10:00:00.000Z'), shiftRow('s-old', '2026-10-01T09:00:00.000Z', '2026-10-02T10:00:00.000Z')];
+    timeOff.listTimeOffApprovals.mockResolvedValue({
+      requests: [{ kind: 'TIME_OFF', id: '33333333-3333-4333-8333-333333333333', createdAt: '2026-10-20T10:00:00.000Z', sortAt: '2026-11-04T10:00:00.000Z' }], hasMore: false,
+    });
+    const res = await call(index, { method: 'GET', query: { kind: 'ALL', status: 'HISTORY', limit: '2' } });
+    expect(res.body.requests.map((r) => r.id)).toEqual(['s-new', '33333333-3333-4333-8333-333333333333']);
+    const cursor = res.body.nextCursor;
+    expect(JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))).toEqual(['2026-11-04T10:00:00.000Z', '33333333-3333-4333-8333-333333333333']);
+    // the SAME cursor is handed to both readers for the next page
+    await call(index, { method: 'GET', query: { kind: 'ALL', status: 'HISTORY', limit: '2', cursor } });
+    expect(timeOff.listTimeOffApprovals.mock.calls.at(-1)[2].cursor).toEqual({ at: '2026-11-04T10:00:00.000Z', id: '33333333-3333-4333-8333-333333333333' });
+    expect(state.sql.calls.feedQueries.at(-1).values).toContain('2026-11-04T10:00:00.000Z');
+  });
+
+  it('kind=ALL with the flag OFF is only the shift changes; kind=TIME_OFF stays a 404', async () => {
+    state.shiftRows = [shiftRow('s3', '2026-11-04T09:00:00.000Z', '2026-11-04T09:00:00.000Z', 'PENDING')];
+    const all = await call(index, { method: 'GET', query: { kind: 'ALL', status: 'PENDING' } });
+    expect(all.body.requests.map((r) => r.kind)).toEqual(['SHIFT_CHANGE']);
+    expect((await call(index, { method: 'GET', query: { kind: 'TIME_OFF', status: 'HISTORY' } })).statusCode).toBe(404);
+  });
+
+  it('role guard and tenant: an EMPLOYEE is 403 on every kind/status; the tenant is always bound into the query', async () => {
+    const employeeToken = 'e'; // not a valid session token => 401, never data
+    const res = await call(index, { method: 'GET', query: { kind: 'SHIFT_CHANGE', status: 'HISTORY' }, headers: { cookie: `anclora_session=${employeeToken}` } });
+    expect(res.statusCode).toBe(401);
+    expect(state.sql.calls.feedQueries).toHaveLength(0);
   });
 });

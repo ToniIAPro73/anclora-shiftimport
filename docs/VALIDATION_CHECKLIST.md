@@ -23,7 +23,8 @@
 | E2E real con flags efímeros, 5 escenarios (aprobación, rechazo, planificador, importación en conflicto + override, regresión de cambio de turno) | 5/5, residuo 0 |
 | Flags apagados: rutas de vacaciones y `kind=TIME_OFF` ⇒ 404; `qa:local:smoke` | PASS |
 | Huella de la organización real `ShiftImport` antes/después | idéntica; Groundforce no existe en esta BD |
-| `npm run test:f3` (34 ficheros, 501 tests; incluye regresión de aprobación de cambio de turno, estadísticas, ledger, auto-publicación F1) | PASS |
+| E2E real del feed unificado (`kind` × `status`, fusión ALL por resolución, cursor sin duplicados, tenant, rol, legacy sin `kind`) | PASS |
+| `npm run test:f3` (35 ficheros, 510 tests; incluye regresión de aprobación de cambio de turno, estadísticas, ledger, auto-publicación F1) | PASS |
 | Arnés accesibilidad/responsive (375/412/1440 × ES-oscuro / EN-claro) | 144/144 |
 | `eslint` (0 warnings), `tsc`, `build` | PASS |
 | Ninguna suite amplia ni completa ejecutada; ninguna migración nueva | confirmado |
@@ -31,9 +32,9 @@
 ## 3. NOT_RUN / gaps
 - **Puerta F3 abierta**: los flags de Vercel Development no existen. Para cerrarla activa en **Development**, en este orden: `TIME_OFF_ENABLED=true` y después `VITE_TIME_OFF_ENABLED=true` (redeploy). Yo no cambio variables de Vercel.
 - QA visual con `agent-browser` del flujo F3 sobre el runtime real: pendiente de esa activación (hoy validado con el arnés y los E2E de API).
-- F4 (no iniciada): Centro de Solicitudes de gestores, aprobación en bloque, historial de cambios de turno.
+- F4 (no iniciada): Centro de Solicitudes de gestores y aprobación en bloque (el historial de cambios de turno ya está en la API unificada de F3).
 - Suite histórica amplia de `specs-qa-mirror`: deuda técnica no bloqueante de F1; no se ejecutó.
 
 ## 4. Para Toni
 - Activa los dos flags en Development (servidor primero) y dime: cierro la puerta con la comprobación focal sobre ese entorno.
-- Confirma que «el propietario siempre decide» y «la política estrecha a administradores y planificadores» es lo que quieres para vacaciones.
+- Decisión confirmada: el propietario siempre decide (salvo autoaprobación); la política estrecha al resto.
