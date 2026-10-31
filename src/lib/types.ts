@@ -34,6 +34,8 @@ export interface Shift {
   effectiveState?: 'EFFECTIVE' | 'SUPERSEDED' | 'ABSORBED' | 'METADATA_ONLY' | 'REQUIRES_REVIEW';
   planRevision?: number;
   changeId?: string | null;
+  /** Set when the row was materialised by an approved time-off request (a protected absence). */
+  timeOffRequestId?: string | null;
   createdAt?: string | null;
   importId?: string | null;
   /** The day also holds superseded/absorbed rows (history available). */

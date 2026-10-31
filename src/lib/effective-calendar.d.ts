@@ -30,6 +30,7 @@ export interface CalendarRowInput {
   importId?: string | null;
   import_id?: string | null;
   changeId?: string | null;
+  timeOffRequestId?: string | null;
   change_id?: string | null;
   currentEvidence?: boolean;
   current_evidence?: boolean;
@@ -51,6 +52,7 @@ export interface NormalizedCalendarRow {
   createdAt: string | null;
   importId: string | null;
   changeId: string | null;
+  timeOffRequestId: string | null;
   currentEvidence?: boolean;
 }
 

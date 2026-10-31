@@ -107,6 +107,7 @@ export function normalizeCalendarRow(row) {
     createdAt: pick('createdAt', 'created_at') ?? null,
     importId: pick('importId', 'import_id') ?? null,
     changeId: pick('changeId', 'change_id') ?? null,
+    timeOffRequestId: pick('timeOffRequestId', 'time_off_request_id') ?? null,
     currentEvidence: pick('currentEvidence', 'current_evidence') === true,
   };
 }

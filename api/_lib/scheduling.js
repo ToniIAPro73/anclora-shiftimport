@@ -206,6 +206,24 @@ async function assertEmployeeForSchedule(sql, ctx, schedule, employeeId) {
   if (schedule.area_id && rows[0].area_id !== schedule.area_id) throw scheduleScopeError();
 }
 
+/**
+ * An approved vacation is protected: no draft assignment may coexist with it on the same (employee, date) (spec §4.4.4, F3-M03).
+ * Data-driven (an EFFECTIVE shift born from a time-off request), so it needs no flag: without such rows nothing changes.
+ */
+async function assertNotProtectedAbsenceDay(sql, ctx, employeeId, date) {
+  const rows = await sql`
+    SELECT 1 FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
+      AND effective_state = 'EFFECTIVE' AND time_off_request_id IS NOT NULL
+    LIMIT 1
+  `;
+  if (rows.length > 0) {
+    const error = new HttpError(422, 'This day has an approved vacation and cannot be planned');
+    error.code = 'PROTECTED_ABSENCE_DAY';
+    throw error;
+  }
+}
+
 async function assertNoAssignmentOverlap(sql, { scheduleVersionId, employeeId, date, startTime, endTime, excludeId = null }) {
   if (startTime === null || endTime === null) return;
   const rows = excludeId
@@ -477,7 +495,7 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
   const calendarShiftQuery = scopedAreaId
     ? sql`
       SELECT sh.id, sh.employee_id, sh.date, sh.start_time, sh.end_time,
-             sh.location, sh.shift_type, sh.counts_as_work
+             sh.location, sh.shift_type, sh.counts_as_work, sh.time_off_request_id
       FROM shifts sh
       JOIN employees e ON e.id = sh.employee_id
       WHERE sh.organization_id = ${ctx.organizationId}
@@ -487,14 +505,14 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
         AND sh.area_id = ${scopedAreaId}
         AND sh.date BETWEEN ${schedule.period_start} AND ${schedule.period_end}
         AND sh.origin = 'MAN'
-        AND sh.provenance IN ('MANUAL_ADMIN_CHANGE', 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE')
+        AND sh.provenance IN ('MANUAL_ADMIN_CHANGE', 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE', 'EMPLOYEE_REQUEST')
         AND sh.effective_state = 'EFFECTIVE'
         AND sh.schedule_version_id IS NULL
       ORDER BY sh.date, sh.start_time NULLS FIRST, sh.employee_id, sh.id
     `
     : sql`
       SELECT sh.id, sh.employee_id, sh.date, sh.start_time, sh.end_time,
-             sh.location, sh.shift_type, sh.counts_as_work
+             sh.location, sh.shift_type, sh.counts_as_work, sh.time_off_request_id
       FROM shifts sh
       JOIN employees e ON e.id = sh.employee_id
       WHERE sh.organization_id = ${ctx.organizationId}
@@ -502,7 +520,7 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
         AND e.status = 'active'
         AND sh.date BETWEEN ${schedule.period_start} AND ${schedule.period_end}
         AND sh.origin = 'MAN'
-        AND sh.provenance IN ('MANUAL_ADMIN_CHANGE', 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE')
+        AND sh.provenance IN ('MANUAL_ADMIN_CHANGE', 'MANUAL_CONFIRMED_WHOLE_DAY_OVERRIDE', 'EMPLOYEE_REQUEST')
         AND sh.effective_state = 'EFFECTIVE'
         AND sh.schedule_version_id IS NULL
       ORDER BY sh.date, sh.start_time NULLS FIRST, sh.employee_id, sh.id
@@ -525,6 +543,8 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
       location: row.location ?? null,
       shiftType: row.shift_type ?? 'Regular',
       countsAsWork: row.counts_as_work !== false,
+      // An approved vacation (born from a time-off request) shows as a blocked day in Planning (spec §4.4.4).
+      timeOffRequestId: row.time_off_request_id ?? null,
     }));
   return {
     version: mapScheduleVersion(schedule),
@@ -544,6 +564,7 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
+  await assertNotProtectedAbsenceDay(sql, ctx, employeeId, date);
   await assertNoAssignmentOverlap(sql, {
     scheduleVersionId: versionId, employeeId, date, startTime, endTime,
   });
@@ -584,6 +605,7 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
+  await assertNotProtectedAbsenceDay(sql, ctx, employeeId, date);
   await assertNoAssignmentOverlap(sql, {
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, excludeId: assignmentId,
   });
@@ -751,6 +773,12 @@ export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, new
         FROM shift_assignments sa
         JOIN target t ON t.version_id = sa.schedule_version_id
         JOIN created c ON TRUE
+        WHERE NOT EXISTS (
+          SELECT 1 FROM shifts absence
+          WHERE absence.organization_id = t.organization_id AND absence.employee_id = sa.employee_id
+            AND absence.date = sa.date AND absence.effective_state = 'EFFECTIVE'
+            AND absence.time_off_request_id IS NOT NULL
+        )
         RETURNING id
       )
       SELECT
@@ -847,14 +875,20 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
     all_assignments AS MATERIALIZED (
       SELECT sa.id, sa.schedule_version_id, sa.employee_id, sa.date,
              sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
-             e.status AS employee_status
+             e.status AS employee_status,
+             EXISTS (
+               SELECT 1 FROM shifts absence
+               WHERE absence.organization_id = t.organization_id AND absence.employee_id = sa.employee_id
+                 AND absence.date = sa.date AND absence.effective_state = 'EFFECTIVE'
+                 AND absence.time_off_request_id IS NOT NULL
+             ) AS protected_absence
       FROM shift_assignments sa
       JOIN target t ON t.version_id = sa.schedule_version_id
       JOIN employees e ON e.id = sa.employee_id
         AND e.organization_id = t.organization_id
     ),
     active_assignments AS MATERIALIZED (
-      SELECT * FROM all_assignments WHERE employee_status = 'active'
+      SELECT * FROM all_assignments WHERE employee_status = 'active' AND NOT protected_absence
     ),
     assignment_intervals AS MATERIALIZED (
       SELECT a.*,
@@ -907,12 +941,15 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
     ),
     excluded AS (
       SELECT
-        COUNT(*) FILTER (WHERE employee_status <> 'active')::integer AS excluded_count,
+        COUNT(*) FILTER (WHERE employee_status <> 'active' OR protected_absence)::integer AS excluded_count,
         COALESCE(
           json_agg(
-            json_build_object('assignmentId', id, 'employeeId', employee_id)
+            json_build_object(
+              'assignmentId', id, 'employeeId', employee_id,
+              'reason', CASE WHEN employee_status <> 'active' THEN 'INACTIVE_EMPLOYEE' ELSE 'PROTECTED_ABSENCE' END
+            )
             ORDER BY id
-          ) FILTER (WHERE employee_status <> 'active'),
+          ) FILTER (WHERE employee_status <> 'active' OR protected_absence),
           '[]'::json
         ) AS excluded_assignments
       FROM all_assignments

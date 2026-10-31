@@ -268,6 +268,7 @@ export function mapShiftRow(row) {
     effectiveState: row.effective_state ?? 'EFFECTIVE',
     planRevision: row.plan_revision ?? 1,
     changeId: row.change_id ?? null,
+    timeOffRequestId: row.time_off_request_id ?? null,
     createdAt: row.created_at ?? null,
     hasHistory: row.has_history === true,
   };
@@ -2220,7 +2221,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
                  start_time, end_time, location, origin, shift_type, counts_as_work,
-                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
+                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, time_off_request_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2249,7 +2250,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
           SELECT id, organization_id, employee_id, import_id, area_id,
                  TO_CHAR(date, 'YYYY-MM-DD') AS date,
                  start_time, end_time, location, origin, shift_type, counts_as_work,
-                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
+                 layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, time_off_request_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2282,7 +2283,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
                start_time, end_time, location, origin, shift_type, counts_as_work,
-               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
+               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, time_off_request_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
@@ -2311,7 +2312,7 @@ export async function listShifts(sql, ctx, requestedEmployeeId, { areaId = null 
         SELECT id, organization_id, employee_id, import_id, area_id,
                TO_CHAR(date, 'YYYY-MM-DD') AS date,
                start_time, end_time, location, origin, shift_type, counts_as_work,
-               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, created_at,
+               layer, provenance, legacy_origin, duty_role, effective_state, plan_revision, change_id, time_off_request_id, created_at,
                  EXISTS (
                    SELECT 1 FROM shifts h
                    WHERE h.organization_id = shifts.organization_id AND h.employee_id = shifts.employee_id
