@@ -1,0 +1,57 @@
+/* Time off (F2-M05). Mobile-first: one column, nothing wider than the viewport. Tokens only, so light/dark follow the theme. */
+.time-off { display: grid; gap: 14px; margin-top: 18px; padding: 16px; border: 1px solid var(--glass-border); border-radius: 14px; background: var(--panel-muted-bg); min-width: 0; }
+.time-off__heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.time-off__eyebrow { margin: 0; color: var(--text-subtle); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; }
+.time-off h2 { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: 1.05rem; }
+.time-off__description { margin: 0; max-width: 56ch; color: var(--text-muted); font-size: 0.82rem; }
+.time-off__new, .time-off__cancel, .time-off-form__submit, .time-off__state button, .time-off-form__alert button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid var(--glass-border); background: var(--glass-bg); color: var(--color-accent); font: inherit; font-size: 0.84rem; font-weight: 700; cursor: pointer;
+}
+.time-off__new, .time-off-form__submit { background: var(--color-accent); border-color: var(--color-accent); color: var(--background, #0f172a); }
+.time-off-form__submit:disabled, .time-off__cancel:disabled { opacity: 0.55; cursor: not-allowed; }
+.time-off__new:focus-visible, .time-off__cancel:focus-visible, .time-off-form__submit:focus-visible, .time-off-form__close:focus-visible,
+.time-off__state button:focus-visible, .time-off-form__alert button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.time-off__feedback { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 0.84rem; border: 1px solid var(--glass-border); }
+.time-off__feedback--alert { border-color: var(--color-danger, #f87171); }
+.time-off__year { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
+.time-off__year .field-select { min-height: 36px; }
+.time-off__state { margin: 0; color: var(--text-muted); font-size: 0.84rem; }
+.time-off__state--error { display: grid; gap: 8px; justify-items: start; }
+.time-off__summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.time-off__summary div { padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: 10px; }
+.time-off__summary dt { color: var(--text-muted); font-size: 0.74rem; }
+.time-off__summary dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 800; }
+.time-off__list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.time-off__item { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--glass-border); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
+.time-off__item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.time-off__days, .time-off__comment, .time-off__applied, .time-off__rejection { margin: 0; font-size: 0.82rem; color: var(--text-muted); }
+.time-off__badge { padding: 3px 10px; border-radius: 999px; border: 1px solid var(--glass-border); font-size: 0.72rem; font-weight: 800; }
+.time-off__badge--pending { color: var(--warning, #f59e0b); border-color: currentColor; }
+.time-off__badge--approved { color: var(--color-accent); border-color: currentColor; }
+.time-off__badge--rejected { color: var(--color-danger, #f87171); border-color: currentColor; }
+.time-off__history summary { cursor: pointer; font-size: 0.78rem; color: var(--text-muted); }
+.time-off__history ol { margin: 6px 0 0; padding-left: 18px; font-size: 0.78rem; color: var(--text-muted); }
+
+.time-off-form { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--glass-border); border-radius: 12px; background: var(--glass-bg); min-width: 0; }
+.time-off-form__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.time-off-form__heading h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 0.98rem; }
+.time-off-form__close { display: inline-grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--glass-border); border-radius: 8px; background: transparent; color: var(--text-primary); cursor: pointer; }
+.time-off-form__form { display: grid; gap: 12px; }
+.time-off-form__dates { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.time-off-form .field-input, .time-off-form .field-textarea { width: 100%; box-sizing: border-box; }
+.time-off-form__days { margin: 0; justify-self: start; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--glass-border); font-size: 0.78rem; font-weight: 800; }
+.time-off-form__impact { display: grid; gap: 4px; font-size: 0.82rem; color: var(--text-muted); }
+.time-off-form__impact p { margin: 0; }
+.time-off-form__impact-title { font-weight: 800; color: var(--text-primary); }
+.time-off-form__impact-overlap { color: var(--color-danger, #f87171); font-weight: 700; }
+.time-off-form__alert { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--color-danger, #f87171); border-radius: 10px; font-size: 0.84rem; }
+.time-off-form__alert p { margin: 0; }
+.time-off-form__alert button { justify-self: start; margin-top: 6px; }
+.time-off-form__success { margin: 0; padding: 10px 12px; border: 1px solid var(--color-accent); border-radius: 8px; font-size: 0.84rem; }
+.time-off-form__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.time-off-form__count { color: var(--text-subtle); font-size: 0.76rem; }
+
+@media (min-width: 560px) {
+  .time-off-form__dates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

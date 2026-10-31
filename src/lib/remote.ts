@@ -456,6 +456,83 @@ export async function loadRemoteChangeRequests(status?: ChangeRequestStatus): Pr
   return payload.requests;
 }
 
+export type TimeOffRequestType = 'VACATION' | 'SICK_LEAVE' | 'PERMISSION' | 'OTHER';
+export type TimeOffRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface TimeOffHistoryEvent {
+  type: 'CREATED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  at: string | null;
+  byName?: string | null;
+  reason?: string | null;
+}
+
+export interface TimeOffRequest {
+  id: string;
+  requestType: TimeOffRequestType;
+  startDate: string;
+  endDate: string;
+  requestedDays: number;
+  comment: string;
+  status: TimeOffRequestStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
+  rejectionReason: string | null;
+  history: TimeOffHistoryEvent[];
+  /** Only once APPROVED: the range that was really applied (OD-08). */
+  appliedStartDate?: string | null;
+  appliedDays?: number | null;
+  skippedPastDays?: number | null;
+}
+
+export interface TimeOffSummary {
+  approvedDaysInYear: number;
+  pendingDays: number;
+  activeCount: number;
+}
+
+export interface TimeOffImpact {
+  publishedShifts: number;
+  draftAssignments: number;
+  overlapsOwn: Array<{ id: string; startDate: string; endDate: string; status: TimeOffRequestStatus }>;
+}
+
+export async function loadRemoteTimeOffRequests(
+  options: { status?: TimeOffRequestStatus; year?: number } = {},
+): Promise<{ requests: TimeOffRequest[]; summary: TimeOffSummary }> {
+  const params = new URLSearchParams();
+  if (options.status) params.set('status', options.status);
+  if (options.year) params.set('year', String(options.year));
+  const query = params.toString();
+  return apiFetch<{ requests: TimeOffRequest[]; summary: TimeOffSummary }>(`/api/me/time-off-requests${query ? `?${query}` : ''}`);
+}
+
+export async function loadRemoteTimeOffImpact(startDate: string, endDate: string): Promise<TimeOffImpact> {
+  const params = new URLSearchParams({ startDate, endDate });
+  return apiFetch<TimeOffImpact>(`/api/me/time-off-requests/impact?${params.toString()}`);
+}
+
+export async function createRemoteTimeOffRequest(input: {
+  requestType: TimeOffRequestType;
+  startDate: string;
+  endDate: string;
+  comment?: string;
+}): Promise<TimeOffRequest> {
+  const payload = await apiFetch<{ request: TimeOffRequest }>('/api/me/time-off-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return payload.request;
+}
+
+export async function cancelRemoteTimeOffRequest(requestId: string): Promise<TimeOffRequest> {
+  const payload = await apiFetch<{ request: TimeOffRequest }>(
+    `/api/me/time-off-requests/${encodeURIComponent(requestId)}/cancel`,
+    { method: 'POST' },
+  );
+  return payload.request;
+}
+
 export async function loadRemoteNotifications(): Promise<{
   notifications: EmployeeNotification[];
   unreadCount: number;

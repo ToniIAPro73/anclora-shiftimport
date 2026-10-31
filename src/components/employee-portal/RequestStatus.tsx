@@ -12,6 +12,8 @@ import { Shift } from '../../lib/types';
 import { ChangeRequestForm } from './ChangeRequestForm';
 import { ShiftPicker } from './ShiftPicker';
 import { formatRequestDateTime } from '../../lib/format-request';
+import { isTimeOffUiEnabled } from '../../lib/flags';
+import { TimeOffRequests } from '../requests/TimeOffRequests';
 
 type RequestStatusState =
   | { status: 'loading'; requests: ChangeRequest[] }
@@ -703,6 +705,7 @@ export function RequestStatus({
           </div>
         </div>
       )}
+      {employeeId && isTimeOffUiEnabled() && <TimeOffRequests />}
     </section>
   );
 }

@@ -73,4 +73,17 @@ describe('Notifications', () => {
     await waitFor(() => expect(screen.getByTestId('notifications-error')).toBeTruthy());
     expect(screen.queryByText(/email|SMS|push/i)).toBeNull();
   });
+
+  it('R-06: a notification type this UI does not know (e.g. TIME_OFF_REQUEST_RESOLVED) renders the generic text and never opens a shift', async () => {
+    const onOpenShift = vi.fn();
+    const unknown = { ...notification(), type: 'TIME_OFF_REQUEST_RESOLVED', resourceType: 'TIME_OFF_REQUEST' } as unknown as EmployeeNotification;
+    mockedLoad.mockResolvedValue({ notifications: [unknown], unreadCount: 1 });
+    mockedMarkRead.mockResolvedValue({ ...unknown, readAt: '2026-09-05T10:05:00.000Z' });
+    renderNotifications(onOpenShift);
+
+    const item = await screen.findByRole('button', { name: 'Tienes una nueva actualización' });
+    fireEvent.click(item);
+    await waitFor(() => expect(mockedMarkRead).toHaveBeenCalledWith(unknown.id));
+    expect(onOpenShift).not.toHaveBeenCalled();
+  });
 });

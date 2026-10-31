@@ -2,13 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { I18nProvider } from '../../lib/i18n-react';
-import { ChangeRequest, loadRemoteChangeRequests } from '../../lib/remote';
+import { ChangeRequest, loadRemoteChangeRequests, loadRemoteTimeOffRequests } from '../../lib/remote';
 import { ThemeProvider } from '../../lib/theme-react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { RequestStatus } from './RequestStatus';
 
 vi.mock('../../lib/remote', () => ({
   loadRemoteChangeRequests: vi.fn(),
+  loadRemoteTimeOffRequests: vi.fn(),
 }));
 
 setupLocalStorageMock();
@@ -37,11 +38,11 @@ function request(status: ChangeRequest['status'], id: string, rejectionReason?: 
   };
 }
 
-function renderStatus(onSelectShift = vi.fn()) {
+function renderStatus(onSelectShift = vi.fn(), employeeId?: string) {
   return render(
     <ThemeProvider>
       <I18nProvider>
-        <RequestStatus onSelectShift={onSelectShift} />
+        <RequestStatus onSelectShift={onSelectShift} employeeId={employeeId} />
       </I18nProvider>
     </ThemeProvider>,
   );
@@ -108,5 +109,22 @@ describe('RequestStatus', () => {
     renderStatus();
     await waitFor(() => expect(screen.getByText('Falta cobertura en el turno.')).toBeTruthy());
     expect(screen.getByText('Motivo del rechazo')).toBeTruthy();
+  });
+
+  it('flag OFF (default): the time-off section is absent and its endpoint is never called (pre-F2 behaviour)', async () => {
+    mockedLoad.mockResolvedValue([request('PENDING', 'request-pending')]);
+    renderStatus(vi.fn(), 'employee-1');
+    await waitFor(() => expect(screen.getByText('Motivo PENDING')).toBeTruthy());
+    expect(screen.queryByTestId('time-off-section')).toBeNull();
+    expect(vi.mocked(loadRemoteTimeOffRequests)).not.toHaveBeenCalled();
+  });
+
+  it('flag ON: the "Vacaciones y ausencias" section is mounted for a linked employee', async () => {
+    vi.stubEnv('VITE_TIME_OFF_ENABLED', 'true');
+    vi.mocked(loadRemoteTimeOffRequests).mockResolvedValue({ requests: [], summary: { approvedDaysInYear: 0, pendingDays: 0, activeCount: 0 } });
+    mockedLoad.mockResolvedValue([request('PENDING', 'request-pending')]);
+    renderStatus(vi.fn(), 'employee-1');
+    expect(await screen.findByTestId('time-off-section')).toBeTruthy();
+    vi.unstubAllEnvs();
   });
 });
