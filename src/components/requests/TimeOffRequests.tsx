@@ -10,6 +10,7 @@ import { getOperationalDate } from '../../lib/operational-date';
 import { ApiError } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import { TimeOffRequestForm } from './TimeOffRequestForm';
+import { TIME_OFF_CHANGED_EVENT } from './use-pending-time-off';
 import './TimeOffRequests.css';
 
 type ListState =
@@ -45,6 +46,8 @@ export function TimeOffRequests() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: 'status' | 'alert'; text: string } | null>(null);
 
+  const announceChange = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(TIME_OFF_CHANGED_EVENT)); };
+
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
@@ -71,6 +74,7 @@ export function TimeOffRequests() {
         ? { ...current, requests: current.requests.map((r) => (r.id === cancelled.id ? cancelled : r)) }
         : current);
       setFeedback({ tone: 'status', text: t('timeOff.cancelled') });
+      announceChange();
       void load();
     } catch (error) {
       const notPending = error instanceof ApiError && error.code === 'TIME_OFF_NOT_PENDING';
@@ -102,7 +106,7 @@ export function TimeOffRequests() {
       {formOpen && (
         <TimeOffRequestForm
           onClose={() => setFormOpen(false)}
-          onCreated={() => { setFormOpen(false); setFeedback({ tone: 'status', text: t('timeOff.sent') }); void load(); }}
+          onCreated={() => { setFormOpen(false); setFeedback({ tone: 'status', text: t('timeOff.sent') }); announceChange(); void load(); }}
         />
       )}
 

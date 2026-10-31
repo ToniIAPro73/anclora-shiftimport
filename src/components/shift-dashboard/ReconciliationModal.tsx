@@ -164,7 +164,16 @@ export function ReconciliationModal({
                           <CalendarDays size={16} aria-hidden="true" />
                         </button>
                       </span>
-                      {pending && item.reasonCode && (
+                      {pending && item.reasonCode === 'APPROVED_VACATION_CONFLICT' && (
+                        <small className="recon-row__reason recon-row__reason--vacation" data-testid={`recon-why-${item.date}`}>
+                          <AlertTriangle size={12} aria-hidden="true" />{' '}
+                          <strong>{t('dayHistory.protectedBadge')}</strong> · {t('reconModal.reason.APPROVED_VACATION_CONFLICT', {
+                            start: item.protectedAbsence?.startDate ? `${item.protectedAbsence.startDate.slice(8, 10)}/${item.protectedAbsence.startDate.slice(5, 7)}` : '—',
+                            end: item.protectedAbsence?.endDate ? `${item.protectedAbsence.endDate.slice(8, 10)}/${item.protectedAbsence.endDate.slice(5, 7)}` : '—',
+                          })}
+                        </small>
+                      )}
+                      {pending && item.reasonCode && item.reasonCode !== 'APPROVED_VACATION_CONFLICT' && (
                         <small className="recon-row__reason" data-testid={`recon-why-${item.date}`}>{t('reconModal.reason.PENDING_REVIEW')}</small>
                       )}
                       {reasonText && (

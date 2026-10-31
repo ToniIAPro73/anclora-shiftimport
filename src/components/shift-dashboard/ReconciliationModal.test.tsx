@@ -166,4 +166,21 @@ describe('ReconciliationModal — presentation', () => {
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Todos' }), { key: 'Home' });
     expect(screen.getByRole('tab', { name: 'Pendientes' })).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('APPROVED_VACATION_CONFLICT explains the protected vacation with its range, an icon and words (not just colour)', () => {
+    const item: ReconciliationItem = {
+      date: '2026-08-12', status: 'PENDING',
+      current: [{ type: 'Vacaciones', startTime: null, endTime: null }],
+      proposed: [{ type: 'Regular', startTime: '05:00', endTime: '13:00' }],
+      reasonCode: 'APPROVED_VACATION_CONFLICT',
+      protectedAbsence: { timeOffRequestId: 'r1', startDate: '2026-08-12', endDate: '2026-08-18' },
+      resolvedAt: null, resolvedReason: null, selfChange: null,
+    };
+    renderModal({ employeeId: 'e1', year: 2026, pendingCount: 1, resolvedCount: 0, items: [item] });
+    const why = screen.getByTestId('recon-why-2026-08-12');
+    expect(why).toHaveTextContent('Protegida');
+    expect(why).toHaveTextContent('Conflicto con Vacaciones aprobadas (12/08–18/08)');
+    expect(why).not.toHaveTextContent('Diferencia pendiente');
+    expect(why.querySelector('svg')).toBeTruthy();
+  });
 });

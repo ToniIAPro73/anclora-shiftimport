@@ -20,7 +20,7 @@ export interface DayDetailModalProps {
   onDeleteShift?: (id: string) => void | Promise<void>;
   triggerRef?: React.RefObject<HTMLElement | null>;
   /** Effective-calendar provenance (backend sessions only). */
-  provenance?: { employeeId: string; canReconcile: boolean; onChanged?: () => void };
+  provenance?: { employeeId: string; canReconcile: boolean; canOverrideProtectedAbsence?: boolean; onChanged?: () => void };
   /** DCF incidences / observations of this day (backend sessions). */
   annotations?: DayAnnotation[];
   canEditAnnotations?: boolean;
@@ -273,6 +273,7 @@ export const DayDetailModal: React.FC<DayDetailModalProps> = ({
             employeeId={provenance.employeeId}
             date={date}
             canReconcile={provenance.canReconcile}
+            canOverrideProtectedAbsence={provenance.canOverrideProtectedAbsence}
             onChanged={provenance.onChanged}
           />
           </div>

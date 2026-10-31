@@ -58,6 +58,7 @@ import { StatisticsModal } from './components/shift-dashboard/StatisticsModal';
 import { ReconciliationModal } from './components/shift-dashboard/ReconciliationModal';
 import { AnnualTargetModal } from './components/shift-dashboard/AnnualTargetModal';
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
+import { usePendingTimeOff } from './components/requests/use-pending-time-off';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
@@ -832,6 +833,8 @@ function App() {
   // DCF incidences and observations of the visible month (backend sessions only).
   const [annotations, setAnnotations] = useState<DayAnnotation[]>([]);
   const [annotationsVersion, setAnnotationsVersion] = useState(0);
+  // Own pending vacation requests as a calendar overlay (employee viewing their own calendar; off unless VITE_TIME_OFF_ENABLED).
+  const pendingTimeOff = usePendingTimeOff(session?.role === 'EMPLOYEE', currentYear);
   useEffect(() => {
     let cancelled = false;
     if (!session || !activeEmployeeId || needsOrgChoice) {
@@ -2300,6 +2303,7 @@ function App() {
             canEditAnnotations={Boolean(session?.role && ['OWNER', 'ADMIN', 'PLANNER'].includes(session.role))}
             onAnnotationsChanged={() => setAnnotationsVersion((value) => value + 1)}
             onDayChanged={() => { void refreshCalendarData(); }}
+            pendingTimeOff={pendingTimeOff}
           />
         </section>
         <StatisticsModal

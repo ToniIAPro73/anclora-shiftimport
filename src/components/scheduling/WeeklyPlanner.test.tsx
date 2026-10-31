@@ -166,6 +166,24 @@ describe('WeeklyPlanner', () => {
     expect(screen.queryByRole('button', { name: /Extras/ })).not.toBeInTheDocument();
   });
 
+  it('an approved vacation shows as a protected day (lock + words) and is not an ordinary calendar shift', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [],
+      calendarShifts: [{
+        id: 'vacation-1', employeeId: 'employee-1', date: '2026-09-29', startTime: null, endTime: null, location: 'Vacaciones',
+        shiftType: 'Vacaciones', countsAsWork: false, timeOffRequestId: 'request-1',
+      }],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByText(/Vacaciones aprobadas · protegido/)).toBeInTheDocument());
+    const cell = document.querySelector('[data-protected-absence="true"]') as HTMLElement;
+    expect(cell).toBeTruthy();
+    expect(cell.getAttribute('aria-label')).toContain('día protegido: no se puede planificar');
+    expect(screen.queryByText('Ya en calendario')).not.toBeInTheDocument();
+  });
+
   it('preserves start and end times and keeps inputs enabled when selecting Ausencia type', async () => {
     upsertShiftType({
       id: 'ausencia',

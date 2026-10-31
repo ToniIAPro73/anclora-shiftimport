@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Plus, Table2, X } from 'lucide-react';
+import { CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Lock, Plus, Table2, X } from 'lucide-react';
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
@@ -734,15 +734,21 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                       getShiftTypeDefinition(shiftTypeId)?.label ?? shiftTypeId,
                                     );
                                     const hasTimes = Boolean(shift.startTime && shift.endTime);
+                                    const protectedAbsence = Boolean(shift.timeOffRequestId);
                                     return (
                                       <div
                                         className="weekly-planner__assignment weekly-planner__calendar-shift"
                                         key={`calendar-${shift.id}`}
                                         data-shift-type={shiftTypeId}
-                                        title={t('planner.alreadyOnCalendar')}
-                                        aria-label={`${t('planner.alreadyOnCalendar')}: ${displayType}${hasTimes ? ` ${shift.startTime}–${shift.endTime}` : ''}`}
+                                        data-protected-absence={protectedAbsence || undefined}
+                                        title={protectedAbsence ? t('planner.protectedVacationAria') : t('planner.alreadyOnCalendar')}
+                                        aria-label={protectedAbsence
+                                          ? `${t('planner.protectedVacationAria')}: ${displayType}`
+                                          : `${t('planner.alreadyOnCalendar')}: ${displayType}${hasTimes ? ` ${shift.startTime}–${shift.endTime}` : ''}`}
                                       >
-                                        <span className="weekly-planner__assignment-type">{t('planner.alreadyOnCalendar')}</span>
+                                        <span className="weekly-planner__assignment-type">
+                                          {protectedAbsence && <Lock size={11} aria-hidden="true" />}{protectedAbsence ? ` ${t('planner.protectedVacation')}` : t('planner.alreadyOnCalendar')}
+                                        </span>
                                         <strong>{hasTimes
                                           ? `${displayType} · ${shift.startTime}–${shift.endTime}`
                                           : displayType}</strong>
@@ -750,7 +756,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                       </div>
                                     );
                                   })}
-                                  {editable && day >= today && (
+                                  {editable && day >= today && !(calendarShiftsByCell.get(`${employee.id}:${day}`) ?? []).some((shift) => shift.timeOffRequestId) && (
                                     <button type="button" className="weekly-planner__add-cell" onClick={() => handleAdd(employee.id, day)} aria-label={t('planner.addAssignment', { employee: employee.name, date: day })} data-editor-target={`${employee.id}:${day}`}>
                                       <Plus size={16} aria-hidden="true" />
                                     </button>

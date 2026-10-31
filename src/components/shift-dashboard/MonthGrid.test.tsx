@@ -499,3 +499,53 @@ describe('MonthGrid "day changed" indicator is a VISIBLE change, not technical h
     expect(button?.getAttribute('data-review')).not.toBeNull();
   });
 });
+
+describe('approved and pending vacations (F3-M06)', () => {
+  const vacation = (date: string, extra: Partial<Shift> = {}): Shift => ({
+    id: `v-${date}`, date, startTime: '', endTime: '', location: 'Vacaciones', origin: 'MAN', shiftType: 'Vacaciones', countsAsWork: false,
+    provenance: 'EMPLOYEE_REQUEST', layer: 'CHANGE', effectiveState: 'EFFECTIVE', timeOffRequestId: 'req-1', ...extra,
+  });
+  const grid = (props: Partial<React.ComponentProps<typeof MonthGrid>> = {}) => render(
+    <I18nProvider>
+      <MonthGrid year={2026} month={7} shifts={[]} onEditShift={vi.fn()} onCreateShift={vi.fn()} {...props} />
+    </I18nProvider>,
+  );
+
+  it('an approved vacation badge is marked protected with a lock AND words (colour is never the only cue)', () => {
+    grid({ shifts: [vacation('2026-08-10')] });
+    const badge = document.querySelector('.month-shift-badge[data-protected-absence]') as HTMLElement;
+    expect(badge).toBeTruthy();
+    expect(badge.querySelector('.month-shift-badge__lock')).toBeTruthy();
+    expect(badge.getAttribute('aria-label')).toContain('Vacaciones aprobadas (protegidas)');
+  });
+
+  it('a vacation without a request (manual) is NOT shown as protected', () => {
+    grid({ shifts: [vacation('2026-08-10', { timeOffRequestId: null, provenance: 'MANUAL_ADMIN_CHANGE' })] });
+    expect(document.querySelector('[data-protected-absence]')).toBeNull();
+  });
+
+  it('a pending request is a dashed chip with text on each day of its range, never on other days, and never counted as a shift', () => {
+    grid({ pendingTimeOff: [{ id: 'r1', startDate: '2026-08-12', endDate: '2026-08-14' }] });
+    for (const day of ['12', '13', '14']) {
+      const chip = screen.getByTestId(`day-pending-vacation-2026-08-${day}`);
+      expect(chip).toHaveTextContent('Vacaciones (Pendiente)');
+      expect(chip).toHaveAttribute('data-pending-request', 'true');
+      expect(chip).toHaveAttribute('aria-label', 'Solicitud de vacaciones pendiente de aprobación');
+    }
+    expect(screen.queryByTestId('day-pending-vacation-2026-08-11')).toBeNull();
+    expect(screen.queryByTestId('day-pending-vacation-2026-08-15')).toBeNull();
+    expect(document.querySelectorAll('.month-shift-badge')).toHaveLength(0);
+  });
+
+  it('a pending chip yields to a vacation that is already in the calendar that day', () => {
+    grid({ shifts: [vacation('2026-08-12')], pendingTimeOff: [{ id: 'r1', startDate: '2026-08-12', endDate: '2026-08-13' }] });
+    expect(screen.queryByTestId('day-pending-vacation-2026-08-12')).toBeNull();
+    expect(screen.getByTestId('day-pending-vacation-2026-08-13')).toBeInTheDocument();
+  });
+
+  it('a day with an approved vacation and a pending import proposal announces the conflict on its warning button', () => {
+    const proposal: Shift = { id: 'p1', date: '2026-08-10', startTime: '05:00', endTime: '13:00', location: 'Regular', origin: 'IMP', shiftType: 'Regular', effectiveState: 'REQUIRES_REVIEW' };
+    grid({ shifts: [vacation('2026-08-10'), proposal], employeeId: 'e1', provenanceEnabled: true });
+    expect(screen.getByTestId('day-history-btn-2026-08-10')).toHaveAttribute('aria-label', 'Conflicto con Vacaciones aprobadas — abrir el día');
+  });
+});

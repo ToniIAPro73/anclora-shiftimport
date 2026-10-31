@@ -163,3 +163,18 @@
   .stats-modal .planned-card { padding: 10px 14px; }
   .recon-modal__header { margin-bottom: 8px; }
 }
+
+/* Approved vacation in the day detail (F3): origin line, conflict block with its five answers and the two named actions. */
+.day-history__origin { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 0.82rem; color: var(--text-muted); }
+.day-history__origin strong { color: var(--text-primary); }
+.day-history__conflict {
+  display: grid; gap: 6px; margin: 0 0 12px; padding: 12px; border: 1px solid var(--warning, #f59e0b); border-left-width: 4px;
+  border-radius: 10px; font-size: 0.84rem; background: color-mix(in srgb, var(--warning, #f59e0b) 8%, transparent);
+}
+.day-history__conflict p { margin: 0; }
+.day-history__conflict-title { display: flex; align-items: center; gap: 8px; }
+.day-history__conflict-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.day-history__conflict-actions .eff-button { min-height: 40px; }
+.day-history__conflict-note { color: var(--text-muted); font-size: 0.8rem; }
+.day-history__conflict-error { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--color-danger, #f87171); border-radius: 8px; }
+.recon-row__reason--vacation { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }

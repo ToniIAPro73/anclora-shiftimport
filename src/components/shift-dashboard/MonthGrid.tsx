@@ -5,7 +5,7 @@ import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
-import { AlertTriangle, History, MessageSquare, Plus } from 'lucide-react';
+import { AlertTriangle, History, Lock, MessageSquare, Plus } from 'lucide-react';
 import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 import { sortDayShifts } from '../../lib/shifts';
@@ -42,6 +42,8 @@ interface MonthGridProps {
   annotations?: DayAnnotation[];
   canEditAnnotations?: boolean;
   onAnnotationsChanged?: () => void;
+  /** Own vacation requests still awaiting a decision (visual layer only: they never count in the statistics). */
+  pendingTimeOff?: ReadonlyArray<{ id: string; startDate: string; endDate: string }>;
 }
 
 export const MonthGrid = ({
@@ -62,6 +64,7 @@ export const MonthGrid = ({
   annotations = [],
   canEditAnnotations = false,
   onAnnotationsChanged,
+  pendingTimeOff = [],
 }: MonthGridProps) => {
   const { locale, t, tl } = useI18n();
   const weekStartsOn = getWeekStartsOn(locale);
@@ -151,7 +154,8 @@ export const MonthGrid = ({
     const hasTimes = hasShiftTimes(shift);
     const originPrefix = shift.isDraft ? t('calendar.draftBadge') : shiftOrigin === 'IMP' ? t('importConflict.describeImported') : t('importConflict.describeManual');
     const isExpanded = expandedShiftId === shift.id;
-    const fullLabel = `${originPrefix} ${shiftType}${hasTimes ? ` ${shift.startTime}–${shift.endTime}` : ''}`;
+    const protectedAbsence = Boolean(shift.timeOffRequestId) && shift.effectiveState !== 'SUPERSEDED';
+    const fullLabel = `${originPrefix} ${shiftType}${hasTimes ? ` ${shift.startTime}–${shift.endTime}` : ''}${protectedAbsence ? ` — ${t('calendar.protectedVacation')}` : ''}`;
     const definition = getShiftTypeDefinition(shiftTypeId);
     const shortLabel = locale === 'es' ? (definition?.shortLabel ?? shiftType) : shiftType;
 
@@ -163,6 +167,7 @@ export const MonthGrid = ({
         data-shift-visual={getShiftVisualTokenKey(shiftTypeId)}
         className={`month-shift-badge${isExpanded ? ' is-expanded' : ''}${shift.isDraft ? ' is-draft' : ''}`}
         data-draft={shift.isDraft || undefined}
+        data-protected-absence={protectedAbsence || undefined}
         onClick={(event) => {
           event.stopPropagation();
           handleShiftPress(shift);
@@ -175,6 +180,7 @@ export const MonthGrid = ({
         title={fullLabel}
         aria-label={fullLabel}
       >
+        {protectedAbsence && <Lock size={10} className="month-shift-badge__lock" aria-hidden="true" />}
         <span className="month-shift-badge__origin">{originPrefix} </span>
         <span className="month-shift-badge__label">{shiftType}</span>
         <span className="month-shift-badge__short" aria-hidden="true">{shortLabel}</span>
@@ -250,6 +256,9 @@ export const MonthGrid = ({
             const hasVacationShift = currentShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const isHistorical = isHistoricalDate(iso, todayISO);
             const needsReview = pendingRows;
+            const vacationConflict = needsReview && currentShifts.some((shift) => Boolean(shift.timeOffRequestId));
+            const pendingVacation = pendingTimeOff.some((request) => request.startDate <= iso && iso <= request.endDate)
+              && !currentShifts.some((shift) => getShiftType(shift) === 'Vacaciones');
             const dayAnnotations = annotations.filter((item) => item.date === iso);
             const hasDcf = dayAnnotations.some((item) => item.kind === 'DCF');
             const hasComment = dayAnnotations.some((item) => item.kind === 'COMMENT');
@@ -345,7 +354,7 @@ export const MonthGrid = ({
                         dayDetailTriggerRef.current = event.currentTarget;
                         setSelectedDayDetailDate(iso);
                       }}
-                      aria-label={needsReview ? t('calendarTools.dayWarning') : `${t('dayHistory.changedBadge')} — ${t('dayHistory.open')}`}
+                      aria-label={vacationConflict ? t('calendar.vacationConflictAria') : needsReview ? t('calendarTools.dayWarning') : `${t('dayHistory.changedBadge')} — ${t('dayHistory.open')}`}
                       title={needsReview ? t('calendarTools.dayWarning') : t('dayHistory.changedBadge')}
                       data-testid={`day-history-btn-${iso}`}
                       data-review={needsReview || undefined}
@@ -374,6 +383,18 @@ export const MonthGrid = ({
 
                 <div className="month-day-sections">
                   {renderShiftStack(visibleShifts)}
+                  {pendingVacation && (
+                    <span
+                      className="month-pending-vacation"
+                      data-pending-request="true"
+                      data-testid={`day-pending-vacation-${iso}`}
+                      role="img"
+                      aria-label={t('calendar.pendingVacationAria')}
+                      title={t('calendar.pendingVacationAria')}
+                    >
+                      {t('calendar.pendingVacationChip')}
+                    </span>
+                  )}
                   {hiddenCount > 0 && (
                     <button
                       type="button"
@@ -428,7 +449,7 @@ export const MonthGrid = ({
           onDeleteShift={onDeleteShift}
           triggerRef={dayDetailTriggerRef}
           provenance={provenanceEnabled && employeeId
-            ? { employeeId, canReconcile, onChanged: onDayChanged }
+            ? { employeeId, canReconcile, canOverrideProtectedAbsence: role === 'OWNER' || role === 'ADMIN', onChanged: onDayChanged }
             : undefined}
           annotations={annotations.filter((item) => item.date === selectedDayDetailDate)}
           canEditAnnotations={canEditAnnotations}

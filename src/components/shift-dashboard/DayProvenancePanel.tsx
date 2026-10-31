@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { AlertTriangle, Lock } from 'lucide-react';
 import { loadDayHistory, reconcileCalendarDayRemote, type RemoteDayHistory } from '../../lib/remote';
+import { ApiError } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
 import type { NormalizedCalendarRow } from '../../lib/effective-calendar.js';
 import { classifyReason, hasSemanticDayChange, normalizeChangeRows, uniqueKeepOptions } from './reconciliation-display';
@@ -8,10 +10,14 @@ interface DayProvenancePanelProps {
   employeeId: string;
   date: string;
   canReconcile: boolean;
+  /** OWNER/ADMIN only: replacing an approved vacation with an import proposal is an audited override. */
+  canOverrideProtectedAbsence?: boolean;
   onChanged?: () => void;
 }
 
 const clock = (value: string | null): string => (value ? String(value).slice(0, 5) : '');
+/** `2026-08-12` → `12/08` (the vacation range in conflict messages). */
+const dayMonth = (iso?: string | null): string => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
 
 function RowList({ rows, empty }: { rows: NormalizedCalendarRow[]; empty: string }) {
   if (rows.length === 0) return <p className="day-history__empty">{empty}</p>;
@@ -31,7 +37,7 @@ function RowList({ rows, empty }: { rows: NormalizedCalendarRow[]; empty: string
  * Day provenance: current calendar, detected alternatives, chronological
  * change trail and explicit resolution for days awaiting review.
  */
-export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }: DayProvenancePanelProps) {
+export function DayProvenancePanel({ employeeId, date, canReconcile, canOverrideProtectedAbsence = false, onChanged }: DayProvenancePanelProps) {
   const { t, locale } = useI18n();
   const [history, setHistory] = useState<RemoteDayHistory | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -39,6 +45,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [reconcileError, setReconcileError] = useState(false);
+  const [overrideForbidden, setOverrideForbidden] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -62,17 +69,19 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
       ? '—'
       : list.map((r) => `${r.shiftType}${r.startTime && r.endTime ? ` ${clock(r.startTime)}–${clock(r.endTime)}` : ''}`).join(' + ');
 
-  const submitReconcile = async () => {
+  const submitReconcile = async (ids: string[] = keepIds) => {
     setSaving(true);
     setReconcileError(false);
+    setOverrideForbidden(false);
     try {
-      await reconcileCalendarDayRemote({ employeeId, date, keepShiftIds: keepIds, reason });
+      await reconcileCalendarDayRemote({ employeeId, date, keepShiftIds: ids, reason });
       setKeepIds([]);
       setReason('');
       await load();
       onChanged?.();
-    } catch {
-      setReconcileError(true);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN') setOverrideForbidden(true);
+      else setReconcileError(true);
     } finally {
       setSaving(false);
     }
@@ -124,9 +133,79 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, onChanged }
     );
   };
 
+  const absence = history.protectedAbsence ?? null;
+  const replaced = history.replacedAbsence ?? null;
+  const inConflict = Boolean(absence) && provenance.requiresReview;
+  const range = { start: dayMonth(absence?.startDate), end: dayMonth(absence?.endDate) };
+  const proposalIds = (provenance.proposed ?? history.rows.filter((row) => row.effectiveState === 'REQUIRES_REVIEW'))
+    .map((row) => row.id).filter((id): id is string => Boolean(id));
+
   return (
     <section className="day-history" aria-label={t('dayHistory.title')} data-testid="day-history">
-      {provenance.requiresReview && (
+      {absence && (
+        <p className="day-history__origin" data-testid="day-history-origin">
+          <Lock size={14} aria-hidden="true" />
+          <strong>{t('dayHistory.protectedBadge')}</strong> · {t('dayHistory.originTimeOff', range)}
+        </p>
+      )}
+      {replaced && (
+        <p className="day-history__origin day-history__origin--replaced" role="status" data-testid="day-history-absence-replaced">
+          {t('dayHistory.absenceReplaced', { start: dayMonth(replaced.startDate), end: dayMonth(replaced.endDate) })}
+        </p>
+      )}
+      {inConflict && (
+        <div className="day-history__conflict" role="alert" data-testid="day-history-conflict">
+          <p className="day-history__conflict-title">
+            <AlertTriangle size={16} aria-hidden="true" />
+            <strong>{t('dayHistory.vacationConflict.title', range)}</strong>
+          </p>
+          <p>{t('dayHistory.vacationConflict.what')}</p>
+          <p>{t('dayHistory.vacationConflict.written')}</p>
+          <p>{t('dayHistory.vacationConflict.notWritten')}</p>
+          <p>{t('dayHistory.vacationConflict.why')}</p>
+          <p><strong>{t('dayHistory.vacationConflict.action')}</strong></p>
+          {canReconcile ? (
+            <>
+              <label className="day-history__reason">
+                <span>{t('dayHistory.reconcileReason')}</span>
+                <textarea value={reason} maxLength={2000} rows={2} onChange={(event) => setReason(event.target.value)} data-testid="day-history-conflict-reason" />
+              </label>
+              <div className="day-history__conflict-actions">
+                <button
+                  type="button" className="eff-button eff-button--primary" disabled={saving || !reason.trim() || !absence?.shiftId}
+                  onClick={() => void submitReconcile(absence?.shiftId ? [absence.shiftId] : [])} data-testid="day-history-keep-current"
+                >
+                  {t('dayHistory.vacationConflict.keepCurrent')}
+                </button>
+                <button
+                  type="button" className="eff-button" disabled={saving || !reason.trim() || !canOverrideProtectedAbsence || proposalIds.length === 0}
+                  aria-describedby={canOverrideProtectedAbsence ? undefined : 'day-history-use-proposal-note'}
+                  onClick={() => void submitReconcile(proposalIds)} data-testid="day-history-use-proposal"
+                >
+                  {t('dayHistory.vacationConflict.useProposal')}
+                </button>
+              </div>
+              {!canOverrideProtectedAbsence && (
+                <p id="day-history-use-proposal-note" className="day-history__conflict-note" data-testid="day-history-use-proposal-note">
+                  {t('dayHistory.vacationConflict.useProposalForbidden')}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="day-history__conflict-note">{t('dayHistory.vacationConflict.useProposalForbidden')}</p>
+          )}
+          {overrideForbidden && (
+            <div className="day-history__conflict-error" role="alert" data-testid="day-history-override-forbidden">
+              <strong>{t('dayHistory.vacationConflict.forbiddenTitle')}</strong>
+              <p>{t('dayHistory.vacationConflict.forbiddenWhy')}</p>
+              <p>{t('dayHistory.vacationConflict.forbiddenKept')}</p>
+              <p>{t('dayHistory.vacationConflict.forbiddenAction')}</p>
+            </div>
+          )}
+          {reconcileError && <p role="alert">{t('dayHistory.reconcileError')}</p>}
+        </div>
+      )}
+      {provenance.requiresReview && !inConflict && (
         <div className="day-history__pending" role="status" data-testid="day-history-pending">
           <div className="day-history__pending-head">
             <strong>{t('dayHistory.pendingTitle')}</strong>

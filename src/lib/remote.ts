@@ -195,6 +195,8 @@ export interface CalendarScheduleShift {
   location: string | null;
   shiftType: string;
   countsAsWork: boolean;
+  /** Set for an approved vacation: the day is protected and cannot be planned. */
+  timeOffRequestId?: string | null;
 }
 
 export interface SchedulePublicationResult {
@@ -342,6 +344,7 @@ interface RemoteShiftRow {
   effectiveState?: Shift['effectiveState'];
   planRevision?: number;
   changeId?: string | null;
+  timeOffRequestId?: string | null;
   createdAt?: string | null;
   importId?: string;
   hasHistory?: boolean;
@@ -365,6 +368,7 @@ const toShift = (row: RemoteShiftRow): Shift => ({
   effectiveState: row.effectiveState,
   planRevision: row.planRevision,
   changeId: row.changeId ?? null,
+  timeOffRequestId: row.timeOffRequestId ?? null,
   createdAt: row.createdAt ?? null,
   importId: row.importId,
   hasHistory: row.hasHistory === true,
@@ -1547,12 +1551,27 @@ export interface RemoteCalendarChange {
   createdAt: string;
 }
 
+/** An approved vacation (born from a time-off request) holding — or that held — a calendar day. */
+export interface ProtectedAbsence {
+  timeOffRequestId: string;
+  startDate?: string;
+  endDate?: string;
+  appliedStartDate?: string | null;
+  appliedDays?: number | null;
+  requestedDays?: number;
+  /** The EFFECTIVE (or replaced) vacation row of that day. */
+  shiftId?: string;
+}
+
 export interface RemoteDayHistory {
   employeeId: string;
   date: string;
   rows: RemoteShiftRow[];
   changes: RemoteCalendarChange[];
   provenance: DayProvenance;
+  protectedAbsence?: ProtectedAbsence | null;
+  replacedAbsence?: ProtectedAbsence | null;
+  conflictsWithApprovedVacation?: boolean;
 }
 
 export async function loadDayHistory(employeeId: string, date: string): Promise<RemoteDayHistory> {
@@ -1658,6 +1677,8 @@ export interface ReconciliationItem {
   current: ReconciliationShiftLabel[];
   proposed: ReconciliationShiftLabel[];
   reasonCode?: ReconciliationReasonCode;
+  /** Set when the day holds an approved vacation that an import tried to replace (`APPROVED_VACATION_CONFLICT`). */
+  protectedAbsence?: ProtectedAbsence | null;
   resolvedAt: string | null;
   resolvedReason: string | null;
   selfChange: boolean | null;

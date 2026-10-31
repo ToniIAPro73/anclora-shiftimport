@@ -216,3 +216,99 @@ describe('day history: a technical check is not a change (16/07 equivalent)', ()
     expect(item).toHaveTextContent('Se detectó una diferencia que necesita revisión.');
   });
 });
+
+describe('approved vacation in the day (F3-M06)', () => {
+  const absence = { timeOffRequestId: 'req-1', startDate: '2026-08-12', endDate: '2026-08-18', shiftId: 'abs' };
+  const conflict = (over: Record<string, unknown> = {}) => history({
+    provenance: {
+      requiresReview: true, effective: [row('abs', 'Vacaciones', null, null)], current: [row('abs', 'Vacaciones', null, null)],
+      proposed: [row('prop', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')], countedProvisionally: false, legacyDutyRows: [],
+    },
+    rows: [row('abs', 'Vacaciones', null, null), row('prop', 'Regular', '05:00', '13:00', 'REQUIRES_REVIEW')],
+    changes: [], protectedAbsence: absence, conflictsWithApprovedVacation: true, ...over,
+  });
+  const panel = (canReconcile: boolean, canOverrideProtectedAbsence: boolean) => render(
+    <I18nProvider><DayProvenancePanel employeeId="e1" date="2026-08-12" canReconcile={canReconcile} canOverrideProtectedAbsence={canOverrideProtectedAbsence} /></I18nProvider>,
+  );
+
+  it('shows the origin "solicitud de vacaciones aprobada" with the range, with a lock and words', async () => {
+    loadDayHistory.mockResolvedValue(conflict({ provenance: { requiresReview: false, effective: [row('abs', 'Vacaciones', null, null)], current: [], proposed: [], legacyDutyRows: [] }, rows: [row('abs', 'Vacaciones', null, null)], conflictsWithApprovedVacation: false }));
+    panel(true, true);
+    const origin = await screen.findByTestId('day-history-origin');
+    expect(origin).toHaveTextContent('Protegida');
+    expect(origin).toHaveTextContent('Origen: solicitud de vacaciones aprobada (12/08–18/08)');
+  });
+
+  it('a conflict states the five answers and offers two named actions', async () => {
+    loadDayHistory.mockResolvedValue(conflict());
+    panel(true, true);
+    const box = await screen.findByTestId('day-history-conflict');
+    expect(box).toHaveAttribute('role', 'alert');
+    expect(box).toHaveTextContent('Conflicto con Vacaciones aprobadas (12/08–18/08)');
+    for (const text of ['Qué pasó', 'Qué se guardó', 'Qué no se aplicó', 'Por qué', 'Qué puedes hacer']) expect(box).toHaveTextContent(text);
+    expect(screen.getByTestId('day-history-keep-current')).toHaveTextContent('Mantener actual (Vacaciones)');
+    expect(screen.getByTestId('day-history-use-proposal')).toHaveTextContent('Usar propuesta');
+    expect(screen.queryByTestId('day-history-pending')).toBeNull(); // the generic keep-options block does not compete with it
+  });
+
+  it('OWNER/ADMIN: "Mantener actual" keeps the vacation row; "Usar propuesta" keeps the proposal rows; both need a reason', async () => {
+    loadDayHistory.mockResolvedValue(conflict());
+    panel(true, true);
+    await screen.findByTestId('day-history-conflict');
+    expect(screen.getByTestId('day-history-keep-current')).toBeDisabled();
+    fireEvent.change(screen.getByTestId('day-history-conflict-reason'), { target: { value: 'Confirmado con el empleado' } });
+    fireEvent.click(screen.getByTestId('day-history-use-proposal'));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-08-12', keepShiftIds: ['prop'], reason: 'Confirmado con el empleado' }));
+    await waitFor(() => expect(screen.getByTestId('day-history-keep-current')).toBeDisabled()); // the reason is cleared after a decision
+    fireEvent.change(screen.getByTestId('day-history-conflict-reason'), { target: { value: 'Confirmado con el empleado' } });
+    fireEvent.click(screen.getByTestId('day-history-keep-current'));
+    await waitFor(() => expect(reconcile).toHaveBeenLastCalledWith({ employeeId: 'e1', date: '2026-08-12', keepShiftIds: ['abs'], reason: 'Confirmado con el empleado' }));
+  });
+
+  it('PLANNER: "Usar propuesta" is disabled with its reason announced; "Mantener actual" still works', async () => {
+    loadDayHistory.mockResolvedValue(conflict());
+    panel(true, false);
+    await screen.findByTestId('day-history-conflict');
+    fireEvent.change(screen.getByTestId('day-history-conflict-reason'), { target: { value: 'ok' } });
+    const use = screen.getByTestId('day-history-use-proposal');
+    expect(use).toBeDisabled();
+    expect(use).toHaveAttribute('aria-describedby', 'day-history-use-proposal-note');
+    expect(screen.getByTestId('day-history-use-proposal-note')).toHaveTextContent('solo está disponible para propietarios y administradores');
+    expect(screen.getByTestId('day-history-keep-current')).toBeEnabled();
+  });
+
+  it('a 403 PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN is explained with what was and was not written and what to do', async () => {
+    const { ApiError } = await import('../../lib/session');
+    reconcile.mockRejectedValueOnce(new ApiError(403, 'forbidden', 'PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN'));
+    loadDayHistory.mockResolvedValue(conflict());
+    panel(true, true);
+    await screen.findByTestId('day-history-conflict');
+    fireEvent.change(screen.getByTestId('day-history-conflict-reason'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByTestId('day-history-use-proposal'));
+    const error = await screen.findByTestId('day-history-override-forbidden');
+    expect(error).toHaveAttribute('role', 'alert');
+    expect(error).toHaveTextContent('No se pudo sustituir las Vacaciones');
+    expect(error).toHaveTextContent('nada. Las Vacaciones y la propuesta siguen como estaban');
+  });
+
+  it('after an OWNER/ADMIN replaced the vacation the day says so and the request stays approved', async () => {
+    loadDayHistory.mockResolvedValue(conflict({
+      provenance: { requiresReview: false, effective: [row('prop', 'Regular', '05:00', '13:00')], current: [], proposed: [], legacyDutyRows: [] },
+      rows: [row('prop', 'Regular', '05:00', '13:00')], protectedAbsence: null, replacedAbsence: absence, conflictsWithApprovedVacation: false,
+    }));
+    panel(true, true);
+    const note = await screen.findByTestId('day-history-absence-replaced');
+    expect(note).toHaveTextContent('fueron sustituidas este día por un propietario o administrador');
+    expect(note).toHaveTextContent('La solicitud sigue aprobada');
+  });
+
+  it('in English', async () => {
+    window.localStorage?.setItem?.('anclora_shiftimport_locale_v1', 'en');
+    loadDayHistory.mockResolvedValue(conflict());
+    panel(true, true);
+    const box = await screen.findByTestId('day-history-conflict');
+    expect(box).toHaveTextContent('Conflict with approved Vacation (12/08–18/08)');
+    expect(screen.getByTestId('day-history-keep-current')).toHaveTextContent('Keep current (Vacation)');
+    expect(screen.getByTestId('day-history-use-proposal')).toHaveTextContent('Use proposal');
+  });
+});
