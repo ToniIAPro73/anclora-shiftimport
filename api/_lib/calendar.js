@@ -320,12 +320,34 @@ async function loadDayRows(sql, ctx, employeeId, date) {
     SELECT id, organization_id, employee_id, import_id, area_id,
            TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, location, origin,
            shift_type, counts_as_work, layer, provenance, legacy_origin, duty_role,
-           effective_state, plan_revision, change_id
+           effective_state, plan_revision, change_id, time_off_request_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
     ORDER BY start_time ASC NULLS FIRST, id ASC
   `;
 }
+
+
+/**
+ * Range of the approved time-off requests behind a set of day rows, so the UI can say "Conflicto con Vacaciones aprobadas
+ * (12/08–18/08)" without a second round trip. Only requests of this organisation are ever read.
+ */
+async function loadProtectedAbsences(sql, ctx, rows) {
+  const ids = [...new Set(rows.map((row) => row.time_off_request_id ?? row.timeOffRequestId).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const found = await sql`
+    SELECT id, TO_CHAR(start_date, 'YYYY-MM-DD') AS start_date, TO_CHAR(end_date, 'YYYY-MM-DD') AS end_date,
+           TO_CHAR(applied_start_date, 'YYYY-MM-DD') AS applied_start_date, applied_days, requested_days
+    FROM time_off_requests
+    WHERE organization_id = ${ctx.organizationId} AND id = ANY(${ids}::uuid[])
+  `;
+  return new Map(found.map((row) => [row.id, {
+    timeOffRequestId: row.id, startDate: row.start_date, endDate: row.end_date,
+    appliedStartDate: row.applied_start_date ?? null, appliedDays: row.applied_days ?? null, requestedDays: Number(row.requested_days),
+  }]));
+}
+
+const REQUIRES_REVIEW_STATE = 'REQUIRES_REVIEW';
 
 const REPLACING_TYPES = new Set(['TIME_CHANGE', 'TYPE_CHANGE', 'CANCEL_SHIFT', 'REPLACE_DAY']);
 
@@ -471,6 +493,14 @@ export async function reconcileCalendarDay(sql, ctx, input) {
   const decidable = candidates.filter((row) => !isDuty(row));
   const kept = decidable.filter((row) => keepIds.has(row.id));
   const dropped = decidable.filter((row) => !keepIds.has(row.id));
+  // Replacing an APPROVED vacation (a row born from a time-off request) with an alternative is an override: only OWNER/ADMIN may do
+  // it, and it is audited. Keeping the vacation (dropping the proposal) is an ordinary resolution open to every manager in scope.
+  const overriddenAbsences = dropped.filter((row) => row.time_off_request_id && row.effective_state === 'EFFECTIVE');
+  if (overriddenAbsences.length > 0 && ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') {
+    const error = new HttpError(403, 'Only an owner or administrator can replace an approved vacation');
+    error.code = 'PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN';
+    throw error;
+  }
   const resolved = resolveDay(date, [...kept, ...dutyRows].map((row) => ({ ...normalizeCalendarRow(row), effectiveState: 'EFFECTIVE' })));
   const blocking = resolved.issues.filter((issue) => issue.blocking);
   if (blocking.length) {
@@ -511,7 +541,16 @@ export async function reconcileCalendarDay(sql, ctx, input) {
     targetId: employeeId,
     metadata: { changeId, date, selfChange, kept: kept.length, dropped: dropped.length },
   });
-  return { changeId, date, employeeId, kept: kept.length, dropped: dropped.length };
+  // The request itself stays APPROVED (no revocation in the MVP, OD-04); the trail of who replaced it lives here.
+  for (const requestId of new Set(overriddenAbsences.map((row) => row.time_off_request_id))) {
+    await recordAuditEvent(sql, ctx, {
+      eventType: 'time_off_request.manual_override',
+      targetType: 'TIME_OFF_REQUEST',
+      targetId: requestId,
+      metadata: { changeId, date, employeeId, actorRole: ctx.role, replacedShiftIds: overriddenAbsences.filter((row) => row.time_off_request_id === requestId).map((row) => row.id), keptShiftIds: kept.map((row) => row.id) },
+    });
+  }
+  return { changeId, date, employeeId, kept: kept.length, dropped: dropped.length, overriddenAbsences: overriddenAbsences.length };
 }
 
 /** Full provenance of one day: every row ever recorded plus the change trail. */
@@ -544,12 +583,19 @@ export async function getDayHistory(sql, ctx, employeeId, date) {
     approvalStatus: change.approval_status,
     createdAt: change.created_at,
   }));
+  const absences = await loadProtectedAbsences(sql, ctx, rows);
+  const protectedRow = rows.find((row) => row.effective_state === 'EFFECTIVE' && row.time_off_request_id);
+  const replacedRow = rows.find((row) => row.effective_state === 'SUPERSEDED' && row.time_off_request_id);
   return {
     employeeId: targetEmployeeId,
     date,
     rows: rows.map(mapShiftRow),
     changes: mappedChanges,
     provenance: buildDayProvenance(rows, mappedChanges),
+    // An approved vacation holds this day (protected) or held it until an OWNER/ADMIN replaced it (replaced).
+    protectedAbsence: protectedRow ? { ...absences.get(protectedRow.time_off_request_id), shiftId: protectedRow.id } : null,
+    replacedAbsence: !protectedRow && replacedRow ? { ...absences.get(replacedRow.time_off_request_id), shiftId: replacedRow.id } : null,
+    conflictsWithApprovedVacation: Boolean(protectedRow) && rows.some((row) => row.effective_state === REQUIRES_REVIEW_STATE),
   };
 }
 
@@ -739,11 +785,12 @@ export async function listReconciliationDays(sql, ctx, employeeId, year) {
   const rows = await sql`
     SELECT id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, location,
            shift_type, counts_as_work, layer, provenance, legacy_origin, duty_role,
-           effective_state, plan_revision, created_at, import_id, change_id
+           effective_state, plan_revision, created_at, import_id, change_id, time_off_request_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ${targetEmployeeId}
       AND TO_CHAR(date, 'YYYY-MM-DD') = ANY(${dates})
   `;
+  const absences = await loadProtectedAbsences(sql, ctx, rows);
   const auditChanges = await sql`
     SELECT TO_CHAR(date, 'YYYY-MM-DD') AS date, after_state, created_at
     FROM calendar_changes
@@ -767,13 +814,17 @@ export async function listReconciliationDays(sql, ctx, employeeId, year) {
     const effectiveRows = isPending
       ? (provisional?.counted ? provisional.rows.map(label) : [])
       : provenance.effective.map(label);
-    const reasonCode = isPending ? provisional?.reason ?? 'PENDING_REVIEW' : 'PENDING_REVIEW';
+    const protectedRow = isPending
+      ? unwrap(date).find((row) => row.effectiveState === 'EFFECTIVE' && row.timeOffRequestId)
+      : null;
+    const reasonCode = protectedRow ? 'APPROVED_VACATION_CONFLICT' : isPending ? provisional?.reason ?? 'PENDING_REVIEW' : 'PENDING_REVIEW';
     return {
       date,
       status: isPending ? 'PENDING' : 'RESOLVED',
       current: effectiveRows,
       proposed: isPending ? unwrap(date).filter((row) => row.effectiveState === 'REQUIRES_REVIEW' && !provisional?.rows.some((current) => current.id === row.id)).map(label) : [],
       reasonCode,
+      protectedAbsence: protectedRow ? (absences.get(protectedRow.timeOffRequestId) ?? { timeOffRequestId: protectedRow.timeOffRequestId }) : null,
       resolvedAt: !isPending && resolution ? resolution.created_at : null,
       resolvedReason: !isPending && resolution ? resolution.reason : null,
       selfChange: !isPending && resolution ? Boolean(resolution.self_change) : null,
