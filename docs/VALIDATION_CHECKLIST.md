@@ -1,41 +1,39 @@
-# Checklist de validación — F2: base de vacaciones (Time Off) y feature flags (2026-10-31)
+# Checklist de validación — F3: aprobación y materialización de vacaciones, protección y conflicto con importaciones (2026-11-01)
 
 > Se sobrescribe en cada entrega; el historial queda en Git.
 
 **Repositorio:** anclora-shiftimport
-**Rama:** development (F2 sobre `d92bbb7`)
-**Spec canónica:** `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (F2, §20.1)
-**Entorno de validación:** runtime local (`qa:dev-runtime`) → Neon `main`; escrituras solo en tenants sintéticos `E2E-SHIFT-<runId>`; migración probada antes en PostgreSQL 16 descartable.
-**Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce (huella idéntica antes/después); residuo 0; 0 promociones.
+**Rama:** development (F3 sobre `cf18909`)
+**Spec canónica:** `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (F3, §20.1)
+**Entorno de validación:** runtime local con flags **efímeros** → Neon `main` (0050 ya aplicada, ninguna migración nueva); escrituras solo en tenants sintéticos `E2E-SHIFT-<runId>`; migración/SQL probados además en PostgreSQL 16 descartable.
+**Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce (huella idéntica); residuo 0; 0 promociones; variables de Vercel intactas.
 
 ## 1. Qué cambia
-- **Migración `0050`** (aplicada en Neon `main` con tu autorización; 50 aplicadas, 0 pendientes): tabla `time_off_requests` (catálogo cerrado de tipos, exclusión de solapes vivos, `applied_start_date`/`applied_days`), sobre de aprobación con sujeto exclusivo (cambio de turno XOR vacaciones), `shifts.time_off_request_id`, notificaciones y auditoría ampliadas (superconjuntos). Aditiva: el código desplegado sigue funcionando.
-- **Backend** (`TIME_OFF_ENABLED`, **apagado por defecto**; apagado ⇒ 404): `GET/POST /api/me/time-off-requests`, `GET …/impact`, `POST …/:id/cancel`. SELF por construcción (empleado y organización salen de la sesión). Solo `VACATION`; `SICK_LEAVE`/`PERMISSION`/`OTHER` ⇒ `422 TIME_OFF_TYPE_NOT_ENABLED`. Dominio (`time-off.js`) con la regla OD-08 y elegibilidad de aprobadores por scope real + política (`approval-eligibility.js`), que decide a quién se avisa al crear la solicitud.
-- **UI** (`VITE_TIME_OFF_ENABLED`, **apagado por defecto**): «Vacaciones y ausencias» dentro de Solicitudes del empleado: solicitar (validación en línea, impacto en el calendario), ver el año, resumen, historial y cancelar.
-- **Sin cambios** para el usuario con los dos flags apagados.
+- **Aprobar y rechazar vacaciones** (`/api/approval-requests`, con `kind=TIME_OFF|SHIFT_CHANGE|ALL`; sin `kind` todo igual que antes). Scope real (ORGANIZATION/AREAS/EMPLOYEES) en la consulta, anti-autoaprobación por usuario y empleado, el propietario siempre decide, la política estrecha al resto.
+- **Materialización** al aprobar: los turnos previos pasan a `SUPERSEDED`, se crea `Vacaciones` por día (nunca `Baja`), con rastro en `calendar_changes`; si la solicitud ya había empezado solo se aplica de hoy en adelante y se informa de los días no aplicados.
+- **Protección**: el planificador rechaza planificar un día con vacaciones aprobadas (422), la publicación las excluye y los borradores nuevos no las copian; el planificador las muestra bloqueadas.
+- **Importaciones**: sobre un día con vacaciones aprobadas, una propuesta distinta queda pendiente de revisión (`APPROVED_VACATION_CONFLICT`); la ausencia sigue vigente.
+- **Override auditado**: solo propietario/administrador pueden sustituir las vacaciones por la propuesta; queda registrado con quién lo hizo. Un planificador recibe 403.
+- **UI**: insignia «protegida» (candado + texto) en el calendario, chip discontinuo «Vacaciones (Pendiente)» para tus solicitudes, origen y conflicto (con las cinco respuestas y dos acciones) en el detalle del día, motivo en la lista de diferencias, día bloqueado en el planificador.
 
 ## 2. Ya comprobado por el agente
 | Comprobación | Resultado |
 | --- | --- |
-| Migración en PostgreSQL 16 descartable: de cero, idempotente, aserciones (solape, XOR, FK de tenant, catálogo, rechazo con motivo, supersets) | PASS |
-| `0050` en Neon `main` con el runner canónico | aplicada: 50 aplicadas, 0 pendientes |
-| Huella de `ShiftImport` real antes/después del QA | idéntica (`c404cae6ec94…`); Groundforce no existe en esta BD |
-| Flags OFF: 4 rutas ⇒ 404 con sesión válida y sin escribir; UI sin sección; `qa:local:smoke` | PASS |
-| Dominio + elegibilidad + rutas (`test:f2`: 13 ficheros, 252 tests) | PASS |
-| 14 pruebas de integración en PostgreSQL real (scope/política, tenant, año, impacto, compatibilidad) | PASS |
-| E2E real, flag ON, tenants sintéticos (`time-off.spec.ts`) | 4/4 (+1/1 con flag OFF), residuo 0 |
-| QA visual con `agent-browser` en el runtime real (empleado sintético): crear, listar, cancelar | PASS en 375 y 1440, sin scroll horizontal |
-| Arnés accesibilidad/responsive (API simulada) 375/412/768/1440 × ES-oscuro / EN-claro | 129/129 (axe 0 graves, teclado, foco, `role=alert`, objetivos ≥ 24 px) |
-| i18n ES/EN; notificación de tipo desconocido tolerada (R-06) | PASS |
+| 24 pruebas contra PostgreSQL real (materialización, OD-08, idempotencia/concurrencia, scope, tenant, planificador, override) | PASS |
+| E2E real con flags efímeros, 5 escenarios (aprobación, rechazo, planificador, importación en conflicto + override, regresión de cambio de turno) | 5/5, residuo 0 |
+| Flags apagados: rutas de vacaciones y `kind=TIME_OFF` ⇒ 404; `qa:local:smoke` | PASS |
+| Huella de la organización real `ShiftImport` antes/después | idéntica; Groundforce no existe en esta BD |
+| `npm run test:f3` (34 ficheros, 501 tests; incluye regresión de aprobación de cambio de turno, estadísticas, ledger, auto-publicación F1) | PASS |
+| Arnés accesibilidad/responsive (375/412/1440 × ES-oscuro / EN-claro) | 144/144 |
 | `eslint` (0 warnings), `tsc`, `build` | PASS |
-| Ninguna suite amplia ni completa ejecutada | confirmado |
+| Ninguna suite amplia ni completa ejecutada; ninguna migración nueva | confirmado |
 
 ## 3. NOT_RUN / gaps
-- **F3** (no iniciada): aprobar/rechazar, materializar en calendario y borradores, protección en importación y el efecto OD-08 real. En F2 solo existe la función de dominio y las columnas `applied_*`.
-- Los flags **no están definidos en ningún entorno de Vercel**: la funcionalidad queda apagada hasta que decidas activarla (servidor primero, luego build).
-- Un OWNER/ADMIN/PLANNER que también sea empleado puede usar la API, pero su pantalla (Centro de Solicitudes) es F4.
+- **Puerta F3 abierta**: los flags de Vercel Development no existen. Para cerrarla activa en **Development**, en este orden: `TIME_OFF_ENABLED=true` y después `VITE_TIME_OFF_ENABLED=true` (redeploy). Yo no cambio variables de Vercel.
+- QA visual con `agent-browser` del flujo F3 sobre el runtime real: pendiente de esa activación (hoy validado con el arnés y los E2E de API).
+- F4 (no iniciada): Centro de Solicitudes de gestores, aprobación en bloque, historial de cambios de turno.
 - Suite histórica amplia de `specs-qa-mirror`: deuda técnica no bloqueante de F1; no se ejecutó.
 
 ## 4. Para Toni
-- Cuando quieras verla: `TIME_OFF_ENABLED=true` y `VITE_TIME_OFF_ENABLED=true` en el entorno de desarrollo, entra como empleado → Solicitudes → «Vacaciones y ausencias».
-- Confirmar que el aviso al crear la solicitud (a quién llega según política y scope) coincide con lo que esperas antes de F3.
+- Activa los dos flags en Development (servidor primero) y dime: cierro la puerta con la comprobación focal sobre ese entorno.
+- Confirma que «el propietario siempre decide» y «la política estrecha a administradores y planificadores» es lo que quieres para vacaciones.
