@@ -26,7 +26,7 @@
 | E2E real del feed unificado (`kind` × `status`, fusión ALL por resolución, cursor sin duplicados, tenant, rol, legacy sin `kind`) | PASS |
 | `npm run test:f3` (35 ficheros, 510 tests; incluye regresión de aprobación de cambio de turno, estadísticas, ledger, auto-publicación F1) | PASS |
 | Arnés accesibilidad/responsive (375/412/1440 × ES-oscuro / EN-claro) | 144/144 |
-| `eslint` (0 warnings), `tsc`, `build` | PASS |
+| `eslint` (0 warnings, incluido el spec E2E), `tsc`, `build` | PASS |
 | Ninguna suite amplia ni completa ejecutada; ninguna migración nueva | confirmado |
 
 ## 3. NOT_RUN / gaps
