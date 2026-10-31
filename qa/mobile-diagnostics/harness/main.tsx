@@ -7,7 +7,9 @@ import { I18nProvider } from '../../../src/lib/i18n-react';
 import { ThemeProvider } from '../../../src/lib/theme-react';
 import { FutureImportConsent } from '../../../src/components/shift-dashboard/FutureImportConsent';
 import { ImportResultModal } from '../../../src/components/shift-dashboard/ImportResultModal';
-import type { PlanImportPreview } from '../../../src/lib/remote';
+import type { PlanImportPreview, TimeOffRequest } from '../../../src/lib/remote';
+import { TimeOffRequests } from '../../../src/components/requests/TimeOffRequests';
+import { getOperationalDate } from '../../../src/lib/operational-date';
 import '../../../src/index.css';
 
 const preview: PlanImportPreview = {
@@ -21,10 +23,50 @@ const preview: PlanImportPreview = {
     reviewConflicts: [{ employeeId: 'e2', date: '2026-11-05', reason: 'REQUIRES_REVIEW' }],
   },
 };
+
+// ---- F2 time-off surface: the whole `/api/me/time-off-requests*` contract is mocked in the page (no backend, no database) ----
+const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+function installTimeOffMock() {
+  const today = getOperationalDate();
+  const mk = (patch: Partial<TimeOffRequest>): TimeOffRequest => ({
+    id: 'r', requestType: 'VACATION', startDate: addDays(today, 20), endDate: addDays(today, 26), requestedDays: 7, comment: '', status: 'PENDING',
+    createdAt: `${today}T09:00:00.000Z`, resolvedAt: null, resolvedByName: null, rejectionReason: null, history: [{ type: 'CREATED', at: `${today}T09:00:00.000Z` }], ...patch,
+  });
+  const empty = new URLSearchParams(location.search).get('data') === 'empty';
+  const requests: TimeOffRequest[] = empty ? [] : [
+    mk({ id: 'r1', comment: 'Viaje familiar con los abuelos y los primos, vuelta el domingo por la tarde' }),
+    mk({ id: 'r2', status: 'APPROVED', startDate: addDays(today, -3), endDate: addDays(today, 3), requestedDays: 7, resolvedAt: `${today}T10:00:00.000Z`, resolvedByName: 'Ana García',
+      appliedStartDate: today, appliedDays: 4, skippedPastDays: 3, history: [{ type: 'CREATED', at: `${addDays(today, -10)}T09:00:00.000Z` }, { type: 'APPROVED', at: `${today}T10:00:00.000Z`, byName: 'Ana García' }] }),
+    mk({ id: 'r3', status: 'REJECTED', startDate: addDays(today, 40), endDate: addDays(today, 42), requestedDays: 3, rejectionReason: 'Hay cobertura mínima esa semana', resolvedAt: `${today}T11:00:00.000Z`,
+      history: [{ type: 'CREATED', at: `${today}T09:00:00.000Z` }, { type: 'REJECTED', at: `${today}T11:00:00.000Z`, reason: 'Hay cobertura mínima esa semana' }] }),
+    mk({ id: 'r4', status: 'CANCELLED', startDate: addDays(today, 60), endDate: addDays(today, 61), requestedDays: 2, history: [{ type: 'CREATED', at: `${today}T09:00:00.000Z` }, { type: 'CANCELLED', at: `${today}T12:00:00.000Z` }] }),
+  ];
+  const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  window.fetch = async (input, init) => {
+    const url = new URL(String(input), location.origin);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (url.pathname === '/api/me/time-off-requests/impact') {
+      const start = url.searchParams.get('startDate') ?? '';
+      const overlap = start === addDays(today, 20);
+      return json(200, { publishedShifts: 3, draftAssignments: 1, overlapsOwn: overlap ? [{ id: 'r1', startDate: addDays(today, 20), endDate: addDays(today, 26), status: 'PENDING' }] : [] });
+    }
+    if (url.pathname.endsWith('/cancel') && method === 'POST') return json(200, { request: { ...requests[0], status: 'CANCELLED' } });
+    if (url.pathname === '/api/me/time-off-requests' && method === 'POST') return json(201, { request: mk({ id: 'new', ...JSON.parse(String(init?.body ?? '{}')) }) });
+    if (url.pathname === '/api/me/time-off-requests') {
+      return json(200, { requests, summary: { approvedDaysInYear: empty ? 0 : 4, pendingDays: empty ? 0 : 7, activeCount: empty ? 0 : 2 } });
+    }
+    return json(404, { error: 'Not found' });
+  };
+}
 const base = { status: 'COMPLETED' as const, historical: { submittedCount: 12, persistedCount: 12, existingCount: 0 }, duplicate: null };
 const surface = new URLSearchParams(location.search).get('surface') ?? 'consent';
 localStorage.setItem('anclora_shiftimport_locale_v1', new URLSearchParams(location.search).get('lang') ?? 'es');
 localStorage.setItem('anclora_theme_mode', new URLSearchParams(location.search).get('theme') ?? 'dark');
+
+function TimeOffSurface() {
+  installTimeOffMock();
+  return <main style={{ padding: 16, maxWidth: 760 }} data-testid="harness-time-off"><TimeOffRequests /></main>;
+}
 
 function Surface() {
   const [decision, setDecision] = React.useState<'historical-only' | 'historical-and-plan' | 'historical-and-auto-publish'>('historical-and-auto-publish');
@@ -56,5 +98,5 @@ function Surface() {
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <ThemeProvider><I18nProvider><Surface /></I18nProvider></ThemeProvider>,
+  <ThemeProvider><I18nProvider>{surface === 'time-off' ? <TimeOffSurface /> : <Surface />}</I18nProvider></ThemeProvider>,
 );

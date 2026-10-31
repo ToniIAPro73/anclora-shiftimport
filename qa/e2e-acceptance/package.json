@@ -18,7 +18,8 @@
     "test:tenant": "playwright test --config playwright.r3-gate.config.ts --grep \"API isolation\"",
     "test:future": "playwright test --config playwright.p0-gate.config.ts --grep \"future, idempotency\"",
     "test:invitations": "playwright test --config playwright.invitations.config.ts",
-    "test:qa-mirror": "playwright test --config playwright.qa-mirror.config.ts"
+    "test:qa-mirror": "playwright test --config playwright.qa-mirror.config.ts",
+    "test:f2": "playwright test --config playwright.qa-mirror.config.ts specs-qa-mirror/time-off.spec.ts --project=desktop"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
