@@ -1,41 +1,41 @@
-# Checklist de validación — F1: planificación móvil y auto-publicación en importación (2026-10-30)
+# Checklist de validación — F2: base de vacaciones (Time Off) y feature flags (2026-10-31)
 
 > Se sobrescribe en cada entrega; el historial queda en Git.
 
 **Repositorio:** anclora-shiftimport
-**Rama:** development (F1 sobre `7979b35`)
-**Spec canónica:** `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (F1)
-**Entorno de validación:** runtime local (`qa:dev-runtime`, `IMPORT_AUTO_PUBLISH_ENABLED=true`) → Neon `main`; escrituras solo en `ShiftImport — QA Mirror` y tenants sintéticos `E2E-SHIFT-<runId>`.
-**Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce; 0 despliegues manuales; 0 promociones.
+**Rama:** development (F2 sobre `d92bbb7`)
+**Spec canónica:** `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (F2, §20.1)
+**Entorno de validación:** runtime local (`qa:dev-runtime`) → Neon `main`; escrituras solo en tenants sintéticos `E2E-SHIFT-<runId>`; migración probada antes en PostgreSQL 16 descartable.
+**Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce (huella idéntica antes/después); residuo 0; 0 promociones.
 
 ## 1. Qué cambia
-- **Móvil**: `day-focus` rediseñado (era una tira de ~10 px por especificidad CSS), pista de scroll encima de la rejilla, barra del planificador en rejilla ≤640, «1 turno», calendario mensual compacto con panel del día (`MonthDayAgenda`), TopBar compacto con Rol/Empleado en el menú de cuenta (OD-06).
-- **Importación**: nueva decisión `historical-and-auto-publish` (publica solo lo válido, de hoy en adelante, atribuible a la propia importación y sin pisar trabajo manual). Detrás de `IMPORT_AUTO_PUBLISH_ENABLED` (**apagado por defecto**): con el switch apagado todo se comporta como hoy.
-- **Reversión** de importaciones auto-publicadas (1:1 o bloqueada) y notificación única por empleado y lote.
-- **Migración `0049` aplicada en Neon `main`** con tu autorización (`db/migrations/0049_import_auto_publish_decision.sql`, sha256 `550cc2042877…`); el switch sigue apagado por defecto.
-
-## 0. Corrección posterior a F1 (calendario en vertical, sin commit)
-- Con el móvil en vertical y «Sitio de escritorio» (~980 px de ancho, 2000+ px de alto) el mes salía pequeño y aplastado (filas de ~59 px). En `src/index.css` (`@media (min-width: 641px) and (orientation: portrait) and (min-height: 701px)`) las filas pasan a seguir el ancho (`clamp(104px, 14.5vw, 190px)`, casillas algo más altas que anchas, ~142 px a 980 px) y el mes NO se estira al alto de la pantalla. Horizontal, escritorio y ≤640 px no cambian.
-- Tablets (561–980 px): siete columnas fluidas (el domingo ya no se corta a 768 px) y la cabecera del calendario ya no se solapa con el selector de empleado (`AppShell.css`); los controles pasan a otra línea si no caben.
-- Comprobado (diagnóstico con API simulada, 980×2000; iPhone 390, Galaxy A16 412 y tablets 600/768/820 en vertical): rejilla 311 → ~730 px, sin desbordes. **Validación de Toni en dispositivo: pendiente.**
+- **Migración `0050`** (aplicada en Neon `main` con tu autorización; 50 aplicadas, 0 pendientes): tabla `time_off_requests` (catálogo cerrado de tipos, exclusión de solapes vivos, `applied_start_date`/`applied_days`), sobre de aprobación con sujeto exclusivo (cambio de turno XOR vacaciones), `shifts.time_off_request_id`, notificaciones y auditoría ampliadas (superconjuntos). Aditiva: el código desplegado sigue funcionando.
+- **Backend** (`TIME_OFF_ENABLED`, **apagado por defecto**; apagado ⇒ 404): `GET/POST /api/me/time-off-requests`, `GET …/impact`, `POST …/:id/cancel`. SELF por construcción (empleado y organización salen de la sesión). Solo `VACATION`; `SICK_LEAVE`/`PERMISSION`/`OTHER` ⇒ `422 TIME_OFF_TYPE_NOT_ENABLED`. Dominio (`time-off.js`) con la regla OD-08 y elegibilidad de aprobadores por scope real + política (`approval-eligibility.js`), que decide a quién se avisa al crear la solicitud.
+- **UI** (`VITE_TIME_OFF_ENABLED`, **apagado por defecto**): «Vacaciones y ausencias» dentro de Solicitudes del empleado: solicitar (validación en línea, impacto en el calendario), ver el año, resumen, historial y cancelar.
+- **Sin cambios** para el usuario con los dos flags apagados.
 
 ## 2. Ya comprobado por el agente
 | Comprobación | Resultado |
 | --- | --- |
-| `0049` en Neon `main` (autorizada) | aplicada: 49 aplicadas, 0 pendientes, `0050` sin aplicar |
-| Huella de la organización real `ShiftImport` antes/después de migrar y de todo el QA | idéntica; Groundforce no existe en esta BD; 0 escrituras en ambas |
-| E2E real (`auto-publish.spec.ts`, runtime local → Neon `main`, tenants sintéticos `E2E-SHIFT-<runId>`, residuo 0) | 8/8: MIXED y FUTURE limpios, SPLIT, manual/NULL/pendiente retenidos, reversión 1:1 y bloqueada, PLANNER ORG/AREAS/EMPLOYEES, EMPLOYEE 403, cross-tenant, INV-06 |
-| `qa:local:smoke` (QA Mirror) | PASS |
-| Accesibilidad en runtime real (`a11y-f1.spec.ts`) | 4/4 (teclado, `aria-pressed`, foco devuelto al menú, `day-focus`, pista); corregido un fallo de contraste real |
-| Accesibilidad consentimiento y resultado (`harness/a11y.mjs`) | 92/92 (axe, teclado, foco, trampa de foco, Esc, `role=status`) |
-| Suite completa `vitest`, `eslint`, `tsc`, `build` | PASS |
-| Mirror refrescado (`--apply`) tras el QA | PASS, origen sin cambios |
+| Migración en PostgreSQL 16 descartable: de cero, idempotente, aserciones (solape, XOR, FK de tenant, catálogo, rechazo con motivo, supersets) | PASS |
+| `0050` en Neon `main` con el runner canónico | aplicada: 50 aplicadas, 0 pendientes |
+| Huella de `ShiftImport` real antes/después del QA | idéntica (`c404cae6ec94…`); Groundforce no existe en esta BD |
+| Flags OFF: 4 rutas ⇒ 404 con sesión válida y sin escribir; UI sin sección; `qa:local:smoke` | PASS |
+| Dominio + elegibilidad + rutas (`test:f2`: 13 ficheros, 252 tests) | PASS |
+| 14 pruebas de integración en PostgreSQL real (scope/política, tenant, año, impacto, compatibilidad) | PASS |
+| E2E real, flag ON, tenants sintéticos (`time-off.spec.ts`) | 4/4 (+1/1 con flag OFF), residuo 0 |
+| QA visual con `agent-browser` en el runtime real (empleado sintético): crear, listar, cancelar | PASS en 375 y 1440, sin scroll horizontal |
+| Arnés accesibilidad/responsive (API simulada) 375/412/768/1440 × ES-oscuro / EN-claro | 129/129 (axe 0 graves, teclado, foco, `role=alert`, objetivos ≥ 24 px) |
+| i18n ES/EN; notificación de tipo desconocido tolerada (R-06) | PASS |
+| `eslint` (0 warnings), `tsc`, `build` | PASS |
+| Ninguna suite amplia ni completa ejecutada | confirmado |
 
 ## 3. NOT_RUN / gaps
-**F1_GATE=PASS** (validación humana de Toni, 2026-10-30). Lo siguiente es deuda técnica NO bloqueante:
-- Suite histórica completa de `specs-qa-mirror`: no completada (1 h, 18 fallos sin diagnosticar uno a uno). `import-layout-identity` (desktop) falla por un test desfasado desde `851e846` (anterior a F1); el resto, timeouts de 90 s. Deuda técnica no bloqueante; no se re-ejecuta ni se sanea en F1.
-- `test:a11y` del paquete E2E (usa `vercel dev` + Postgres Docker): no es el runtime contractual.
-- Specs que exigen documentos reales: no ejecutados.
+- **F3** (no iniciada): aprobar/rechazar, materializar en calendario y borradores, protección en importación y el efecto OD-08 real. En F2 solo existe la función de dominio y las columnas `applied_*`.
+- Los flags **no están definidos en ningún entorno de Vercel**: la funcionalidad queda apagada hasta que decidas activarla (servidor primero, luego build).
+- Un OWNER/ADMIN/PLANNER que también sea empleado puede usar la API, pero su pantalla (Centro de Solicitudes) es F4.
+- Suite histórica amplia de `specs-qa-mirror`: deuda técnica no bloqueante de F1; no se ejecutó.
 
 ## 4. Para Toni
-- Confirmar en el móvil si el navegador estaba en «Sitio de escritorio» (`innerWidth` real).
+- Cuando quieras verla: `TIME_OFF_ENABLED=true` y `VITE_TIME_OFF_ENABLED=true` en el entorno de desarrollo, entra como empleado → Solicitudes → «Vacaciones y ausencias».
+- Confirmar que el aviso al crear la solicitud (a quién llega según política y scope) coincide con lo que esperas antes de F3.
