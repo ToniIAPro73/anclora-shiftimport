@@ -189,3 +189,53 @@ describe('auto-publish decision (F1-M04, INV-06)', () => {
     expect(resolveImportOptions({ canPlan: true, temporal: 'HISTORICAL', autoPublish: true }).options).toEqual(['historical-only']);
   });
 });
+
+describe('APPROVED_VACATION_CONFLICT (F3-M04): an import never replaces an approved vacation on its own', () => {
+  const day = '2026-11-20';
+  const vacation = [{ employeeKey: K, row: row(day, 'Vacaciones') }];
+  const protectedDays = new Set([`${K}\u001f${day}`]);
+  const run = (proposed, { today = TODAY, current = vacation, reviewDays } = {}) =>
+    reconcileCurrentProposal({ proposed, current, today, protectedDays, ...(reviewDays ? { reviewDays } : {}) })[0];
+
+  it('same day as the approved absence ⇒ UNCHANGED, no reason code', () => {
+    const item = run([entry(K, row(day, 'Vacaciones'))]);
+    expect(item.outcome).toBe(O.UNCHANGED);
+    expect(item).not.toHaveProperty('reasonCode');
+  });
+
+  it('a different proposal ⇒ REQUIRES_REVIEW with APPROVED_VACATION_CONFLICT (never MODIFIED)', () => {
+    const item = run([entry(K, row(day, 'Regular', '05:00', '13:00'))]);
+    expect(item).toMatchObject({ outcome: O.REQUIRES_REVIEW, reasonCode: 'APPROVED_VACATION_CONFLICT' });
+  });
+
+  it('holds for past, today and future days alike (a future day would be MODIFIED without the protection)', () => {
+    for (const today of ['2026-11-01', day, '2026-12-31']) {
+      expect(run([entry(K, row(day, 'Regular', '05:00', '13:00'))], { today })).toMatchObject({ outcome: O.REQUIRES_REVIEW, reasonCode: 'APPROVED_VACATION_CONFLICT' });
+    }
+  });
+
+  it('protection comes from protectedDays, not from what CURRENT shows: a draft replacing the key cannot hide it', () => {
+    const draftWins = [{ employeeKey: K, row: row(day, 'Regular', '06:00', '14:00') }];
+    expect(run([entry(K, row(day, 'Regular', '05:00', '13:00'))], { current: draftWins })).toMatchObject({ outcome: O.REQUIRES_REVIEW, reasonCode: 'APPROVED_VACATION_CONFLICT' });
+    expect(run([entry(K, row(day, 'Regular', '05:00', '13:00'))], { current: [] })).toMatchObject({ outcome: O.REQUIRES_REVIEW, reasonCode: 'APPROVED_VACATION_CONFLICT' });
+  });
+
+  it('other days of the same employee are not protected', () => {
+    const other = '2026-11-21';
+    const [item] = reconcileCurrentProposal({ proposed: [entry(K, row(other, 'Regular', '05:00', '13:00'))], current: [], today: TODAY, protectedDays });
+    expect(item.outcome).toBe(O.NEW);
+  });
+
+  it('the summary counts protected conflicts separately from ordinary reviews', () => {
+    const items = [
+      ...reconcileCurrentProposal({ proposed: [entry(K, row(day, 'Regular', '05:00', '13:00'))], current: vacation, today: TODAY, protectedDays }),
+      ...reconcileCurrentProposal({ proposed: [entry(K, row('2026-10-15', 'Regular', '09:00', '17:00'))], current: [entry(K, row('2026-10-15', 'Regular', '08:00', '16:00'))], today: TODAY }),
+    ];
+    expect(summarizeOutcomes(items)).toMatchObject({ requiresReview: 2, protectedConflicts: 1 });
+  });
+
+  it('without protectedDays the behaviour is exactly the previous one (F1/F2 unchanged)', () => {
+    const [item] = reconcileCurrentProposal({ proposed: [entry(K, row(day, 'Regular', '05:00', '13:00'))], current: vacation, today: TODAY });
+    expect(item.outcome).toBe(O.MODIFIED);
+  });
+});

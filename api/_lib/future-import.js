@@ -291,7 +291,7 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
   // Effective = what the operation currently has: draft assignments (incl. planner edits) win over published shifts.
   const keyByEmployee = new Map(normalized.map((shift) => [shift.employeeId, shift.employeeKey]));
   const shiftRows = await sql`
-    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role, layer, provenance, import_id
+    SELECT id, employee_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, start_time, end_time, shift_type, location, counts_as_work, duty_role, layer, provenance, import_id, time_off_request_id
     FROM shifts
     WHERE organization_id = ${ctx.organizationId} AND employee_id = ANY(${employeeIds}::uuid[])
       AND date BETWEEN ${from} AND ${to} AND effective_state = 'EFFECTIVE'
@@ -353,7 +353,9 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
     `;
     pendingModificationDays = new Set(pendingRequests.map((row) => `${row.employee_id}|${row.date}`));
   }
-  const outcomes = reconcileCurrentProposal({ proposed: next, current: effective, today: dated.cutoff, reviewDays });
+  // Approved vacations are protected from the SHIFTS rows themselves, not from whichever draft wins the key above (spec §4.4.3).
+  const protectedDays = new Set(shiftRows.filter((row) => row.time_off_request_id).map((row) => `${keyByEmployee.get(row.employee_id)}\u001f${row.date}`));
+  const outcomes = reconcileCurrentProposal({ proposed: next, current: effective, today: dated.cutoff, reviewDays, protectedDays });
   const summary = summarizeOutcomes(outcomes);
   // Future rows feed Planning drafts; historical candidates remain separate.
   return {
@@ -367,6 +369,7 @@ async function evaluatePlan(sql, ctx, prepared, deleteIds) {
 const outcomeCounts = (summary) => ({
   new: summary.new, unchanged: summary.unchanged, modified: summary.modified,
   requiresReview: summary.requiresReview,
+  protectedConflicts: summary.protectedConflicts ?? 0,
 });
 
 
@@ -386,7 +389,7 @@ async function planAutoPublishWeeks(sql, ctx, prepared, evaluation) {
     const areaId = sample.areaId ?? null;
     const key = `${periodStart}:${areaId ?? 'global'}`;
     if (!byWeek.has(key)) byWeek.set(key, { periodStart, areaId, fileDays: [] });
-    byWeek.get(key).fileDays.push({ employeeId: sample.employeeId, date: item.date, outcome: item.outcome, rows: item.next ?? [] });
+    byWeek.get(key).fileDays.push({ employeeId: sample.employeeId, date: item.date, outcome: item.outcome, ...(item.reasonCode ? { reasonCode: item.reasonCode } : {}), rows: item.next ?? [] });
   }
   const plans = new Map();
   for (const [key, week] of byWeek) {

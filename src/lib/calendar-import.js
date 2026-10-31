@@ -191,8 +191,18 @@ export function hasSemanticHistoryChange(effectiveRows = [], historicRows = []) 
   return false;
 }
 
-/** Compares imported rows with CURRENT only. Pending alternatives never replace CURRENT silently. */
-export function reconcileCurrentProposal({ proposed, current, today, reviewDays = new Set() }) {
+/** Reason code of a day that an import may never replace on its own: it holds a vacation approved through a time-off request. */
+export const APPROVED_VACATION_CONFLICT = 'APPROVED_VACATION_CONFLICT';
+
+/**
+ * Compares imported rows with CURRENT only. Pending alternatives never replace CURRENT silently.
+ *
+ * `protectedDays` (keys `employeeKey␟date`) are derived from `shifts` rows that carry a `time_off_request_id` and are EFFECTIVE —
+ * independently of which draft "wins" the key. On a protected day the approved absence is the CURRENT truth for ANY date (past,
+ * today or future): the same day is UNCHANGED, a different proposal is REQUIRES_REVIEW with `reasonCode = APPROVED_VACATION_CONFLICT`
+ * and the absence stays EFFECTIVE until an OWNER/ADMIN resolves it (spec §4.4.3).
+ */
+export function reconcileCurrentProposal({ proposed, current, today, reviewDays = new Set(), protectedDays = new Set() }) {
   const incoming = indexRows(proposed);
   const existing = indexRows(current);
   const outcomes = [];
@@ -200,25 +210,35 @@ export function reconcileCurrentProposal({ proposed, current, today, reviewDays 
     const [employeeKey, date] = key.split('\u001f');
     const effective = existing.get(key) ?? null;
     const retrospective = date < today;
-    const outcome = reviewDays.has(key)
-      ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW
-      : !effective
-        ? RECONCILIATION_OUTCOME.NEW
-        : sameDay(effective, nextRows)
-          ? RECONCILIATION_OUTCOME.UNCHANGED
-          : retrospective ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW : RECONCILIATION_OUTCOME.MODIFIED;
-    outcomes.push({ employeeKey, date, next: nextRows, effective, retrospective, evidence: false, outcome });
+    const protectedDay = protectedDays.has(key);
+    const protectedConflict = protectedDay && !(effective && sameDay(effective, nextRows));
+    const outcome = protectedDay
+      ? (protectedConflict ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW : RECONCILIATION_OUTCOME.UNCHANGED)
+      : reviewDays.has(key)
+        ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW
+        : !effective
+          ? RECONCILIATION_OUTCOME.NEW
+          : sameDay(effective, nextRows)
+            ? RECONCILIATION_OUTCOME.UNCHANGED
+            : retrospective ? RECONCILIATION_OUTCOME.REQUIRES_REVIEW : RECONCILIATION_OUTCOME.MODIFIED;
+    outcomes.push({
+      employeeKey, date, next: nextRows, effective, retrospective, evidence: false, outcome,
+      ...(protectedConflict ? { reasonCode: APPROVED_VACATION_CONFLICT } : {}),
+    });
   }
   return outcomes.sort((a, b) => a.date.localeCompare(b.date) || a.employeeKey.localeCompare(b.employeeKey));
 }
 
 export function summarizeOutcomes(outcomes) {
-  const summary = { total: outcomes.length, unchanged: 0, new: 0, modified: 0, requiresReview: 0 };
+  const summary = { total: outcomes.length, unchanged: 0, new: 0, modified: 0, requiresReview: 0, protectedConflicts: 0 };
   for (const item of outcomes) {
     if (item.outcome === RECONCILIATION_OUTCOME.UNCHANGED) summary.unchanged += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.NEW) summary.new += 1;
     else if (item.outcome === RECONCILIATION_OUTCOME.MODIFIED) summary.modified += 1;
-    else summary.requiresReview += 1;
+    else {
+      summary.requiresReview += 1;
+      if (item.reasonCode === APPROVED_VACATION_CONFLICT) summary.protectedConflicts += 1;
+    }
   }
   return summary;
 }
