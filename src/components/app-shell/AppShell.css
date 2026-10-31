@@ -240,6 +240,13 @@
   .app-shell__main-context .team-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); align-items: end; }
 }
 
+/* Tablets: the heading used to shrink (min-width: 0) while the controls overflowed over it ("CALENDARIO" under "Empleado:"). */
+@media (min-width: 561px) and (max-width: 980px) {
+  .calendar-toolbar__heading { flex: 0 0 auto; }
+  .calendar-toolbar__title { white-space: nowrap; }
+  .calendar-toolbar__controls { flex-wrap: wrap; }
+}
+
 @media (max-width: 560px) {
   .app-shell__topbar { min-height: 56px; padding: 8px 12px; }
   .app-shell__topbar-controls { gap: 4px; }

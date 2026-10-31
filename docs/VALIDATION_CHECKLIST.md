@@ -14,6 +14,11 @@
 - **Reversión** de importaciones auto-publicadas (1:1 o bloqueada) y notificación única por empleado y lote.
 - **Migración `0049` aplicada en Neon `main`** con tu autorización (`db/migrations/0049_import_auto_publish_decision.sql`, sha256 `550cc2042877…`); el switch sigue apagado por defecto.
 
+## 0. Corrección posterior a F1 (calendario en vertical, sin commit)
+- Con el móvil en vertical y «Sitio de escritorio» (~980 px de ancho, 2000+ px de alto) el mes salía pequeño y aplastado (filas de ~59 px). En `src/index.css` (`@media (min-width: 641px) and (orientation: portrait) and (min-height: 701px)`) las filas pasan a seguir el ancho (`clamp(104px, 14.5vw, 190px)`, casillas algo más altas que anchas, ~142 px a 980 px) y el mes NO se estira al alto de la pantalla. Horizontal, escritorio y ≤640 px no cambian.
+- Tablets (561–980 px): siete columnas fluidas (el domingo ya no se corta a 768 px) y la cabecera del calendario ya no se solapa con el selector de empleado (`AppShell.css`); los controles pasan a otra línea si no caben.
+- Comprobado (diagnóstico con API simulada, 980×2000; iPhone 390, Galaxy A16 412 y tablets 600/768/820 en vertical): rejilla 311 → ~730 px, sin desbordes. **Validación de Toni en dispositivo: pendiente.**
+
 ## 2. Ya comprobado por el agente
 | Comprobación | Resultado |
 | --- | --- |
