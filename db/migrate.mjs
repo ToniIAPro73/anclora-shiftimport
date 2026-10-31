@@ -613,6 +613,16 @@ export const MIGRATION_SENTINELS = {
     cat.columns.has('imports.publication_summary') &&
     Boolean(cat.constraintDefs?.get('imports_import_decision_check')?.includes('historical-and-auto-publish')) &&
     Boolean(cat.constraintDefs?.get('organization_audit_events_event_type_check')?.includes('schedule.auto_published_on_import')),
+  '0050_time_off_requests_and_unified_approvals.sql': (cat) =>
+    cat.tables.has('time_off_requests') &&
+    cat.columns.has('time_off_requests.applied_start_date') &&
+    cat.columns.has('time_off_requests.applied_days') &&
+    cat.columns.has('approval_requests.time_off_request_id') &&
+    cat.columns.has('shifts.time_off_request_id') &&
+    cat.constraints.has('time_off_requests_no_live_overlap') &&
+    cat.constraints.has('approval_requests_subject_xor_check') &&
+    Boolean(cat.constraintDefs?.get('notifications_type_check')?.includes('TIME_OFF_REQUEST_RESOLVED')) &&
+    Boolean(cat.constraintDefs?.get('organization_audit_events_event_type_check')?.includes('time_off_request.manual_override')),
 };
 
 /**

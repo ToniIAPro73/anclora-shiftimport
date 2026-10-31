@@ -523,3 +523,61 @@ describe('0049_import_auto_publish_decision.sql (static)', () => {
     expect(next).toEqual([...previous, 'schedule.auto_published_on_import']);
   });
 });
+
+describe('0050_time_off_requests_and_unified_approvals.sql (static)', () => {
+  const dir = resolve(dirname(fileURLToPath(import.meta.url)), 'migrations');
+  const read = (name) => readFile(resolve(dir, name), 'utf8');
+  const eventList = (sql) => {
+    const block = sql.match(/organization_audit_events_event_type_check CHECK \(event_type IN \(([\s\S]*?)\)\);/)?.[1] ?? '';
+    return [...block.matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  };
+
+  it('is additive, idempotent and free of transaction control (the runner owns transactions)', async () => {
+    const sql = await read('0050_time_off_requests_and_unified_approvals.sql');
+    expect(sql).not.toMatch(/\b(BEGIN|COMMIT|ROLLBACK)\b/i);
+    expect(sql).not.toMatch(/\b(DROP\s+TABLE|DROP\s+COLUMN|TRUNCATE|DELETE\s+FROM|UPDATE\s+\w+\s+SET)\b/i);
+    expect(sql).toContain('CREATE EXTENSION IF NOT EXISTS btree_gist');
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS time_off_requests');
+    expect(sql).toContain('ADD COLUMN IF NOT EXISTS time_off_request_id');
+  });
+
+  it('keeps the closed request catalogue, the live-overlap exclusion and the effective-range columns (OD-03, OD-08)', async () => {
+    const sql = await read('0050_time_off_requests_and_unified_approvals.sql');
+    expect(sql).toContain("request_type IN ('VACATION', 'SICK_LEAVE', 'PERMISSION', 'OTHER')");
+    expect(sql).toContain("EXCLUDE USING gist (employee_id WITH =, daterange(start_date, end_date, '[]') WITH &&)");
+    expect(sql).toContain("WHERE (status IN ('PENDING', 'APPROVED'))");
+    expect(sql).toContain('applied_start_date DATE');
+    expect(sql).toContain('applied_days INTEGER');
+    expect(sql).toContain('REFERENCES employees (id, organization_id)'); // tenant-bound FK
+  });
+
+  it('makes the approval envelope subject exclusive: change request XOR time-off request', async () => {
+    const sql = await read('0050_time_off_requests_and_unified_approvals.sql');
+    expect(sql).toContain('ALTER COLUMN change_request_id DROP NOT NULL');
+    expect(sql).toContain('CHECK ((change_request_id IS NOT NULL) <> (time_off_request_id IS NOT NULL))');
+  });
+
+  it('the audit CHECK is an exact superset of the one in 0049 plus the five time-off events', async () => {
+    const previous = eventList(await read('0049_import_auto_publish_decision.sql'));
+    const next = eventList(await read('0050_time_off_requests_and_unified_approvals.sql'));
+    expect(previous.length).toBeGreaterThan(20);
+    const added = [
+      'time_off_request.created', 'time_off_request.approved', 'time_off_request.rejected',
+      'time_off_request.cancelled', 'time_off_request.manual_override',
+    ];
+    expect([...next].sort()).toEqual([...previous, ...added].sort());
+  });
+
+  it('the notifications CHECKs are supersets of 0028 (old code keeps working)', async () => {
+    const sql = await read('0050_time_off_requests_and_unified_approvals.sql');
+    const old = await read('0028_approval_requests.sql');
+    const values = (text, name) => [...(text.match(new RegExp(`${name}\\s+CHECK \\(\\w+ IN \\(([^)]*)\\)`, 's'))?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    for (const name of ['notifications_type_check', 'notifications_resource_type_check']) {
+      const oldValues = values(old.replace(/\s+/g, ' '), name);
+      expect(oldValues.length).toBeGreaterThan(2);
+      for (const value of oldValues) expect(values(sql.replace(/\s+/g, ' '), name)).toContain(value);
+    }
+    expect(sql).toContain("'TIME_OFF_REQUEST_RESOLVED'");
+    expect(sql).toContain("'TIME_OFF_REQUEST'");
+  });
+});
