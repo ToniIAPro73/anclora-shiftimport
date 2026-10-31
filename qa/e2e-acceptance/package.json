@@ -19,6 +19,7 @@
     "test:future": "playwright test --config playwright.p0-gate.config.ts --grep \"future, idempotency\"",
     "test:invitations": "playwright test --config playwright.invitations.config.ts",
     "test:qa-mirror": "playwright test --config playwright.qa-mirror.config.ts",
+    "test:f3": "playwright test --config playwright.qa-mirror.config.ts specs-qa-mirror/time-off-f3.spec.ts --project=desktop",
     "test:f2": "playwright test --config playwright.qa-mirror.config.ts specs-qa-mirror/time-off.spec.ts --project=desktop"
   },
   "devDependencies": {

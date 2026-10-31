@@ -102,6 +102,13 @@ test.describe('flag OFF (default): the feature does not exist', () => {
     }
     expect((await withDb((q) => q(`SELECT id FROM time_off_requests WHERE organization_id = $1`, [T.orgA])))).toHaveLength(0);
     await api.dispose();
+    // F3: the manager side is dark too. `kind=TIME_OFF` does not exist, `kind=ALL` is just the shift changes, and no `kind` is the legacy answer.
+    const owner = await login('owner', T.orgA);
+    expect((await owner.get('/api/approval-requests?kind=TIME_OFF')).status()).toBe(404);
+    expect((await owner.get('/api/approval-requests?kind=ALL')).status()).toBe(200);
+    expect((await owner.get('/api/approval-requests?status=pending')).status()).toBe(200);
+    expect((await owner.post(`/api/approval-requests/${randomUUID()}/approve`)).status()).toBe(404);
+    await owner.dispose();
   });
 });
 
