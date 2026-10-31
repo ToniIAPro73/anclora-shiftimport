@@ -1,6 +1,8 @@
 import { getSql, requireOrgContext, resolveContext } from '../_lib/auth.js';
 import { logApprovalAuthorizationDenied } from '../_lib/approval.js';
 import { handleError, sendJson } from '../_lib/http.js';
+import { isTimeOffEnabled } from '../_lib/flags.js';
+import { listTimeOffApprovals, parseApprovalQuery } from '../_lib/time-off-approvals.js';
 
 const APPROVAL_REQUEST_STATUSES = new Set(['PENDING']);
 
@@ -37,8 +39,17 @@ export default async function handler(req, res) {
       return sendJson(res, 405, { error: 'Method not allowed' });
     }
 
-    const rawStatus = String(req.query?.status ?? 'PENDING').trim().toUpperCase() || 'PENDING';
-    if (!APPROVAL_REQUEST_STATUSES.has(rawStatus)) {
+    // `kind` opts into the unified envelope (F3). Without it the response is EXACTLY the legacy one (SHIFT_CHANGE, PENDING only).
+    const kindRequested = req.query?.kind !== undefined && String(req.query.kind).trim() !== '';
+    const query = kindRequested ? parseApprovalQuery(req.query) : null;
+    const wantsTimeOff = Boolean(query && query.kind !== 'SHIFT_CHANGE');
+    if (wantsTimeOff && !isTimeOffEnabled() && query.kind === 'TIME_OFF') {
+      return sendJson(res, 404, { error: 'Not found' });
+    }
+    const rawStatus = query
+      ? (query.status === 'HISTORY' ? 'HISTORY' : 'PENDING')
+      : String(req.query?.status ?? 'PENDING').trim().toUpperCase() || 'PENDING';
+    if (!query && !APPROVAL_REQUEST_STATUSES.has(rawStatus)) {
       return sendJson(res, 400, { error: 'Invalid approval request status' });
     }
 
@@ -49,6 +60,13 @@ export default async function handler(req, res) {
       return sendJson(res, 403, { error: 'Approver access required' });
     }
 
+    const includeShiftChanges = !query || query.kind !== 'TIME_OFF';
+    const includeTimeOff = Boolean(query) && wantsTimeOff && isTimeOffEnabled();
+    const timeOff = includeTimeOff ? await listTimeOffApprovals(sql, ctx, query) : { requests: [], nextCursor: null };
+    // SHIFT_CHANGE history is out of F3 (the manager UI is F4): only PENDING shift changes exist as a read model.
+    if (!includeShiftChanges || rawStatus === 'HISTORY') {
+      return sendJson(res, 200, { requests: timeOff.requests, nextCursor: timeOff.nextCursor });
+    }
     const rows = await sql`
       SELECT ar.id, ar.organization_id, ar.change_request_id, ar.status,
              ar.policy_snapshot, ar.created_at,
@@ -118,7 +136,11 @@ export default async function handler(req, res) {
         )
       ORDER BY ar.created_at DESC, ar.id DESC
     `;
-    return sendJson(res, 200, { requests: rows.map(mapApprovalRequestRow) });
+    const shiftChanges = rows.map(mapApprovalRequestRow);
+    if (!query) return sendJson(res, 200, { requests: shiftChanges });
+    const tagged = shiftChanges.map((item) => ({ kind: 'SHIFT_CHANGE', ...item }));
+    const merged = [...tagged, ...timeOff.requests].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    return sendJson(res, 200, { requests: merged, nextCursor: timeOff.nextCursor });
   } catch (error) {
     return handleError(res, error);
   }

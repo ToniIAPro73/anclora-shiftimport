@@ -93,6 +93,13 @@ describe('evaluateApprovalEligibility — scope (ORGANIZATION / AREAS / EMPLOYEE
     expect(lonely.canDecide).toBe(true);
   });
 
+  it('the OWNER always decides, even when the policy has area-level approvers (it only narrows who else decides)', () => {
+    expect(decide(owner, 'AREA_RESPONSIBLE', target(), { areaResponsibleUserIds: ['u-admin'] })).toEqual({ canDecide: true, cannotDecideReason: null });
+    expect(decide(owner, 'ORGANIZATION_ADMIN').canDecide).toBe(true);
+    // …but never their own request
+    expect(decide(owner, 'ORGANIZATION_ADMIN', target({ requesterUserId: 'u-owner' }))).toEqual({ canDecide: false, cannotDecideReason: CANNOT_DECIDE.SELF_REQUEST });
+  });
+
   it('an EMPLOYEE (SELF scope) can never decide, not even a request that is "theirs by scope"', () => {
     expect(decide(employee)).toEqual({ canDecide: false, cannotDecideReason: CANNOT_DECIDE.OUT_OF_SCOPE });
     expect(decide(employee, 'ORGANIZATION_ADMIN', target({ employeeId: 'emp-x' }))).toMatchObject({ canDecide: false });

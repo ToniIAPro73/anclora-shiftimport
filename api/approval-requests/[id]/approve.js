@@ -3,6 +3,8 @@ import { getSql, requireOrgContext, resolveContext } from '../../_lib/auth.js';
 import { logApprovalAuthorizationDenied } from '../../_lib/approval.js';
 import { recordAuditEvent } from '../../_lib/data.js';
 import { handleError, sendJson } from '../../_lib/http.js';
+import { isTimeOffEnabled } from '../../_lib/flags.js';
+import { approveTimeOffRequest } from '../../_lib/time-off-approvals.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,6 +44,17 @@ export default async function handler(req, res) {
     if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN' && ctx.role !== 'PLANNER') {
       logApprovalAuthorizationDenied({ endpoint: 'POST /api/approval-requests/:id/approve', ctx, reason: 'role_insufficient' });
       return sendJson(res, 403, { error: 'Approver access required' });
+    }
+    // Unified envelope (F3): a TIME_OFF subject is decided here, behind the flag. With the flag off, or for any other subject, the
+    // legacy path below runs untouched (a time-off envelope is invisible to it and ends in 404).
+    if (isTimeOffEnabled()) {
+      try {
+        const decided = await approveTimeOffRequest(sql, ctx, approvalRequestId);
+        if (decided) return sendJson(res, 200, decided);
+      } catch (error) {
+        if (error?.status === 409 && error.decision) return sendJson(res, 409, { error: error.message, decision: error.decision });
+        throw error;
+      }
     }
     const resultingVersionId = randomUUID();
     const [updatedRows] = await sql.transaction((txn) => [txn`

@@ -53,6 +53,7 @@ export function resolveTimeOffApprovers({ policy, target, candidates = [], areaR
 
 /**
  * Decision for ONE actor (drives `canDecide` / `cannotDecideReason` on request cards and the approve/reject endpoints).
+ * OWNER always decides (scope + anti-self-approval permitting); the approval policy narrows everybody else.
  * `candidates` is the tenant-validated pool of managers (the actor is added when missing, so the area fallback is computed
  * against the real pool).
  */
@@ -65,6 +66,9 @@ export function evaluateApprovalEligibility({ actor, policy, target, candidates 
   if (!actor || !MANAGER_ROLES.has(actor.role) || !isTargetInScope(actor, target) || !can(actor, ACTIONS.APPROVE_REQUEST, target)) {
     return { canDecide: false, cannotDecideReason: CANNOT_DECIDE.OUT_OF_SCOPE };
   }
+  // The OWNER is the apex of the organisation: like the existing change-request flow, the policy never takes the decision away from
+  // them (the policy only narrows who ELSE decides, and who is notified). Scope and anti-self-approval above still apply.
+  if (actor.role === 'OWNER') return { canDecide: true, cannotDecideReason: null };
   const pool = candidates.some((candidate) => candidate.userId === actor.userId) ? candidates : [...candidates, actor];
   const approvers = resolveTimeOffApprovers({ policy, target, candidates: pool, areaResponsibleUserIds });
   return approvers.some((approver) => approver.userId === actor.userId)

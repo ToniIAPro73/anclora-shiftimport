@@ -2,6 +2,8 @@ import { getSql, requireOrgContext, resolveContext } from '../../_lib/auth.js';
 import { logApprovalAuthorizationDenied } from '../../_lib/approval.js';
 import { recordAuditEvent } from '../../_lib/data.js';
 import { handleError, sendJson } from '../../_lib/http.js';
+import { isTimeOffEnabled } from '../../_lib/flags.js';
+import { rejectTimeOffRequest } from '../../_lib/time-off-approvals.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_REJECTION_REASON_LENGTH = 2000;
@@ -44,6 +46,16 @@ export default async function handler(req, res) {
     if (ctx.role !== 'OWNER' && ctx.role !== 'ADMIN' && ctx.role !== 'PLANNER') {
       logApprovalAuthorizationDenied({ endpoint: 'POST /api/approval-requests/:id/reject', ctx, reason: 'role_insufficient' });
       return sendJson(res, 403, { error: 'Approver access required' });
+    }
+    // Unified envelope (F3): a TIME_OFF subject is decided here, behind the flag; everything else runs the legacy path untouched.
+    if (isTimeOffEnabled()) {
+      try {
+        const decided = await rejectTimeOffRequest(sql, ctx, approvalRequestId, reason);
+        if (decided) return sendJson(res, 200, decided);
+      } catch (error) {
+        if (error?.status === 409 && error.decision) return sendJson(res, 409, { error: error.message, decision: error.decision });
+        throw error;
+      }
     }
     const [updatedRows] = await sql.transaction((txn) => [txn`
       WITH eligible AS (
