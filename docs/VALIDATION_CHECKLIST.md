@@ -30,11 +30,11 @@
 | Ninguna suite amplia ni completa ejecutada; ninguna migración nueva | confirmado |
 
 ## 3. NOT_RUN / gaps
-- **Puerta F3 abierta**: los flags de Vercel Development no existen. Para cerrarla activa en **Development**, en este orden: `TIME_OFF_ENABLED=true` y después `VITE_TIME_OFF_ENABLED=true` (redeploy). Yo no cambio variables de Vercel.
-- QA visual con `agent-browser` del flujo F3 sobre el runtime real: pendiente de esa activación (hoy validado con el arnés y los E2E de API).
+- **Puerta F3 cerrada (`PASS`)** sobre Vercel Preview (rama `development`, deploy `ed1d3a0` posterior a los flags): 6/6 E2E focales de F3 contra el Preview real, QA visual 375/412/1440 (ES oscuro, EN claro) y a11y focal; residuo 0. Producción sin flags.
+- QA visual y a11y sobre el runtime real (Preview): hecho; el estado de conflicto de importación se valida en el runtime real por API y en el arnés visual.
 - F4 (no iniciada): Centro de Solicitudes de gestores y aprobación en bloque (el historial de cambios de turno ya está en la API unificada de F3).
 - Suite histórica amplia de `specs-qa-mirror`: deuda técnica no bloqueante de F1; no se ejecutó.
 
 ## 4. Para Toni
-- Activa los dos flags en Development (servidor primero) y dime: cierro la puerta con la comprobación focal sobre ese entorno.
+- Valida F3 en Preview/development; no se promociona ni se activa Producción sin tu orden expresa.
 - Decisión confirmada: el propietario siempre decide (salvo autoaprobación); la política estrecha al resto.
