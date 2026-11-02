@@ -48,6 +48,7 @@ function makeFakeSql() {
       return Promise.resolve([{ organization_id: ORG, role: state.role, scoped_area_id: null, organization_name: 'Org Change', organization_plan: 'team' }]);
     }
     if (text.includes('FROM employees')) {
+      if (state.unlinked) return Promise.resolve([]);
       return Promise.resolve([{ id: EMPLOYEE }]);
     }
     if (text.includes('WITH owned_shift')) {
@@ -154,8 +155,16 @@ describe('POST /api/me/shifts/:id/change-requests', () => {
     const validBody = { requestType: 'TIME_CHANGE', reason: 'Need a different time.', requestedStartTime: '10:00', requestedEndTime: '18:00' };
     expect((await call({ id: FOREIGN_SHIFT_ID, body: validBody })).statusCode).toBe(404);
     state.role = 'ADMIN';
+    state.unlinked = true;
     expect((await call()).statusCode).toBe(403);
     expect(state.writes).toBe(0);
+  });
+
+  it('lets an administrator who is also an employee request on their own behalf, never for someone else', async () => {
+    const validBody = { requestType: 'TIME_CHANGE', reason: 'Need a different time.', requestedStartTime: '10:00', requestedEndTime: '18:00' };
+    state.role = 'ADMIN';
+    expect((await call({ body: validBody })).statusCode).toBe(201);
+    expect((await call({ id: FOREIGN_SHIFT_ID, body: validBody })).statusCode).toBe(404);
   });
 
   it('rejects malformed, anonymous and unsupported requests', async () => {

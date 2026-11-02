@@ -1,8 +1,9 @@
 /* Time off (F2-M05). Mobile-first: one column, nothing wider than the viewport. Tokens only, so light/dark follow the theme. */
-.time-off { display: grid; gap: 14px; margin-top: 18px; padding: 16px; border: 1px solid var(--glass-border); border-radius: 14px; background: var(--panel-muted-bg); min-width: 0; }
+.time-off { display: grid; gap: 12px; margin-top: 18px; padding: 14px; border: 1px solid var(--glass-border); border-radius: 14px; background: var(--panel-muted-bg); min-width: 0; }
 .time-off__heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .time-off__eyebrow { margin: 0; color: var(--text-subtle); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; }
 .time-off h2 { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: 1.05rem; }
+.time-off--compact .time-off__description { display: none; }
 .time-off__description { margin: 0; max-width: 56ch; color: var(--text-muted); font-size: 0.82rem; }
 .time-off__new, .time-off__cancel, .time-off-form__submit, .time-off__state button, .time-off-form__alert button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 8px;
@@ -15,13 +16,13 @@
 .time-off__feedback { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 0.84rem; border: 1px solid var(--glass-border); }
 .time-off__feedback--alert { border-color: var(--color-danger, #f87171); }
 .time-off__year { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-muted); }
-.time-off__year .field-select { min-height: 36px; }
+.time-off__year .field-select { min-height: 36px; width: auto; min-width: 96px; }
 .time-off__state { margin: 0; color: var(--text-muted); font-size: 0.84rem; }
 .time-off__state--error { display: grid; gap: 8px; justify-items: start; }
 .time-off__summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
-.time-off__summary div { padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: 10px; }
+.time-off__summary div { padding: 6px 12px; border: 1px solid var(--glass-border); border-radius: 10px; }
 .time-off__summary dt { color: var(--text-muted); font-size: 0.74rem; }
-.time-off__summary dd { margin: 2px 0 0; font-size: 1.25rem; font-weight: 800; }
+.time-off__summary dd { margin: 0; font-size: 1.25rem; font-weight: 800; }
 .time-off__list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .time-off__item { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--glass-border); border-radius: 10px; min-width: 0; overflow-wrap: anywhere; }
 .time-off__item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
@@ -55,3 +56,6 @@
 @media (min-width: 560px) {
   .time-off-form__dates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Embedded in its own modal: no card around the form, the modal owns title and close (same look as the shift-change request). */
+.time-off-form--embedded { border: none; background: transparent; padding: 0; margin-top: 14px; }

@@ -30,6 +30,8 @@ interface SubmitFailure {
 interface TimeOffRequestFormProps {
   onCreated?: (request: TimeOffRequest) => void;
   onClose?: () => void;
+  /** Inside its own modal: the modal supplies title and close, so the card chrome and heading are dropped. */
+  embedded?: boolean;
   /** Override for tests; defaults to the operational (Europe/Madrid) date. */
   today?: string;
 }
@@ -39,7 +41,7 @@ interface TimeOffRequestFormProps {
  * enabled type, so there is no select. Validation is inline and blocks the submit; the server stays authoritative and every
  * failure is explained with the five answers of §15 (what / written / not written / why / what to do) in a persistent alert.
  */
-export function TimeOffRequestForm({ onCreated, onClose, today: todayProp }: TimeOffRequestFormProps) {
+export function TimeOffRequestForm({ onCreated, onClose, today: todayProp, embedded = false }: TimeOffRequestFormProps) {
   const { t } = useI18n();
   const uid = useId();
   const today = todayProp ?? getOperationalDate();
@@ -113,18 +115,20 @@ export function TimeOffRequestForm({ onCreated, onClose, today: todayProp }: Tim
   const commentField = fieldProps('comment');
 
   return (
-    <section className="time-off-form" aria-labelledby={`${uid}-title`} data-testid="time-off-form">
-      <div className="time-off-form__heading">
-        <h3 id={`${uid}-title`}>
-          <CalendarDays size={18} aria-hidden="true" />
-          {t('timeOff.formTitle')}
-        </h3>
-        {onClose && (
-          <button type="button" className="time-off-form__close" onClick={onClose} aria-label={t('timeOff.close')}>
-            <X size={16} aria-hidden="true" />
-          </button>
-        )}
-      </div>
+    <section className={`time-off-form${embedded ? ' time-off-form--embedded' : ''}`} aria-labelledby={embedded ? undefined : `${uid}-title`} aria-label={embedded ? t('timeOff.formTitle') : undefined} data-testid="time-off-form">
+      {!embedded && (
+        <div className="time-off-form__heading">
+          <h3 id={`${uid}-title`}>
+            <CalendarDays size={18} aria-hidden="true" />
+            {t('timeOff.formTitle')}
+          </h3>
+          {onClose && (
+            <button type="button" className="time-off-form__close" onClick={onClose} aria-label={t('timeOff.close')}>
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
 
       {failure && (
         <div className="time-off-form__alert" role="alert" data-testid="time-off-error">

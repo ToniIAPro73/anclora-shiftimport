@@ -31,6 +31,7 @@ function makeFakeSql() {
       return Promise.resolve([{ organization_id: ORG, role: state.role, scoped_area_id: null, organization_name: 'Org Requests', organization_plan: 'team' }]);
     }
     if (text.includes('FROM employees')) {
+      if (state.unlinked) return Promise.resolve([]);
       return Promise.resolve([{ id: EMPLOYEE }]);
     }
     if (text.includes('FROM change_requests cr')) {
@@ -113,8 +114,16 @@ describe('GET /api/me/change-requests', () => {
     expect((await call({ token: null })).statusCode).toBe(401);
     expect(state.sql.calls.some((entry) => entry.text.includes('FROM change_requests cr'))).toBe(false);
     state.role = 'ADMIN';
+    state.unlinked = true;
     expect((await call()).statusCode).toBe(403);
     expect(state.sql.calls.some((entry) => entry.text.includes('FROM change_requests cr'))).toBe(false);
+  });
+
+  it('lets an administrator who is also an employee read only their own requests', async () => {
+    state.role = 'ADMIN';
+    const response = await call();
+    expect(response.statusCode).toBe(200);
+    expect(state.sql.calls.find((entry) => entry.text.includes('FROM change_requests cr')).values.slice(0, 2)).toEqual([ORG, EMPLOYEE]);
   });
 
   it('rejects non-GET requests', async () => {

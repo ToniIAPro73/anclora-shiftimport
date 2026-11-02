@@ -2559,8 +2559,10 @@ export function mapNotificationRow(row) {
   };
 }
 
-function assertEmployeePortalContext(ctx) {
-  if (ctx.role !== 'EMPLOYEE') {
+/** Employee-portal self-service. By default the EMPLOYEE role is required; `anyRole` (own change requests) only needs a linked employee,
+ * so an administrator who is also an employee requests on their own behalf. Approval never falls on themselves (self_approval_forbidden). */
+function assertEmployeePortalContext(ctx, { anyRole = false } = {}) {
+  if (!anyRole && ctx.role !== 'EMPLOYEE') {
     throw new HttpError(403, 'Employee portal access required');
   }
   if (!ctx.employeeId) {
@@ -2569,7 +2571,7 @@ function assertEmployeePortalContext(ctx) {
 }
 
 export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawRequestType, rawReason, rawRequestedStartTime, rawRequestedEndTime) {
-  assertEmployeePortalContext(ctx);
+  assertEmployeePortalContext(ctx, { anyRole: true });
   const requestType = String(rawRequestType ?? '').trim().toUpperCase();
   if (!CHANGE_REQUEST_TYPES.has(requestType)) {
     throw new HttpError(400, 'Invalid change request type');
@@ -2736,7 +2738,7 @@ export async function createEmployeeChangeRequest(sql, ctx, rawShiftId, rawReque
 }
 
 export async function cancelEmployeeChangeRequest(sql, ctx, rawRequestId) {
-  assertEmployeePortalContext(ctx);
+  assertEmployeePortalContext(ctx, { anyRole: true });
   const rows = await sql`
     UPDATE change_requests
     SET status = 'CANCELLED',
@@ -2771,7 +2773,7 @@ export async function cancelEmployeeChangeRequest(sql, ctx, rawRequestId) {
  * a request back to its existing SELF-scoped detail screen without issuing a
  * second request for display data. */
 export async function listEmployeeChangeRequests(sql, ctx, rawStatus = null) {
-  assertEmployeePortalContext(ctx);
+  assertEmployeePortalContext(ctx, { anyRole: true });
   const normalizedStatus = String(rawStatus ?? '').trim().toUpperCase() || null;
   if (normalizedStatus && !CHANGE_REQUEST_STATUSES.has(normalizedStatus)) {
     throw new HttpError(400, 'Invalid change request status');

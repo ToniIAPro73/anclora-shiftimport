@@ -47,6 +47,7 @@ function makeFakeSql() {
       return Promise.resolve([{ organization_id: ORG, role: state.role, scoped_area_id: null, organization_name: 'Org Cancel', organization_plan: 'team' }]);
     }
     if (text.includes('FROM employees')) {
+      if (state.unlinked) return Promise.resolve([]);
       return Promise.resolve([{ id: EMPLOYEE }]);
     }
     if (text.startsWith('UPDATE change_requests')) {
@@ -107,11 +108,17 @@ describe('POST /api/me/change-requests/:id/cancel', () => {
     expect(res.body).toEqual({ error: 'Only pending change requests can be cancelled' });
   });
 
-  it('does not allow ADMIN, anonymous or malformed requests', async () => {
+  it('does not allow an unlinked ADMIN, anonymous or malformed requests', async () => {
     state.role = 'ADMIN';
+    state.unlinked = true;
     expect((await call()).statusCode).toBe(403);
     expect((await call({ token: null })).statusCode).toBe(401);
     expect((await call({ id: 'not-a-uuid', token: null })).statusCode).toBe(404);
     expect((await call({ method: 'GET' })).statusCode).toBe(405);
+  });
+
+  it('lets an administrator who is also an employee cancel their own pending request', async () => {
+    state.role = 'ADMIN';
+    expect((await call()).statusCode).not.toBe(403);
   });
 });

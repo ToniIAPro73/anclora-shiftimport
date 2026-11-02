@@ -1,5 +1,5 @@
-import { Ban, CalendarDays, Plus, RotateCcw } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, Ban, CalendarDays, Plus, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   cancelRemoteTimeOffRequest,
   loadRemoteTimeOffRequests,
@@ -9,6 +9,7 @@ import {
 import { getOperationalDate } from '../../lib/operational-date';
 import { ApiError } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
+import { ModalShell } from '../ui/ModalShell';
 import { TimeOffRequestForm } from './TimeOffRequestForm';
 import { TIME_OFF_CHANGED_EVENT } from './use-pending-time-off';
 import './TimeOffRequests.css';
@@ -37,7 +38,18 @@ const HISTORY_KEY = {
  * "Vacaciones y ausencias" for the employee portal (F2-M05): own requests, year selector, summary, new request, cancel.
  * Mounted only behind `VITE_TIME_OFF_ENABLED`; a 404 from the server (server flag off) hides the whole section.
  */
-export function TimeOffRequests() {
+interface TimeOffRequestsProps {
+  /** Only these statuses are listed (the portal's status filter); `ALL` or undefined lists everything. */
+  statusFilter?: 'ALL' | TimeOffRequest['status'];
+  /** Increment to open the request form from outside (the portal's pinned action bar). */
+  openFormSignal?: number;
+  /** The caller owns the "request vacation" button: hide the one in the heading. */
+  hideNewButton?: boolean;
+  /** Reports how many requests the selected year has (null while unknown). */
+  onCountChange?: (count: number | null) => void;
+}
+
+export function TimeOffRequests({ statusFilter = 'ALL', openFormSignal = 0, hideNewButton = false, onCountChange }: TimeOffRequestsProps = {}) {
   const { t, locale } = useI18n();
   const currentYear = Number(getOperationalDate().slice(0, 4));
   const [year, setYear] = useState(currentYear);
@@ -59,6 +71,12 @@ export function TimeOffRequests() {
   }, [year]);
 
   useEffect(() => { void load(); }, [load]);
+  // Only a signal raised while mounted opens the form: remounting with an old signal (back from another view) must not.
+  const handledSignal = useRef(openFormSignal);
+  useEffect(() => {
+    if (openFormSignal !== handledSignal.current) { handledSignal.current = openFormSignal; setFormOpen(true); }
+  }, [openFormSignal]);
+  useEffect(() => { onCountChange?.(state.status === 'ready' ? state.requests.length : null); }, [state, onCountChange]);
 
   const formatDate = (iso: string) =>
     new Intl.DateTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
@@ -86,16 +104,17 @@ export function TimeOffRequests() {
   };
 
   if (state.status === 'unavailable') return null;
+  const visible = state.status === 'ready' ? state.requests.filter((request) => statusFilter === 'ALL' || request.status === statusFilter) : [];
 
   return (
-    <section className="time-off" aria-labelledby="time-off-title" data-testid="time-off-section">
+    <section className={`time-off${hideNewButton ? ' time-off--compact' : ''}`} aria-labelledby="time-off-title" data-testid="time-off-section">
       <div className="time-off__heading">
         <div>
           <p className="time-off__eyebrow">{t('timeOff.eyebrow')}</p>
           <h2 id="time-off-title"><CalendarDays size={20} aria-hidden="true" />{t('timeOff.title')}</h2>
           <p className="time-off__description">{t('timeOff.description')}</p>
         </div>
-        {!formOpen && (
+        {!hideNewButton && (
           <button type="button" className="time-off__new" onClick={() => setFormOpen(true)} data-testid="time-off-new">
             <Plus size={15} aria-hidden="true" />
             {t('timeOff.newRequest')}
@@ -103,12 +122,16 @@ export function TimeOffRequests() {
         )}
       </div>
 
-      {formOpen && (
+      <ModalShell isOpen={formOpen} onClose={() => setFormOpen(false)} title={t('timeOff.formTitle')} closeAriaLabel={t('timeOff.close')} maxWidth="640px">
+        <button type="button" className="employee-request-status__back-btn" onClick={() => setFormOpen(false)}>
+          <ArrowLeft size={15} aria-hidden="true" />
+          <span>{t('employeeRequestStatus.backToRequests')}</span>
+        </button>
         <TimeOffRequestForm
-          onClose={() => setFormOpen(false)}
+          embedded
           onCreated={() => { setFormOpen(false); setFeedback({ tone: 'status', text: t('timeOff.sent') }); announceChange(); void load(); }}
         />
-      )}
+      </ModalShell>
 
       {feedback && (
         <p className={`time-off__feedback time-off__feedback--${feedback.tone}`} role={feedback.tone} data-testid="time-off-feedback">{feedback.text}</p>
@@ -135,11 +158,11 @@ export function TimeOffRequests() {
             <div><dt>{t('timeOff.summaryApproved', { year })}</dt><dd>{state.summary.approvedDaysInYear}</dd></div>
             <div><dt>{t('timeOff.summaryPending')}</dt><dd>{state.summary.pendingDays}</dd></div>
           </dl>
-          {state.requests.length === 0 ? (
+          {visible.length === 0 ? (
             <p className="time-off__state" data-testid="time-off-empty">{t('timeOff.listEmpty')}</p>
           ) : (
             <ol className="time-off__list" aria-label={t('timeOff.listTitle')}>
-              {state.requests.map((request) => (
+              {visible.map((request) => (
                 <li key={request.id} className="time-off__item" data-testid="time-off-item" data-status={request.status}>
                   <div className="time-off__item-head">
                     <strong>{t('timeOff.range', { start: formatDate(request.startDate), end: formatDate(request.endDate) })}</strong>

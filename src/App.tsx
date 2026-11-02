@@ -2218,6 +2218,9 @@ function App() {
       onRequests={session?.role === 'EMPLOYEE' && session.employeeId ? () => {
         if (!isImporting) setIsEmployeeRequestsOpen(true);
       } : undefined}
+      onMyRequests={session && session.role !== 'EMPLOYEE' && session.employeeId ? () => {
+        if (!isImporting) setIsEmployeeRequestsOpen(true);
+      } : undefined}
       onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
       onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
       onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
@@ -2447,7 +2450,7 @@ function App() {
         currentUserId={session?.user?.id}
       />
 
-      {session?.role === 'EMPLOYEE' && session.employeeId && (
+      {session?.employeeId && (
         <ModalShell
           isOpen={isEmployeeRequestsOpen && !isImporting}
           onClose={() => {
@@ -2459,10 +2462,13 @@ function App() {
               ? t('employeePortal.newRequest')
               : employeeRequestView === 'detail'
                 ? t('employeeChangeRequest.title')
-                : t('employeePortal.requests')
+                : session.role === 'EMPLOYEE'
+                  ? t('employeePortal.requests')
+                  : t('employeePortal.myRequests')
           }
           closeAriaLabel={t('common.close')}
-          maxWidth="780px"
+          maxWidth={employeeRequestView === 'create' ? '860px' : '780px'}
+          height={employeeRequestView === 'create' ? 'auto' : 'min(calc(100dvh - 32px), 960px)'}
           workspace
         >
           <RequestStatus
@@ -2476,7 +2482,7 @@ function App() {
         </ModalShell>
       )}
 
-      {session?.role === 'EMPLOYEE' && session.employeeId && isNewEmployeeRequestOpen && (
+      {session?.employeeId && isNewEmployeeRequestOpen && (
         <NewChangeRequestModal
           isOpen={isNewEmployeeRequestOpen && !isImporting}
           employeeId={session.employeeId}

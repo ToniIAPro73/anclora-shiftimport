@@ -20,7 +20,7 @@ export default async function handler(req, res) {
 
     const sql = getSql();
     const ctx = requireOrgContext(await resolveContext(req, sql));
-    if (ctx.role !== 'EMPLOYEE' || !ctx.employeeId) {
+    if (!ctx.employeeId) {
       logApprovalAuthorizationDenied({ endpoint: 'POST /api/me/change-requests/:id/cancel', ctx, reason: 'employee_self_scope_required' });
       return sendJson(res, 403, { error: 'Employee portal access required' });
     }

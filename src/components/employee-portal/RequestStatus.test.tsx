@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { I18nProvider } from '../../lib/i18n-react';
-import { ChangeRequest, loadRemoteChangeRequests, loadRemoteTimeOffRequests } from '../../lib/remote';
+import { ChangeRequest, loadRemoteChangeRequests, loadRemoteShifts, loadRemoteTimeOffRequests } from '../../lib/remote';
 import { ThemeProvider } from '../../lib/theme-react';
 import { setupLocalStorageMock } from '../../test-utils/local-storage';
 import { RequestStatus } from './RequestStatus';
 
 vi.mock('../../lib/remote', () => ({
   loadRemoteChangeRequests: vi.fn(),
+  loadRemoteShifts: vi.fn(),
   loadRemoteTimeOffRequests: vi.fn(),
 }));
 
@@ -126,5 +127,29 @@ describe('RequestStatus', () => {
     renderStatus(vi.fn(), 'employee-1');
     expect(await screen.findByTestId('time-off-section')).toBeTruthy();
     vi.unstubAllEnvs();
+  });
+  it('new shift-change request: offers upcoming shifts and preselects the next one, never the oldest in the history', async () => {
+    mockedLoad.mockResolvedValue([]);
+    const day = (offset: number) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + offset); return d.toISOString().slice(0, 10); };
+    const shift = (id: string, date: string, location: string) => ({ id, date, startTime: '08:00', endTime: '15:00', shiftType: 'Regular', location, employeeId: 'employee-1' });
+    vi.mocked(loadRemoteShifts).mockResolvedValue([
+      shift('old', '2024-10-13', 'JT'),
+      shift('later', day(9), 'Lejano'),
+      shift('next', day(2), 'Proximo'),
+    ] as never);
+    render(
+      <ThemeProvider>
+        <I18nProvider>
+          <RequestStatus employeeId="employee-1" view="create" />
+        </I18nProvider>
+      </ThemeProvider>,
+    );
+    const trigger = await screen.findByTestId('shift-picker-trigger');
+    expect(trigger.textContent).toContain('Proximo');
+    expect(trigger.textContent).not.toContain('JT');
+    fireEvent.click(trigger);
+    const options = within(screen.getByRole('listbox')).getAllByRole('option').map((option) => option.textContent ?? '');
+    expect(options).toHaveLength(2);
+    expect(options.join(' ')).not.toContain('JT');
   });
 });

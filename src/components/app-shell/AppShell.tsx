@@ -141,6 +141,8 @@ export interface AppShellProps {
   onSelfImport?: () => void;
   onHistoricalAdd?: () => void;
   onRequests?: () => void;
+  /** A manager who is also an employee: their own vacation / shift-change requests, separate from the approvals inbox. */
+  onMyRequests?: () => void;
   onHistory?: () => void;
   onPlanner?: () => void;
   onApprovals?: () => void;
@@ -321,6 +323,7 @@ export function AppShell({
   onSelfImport,
   onHistoricalAdd,
   onRequests,
+  onMyRequests,
   onHistory,
   onPlanner,
   onApprovals,
@@ -434,6 +437,7 @@ export function AppShell({
                       testId="sidebar-approvals"
                     />
                   )}
+                  {onMyRequests && <SidebarItem label={t('employeePortal.myRequests')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onMyRequests)} testId="sidebar-my-requests" />}
                 </>
               )}
             </SidebarGroup>

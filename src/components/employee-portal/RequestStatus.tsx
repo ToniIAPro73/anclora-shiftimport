@@ -7,6 +7,7 @@ import {
   loadRemoteChangeRequests,
   loadRemoteShifts,
 } from '../../lib/remote';
+import { getOperationalDate } from '../../lib/operational-date';
 import { useI18n } from '../../lib/use-i18n';
 import { Shift } from '../../lib/types';
 import { ChangeRequestForm } from './ChangeRequestForm';
@@ -70,6 +71,8 @@ export function RequestStatus({
   });
   const [selectedShiftId, setSelectedShiftId] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const [timeOffCount, setTimeOffCount] = useState<number | null>(null);
+  const [timeOffFormSignal, setTimeOffFormSignal] = useState(0);
   const [cancelFeedback, setCancelFeedback] = useState('');
 
   const loadRequests = useCallback(async () => {
@@ -86,7 +89,12 @@ export function RequestStatus({
     if (!employeeId) return;
     setShiftsState({ status: 'loading', shifts: [] });
     try {
-      const shifts = await loadRemoteShifts(employeeId);
+      const all = await loadRemoteShifts(employeeId);
+      // A change request is about a shift still to come: offer the upcoming ones, soonest first, and preselect the next one.
+      // Only when nothing is upcoming fall back to the most recent past shifts (never the oldest one in the history).
+      const today = getOperationalDate();
+      const upcoming = all.filter((shift) => shift.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+      const shifts = upcoming.length > 0 ? upcoming : [...all].sort((a, b) => b.date.localeCompare(a.date));
       setShiftsState({ status: 'ready', shifts });
       setSelectedShiftId((current) => (current && shifts.some((s) => s.id === current) ? current : shifts[0]?.id ?? ''));
     } catch {
@@ -109,6 +117,10 @@ export function RequestStatus({
     () => (filter === 'ALL' ? state.requests : state.requests.filter((request) => request.status === filter)),
     [filter, state.requests],
   );
+
+  const timeOffUi = Boolean(employeeId) && isTimeOffUiEnabled();
+  // Requests exist (shift changes or vacations): the list leads and creating moves to the pinned action bar below it.
+  const hasAnyRequests = (state.status === 'ready' && state.requests.length > 0) || (timeOffCount ?? 0) > 0;
 
   const totalPages = Math.max(1, Math.ceil(visibleRequests.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -184,16 +196,13 @@ export function RequestStatus({
             }}
           >
             <ArrowLeft size={15} />
-            <span>Volver a solicitudes</span>
+            <span>{t('employeeRequestStatus.backToRequests')}</span>
           </button>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px' }}>
-          <div style={{ marginBottom: '16px' }}>
-            <p className="employee-change-request__eyebrow">{t('employeeChangeRequest.eyebrow')}</p>
-            <h3 style={{ margin: '4px 0 8px', fontSize: '1.25rem', fontWeight: 800 }}>{t('employeePortal.newRequest')}</h3>
-            <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)' }}>{t('employeePortal.newRequestDescription')}</p>
-          </div>
+        {/* Side room for focus rings and hover borders: without it they are clipped by the scroll area and a horizontal bar appears. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px', margin: '0 -10px' }}>
+          <p className="employee-new-request__intro">{t('employeePortal.newRequestDescription')}</p>
 
           {shiftsState.status === 'loading' && (
             <p role="status" aria-busy="true" style={{ padding: '20px', color: 'var(--text-muted)' }}>{t('employeePortal.loadingOwnShifts')}</p>
@@ -213,7 +222,7 @@ export function RequestStatus({
           )}
 
           {shiftsState.status === 'ready' && shiftsState.shifts.length > 0 && selectedShift && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="employee-new-request__layout" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label htmlFor="employee-new-request-shift" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
                   {t('employeePortal.requestShiftLabel')}
@@ -280,7 +289,8 @@ export function RequestStatus({
           </button>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px' }}>
+        {/* Side room for focus rings and hover borders: without it they are clipped by the scroll area and a horizontal bar appears. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '4px 10px', margin: '0 -10px' }}>
           <div style={{ padding: '20px', borderRadius: '14px', background: 'var(--panel-muted-bg)', border: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
               <div>
@@ -387,6 +397,7 @@ export function RequestStatus({
     <section className="employee-request-status" aria-labelledby="employee-request-status-title" data-testid="request-status" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       <h2 id="employee-request-status-title" className="sr-only">{t('employeeRequestStatus.title')}</h2>
       {/* Pinned Toolbar: Filter on left, New Request CTA on right */}
+      {hasAnyRequests && (
       <div
         className="employee-request-status__toolbar"
         style={{
@@ -429,32 +440,11 @@ export function RequestStatus({
           </select>
         </div>
 
-        <button
-          type="button"
-          className="employee-request-status__new"
-          onClick={handleOpenCreate}
-          data-testid="request-status-new-btn"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            minHeight: '34px',
-            padding: '0 14px',
-            borderRadius: '8px',
-            background: 'var(--color-accent)',
-            color: 'var(--background, #0f172a)',
-            fontWeight: 700,
-            fontSize: '0.82rem',
-            border: 'none',
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-          }}
-        >
-          <Plus size={15} />
-          <span>{t('employeeRequestStatus.newRequest')}</span>
-        </button>
       </div>
+      )}
 
+      {/* One interior scroll region below the pinned toolbar: both sections stay reachable, the modal card itself never clips. */}
+      <div className="employee-request-status__body">
       {/* States */}
       {state.status === 'loading' && (
         <p className="employee-request-status__state" role="status" aria-busy="true" data-testid="request-status-loading">
@@ -473,42 +463,26 @@ export function RequestStatus({
         </div>
       )}
 
-      {state.status !== 'loading' && state.status !== 'error' && visibleRequests.length === 0 && (
-        <div className="employee-request-status__state employee-request-status__state--empty" data-testid="request-status-empty" style={{ textAlign: 'center', padding: '36px 20px', margin: 'auto 0' }}>
-          <Calendar size={36} style={{ color: 'var(--text-subtle)', margin: '0 auto 12px' }} />
-          <h3 style={{ margin: '0 0 6px', fontSize: '1.1rem', fontWeight: 700 }}>{t('employeeRequestStatus.emptyTitle')}</h3>
-          <p style={{ margin: '0 auto 18px', maxWidth: '42ch', fontSize: '0.84rem', color: 'var(--text-muted)' }}>
-            {t('employeeRequestStatus.emptyDescription')}
-          </p>
-          <button
-            type="button"
-            className="employee-request-status__new"
-            onClick={handleOpenCreate}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              minHeight: '36px',
-              padding: '0 16px',
-              borderRadius: '8px',
-              background: 'var(--color-accent)',
-              color: 'var(--background, #0f172a)',
-              fontWeight: 700,
-              fontSize: '0.82rem',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <Plus size={15} />
-            <span>{t('employeeRequestStatus.newRequest')}</span>
-          </button>
-        </div>
+      {state.status !== 'loading' && state.status !== 'error' && visibleRequests.length === 0 && !hasAnyRequests && (
+        <section className="request-card" aria-labelledby="shift-change-card-title" data-testid="request-status-empty">
+          <div className="request-card__heading">
+            <div>
+              <p className="request-card__eyebrow">{t('employeeRequestStatus.shiftCardEyebrow')}</p>
+              <h2 id="shift-change-card-title"><Calendar size={20} aria-hidden="true" />{t('employeeRequestStatus.shiftCardTitle')}</h2>
+              <p className="request-card__description">{t('employeeRequestStatus.shiftCardDescription')}</p>
+            </div>
+            <button type="button" className="request-card__new" onClick={handleOpenCreate} data-testid="request-status-new-btn">
+              <Plus size={15} aria-hidden="true" />
+              {t('employeeRequestStatus.newShiftChange')}
+            </button>
+          </div>
+        </section>
       )}
 
       {/* Compact Table */}
       {state.status === 'ready' && visibleRequests.length > 0 && (
-        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <div className="employee-request-table-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '12px', background: 'var(--panel-muted-bg)' }}>
+        <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column' }}>
+          <div className="employee-request-table-scroll" style={{ maxHeight: 'min(40dvh, 360px)', overflowY: 'auto', border: '1px solid var(--glass-border)', borderRadius: '12px', background: 'var(--panel-muted-bg)' }}>
             <table className="employee-request-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--glass-border)', background: 'rgba(255, 255, 255, 0.02)' }}>
@@ -705,7 +679,30 @@ export function RequestStatus({
           </div>
         </div>
       )}
-      {employeeId && isTimeOffUiEnabled() && <TimeOffRequests />}
+      {timeOffUi && (
+        <TimeOffRequests
+          statusFilter={filter}
+          openFormSignal={timeOffFormSignal}
+          hideNewButton={hasAnyRequests}
+          onCountChange={setTimeOffCount}
+        />
+      )}
+      </div>
+
+      {hasAnyRequests && (
+        <div className="employee-request-status__actions" data-testid="request-status-actions">
+          <button type="button" className="employee-request-status__action" onClick={handleOpenCreate} data-testid="request-status-new-btn">
+            <Plus size={15} aria-hidden="true" />
+            {t('employeeRequestStatus.newShiftChange')}
+          </button>
+          {timeOffUi && timeOffCount !== null && (
+            <button type="button" className="employee-request-status__action" onClick={() => setTimeOffFormSignal((n) => n + 1)} data-testid="time-off-new">
+              <Plus size={15} aria-hidden="true" />
+              {t('timeOff.newRequest')}
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

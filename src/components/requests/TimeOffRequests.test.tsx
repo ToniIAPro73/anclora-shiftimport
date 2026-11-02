@@ -124,7 +124,7 @@ describe('TimeOffRequests (Mis solicitudes de vacaciones)', () => {
     renderSection();
     fireEvent.click(await screen.findByTestId('time-off-new'));
     expect(screen.getByTestId('time-off-form')).toBeTruthy();
-    expect(screen.queryByTestId('time-off-new')).toBeNull();
+    expect(screen.getByRole('dialog')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Cerrar formulario'));
     expect(screen.queryByTestId('time-off-form')).toBeNull();
   });
