@@ -309,6 +309,8 @@ function mapAssignment(row) {
     location: row.location,
     shiftType: row.shift_type ?? 'Regular',
     countsAsWork: row.counts_as_work !== false,
+    // DRAFT only: a later manual calendar change contradicts this assignment (spec §4.5); it is kept but never published.
+    staleAgainstCalendar: row.stale_against_calendar === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -469,7 +471,36 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
     ? sql`
       SELECT sa.id, sa.schedule_version_id, sa.import_id, sa.employee_id, sa.date,
              sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
-             sa.created_at, sa.updated_at
+             sa.created_at, sa.updated_at,
+             ((${schedule.status === 'DRAFT'}::boolean OR NOT EXISTS (
+          -- A published version only keeps flagging what its publication did not materialize (the exclusion is derived, never stored).
+          SELECT 1 FROM shifts mat
+          WHERE mat.organization_id = ${ctx.organizationId} AND mat.schedule_version_id = sa.schedule_version_id
+            AND mat.employee_id = sa.employee_id AND mat.date = sa.date
+            AND mat.start_time IS NOT DISTINCT FROM TO_CHAR(sa.start_time, 'HH24:MI')
+            AND mat.end_time IS NOT DISTINCT FROM TO_CHAR(sa.end_time, 'HH24:MI')
+            AND lower(btrim(COALESCE(mat.shift_type, ''))) = lower(btrim(COALESCE(sa.shift_type, '')))
+        )) AND EXISTS (
+          SELECT 1 FROM shifts m
+          WHERE m.organization_id = ${ctx.organizationId}
+            AND m.employee_id = sa.employee_id AND m.date = sa.date
+            AND m.effective_state = 'EFFECTIVE' AND m.schedule_version_id IS NULL
+            AND m.provenance = 'MANUAL_ADMIN_CHANGE'
+            AND lower(btrim(COALESCE(m.shift_type, ''))) <> 'jt'
+            AND (
+              (sa.start_time IS NULL) <> (NULLIF(btrim(m.start_time), '') IS NULL)
+              OR (sa.start_time IS NULL AND NULLIF(btrim(m.start_time), '') IS NULL
+                  AND lower(btrim(COALESCE(sa.shift_type, ''))) <> lower(btrim(COALESCE(m.shift_type, ''))))
+              OR (sa.start_time IS NOT NULL AND sa.end_time IS NOT NULL
+                  AND NULLIF(btrim(m.start_time), '') IS NOT NULL AND NULLIF(btrim(m.end_time), '') IS NOT NULL
+                  AND (sa.date + sa.start_time,
+                       sa.date + sa.end_time + CASE WHEN sa.end_time <= sa.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END)
+                      OVERLAPS
+                      (m.date + btrim(m.start_time)::time,
+                       m.date + btrim(m.end_time)::time
+                         + CASE WHEN btrim(m.end_time)::time <= btrim(m.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END))
+            )
+        )) AS stale_against_calendar
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
       WHERE sa.schedule_version_id = ${versionId}
@@ -481,7 +512,36 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
     : sql`
       SELECT sa.id, sa.schedule_version_id, sa.import_id, sa.employee_id, sa.date,
              sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
-             sa.created_at, sa.updated_at
+             sa.created_at, sa.updated_at,
+             ((${schedule.status === 'DRAFT'}::boolean OR NOT EXISTS (
+          -- A published version only keeps flagging what its publication did not materialize (the exclusion is derived, never stored).
+          SELECT 1 FROM shifts mat
+          WHERE mat.organization_id = ${ctx.organizationId} AND mat.schedule_version_id = sa.schedule_version_id
+            AND mat.employee_id = sa.employee_id AND mat.date = sa.date
+            AND mat.start_time IS NOT DISTINCT FROM TO_CHAR(sa.start_time, 'HH24:MI')
+            AND mat.end_time IS NOT DISTINCT FROM TO_CHAR(sa.end_time, 'HH24:MI')
+            AND lower(btrim(COALESCE(mat.shift_type, ''))) = lower(btrim(COALESCE(sa.shift_type, '')))
+        )) AND EXISTS (
+          SELECT 1 FROM shifts m
+          WHERE m.organization_id = ${ctx.organizationId}
+            AND m.employee_id = sa.employee_id AND m.date = sa.date
+            AND m.effective_state = 'EFFECTIVE' AND m.schedule_version_id IS NULL
+            AND m.provenance = 'MANUAL_ADMIN_CHANGE'
+            AND lower(btrim(COALESCE(m.shift_type, ''))) <> 'jt'
+            AND (
+              (sa.start_time IS NULL) <> (NULLIF(btrim(m.start_time), '') IS NULL)
+              OR (sa.start_time IS NULL AND NULLIF(btrim(m.start_time), '') IS NULL
+                  AND lower(btrim(COALESCE(sa.shift_type, ''))) <> lower(btrim(COALESCE(m.shift_type, ''))))
+              OR (sa.start_time IS NOT NULL AND sa.end_time IS NOT NULL
+                  AND NULLIF(btrim(m.start_time), '') IS NOT NULL AND NULLIF(btrim(m.end_time), '') IS NOT NULL
+                  AND (sa.date + sa.start_time,
+                       sa.date + sa.end_time + CASE WHEN sa.end_time <= sa.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END)
+                      OVERLAPS
+                      (m.date + btrim(m.start_time)::time,
+                       m.date + btrim(m.end_time)::time
+                         + CASE WHEN btrim(m.end_time)::time <= btrim(m.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END))
+            )
+        )) AS stale_against_calendar
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
       WHERE sa.schedule_version_id = ${versionId}
@@ -881,14 +941,37 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
                WHERE absence.organization_id = t.organization_id AND absence.employee_id = sa.employee_id
                  AND absence.date = sa.date AND absence.effective_state = 'EFFECTIVE'
                  AND absence.time_off_request_id IS NOT NULL
-             ) AS protected_absence
+             ) AS protected_absence,
+             -- A manual calendar change made after the draft was prepared contradicts this assignment (e.g. a day off replaced by
+             -- Extras): it stays in the draft for review but must never re-enter the calendar silently.
+             EXISTS (
+            SELECT 1 FROM shifts m
+            WHERE m.organization_id = t.organization_id
+              AND m.employee_id = sa.employee_id AND m.date = sa.date
+              AND m.effective_state = 'EFFECTIVE' AND m.schedule_version_id IS NULL
+              AND m.provenance = 'MANUAL_ADMIN_CHANGE'
+              AND lower(btrim(COALESCE(m.shift_type, ''))) <> 'jt'
+              AND (
+                (sa.start_time IS NULL) <> (NULLIF(btrim(m.start_time), '') IS NULL)
+                OR (sa.start_time IS NULL AND NULLIF(btrim(m.start_time), '') IS NULL
+                    AND lower(btrim(COALESCE(sa.shift_type, ''))) <> lower(btrim(COALESCE(m.shift_type, ''))))
+                OR (sa.start_time IS NOT NULL AND sa.end_time IS NOT NULL
+                    AND NULLIF(btrim(m.start_time), '') IS NOT NULL AND NULLIF(btrim(m.end_time), '') IS NOT NULL
+                    AND (sa.date + sa.start_time,
+                         sa.date + sa.end_time + CASE WHEN sa.end_time <= sa.start_time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END)
+                        OVERLAPS
+                        (m.date + btrim(m.start_time)::time,
+                         m.date + btrim(m.end_time)::time
+                           + CASE WHEN btrim(m.end_time)::time <= btrim(m.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END))
+              )
+          ) AS stale_against_calendar
       FROM shift_assignments sa
       JOIN target t ON t.version_id = sa.schedule_version_id
       JOIN employees e ON e.id = sa.employee_id
         AND e.organization_id = t.organization_id
     ),
     active_assignments AS MATERIALIZED (
-      SELECT * FROM all_assignments WHERE employee_status = 'active' AND NOT protected_absence
+      SELECT * FROM all_assignments WHERE employee_status = 'active' AND NOT protected_absence AND NOT stale_against_calendar
     ),
     assignment_intervals AS MATERIALIZED (
       SELECT a.*,
@@ -941,15 +1024,17 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
     ),
     excluded AS (
       SELECT
-        COUNT(*) FILTER (WHERE employee_status <> 'active' OR protected_absence)::integer AS excluded_count,
+        COUNT(*) FILTER (WHERE employee_status <> 'active' OR protected_absence OR stale_against_calendar)::integer AS excluded_count,
         COALESCE(
           json_agg(
             json_build_object(
               'assignmentId', id, 'employeeId', employee_id,
-              'reason', CASE WHEN employee_status <> 'active' THEN 'INACTIVE_EMPLOYEE' ELSE 'PROTECTED_ABSENCE' END
+              'reason', CASE WHEN employee_status <> 'active' THEN 'INACTIVE_EMPLOYEE'
+                             WHEN protected_absence THEN 'PROTECTED_ABSENCE'
+                             ELSE 'STALE_AGAINST_CALENDAR' END
             )
             ORDER BY id
-          ) FILTER (WHERE employee_status <> 'active' OR protected_absence),
+          ) FILTER (WHERE employee_status <> 'active' OR protected_absence OR stale_against_calendar),
           '[]'::json
         ) AS excluded_assignments
       FROM all_assignments

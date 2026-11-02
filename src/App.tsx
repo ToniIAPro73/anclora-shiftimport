@@ -793,6 +793,8 @@ function App() {
         for (const snapshot of snapshots) {
           for (const assignment of snapshot.assignments) {
             if (assignment.employeeId !== activeEmployeeId || assignment.date < firstDay || assignment.date > lastDay) continue;
+            // A later manual calendar change contradicts it: it stays in the draft (planner) but is not a second current shift.
+            if (assignment.staleAgainstCalendar) continue;
             rows.push({
               id: `draft:${assignment.id}`,
               date: assignment.date,

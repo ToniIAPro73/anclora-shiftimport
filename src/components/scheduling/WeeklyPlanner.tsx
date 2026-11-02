@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Lock, Plus, Table2, X } from 'lucide-react';
+import './StaleAssignment.css';
+import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Lock, Plus, Table2, X } from 'lucide-react';
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
@@ -716,13 +717,17 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                         onClick={() => { if (editable && day >= today) handleEdit(employee.id, day, assignment); }}
                                         disabled={!editable || day < today}
                                         data-editor-target={`${employee.id}:${day}`}
-                                        title={editable ? t('planner.editAssignment') : t('planner.locked')}
+                                        data-stale={assignment.staleAgainstCalendar || undefined}
+                                        title={assignment.staleAgainstCalendar ? t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignmentHint' : 'planner.excludedAssignmentHint') : (editable ? t('planner.editAssignment') : t('planner.locked'))}
                                       >
                                         {hasTimes && <span className="weekly-planner__assignment-type">{displayType}</span>}
                                         <strong>{hasTimes
                                           ? `${assignment.startTime!.slice(0, 5)}–${assignment.endTime!.slice(0, 5)}`
                                           : displayType}</strong>
                                         {assignment.location && <span>{assignment.location}</span>}
+                                        {assignment.staleAgainstCalendar && (
+                                          <span className="weekly-planner__stale" data-testid="planner-stale-assignment"><AlertTriangle size={11} aria-hidden="true" /><span className="weekly-planner__stale-full">{t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignment' : 'planner.excludedAssignment')}</span><span className="weekly-planner__stale-short" aria-hidden="true">{t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignmentShort' : 'planner.excludedAssignmentShort')}</span></span>
+                                        )}
                                       </button>
                                     );
                                   })}
@@ -821,7 +826,12 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
         >
           <div className="weekly-planner__publish-summary">
             <p>{t('planner.publishDescription')}</p>
-            <strong>{t('planner.publishSummary', { count: snapshot.assignments.length })}</strong>
+            <strong>{t('planner.publishSummary', { count: snapshot.assignments.filter((assignment) => !assignment.staleAgainstCalendar).length })}</strong>
+            {snapshot.assignments.some((assignment) => assignment.staleAgainstCalendar) && (
+              <p className="weekly-planner__publish-note" role="status" data-testid="planner-stale-publish-note">
+                {t('planner.publishStaleNote', { count: snapshot.assignments.filter((assignment) => assignment.staleAgainstCalendar).length })}
+              </p>
+            )}
             <p className="weekly-planner__publish-note">{t('planner.publishNote')}</p>
             {publishError && <p className="weekly-planner__editor-error" role="alert" aria-live="polite">{publishError}</p>}
           </div>

@@ -1,0 +1,15 @@
+/* The cell grid must not grow past its table column because of a long label. */
+.weekly-planner__cell { grid-template-columns: minmax(0, 1fr); }
+/* A DRAFT assignment contradicted by a later manual calendar change: flagged with text + icon + dashed border (never colour alone). */
+.weekly-planner__assignment[data-stale] { border-style: dashed; opacity: 0.9; }
+.weekly-planner__assignment span.weekly-planner__stale[data-testid] { display: inline-flex; align-items: flex-start; gap: 4px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; overflow: visible; text-overflow: clip; display: flex; margin-top: 2px; font-size: 0.68rem; font-weight: 800; line-height: 1.2; color: var(--warning, #f59e0b); }
+.weekly-planner__assignment[data-stale] { min-width: 0; overflow: hidden; }
+.weekly-planner__assignment span.weekly-planner__stale-full { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; min-width: 0; white-space: normal !important; }
+.day-history__state { color: var(--text-muted); font-size: 0.8em; font-weight: 700; }
+/* The cell is narrow on phones: show a short word, keep the full meaning for assistive tech (sr-only full text) and in the title. */
+.weekly-planner__stale-short { display: none !important; }
+@media (max-width: 720px) {
+  .weekly-planner__assignment span.weekly-planner__stale-full { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap !important; }
+  .weekly-planner__assignment span.weekly-planner__stale-short { display: inline !important; white-space: nowrap !important; color: inherit; font-size: inherit; }
+}
+.weekly-planner__stale > svg { flex: none; margin-top: 1px; }

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import '../scheduling/StaleAssignment.css';
 import { AlertTriangle, Lock } from 'lucide-react';
 import { loadDayHistory, reconcileCalendarDayRemote, type RemoteDayHistory } from '../../lib/remote';
 import { ApiError } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
-import type { NormalizedCalendarRow } from '../../lib/effective-calendar.js';
 import { classifyReason, hasSemanticDayChange, normalizeChangeRows, uniqueKeepOptions } from './reconciliation-display';
 
 interface DayProvenancePanelProps {
@@ -19,7 +19,7 @@ const clock = (value: string | null): string => (value ? String(value).slice(0, 
 /** `2026-08-12` → `12/08` (the vacation range in conflict messages). */
 const dayMonth = (iso?: string | null): string => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : '—');
 
-function RowList({ rows, empty }: { rows: NormalizedCalendarRow[]; empty: string }) {
+function RowList({ rows, empty, stateLabel }: { rows: Array<{ id?: string | null; shiftType?: string | null; startTime?: string | null; endTime?: string | null }>; empty: string; stateLabel?: string }) {
   if (rows.length === 0) return <p className="day-history__empty">{empty}</p>;
   return (
     <ul className="day-history__rows">
@@ -27,6 +27,7 @@ function RowList({ rows, empty }: { rows: NormalizedCalendarRow[]; empty: string
         <li key={row.id ?? index}>
           <strong>{row.shiftType || '—'}</strong>
           {row.startTime && row.endTime ? ` ${clock(row.startTime)}–${clock(row.endTime)}` : ''}
+          {stateLabel && <span className="day-history__state"> · {stateLabel}</span>}
         </li>
       ))}
     </ul>
@@ -62,7 +63,12 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, canOverride
   if (status === 'loading') return <p className="day-history__empty" role="status">{t('dayHistory.loading')}</p>;
   if (status === 'error' || !history) return <p className="day-history__empty" role="alert">{t('dayHistory.error')}</p>;
 
-  const { provenance, changes } = history;
+  const { provenance } = history;
+  // Newest first: the latest change is what the user wants to see; the stored trail itself is never rewritten.
+  const changes = [...history.changes].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const supersededRows = history.rows
+    .filter((row) => row.effectiveState === 'SUPERSEDED')
+    .sort((a, b) => Date.parse(b.createdAt ?? '') - Date.parse(a.createdAt ?? '') || 0);
   const formatWhen = (iso: string) => new Date(iso).toLocaleString(locale === 'en' ? 'en-GB' : 'es-ES');
   const describe = (list: Array<{ shiftType: string; startTime: string | null; endTime: string | null }>) =>
     list.length === 0
@@ -246,9 +252,16 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, canOverride
       <div className="day-history__compare day-history__compare--1" data-testid="day-history-compare">
         <div className="day-history__card">
           <h4>{t('dayHistory.effective')}</h4>
-          <RowList rows={provenance.effective} empty={t('dayHistory.noRows')} />
+          <RowList rows={provenance.effective} empty={t('dayHistory.noRows')} stateLabel={t('dayHistory.stateEffective')} />
         </div>
       </div>
+      )}
+
+      {supersededRows.length > 0 && (
+        <div className="day-history__card" data-testid="day-history-superseded">
+          <h4>{t('dayHistory.superseded')}</h4>
+          <RowList rows={supersededRows} empty={t('dayHistory.noRows')} stateLabel={t('dayHistory.stateSuperseded')} />
+        </div>
       )}
 
       <div className="day-history__trail">

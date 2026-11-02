@@ -625,3 +625,36 @@ describe('WeeklyPlanner', () => {
     });
   });
 });
+describe('WeeklyPlanner: stale draft assignments', () => {
+  it('flags an assignment contradicted by a later calendar change and does not count it as publishable', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [
+        assignment({ id: 'stale', shiftType: 'Libre', startTime: null, endTime: null, countsAsWork: false, staleAgainstCalendar: true }),
+        assignment({ id: 'ok', date: '2026-09-29' }),
+      ],
+      calendarShifts: [{ id: 'cal', employeeId: 'employee-1', date: '2026-09-28', startTime: '08:00', endTime: '15:00', location: null, shiftType: 'Extras', countsAsWork: true }],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getAllByTestId('planner-stale-assignment')).toHaveLength(1));
+    expect(screen.getByTestId('planner-stale-assignment')).toHaveTextContent('Desactualizada respecto al calendario');
+    // the draft still holds it (preserved), shown beside the current calendar shift
+    expect(screen.getByText('Ya en calendario')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+    expect(screen.getByText('1 turnos se materializarán')).toBeInTheDocument();
+    expect(screen.getByTestId('planner-stale-publish-note')).toHaveTextContent('1 asignaciones desactualizadas');
+  });
+  it('in a published version the contradicted assignment reads as excluded from publication, never as published', async () => {
+    const published = version({ status: 'PUBLISHED' });
+    mockedList.mockResolvedValue([published]);
+    mockedLoad.mockResolvedValue(snapshot({
+      version: published,
+      assignments: [assignment({ id: 'stale', shiftType: 'Libre', startTime: null, endTime: null, countsAsWork: false, staleAgainstCalendar: true })],
+    }));
+    renderPlanner();
+
+    await waitFor(() => expect(screen.getByTestId('planner-stale-assignment')).toHaveTextContent('Excluida de publicación · Desactualizada respecto al calendario'));
+  });
+});

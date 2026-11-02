@@ -86,6 +86,8 @@ export interface ShiftAssignment {
   shiftType?: string | null;
   countsAsWork?: boolean;
   location: string | null;
+  /** DRAFT assignment contradicted by a later manual calendar change: kept for review, never shown as current, never published. */
+  staleAgainstCalendar?: boolean;
 }
 
 export interface RemoteShiftDetail {
@@ -203,7 +205,7 @@ export interface SchedulePublicationResult {
   status: 'PUBLISHED';
   publishedAt: string;
   createdShiftCount: number;
-  excludedAssignments: Array<{ assignmentId: string; employeeId: string }>;
+  excludedAssignments: Array<{ assignmentId: string; employeeId: string; reason?: 'INACTIVE_EMPLOYEE' | 'PROTECTED_ABSENCE' | 'STALE_AGAINST_CALENDAR' }>;
   excludedAssignmentCount: number;
 }
 

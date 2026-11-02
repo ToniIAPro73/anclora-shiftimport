@@ -710,6 +710,24 @@ Campo añadido: `expectedEffectiveShiftIds[]` (opcional): ids de las filas vigen
 
 **Resultados QA focal (2026-11-01, tenant sintético `E2E-SHIFT-<runId>`, residuo 0).** Reales en el runtime local con Neon `main`: día libre → Regular (`REPLACE`): libre `SUPERSEDED`, Regular `EFFECTIVE`, `calendar_changes` `TYPE_CHANGE` y `CALENDAR_CHANGE_APPLIED`; Regular + Extras 18–21 (`ADD`): ambos `EFFECTIVE`; vacaciones aprobadas → Extras por ADMIN: vacaciones `SUPERSEDED`, Extras `EFFECTIVE`, `time_off_request.manual_override` y solicitud `APPROVED`; día vacío: alta directa sin diálogo; diálogo con expectativa obsoleta: `409 DAY_CHANGED` sin cambios; estadísticas del tenant: libres 0, vacaciones 0, regular 1380 min, extras 540 min, 5 fechas trabajadas. Visual a 1366×768 y 375×812 (pie accesible, sin desbordamiento horizontal). Pruebas: `api/_lib/calendar-contextual-change.test.js` (18), `src/lib/shift-context.test.ts` (14), `ShiftContextDialog.test.tsx` (4).
 
+
+#### 4.5.1 Consistencia calendario ↔ planificación ↔ historial (borradores obsoletos)
+
+**Incidencia (2026-11-01).** Un `Día libre` sustituido por `Extras 08:00–15:00` (`REPLACE`) seguía mostrándose como `Borrador Día libre` en el calendario y como asignación vigente en el planificador. Causa: (1) `shifts` era correcto (`Libre` `SUPERSEDED`, `Extras` `EFFECTIVE`) y el historial existía; (2) la asignación `Libre` seguía en una versión `DRAFT` de `shift_assignments`, legítimamente; (3) el calendario pintaba toda asignación de borrador que no fuese idéntica a un turno vigente; (4) ni el planificador ni `publishScheduleVersionTx` sabían que un cambio manual posterior la contradecía, de modo que publicar habría reintroducido el día libre junto a `Extras`.
+
+**Regla.** Una asignación de una versión `DRAFT` está **desactualizada respecto al calendario** (`staleAgainstCalendar`) si ese `(empleado, fecha)` tiene un `shift` `EFFECTIVE`, sin `schedule_version_id`, con provenance `MANUAL_ADMIN_CHANGE` (los cambios de `applyCalendarChange`) que la contradice: un registro de día completo frente a trabajo con horas (en cualquiera de los dos sentidos), dos tipos de día completo distintos, o intervalos solapados. Un `Regular` + `Extras` no solapados **no** es contradicción (D-03). No se borra nada: la asignación permanece en el borrador.
+
+| Superficie | Comportamiento |
+|---|---|
+| Calendario mensual | Solo turnos `EFFECTIVE`; el borrador obsoleto no es un segundo chip. Los borradores auténticos (no contradichos) siguen mostrándose como `Borrador`. |
+| Planificador | La asignación se conserva y se señala («Desactualizada respecto al calendario»; en móvil «Obsoleta», con el texto completo para tecnologías de apoyo), con borde discontinuo e icono; el diálogo de publicar informa de cuántas no se publicarán. |
+| Publicación (`publishScheduleVersionTx`) | Las obsoletas se excluyen de lo que se materializa y se devuelven en `excluded_assignments` con `reason: 'STALE_AGAINST_CALENDAR'`, igual que `PROTECTED_ABSENCE`. La publicación no puede reintroducir el día libre. |
+| Versión `PUBLISHED` | La exclusión **no se almacena**: se deriva. Una asignación de una versión no `DRAFT` se marca `staleAgainstCalendar` solo si la contradice un cambio manual vigente **y** su publicación no materializó un `shift` equivalente con ese `schedule_version_id`. El planificador la rotula «Excluida de publicación · Desactualizada respecto al calendario» (móvil: «Excluida»), nunca como turno publicado. Una nueva versión copia la asignación como evidencia, sigue marcada y se vuelve a excluir al publicar: no se reactiva sin intervención explícita. |
+| Historial del día | Reutiliza `GET /api/calendar/changes`: «Calendario actual · Vigente», «Sustituidos · Sustituido» y el rastro de cambios **del más reciente al más antiguo** (el almacenamiento sigue en orden cronológico e inmutable). |
+| Estadísticas | Sin cambios: solo filas `EFFECTIVE`. Caso real: libres 0, `Extras` 420 min, regulares 0. |
+
+**QA focal (2026-11-01, tenant sintético, residuo 0).** Reales en el runtime local con Neon `main`: snapshot (`stale:false` antes, `stale:true` después del `REPLACE`), publicación (`created:0`, `excluded:[STALE_AGAINST_CALENDAR]`, día intacto), nuevo borrador copiando la asignación (sigue marcada), calendario, historial y planificador a 1366×768 y 375×812. Tests: `api/schedules/publish.test.js` (+1), `api/schedules/stale-snapshot.test.js` (2), `DayProvenancePanel.test.tsx` (+1), `WeeklyPlanner.test.tsx` (+1), `api/_lib/calendar-contextual-change.test.js` (20).
+
 ---
 
 ## 5. UX/UI

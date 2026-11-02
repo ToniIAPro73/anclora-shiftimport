@@ -152,3 +152,24 @@ describe('publishScheduleVersion', () => {
     });
   });
 });
+
+describe('stale draft assignments (a later manual calendar change contradicts them)', () => {
+  it('the publication statement holds them back, so a replaced day off is never re-materialised silently', async () => {
+    const sql = makeSql({
+      found: true, current_status: 'DRAFT', error_code: null, published_at: '2026-11-01T10:00:00.000Z',
+      created_shift_count: 0, excluded_count: 1,
+      excluded_assignments: [{ assignmentId: ASSIGNMENT, employeeId: '66666666-6666-4666-8666-666666666666', reason: 'STALE_AGAINST_CALENDAR' }],
+    });
+    const result = await publishScheduleVersion(sql, ctx, SCHEDULE, VERSION);
+    expect(result.createdShiftCount).toBe(0);
+    expect(result.excludedAssignments[0].reason).toBe('STALE_AGAINST_CALENDAR');
+    const statement = sql.transactionQueries.join(' ').replace(/\s+/g, ' ');
+    // computed from the day's current manual changes only, and excluded from what is materialised
+    expect(statement).toContain("m.provenance = 'MANUAL_ADMIN_CHANGE'");
+    expect(statement).toContain("m.effective_state = 'EFFECTIVE'");
+    expect(statement).toContain('AND NOT stale_against_calendar');
+    expect(statement).toContain("ELSE 'STALE_AGAINST_CALENDAR'");
+    // the assignment itself is never deleted by publication
+    expect(statement).not.toMatch(/DELETE FROM shift_assignments/);
+  });
+});

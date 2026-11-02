@@ -312,3 +312,32 @@ describe('approved vacation in the day (F3-M06)', () => {
     expect(screen.getByTestId('day-history-use-proposal')).toHaveTextContent('Use proposal');
   });
 });
+
+describe('DayProvenancePanel: a replaced day off (REPLACE audit trail)', () => {
+  const replacedDay = () => ({
+    provenance: {
+      requiresReview: false, effective: [row('ex', 'Extras', '08:00', '15:00')], companyOriginal: [], companyCurrent: [], current: [row('ex', 'Extras', '08:00', '15:00')],
+      proposed: [], countedProvisionally: false, revisions: [1], legacyDutyRows: [],
+    },
+    // the API stores the trail oldest -> newest; the panel must show the newest first
+    changes: [
+      { id: 'old', changeType: 'TYPE_CHANGE', createdAt: '2026-10-30T09:00:00Z', actorRole: 'ADMIN', actorName: 'Ana', selfChange: false, reason: 'Primer ajuste', before: [{ shiftType: 'Libre', startTime: null, endTime: null }], after: [{ shiftType: 'Libre', startTime: null, endTime: null }] },
+      { id: 'new', changeType: 'TYPE_CHANGE', createdAt: '2026-11-01T09:00:00Z', actorRole: 'ADMIN', actorName: 'Beto', selfChange: false, reason: 'Trabajo extraordinario', before: [{ shiftType: 'Libre', startTime: null, endTime: null }], after: [{ shiftType: 'Extras', startTime: '08:00', endTime: '15:00' }] },
+    ],
+    rows: [row('off', 'Libre', null, null, 'SUPERSEDED'), row('ex', 'Extras', '08:00', '15:00')],
+  });
+
+  it('lists the current shift as current, the replaced day off as replaced, and the newest change first', async () => {
+    loadDayHistory.mockResolvedValue(replacedDay());
+    renderPanel(false);
+    await waitFor(() => expect(screen.getByTestId('day-history')).toBeInTheDocument());
+    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Extras 08:00–15:00');
+    expect(screen.getByTestId('day-history-compare')).toHaveTextContent('Vigente');
+    expect(screen.getByTestId('day-history-superseded')).toHaveTextContent('Libre');
+    expect(screen.getByTestId('day-history-superseded')).toHaveTextContent('Sustituido');
+    const trail = screen.getAllByTestId(/^day-history-change-/).map((item) => item.getAttribute('data-testid'));
+    expect(trail).toEqual(['day-history-change-new', 'day-history-change-old']);
+    expect(screen.getByTestId('day-history-change-new')).toHaveTextContent('Trabajo extraordinario');
+    expect(screen.getByTestId('day-history-change-new')).toHaveTextContent('Libre → Extras 08:00–15:00');
+  });
+});
