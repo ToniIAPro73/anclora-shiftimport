@@ -669,6 +669,47 @@ Rango máximo 366 días ⇒ las sentencias `generate_series` son acotadas.
 - `createNewDraftFromVersionTx`: no copiar asignaciones de pares protegidos.
 - `calendar-actions.ts`: sin cambios en F2/F3; `hasVacation` ya deshabilita `+` para no-OWNER/ADMIN.
 
+
+### 4.5 Gestión contextual de turnos manuales (Sustituir / Añadir)
+
+**Decisión de diseño: `EXTEND_EXISTING`.** No hay endpoint ni sistema de turnos nuevo: la operación se expresa con el contrato vigente `POST /api/calendar/changes` → `applyCalendarChange` (`api/_lib/calendar.js`), que ya valida el día resultante con `resolveDay`, escribe `calendar_changes` (antes/después) y audita. `shift_assignments` (planificación) no interviene: la fuente de verdad operativa es `shifts`.
+
+**Decisiones aprobadas**
+
+| ID | Estado | Regla |
+|---|---|---|
+| D-01 | APPROVED | Un día libre vigente sustituido por trabajo pasa a `SUPERSEDED` (permanece en el historial, no cuenta como día libre disfrutado) y el nuevo turno es `EFFECTIVE`. Ej.: `Día libre` + `REPLACE → Extras 16:00–19:00` ⇒ libres disfrutados 0, minutos regulares 0, extras 180. |
+| D-02 | APPROVED | Con asignaciones previas se detectan las vigentes, se **recomienda** `REPLACE` o `ADD` (preseleccionada), se puede cambiar si ambas son válidas, se muestra la vista previa y se exige confirmación explícita y motivo. Nunca se sustituye en silencio. |
+| D-03 | APPROVED | `Regular` + `Extras` no solapados coexisten (`ADD`). Un día con varios turnos cuenta **una** fecha trabajada, no dos días regulares. |
+| D-04 | DEFERRED | Descansos parciales/compensatorios, bolsas de horas, retribución y nuevos tipos de ausencia: **fuera de alcance**, sin campos ni estados especulativos. |
+
+**Mapeo al contrato existente (sin tipos nuevos)**
+
+| Operación | `changeType` | Campos |
+|---|---|---|
+| `ADD` | `ADD_EXTRA` (tipo `Extras`) / `ADD_SHIFT` | `after[]`; `supersedeShiftIds` **debe** ir vacío (`400 ADD_CANNOT_SUPERSEDE`) |
+| `REPLACE` | `TYPE_CHANGE` (cambia el tipo) / `TIME_CHANGE` (mismo tipo) | `supersedeShiftIds:[targetShiftId]` — **un único objetivo**; nunca se sustituye el día completo |
+
+Campo añadido: `expectedEffectiveShiftIds[]` (opcional): ids de las filas vigentes que el usuario vio. Si el día actual difiere ⇒ `409 DAY_CHANGED` sin escritura. Además, y siempre (también sin ese campo), la transacción bloquea las filas del día (`FOR UPDATE`) y comprueba que siguen siendo las leídas; si cambiaron entre la lectura y la escritura, la transacción aborta (`22012`) y se devuelve el mismo `409`. *Nota técnica:* el divisor depende de la comparación (`1 / (CASE WHEN … THEN 1 ELSE 0 END)`); un `1/0` constante en una rama de `CASE` se pliega en planificación y fallaría siempre.
+
+**Matriz contextual** (`src/lib/shift-context.ts`, que reutiliza `resolveDay`/`classifyKind`; el servidor repite toda validación)
+
+| Existente | Nuevo | Recomendación | Restricción |
+|---|---|---|---|
+| Ninguno | Cualquiera | Alta directa, sin diálogo | — |
+| Día libre | Extras / Regular | `REPLACE` (objetivo: el día libre) | `ADD` incompatible (`FULL_DAY_WITH_WORK`) |
+| Regular | Extras no solapadas | `ADD` | `REPLACE` solo por elección explícita |
+| Regular | Regular corregido | `REPLACE` | no se duplica por defecto |
+| Regular | Extras solapadas | ninguna | `ADD` bloqueado (`OVERLAP`) hasta resolver |
+| Varios turnos | Turno nuevo | contextual | `REPLACE` exige objetivo exacto; solo se ofrecen objetivos que dejan un día coherente |
+| Vacaciones aprobadas | Trabajo | flujo protegido, sin recomendación | `ADD` nunca (`422 PROTECTED_ABSENCE_DAY`); `REPLACE` solo OWNER/ADMIN (`403 PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN` para el resto) y auditado como `time_off_request.manual_override`; la solicitud sigue `APPROVED` |
+
+**Estadísticas.** Sin métrica nueva. Las consultas leen solo filas `EFFECTIVE`, de modo que un `Libre`/`Vacaciones`/`Regular` `SUPERSEDED` no cuenta (días libres disfrutados 0). Los objetivos regulares siguen sumando únicamente `Regular` (`included_work_buckets`); las horas `Extras` se acumulan aparte. `workedDays` cuenta fechas únicas con trabajo (un día con Regular + Extras = 1); no existe una métrica separada de «días regulares» y no se ha creado. La semántica de `counts_as_work` no cambia.
+
+**UI.** `ShiftContextDialog` (`ModalShell` en modo `workspace`, pie fijo): título «Ya existen asignaciones para este día», turnos vigentes, turno nuevo, selector Sustituir/Añadir con indicador «Recomendado», selector de objetivo cuando hay varios, vista previa (estado en texto + icono: «Se mantiene», «Se sustituye», «Nuevo»), motivo obligatorio, Cancelar/Confirmar. Se abre solo para OWNER/ADMIN/PLANNER que crean un turno **nuevo** en un día con filas vigentes del empleado; la edición de filas existentes mantiene su flujo. Claves `shiftContext.*` (ES/EN).
+
+**Resultados QA focal (2026-11-01, tenant sintético `E2E-SHIFT-<runId>`, residuo 0).** Reales en el runtime local con Neon `main`: día libre → Regular (`REPLACE`): libre `SUPERSEDED`, Regular `EFFECTIVE`, `calendar_changes` `TYPE_CHANGE` y `CALENDAR_CHANGE_APPLIED`; Regular + Extras 18–21 (`ADD`): ambos `EFFECTIVE`; vacaciones aprobadas → Extras por ADMIN: vacaciones `SUPERSEDED`, Extras `EFFECTIVE`, `time_off_request.manual_override` y solicitud `APPROVED`; día vacío: alta directa sin diálogo; diálogo con expectativa obsoleta: `409 DAY_CHANGED` sin cambios; estadísticas del tenant: libres 0, vacaciones 0, regular 1380 min, extras 540 min, 5 fechas trabajadas. Visual a 1366×768 y 375×812 (pie accesible, sin desbordamiento horizontal). Pruebas: `api/_lib/calendar-contextual-change.test.js` (18), `src/lib/shift-context.test.ts` (14), `ShiftContextDialog.test.tsx` (4).
+
 ---
 
 ## 5. UX/UI

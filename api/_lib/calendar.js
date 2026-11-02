@@ -51,6 +51,13 @@ function badRequest(message, code) {
   return error;
 }
 
+/** 409: the day changed between opening the dialog and confirming; nothing was written. */
+function dayChanged() {
+  const error = new HttpError(409, 'The day changed since it was loaded; review it and try again');
+  error.code = 'DAY_CHANGED';
+  return error;
+}
+
 function mapTargetRow(row) {
   if (!row) return null;
   const dateOnly = (value, fallback) => value instanceof Date
@@ -350,6 +357,8 @@ async function loadProtectedAbsences(sql, ctx, rows) {
 const REQUIRES_REVIEW_STATE = 'REQUIRES_REVIEW';
 
 const REPLACING_TYPES = new Set(['TIME_CHANGE', 'TYPE_CHANGE', 'CANCEL_SHIFT', 'REPLACE_DAY']);
+// Contextual "Añadir": keeps every current row of the day, so it can never name rows to supersede.
+const ADDING_TYPES = new Set(['ADD_SHIFT', 'ADD_EXTRA']);
 
 /**
  * Direct administrative change on the effective calendar. This is NOT an
@@ -398,6 +407,34 @@ export async function applyCalendarChange(sql, ctx, input) {
     supersededRows = [];
   }
 
+  if (ADDING_TYPES.has(changeType) && requestedIds.size > 0) {
+    throw badRequest('Adding a shift cannot supersede existing rows', 'ADD_CANNOT_SUPERSEDE');
+  }
+
+  // Stale-dialog protection: the client states which rows it showed; any difference with the day as it is now is a controlled conflict.
+  const currentIds = effectiveRows.map((row) => String(row.id)).sort();
+  if (Array.isArray(input?.expectedEffectiveShiftIds)) {
+    const expected = [...new Set(input.expectedEffectiveShiftIds.map(String))].sort();
+    if (expected.length !== currentIds.length || expected.some((id, index) => id !== currentIds[index])) {
+      throw dayChanged();
+    }
+  }
+
+  // F3: an approved vacation (a row born from a time-off request) is protected. Nothing is added beside it, and only OWNER/ADMIN may
+  // replace it (audited as time_off_request.manual_override), exactly as in the reconciliation flow.
+  const protectedRows = dayRows.filter((row) => row.effective_state === 'EFFECTIVE' && row.time_off_request_id);
+  const overriddenAbsences = supersededRows.filter((row) => row.time_off_request_id);
+  if (protectedRows.length > 0 && ADDING_TYPES.has(changeType)) {
+    const error = new HttpError(422, 'The day is protected by an approved vacation');
+    error.code = 'PROTECTED_ABSENCE_DAY';
+    throw error;
+  }
+  if (overriddenAbsences.length > 0 && ctx.role !== 'OWNER' && ctx.role !== 'ADMIN') {
+    const error = new HttpError(403, 'Only an owner or administrator can replace an approved vacation');
+    error.code = 'PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN';
+    throw error;
+  }
+
   const supersededIds = new Set(supersededRows.map((row) => row.id));
   const remaining = dayRows.filter((row) => row.effective_state === 'EFFECTIVE' && !supersededIds.has(row.id));
   const candidate = [
@@ -425,40 +462,72 @@ export async function applyCalendarChange(sql, ctx, input) {
   ];
   const originalShiftId = supersededRows[0]?.id ?? null;
 
-  await sql.transaction((txn) => [
-    txn`
-      INSERT INTO calendar_changes (
-        id, organization_id, employee_id, date, change_type, actor_user_id, actor_role,
-        self_change, source, reason, before_state, after_state, approval_status, original_shift_id
-      ) VALUES (
-        ${changeId}, ${ctx.organizationId}, ${employeeId}, ${date}, ${changeType}, ${ctx.user.id}, ${ctx.role},
-        ${selfChange}, ${PROVENANCE.MANUAL_ADMIN_CHANGE}, ${reason},
-        ${JSON.stringify(beforeState)}::jsonb, ${JSON.stringify(afterState)}::jsonb, 'APPLIED', ${originalShiftId}
-      )
-    `,
-    ...supersededRows.map((row) => txn`
-      UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), updated_at = NOW()
-      WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-    `),
-    ...afterRows.map((row, index) => txn`
-      INSERT INTO shifts (
-        id, organization_id, employee_id, area_id, date, start_time, end_time, location, origin,
-        shift_type, counts_as_work, layer, provenance, duty_role, effective_state, change_id, updated_at
-      ) VALUES (
-        ${newIds[index]}, ${ctx.organizationId}, ${employeeId}, ${areaId}, ${date}, ${row.startTime}, ${row.endTime},
-        ${row.shiftType}, 'MAN', ${row.shiftType}, ${row.countsAsWork}, 'CHANGE', ${PROVENANCE.MANUAL_ADMIN_CHANGE},
-        ${row.dutyRole}, 'EFFECTIVE', ${changeId}, NOW()
-      )
-    `),
-  ]);
+  try {
+    await sql.transaction((txn) => [
+      // Lock the day and re-check, inside the same transaction, that its current rows are still the ones this change was computed from.
+      // A mismatch raises division_by_zero (22012), which aborts the whole transaction: no partial write.
+    // The divisor depends on the comparison on purpose: a constant `1 / 0` in a CASE branch is folded at planning time and would
+    // fail even when the day is unchanged.
+      txn`
+        SELECT id FROM shifts
+        WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
+          AND effective_state = 'EFFECTIVE'
+        FOR UPDATE
+      `,
+      txn`
+        SELECT 1 / (CASE WHEN COALESCE((
+          SELECT array_agg(id::text ORDER BY id::text) FROM shifts
+          WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
+            AND effective_state = 'EFFECTIVE' AND lower(btrim(COALESCE(shift_type, ''))) <> 'jt'
+        ), ARRAY[]::text[]) = ${currentIds}::text[] THEN 1 ELSE 0 END) AS day_unchanged
+      `,
+      txn`
+        INSERT INTO calendar_changes (
+          id, organization_id, employee_id, date, change_type, actor_user_id, actor_role,
+          self_change, source, reason, before_state, after_state, approval_status, original_shift_id
+        ) VALUES (
+          ${changeId}, ${ctx.organizationId}, ${employeeId}, ${date}, ${changeType}, ${ctx.user.id}, ${ctx.role},
+          ${selfChange}, ${PROVENANCE.MANUAL_ADMIN_CHANGE}, ${reason},
+          ${JSON.stringify(beforeState)}::jsonb, ${JSON.stringify(afterState)}::jsonb, 'APPLIED', ${originalShiftId}
+        )
+      `,
+      ...supersededRows.map((row) => txn`
+        UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), updated_at = NOW()
+        WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+      `),
+      ...afterRows.map((row, index) => txn`
+        INSERT INTO shifts (
+          id, organization_id, employee_id, area_id, date, start_time, end_time, location, origin,
+          shift_type, counts_as_work, layer, provenance, duty_role, effective_state, change_id, updated_at
+        ) VALUES (
+          ${newIds[index]}, ${ctx.organizationId}, ${employeeId}, ${areaId}, ${date}, ${row.startTime}, ${row.endTime},
+          ${row.shiftType}, 'MAN', ${row.shiftType}, ${row.countsAsWork}, 'CHANGE', ${PROVENANCE.MANUAL_ADMIN_CHANGE},
+          ${row.dutyRole}, 'EFFECTIVE', ${changeId}, NOW()
+        )
+      `),
+    ]);
+  } catch (error) {
+    if (error?.code === '22012') throw dayChanged();
+    throw error;
+  }
 
+  const supersededShiftIds = supersededRows.map((row) => row.id);
   await recordAuditEvent(sql, ctx, {
     eventType: 'CALENDAR_CHANGE_APPLIED',
     targetType: 'EMPLOYEE',
     targetId: employeeId,
-    metadata: { changeId, date, changeType, selfChange, actorRole: ctx.role },
+    metadata: { changeId, date, changeType, selfChange, actorRole: ctx.role, supersededShiftIds, addedShiftIds: newIds },
   });
-  return { changeId, date, employeeId, changeType, selfChange, actorRole: ctx.role, before: beforeState, after: afterState };
+  // The request itself stays APPROVED (OD-04); who replaced the vacation, when and why lives in the audit trail.
+  for (const requestId of new Set(overriddenAbsences.map((row) => row.time_off_request_id))) {
+    await recordAuditEvent(sql, ctx, {
+      eventType: 'time_off_request.manual_override',
+      targetType: 'TIME_OFF_REQUEST',
+      targetId: requestId,
+      metadata: { changeId, date, employeeId, actorRole: ctx.role, replacedShiftIds: overriddenAbsences.filter((row) => row.time_off_request_id === requestId).map((row) => row.id), addedShiftIds: newIds },
+    });
+  }
+  return { changeId, date, employeeId, changeType, selfChange, actorRole: ctx.role, before: beforeState, after: afterState, supersededShiftIds };
 }
 
 /**

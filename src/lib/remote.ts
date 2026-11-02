@@ -1587,6 +1587,8 @@ export interface CalendarChangeInput {
   reason: string;
   after?: Array<{ shiftType: string; startTime?: string | null; endTime?: string | null }>;
   supersedeShiftIds?: string[];
+  /** Rows the user saw: a different current day is rejected with 409 DAY_CHANGED (stale-dialog protection). */
+  expectedEffectiveShiftIds?: string[];
 }
 
 export async function applyCalendarChangeRemote(input: CalendarChangeInput) {

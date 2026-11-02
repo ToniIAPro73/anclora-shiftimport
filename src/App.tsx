@@ -50,6 +50,7 @@ import {
   RemoteArea,
   RemoteEmployee,
   syncRemoteShifts,
+  applyCalendarChangeRemote,
 } from './lib/remote';
 import { findAreaMismatch } from './lib/areas';
 import { resolveInactiveEmployeeMatch } from './lib/inactive-employee';
@@ -60,6 +61,8 @@ import { AnnualTargetModal } from './components/shift-dashboard/AnnualTargetModa
 import { MonthGrid } from './components/shift-dashboard/MonthGrid';
 import { usePendingTimeOff } from './components/requests/use-pending-time-off';
 import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { ShiftContextDialog, type ShiftContextConfirmation } from './components/shift-dashboard/ShiftContextDialog';
+import { changeTypeFor, planShiftContext, type ContextRowInput, type ShiftContextPlan } from './lib/shift-context';
 import { ShiftModal } from './components/shift-dashboard/ShiftModal';
 import { ImportModal, SelfImportSummary } from './components/shift-dashboard/ImportModal';
 import { OnboardingModal } from './components/shift-dashboard/OnboardingModal';
@@ -270,6 +273,9 @@ function App() {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [draftShiftDate, setDraftShiftDate] = useState<string | null>(null);
   const [pendingWholeDayOverride, setPendingWholeDayOverride] = useState<{ shift: Shift; fullDayType: string } | null>(null);
+  // The day already holds effective assignments: the user must choose Sustituir / Añadir (SDD contextual shift operations).
+  const [contextualShift, setContextualShift] = useState<{ shift: Shift; employeeId: string; plan: ShiftContextPlan } | null>(null);
+  const [contextualError, setContextualError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!appToast) return undefined;
@@ -958,6 +964,67 @@ function App() {
     setCurrentMonth(d.getMonth());
   };
 
+  const toContextRow = (row: Shift): ContextRowInput => ({
+    id: row.id,
+    shiftType: getShiftType(row),
+    startTime: row.startTime || null,
+    endTime: row.endTime || null,
+    countsAsWork: row.countsAsWork ?? null,
+    effectiveState: row.effectiveState ?? 'EFFECTIVE',
+    timeOffRequestId: row.timeOffRequestId ?? null,
+  });
+
+  const prepareContextualShift = (shift: Shift): { shift: Shift; employeeId: string; plan: ShiftContextPlan } | null => {
+    if (!session || !['OWNER', 'ADMIN', 'PLANNER'].includes(session.role ?? '')) return null;
+    if (shifts.some((row) => row.id === shift.id)) return null; // editing a row keeps the existing edit flow
+    const employeeId = shift.employeeId ?? selectedEmployeeId;
+    if (!employeeId) return null;
+    const dayRows = shifts.filter((row) => !row.isDraft && row.date === shift.date && (row.employeeId ?? employeeId) === employeeId);
+    const plan = planShiftContext({
+      date: shift.date,
+      existing: dayRows.map(toContextRow),
+      incoming: { shiftType: getShiftType(shift), startTime: shift.startTime || null, endTime: shift.endTime || null, countsAsWork: shift.countsAsWork ?? null },
+      role: session.role,
+    });
+    return plan ? { shift, employeeId, plan } : null;
+  };
+
+  const handleContextualConfirm = async ({ operation, targetId, reason }: ShiftContextConfirmation) => {
+    if (!contextualShift) return;
+    const { shift, employeeId, plan } = contextualShift;
+    const incoming = { shiftType: getShiftType(shift), startTime: shift.startTime || null, endTime: shift.endTime || null };
+    const target = plan.existing.find((row) => row.id === targetId) ?? null;
+    setContextualError(null);
+    try {
+      await applyCalendarChangeRemote({
+        employeeId,
+        date: shift.date,
+        changeType: changeTypeFor(shift.date, operation, incoming, target),
+        reason,
+        after: [incoming],
+        supersedeShiftIds: operation === 'REPLACE' && targetId ? [targetId] : [],
+        expectedEffectiveShiftIds: plan.existing.map((row) => row.id),
+      });
+      setContextualShift(null);
+      setIsModalOpen(false);
+      setEditingShiftId(null);
+      setDraftShiftDate(null);
+      setAppToast({ tone: 'success', message: t('shiftContext.saved') });
+      void refreshCalendarData();
+    } catch (error) {
+      const code = error instanceof ApiError ? String(error.code ?? '') : '';
+      if (code === 'DAY_CHANGED') {
+        // The day moved under the dialog: drop the stale decision, reload and let the user save again with fresh data.
+        setContextualShift(null);
+        setAppFeedback({ kind: 'alert', message: t('shiftContext.errors.DAY_CHANGED') });
+        void refreshCalendarData();
+        return;
+      }
+      const known = ['PROTECTED_ABSENCE_DAY', 'PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN'];
+      setContextualError(known.includes(code) ? t(`shiftContext.errors.${code}`) : t('shiftContext.errors.generic'));
+    }
+  };
+
   const handleSaveShift = async (shift: Shift, confirmWholeDayOverride = false) => {
     if (isImporting || isSavingShift) {
       return;
@@ -970,6 +1037,13 @@ function App() {
     const incomingType = getShiftType(shift);
     if (getShiftTypeSemantics(incomingType).timed && !hasShiftTimes(shift)) {
       setAppFeedback({ kind: 'alert', message: t('conflicts.timedRequiresTimes') });
+      return;
+    }
+    // A manager adding a NEW shift on a day that already has effective assignments chooses Sustituir / Añadir explicitly.
+    const contextual = prepareContextualShift(shift);
+    if (contextual) {
+      setContextualError(null);
+      setContextualShift(contextual);
       return;
     }
     if (conflict?.code === 'FULL_DAY_CONFLICT') {
@@ -2422,6 +2496,19 @@ function App() {
         onSave={handleSaveShift}
         onDelete={handleDeleteShift}
       />
+
+      {contextualShift && (
+        <ShiftContextDialog
+          isOpen
+          date={new Intl.DateTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { dateStyle: 'full', timeZone: 'UTC' }).format(new Date(`${contextualShift.shift.date}T00:00:00Z`))}
+          employeeName={employees.find((employee) => employee.id === contextualShift.employeeId)?.name ?? ''}
+          incoming={{ shiftType: getShiftType(contextualShift.shift), startTime: contextualShift.shift.startTime || null, endTime: contextualShift.shift.endTime || null }}
+          plan={contextualShift.plan}
+          error={contextualError}
+          onCancel={() => { setContextualShift(null); setContextualError(null); }}
+          onConfirm={handleContextualConfirm}
+        />
+      )}
 
       <ConfirmDialog
         isOpen={pendingWholeDayOverride !== null}
