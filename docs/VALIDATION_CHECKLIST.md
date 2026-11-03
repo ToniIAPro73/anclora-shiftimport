@@ -1,4 +1,4 @@
-# Checklist de validación — Solicitudes, Sustituir/Añadir y consistencia calendario ↔ planificador (2026-11-02)
+# Checklist de validación — F4 (primera entrega) + Solicitudes, Sustituir/Añadir y consistencia calendario ↔ planificador (2026-11-02)
 
 > Se sobrescribe en cada entrega; el historial queda en Git. El cierre de F3 se conserva en la sección «F3 (cerrada)».
 
@@ -15,6 +15,34 @@ PREVIEW_INTEGRATED_QA=PENDING
 PRODUCTION_DEPLOYMENT=NOT_AUTHORIZED
 F4=NOT_STARTED
 ```
+
+## F4 — primera entrega (Centro de Solicitudes, bandeja unificada, contadores) — **local, sin publicar**
+
+```text
+F4_M01=IMPLEMENTED  F4_M02=IMPLEMENTED  F4_M03=IMPLEMENTED_PENDING_GATE  F4_M04=PARTIAL  F4_M05=PENDING
+F4_FIX01_PLANNER_COUNTER=IMPLEMENTED
+AUTOMATED_QA=PASS (focal)  HUMAN_VALIDATION=PENDING  PREVIEW_INTEGRATED_QA=PENDING
+PRODUCTION_DEPLOYMENT=NOT_AUTHORIZED  F4_GATE=NOT_DECLARED  F5=NOT_STARTED
+```
+
+- **Centro de Solicitudes**: «Solicitudes» abre un único modal con `Pendientes del equipo (N)`, `Historial del equipo` y `Mis solicitudes` (solo con empleado vinculado); roles sin gestión, solo `Mis solicitudes`; el portal de EMPLOYEE no cambia. El badge es correcto al cargar.
+- **Bandeja unificada**: cambios de turno y vacaciones, filtros (tipo, área, empleado), paginación, solape, turnos afectados, advertencia de vacaciones ya iniciadas (OD-08), motivo cuando no se puede decidir, rechazo con motivo obligatorio.
+- **Aprobación masiva** (`POST /api/approval-requests/bulk-approve`, solo vacaciones, 1–50): resultado parcial por elemento; nunca aprueba lo no elegible.
+- **Contador del planificador (F4-FIX-01)**: borrador `N planificadas · M desactualizadas`; versión publicada `N publicados · M excluidos` (derivado de lo realmente materializado, sin migración).
+- **Comprobado**: 28 comprobaciones contra Postgres real (alcances OWNER/ADMIN/PLANNER ORG-AREAS-EMPLOYEES/EMPLOYEE, autoaprobación, fuera de alcance, otro tenant, política, parcial); contadores en Postgres real; visual 1440/412/375; axe 0 violaciones; tests focales (ver informe). Residuo 0; ninguna escritura en organizaciones reales; ninguna migración.
+- **F4-M03 (decisiones OD-F4-01..04 aprobadas, implementadas en local)**:
+  - **Copiar semana anterior**: copia el plan *publicado y aún vigente* de la semana anterior a un borrador existente; vista previa, confirmación, no sobrescribe, idempotente; omite con motivo (vacaciones, pasados, solapes, descanso 11 h incluido el límite de semana, obsoletas, fuera de alcance).
+  - **Publicar semanas pendientes** (hasta 12): una publicación canónica por semana, resultado por semana, vista previa por ensayo, sin semanas con fechas ya pasadas, notificaciones como hoy. **Corrige un hueco previo**: ahora la publicación (individual y en lote) rechaza un horario con empleados fuera del alcance del PLANNER.
+  - **PLANNER sin edición operativa directa**: `403 PLANNER_DIRECT_WRITE_FORBIDDEN` en `POST /api/calendar/changes` y en `PATCH /api/shifts` (cerrado el bypass `origin: 'IMP'`, el borrado y los `importId` inventados). Planificar en borrador, registrar histórico y reconciliar siguen permitidos.
+  - **Reconciliación masiva «Mantener actual»** (≤ 50 días de un empleado, motivo común, vista previa, resultado por día) y **guardia de concurrencia `409 DAY_CHANGED`** también en la resolución individual (una sola sentencia con `FOR UPDATE`).
+  - **Comprobado**: 62 comprobaciones contra Postgres real (roles, alcances ORGANIZATION/AREAS/EMPLOYEES, aislamiento de tenant, concurrencia con 3 peticiones simultáneas → 1 sola escritura, vacaciones protegidas) + regresión de F4-M01/M02 (28/28) y del contador F4-FIX-01; visual 1440/412/375 (ES, y EN claro en muestra), `axe` 0 violaciones en los diálogos nuevos, recorrido real por teclado (Tab, Espacio, Enter, Escape, foco visible y atrapado). Sin migraciones; residuo 0.
+- **Pendiente / no ejecutado**: validación humana en dispositivo físico; QA en Preview tras el push. La matriz visual 834×1112 y 844×390 **sí se ejecutó** (abajo).
+- **Remediación (2026-11-03)**: **REM-01** alcance `AREAS`/`EMPLOYEES` en escrituras de planificación, borrador nuevo y copia — corregido; **REM-02** Regular + Extras el mismo día publicable (descanso solo entre días distintos) — corregido; **AUD-03** concurrencia por empleado+día — bloqueo `pg_advisory_xact_lock` + puerta explícita `set_config` (sustituye la división por cero) — corregido y verificado en Postgres real (remediación 37/37, F4-M03 62/62, F4-M01/M02 28/28, 60 peticiones/12 días ⇒ 12 escrituras, 0 duplicados).
+- **QA-04 (visual, `agent-browser`)**: 834×1112 PASS y 844×390 PASS en los 10 pasos (solicitudes, bandeja, masiva, contador, copiar, publicar pendientes, reconciliación, «Mantener actual»); sin desbordamiento horizontal, botón principal alcanzable, foco atrapado/visible, `axe` 0 violaciones en diálogos nuevos. Defecto corregido: foco a `<body>` al llegar los resultados (ahora pasa a «Cerrar»). Evidencia: `qa/e2e-acceptance/artifacts/F4-MOBILE/`.
+- **Cierre técnico F4 (2026-11-03)**: regresión `App.logout.test.tsx` (bfcache) **resuelta** — era una fuga de `fetch` 401 entre tests que F4-M01 (llamada al cargar) hizo visible; 9/9 ×5. **E2E móvil de Playwright** (`npm --prefix qa/e2e-acceptance run test:f4-mobile`, 375×812 táctil, datos sintéticos reales, teardown con residuo 0): **6/6** (solicitudes + masiva, copiar semana, publicar pendientes, reconciliación masiva verificada en BD, modal de turnos, sesión) + recorrido equivalente con `agent-browser`. Defectos corregidos: foco a `<body>` tras resultados, trampa de foco con foco no tabulable, Escape cerraba el modal con el selector abierto en táctil, y **auditoría de «copiar semana» perdida** (tipo fuera del CHECK; ahora `ASSIGNMENT_CREATED`). Evidencia: `qa/e2e-acceptance/artifacts/F4-MOBILE/e2e-mobile-375/`. **ANDROID_PHYSICAL=NOT_VERIFIED, IOS_PHYSICAL=NOT_VERIFIED**, WebKit no cubierto; bfcache real no provocable (se probó el manejador con `pageshow` persistido). Pruebas focalizadas finales: 1498/1498. **F4_M04 = PARTIAL (falta validación humana en dispositivo físico), F4_M05 = PENDING.**
+- **Limitaciones**: descanso entre semanas no comprobado al crear/publicar (solo en copiar semana); contraste 4,49:1 del botón «Revisar» en claro (preexistente); `update` solo con `employeeId` ⇒ 400 (previo); Sustituir/Añadir conserva su guardia de concurrencia original. **F4_M04 = PARTIAL, F4_M05 = PENDING, validación humana NO realizada.**
+- **Hotfix UX móvil del modal de turnos (2026-11-03)**: (1) selector «Tipo de turno» ya no desplaza el modal ni queda fuera de pantalla (sin teclado forzado en táctil, posición con `visualViewport`, `Escape` cierra solo el menú); (2) Hora inicio/fin sin desbordar (rejilla `auto-fit`, una columna si no caben); (3) cabecera fija + una región de scroll + acciones en el pie; (4) etiquetas asociadas (axe 0) y error de validación visible dentro del modal. Verificado en 360/375/390/412/844×390 (muestra ES/EN y claro/oscuro) con `agent-browser`. **No verificado**: puntero táctil/teclado virtual reales y ancho del picker 12 h/iOS (emulados). **Validación humana en dispositivo real: PENDIENTE.** Evidencia: `qa/e2e-acceptance/artifacts/F4-MOBILE/shift-modal-hotfix/`.
+- **Limitaciones**: la fecha de creación de cada tarjeta se muestra en ISO (comportamiento previo); en `ORGANIZATION_ADMIN` un PLANNER de área ve las solicitudes pero no puede decidirlas (política, no error).
 
 ## 1. Qué cambia
 ### A. Solicitudes (`11d9605`)
