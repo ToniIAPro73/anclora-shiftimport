@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { HttpError } from './auth.js';
 import { ACTIONS, can } from './authorization.js';
 import { assertEmployeeInScope, mapShiftRow, recordAuditEvent } from './data.js';
@@ -17,6 +17,7 @@ import {
 import { evaluateWorktimeTarget, resolveWorktimeTargets, validateWorktimeTarget } from '../../src/lib/worktime-targets.js';
 import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes } from './shift-compatibility.js';
+import { assertPlannerOperationalDate } from './planner-write-guard.js';
 import {
   applyEmployeeStatisticsPolicy,
   DEFAULT_OBJECTIVE_SHIFT_TYPES,
@@ -357,6 +358,17 @@ async function loadProtectedAbsences(sql, ctx, rows) {
 const REQUIRES_REVIEW_STATE = 'REQUIRES_REVIEW';
 
 const REPLACING_TYPES = new Set(['TIME_CHANGE', 'TYPE_CHANGE', 'CANCEL_SHIFT', 'REPLACE_DAY']);
+/**
+ * Serialises every writer of ONE employee-day (REPLACE / ADD / reconciliation) with a transaction-scoped advisory lock. A row lock
+ * (`FOR UPDATE`) is not enough: on a day with no effective shift there is no row to lock, so two simultaneous ADDs both read "empty
+ * day" and both write (reproduced with real PostgreSQL: 120 requests over 20 empty days produced 21 applied changes and a day with 2
+ * effective rows). The lock is the FIRST statement of the transaction; the next statement takes a fresh snapshot, so it sees whatever
+ * the previous holder committed. Released automatically at commit/rollback.
+ */
+const lockEmployeeDay = (txn, organizationId, employeeId, date) => txn`
+  SELECT pg_advisory_xact_lock(hashtextextended(${`day:${organizationId}:${employeeId}:${date}`}, 0))
+`;
+
 // Contextual "Añadir": keeps every current row of the day, so it can never name rows to supersede.
 const ADDING_TYPES = new Set(['ADD_SHIFT', 'ADD_EXTRA']);
 
@@ -381,6 +393,8 @@ export async function applyCalendarChange(sql, ctx, input) {
   if (ctx.role === 'EMPLOYEE') {
     throw new HttpError(403, 'Employees must submit a change request instead of editing the plan');
   }
+  // OD-F4-03: a PLANNER never changes the current/future operational calendar directly (history stays allowed).
+  assertPlannerOperationalDate(ctx, date);
   await assertEmployeeInScope(sql, ctx, employeeId);
   const areaId = await loadEmployeeArea(sql, ctx, employeeId);
   if (!can(actorFromContext(ctx), ACTIONS.EDIT_SHIFT, { employeeId, areaId })) {
@@ -462,54 +476,53 @@ export async function applyCalendarChange(sql, ctx, input) {
   ];
   const originalShiftId = supersededRows[0]?.id ?? null;
 
-  try {
-    await sql.transaction((txn) => [
-      // Lock the day and re-check, inside the same transaction, that its current rows are still the ones this change was computed from.
-      // A mismatch raises division_by_zero (22012), which aborts the whole transaction: no partial write.
-    // The divisor depends on the comparison on purpose: a constant `1 / 0` in a CASE branch is folded at planning time and would
-    // fail even when the day is unchanged.
-      txn`
-        SELECT id FROM shifts
+  // The whole change is ONE transaction gated by an explicit, deterministic flag: after the day lock, a first statement compares the
+  // day's current effective rows with the ones this change was computed from and stores the verdict as a transaction-local setting;
+  // EVERY write below is conditioned on it and the last statement reports it. A day that moved is a plain `false`: nothing is written
+  // (no error is provoked to abort anything) and the caller answers 409 DAY_CHANGED.
+  const results = await sql.transaction((txn) => [
+    lockEmployeeDay(txn, ctx.organizationId, employeeId, date),
+    txn`
+      SELECT id FROM shifts
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
+        AND effective_state = 'EFFECTIVE'
+      FOR UPDATE
+    `,
+    txn`
+      SELECT set_config('f4.day_ok', (COALESCE((
+        SELECT array_agg(id::text ORDER BY id::text) FROM shifts
         WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
-          AND effective_state = 'EFFECTIVE'
-        FOR UPDATE
-      `,
-      txn`
-        SELECT 1 / (CASE WHEN COALESCE((
-          SELECT array_agg(id::text ORDER BY id::text) FROM shifts
-          WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
-            AND effective_state = 'EFFECTIVE' AND lower(btrim(COALESCE(shift_type, ''))) <> 'jt'
-        ), ARRAY[]::text[]) = ${currentIds}::text[] THEN 1 ELSE 0 END) AS day_unchanged
-      `,
-      txn`
-        INSERT INTO calendar_changes (
-          id, organization_id, employee_id, date, change_type, actor_user_id, actor_role,
-          self_change, source, reason, before_state, after_state, approval_status, original_shift_id
-        ) VALUES (
-          ${changeId}, ${ctx.organizationId}, ${employeeId}, ${date}, ${changeType}, ${ctx.user.id}, ${ctx.role},
-          ${selfChange}, ${PROVENANCE.MANUAL_ADMIN_CHANGE}, ${reason},
-          ${JSON.stringify(beforeState)}::jsonb, ${JSON.stringify(afterState)}::jsonb, 'APPLIED', ${originalShiftId}
-        )
-      `,
-      ...supersededRows.map((row) => txn`
-        UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), updated_at = NOW()
-        WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-      `),
-      ...afterRows.map((row, index) => txn`
-        INSERT INTO shifts (
-          id, organization_id, employee_id, area_id, date, start_time, end_time, location, origin,
-          shift_type, counts_as_work, layer, provenance, duty_role, effective_state, change_id, updated_at
-        ) VALUES (
-          ${newIds[index]}, ${ctx.organizationId}, ${employeeId}, ${areaId}, ${date}, ${row.startTime}, ${row.endTime},
-          ${row.shiftType}, 'MAN', ${row.shiftType}, ${row.countsAsWork}, 'CHANGE', ${PROVENANCE.MANUAL_ADMIN_CHANGE},
-          ${row.dutyRole}, 'EFFECTIVE', ${changeId}, NOW()
-        )
-      `),
-    ]);
-  } catch (error) {
-    if (error?.code === '22012') throw dayChanged();
-    throw error;
-  }
+          AND effective_state = 'EFFECTIVE' AND lower(btrim(COALESCE(shift_type, ''))) <> 'jt'
+      ), ARRAY[]::text[]) = ${currentIds}::text[])::text, true) AS day_ok
+    `,
+    txn`
+      INSERT INTO calendar_changes (
+        id, organization_id, employee_id, date, change_type, actor_user_id, actor_role,
+        self_change, source, reason, before_state, after_state, approval_status, original_shift_id
+      )
+      SELECT ${changeId}, ${ctx.organizationId}, ${employeeId}, ${date}, ${changeType}, ${ctx.user.id}, ${ctx.role},
+             ${selfChange}, ${PROVENANCE.MANUAL_ADMIN_CHANGE}, ${reason},
+             ${JSON.stringify(beforeState)}::jsonb, ${JSON.stringify(afterState)}::jsonb, 'APPLIED', ${originalShiftId}
+      WHERE current_setting('f4.day_ok', true) = 'true'
+    `,
+    ...supersededRows.map((row) => txn`
+      UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), updated_at = NOW()
+      WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
+        AND current_setting('f4.day_ok', true) = 'true'
+    `),
+    ...afterRows.map((row, index) => txn`
+      INSERT INTO shifts (
+        id, organization_id, employee_id, area_id, date, start_time, end_time, location, origin,
+        shift_type, counts_as_work, layer, provenance, duty_role, effective_state, change_id, updated_at
+      )
+      SELECT ${newIds[index]}, ${ctx.organizationId}, ${employeeId}, ${areaId}, ${date}, ${row.startTime}, ${row.endTime},
+             ${row.shiftType}, 'MAN', ${row.shiftType}, ${row.countsAsWork}, 'CHANGE', ${PROVENANCE.MANUAL_ADMIN_CHANGE},
+             ${row.dutyRole}, 'EFFECTIVE', ${changeId}, NOW()
+      WHERE current_setting('f4.day_ok', true) = 'true'
+    `),
+    txn`SELECT (current_setting('f4.day_ok', true) = 'true') AS applied`,
+  ]);
+  if (results?.[results.length - 1]?.[0]?.applied !== true) throw dayChanged();
 
   const supersededShiftIds = supersededRows.map((row) => row.id);
   await recordAuditEvent(sql, ctx, {
@@ -531,35 +544,62 @@ export async function applyCalendarChange(sql, ctx, input) {
 }
 
 /**
- * Explicit resolution of a REQUIRES_REVIEW day: the administrator names the
- * rows that remain effective; every other pending/effective row of the day is
- * superseded (kept for audit). Recorded as a RECONCILIATION change.
+ * State of ONE employee-day as the reconciliation sees it: every row of the day with its `effective_state`. Any change to the day
+ * (a REPLACE/ADD, an import, a vacation approval, another reconciliation) alters it, so it is both the preview token the client carries
+ * and the value the write gate compares INSIDE the transaction (F4-M03 / OD-F4-04: a stale decision is a 409, never a silent write).
  */
-export async function reconcileCalendarDay(sql, ctx, input) {
-  const employeeId = String(input?.employeeId ?? '').trim();
-  const date = String(input?.date ?? '').trim();
-  const reason = String(input?.reason ?? '').trim();
-  if (!employeeId || !DATE_RE.test(date)) throw badRequest('employeeId and date are required', 'INVALID_INPUT');
-  if (!reason || reason.length > MAX_REASON) throw badRequest('A reason (1-2000 chars) is required', 'REASON_REQUIRED');
-  if (ctx.role === 'EMPLOYEE') throw new HttpError(403, 'Only administrators can reconcile days');
-  await assertEmployeeInScope(sql, ctx, employeeId);
-  const areaId = await loadEmployeeArea(sql, ctx, employeeId);
-  if (!can(actorFromContext(ctx), ACTIONS.EDIT_SHIFT, { employeeId, areaId })) {
-    throw new HttpError(403, 'Not allowed to reconcile this employee calendar');
+export function dayStateSignature(rows) {
+  // Ordered by the row id (a uuid: canonical lowercase hex, so string order = the database's byte order), never by a collation-dependent text.
+  return [...rows]
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .map((row) => `${row.id}:${row.effective_state ?? row.effectiveState}`)
+    .join(',');
+}
+export const dayStateToken = (rows) => createHash('sha256').update(dayStateSignature(rows)).digest('hex').slice(0, 32);
+
+function dayChangedError() {
+  const error = new HttpError(409, 'The day changed since it was displayed. Review it and try again.');
+  error.code = 'DAY_CHANGED';
+  return error;
+}
+
+const isDutyRow = (row) => classifyKind(normalizeCalendarRow(row)).kind === 'LEGACY_DUTY_ROLE';
+
+/** What «Mantener actual» would do to a loaded day, without writing: the current rows stay, every proposal is superseded. */
+function planKeepCurrent(dayRows, date) {
+  const pending = dayRows.filter((row) => row.effective_state === REQUIRES_REVIEW_STATE);
+  const candidates = dayRows.filter((row) => ['EFFECTIVE', REQUIRES_REVIEW_STATE].includes(row.effective_state));
+  const decidable = candidates.filter((row) => !isDutyRow(row));
+  const keep = decidable.filter((row) => row.effective_state === 'EFFECTIVE');
+  const drop = decidable.filter((row) => row.effective_state === REQUIRES_REVIEW_STATE);
+  let skipReason = null;
+  if (pending.length === 0) skipReason = 'NOTHING_TO_RECONCILE';
+  // An empty keep list would supersede every row of the day: «mantener actual» never empties a day.
+  else if (keep.length === 0) skipReason = 'NO_CURRENT_TO_KEEP';
+  else {
+    // The day that would remain must be consistent (the write checks it too); saying so in the preview avoids offering what will fail.
+    const dutyRows = candidates.filter(isDutyRow);
+    const remaining = resolveDay(date, [...keep, ...dutyRows].map((row) => ({ ...normalizeCalendarRow(row), effectiveState: 'EFFECTIVE' })));
+    if (remaining.issues.some((issue) => issue.blocking)) skipReason = 'RESULT_INCONSISTENT';
   }
-  const keepIds = new Set((Array.isArray(input?.keepShiftIds) ? input.keepShiftIds : []).map(String));
-  const dayRows = await loadDayRows(sql, ctx, employeeId, date);
-  const pending = dayRows.filter((row) => row.effective_state === 'REQUIRES_REVIEW');
-  if (pending.length === 0) throw badRequest('The day has nothing to reconcile', 'NOTHING_TO_RECONCILE');
-  const candidates = dayRows.filter((row) => ['EFFECTIVE', 'REQUIRES_REVIEW'].includes(row.effective_state));
+  return { pending, keep, drop, skipReason };
+}
+
+/**
+ * The ONE write path of a reconciliation (single and bulk). `dayRows` is what the decision was based on; the statement locks the day's
+ * rows (`FOR UPDATE`, which also serialises concurrent reconciliations / REPLACE / ADD / imports of the same employee-day) and writes
+ * ONLY if their current `id:state` signature still equals the one that was read. A moved day writes nothing and answers 409 DAY_CHANGED.
+ * Everything is a single gated statement, so there is no window between the check and the writes and no error is provoked on purpose.
+ */
+async function applyReconciliation(sql, ctx, { employeeId, date, reason, keepIds, dayRows }) {
+  const candidates = dayRows.filter((row) => ['EFFECTIVE', REQUIRES_REVIEW_STATE].includes(row.effective_state));
   const unknown = [...keepIds].filter((id) => !candidates.some((row) => row.id === id));
   if (unknown.length) throw badRequest('keepShiftIds must reference rows pending on that day', 'SHIFT_NOT_PENDING');
 
   // Legacy JT rows are the Jefe-de-Turno duty + interval; they are preserved
   // as METADATA_ONLY (still counted via the interval union), never dropped.
-  const isDuty = (row) => classifyKind(normalizeCalendarRow(row)).kind === 'LEGACY_DUTY_ROLE';
-  const dutyRows = candidates.filter(isDuty);
-  const decidable = candidates.filter((row) => !isDuty(row));
+  const dutyRows = candidates.filter(isDutyRow);
+  const decidable = candidates.filter((row) => !isDutyRow(row));
   const kept = decidable.filter((row) => keepIds.has(row.id));
   const dropped = decidable.filter((row) => !keepIds.has(row.id));
   // Replacing an APPROVED vacation (a row born from a time-off request) with an alternative is an override: only OWNER/ADMIN may do
@@ -580,30 +620,45 @@ export async function reconcileCalendarDay(sql, ctx, input) {
 
   const changeId = randomUUID();
   const selfChange = Boolean(ctx.employeeId && ctx.employeeId === employeeId);
-  await sql.transaction((txn) => [
-    txn`
+  const signature = dayStateSignature(dayRows);
+  const [, gated] = await sql.transaction((txn) => [lockEmployeeDay(txn, ctx.organizationId, employeeId, date), txn`
+    WITH locked AS MATERIALIZED (
+      SELECT id, effective_state FROM shifts
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND date = ${date}
+      FOR UPDATE
+    ), gate AS MATERIALIZED (
+      SELECT COALESCE(string_agg(id::text || ':' || effective_state, ',' ORDER BY id), '') = ${signature} AS ok
+      FROM locked
+    ), change AS (
       INSERT INTO calendar_changes (
         id, organization_id, employee_id, date, change_type, actor_user_id, actor_role,
         self_change, source, reason, before_state, after_state, approval_status
-      ) VALUES (
-        ${changeId}, ${ctx.organizationId}, ${employeeId}, ${date}, 'RECONCILIATION', ${ctx.user.id}, ${ctx.role},
-        ${selfChange}, ${PROVENANCE.MANUAL_ADMIN_CHANGE}, ${reason},
-        ${JSON.stringify(snapshotRows(candidates))}::jsonb, ${JSON.stringify(snapshotRows(kept))}::jsonb, 'APPLIED'
       )
-    `,
-    ...kept.map((row) => txn`
+      SELECT ${changeId}, ${ctx.organizationId}, ${employeeId}, ${date}, 'RECONCILIATION', ${ctx.user.id}, ${ctx.role},
+             ${selfChange}, ${PROVENANCE.MANUAL_ADMIN_CHANGE}, ${reason},
+             ${JSON.stringify(snapshotRows(candidates))}::jsonb, ${JSON.stringify(snapshotRows(kept))}::jsonb, 'APPLIED'
+      WHERE (SELECT ok FROM gate)
+      RETURNING id
+    ), kept_rows AS (
       UPDATE shifts SET effective_state = 'EFFECTIVE', superseded_at = NULL, change_id = ${changeId}, updated_at = NOW()
-      WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-    `),
-    ...dropped.map((row) => txn`
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND id::text = ANY(${kept.map((row) => row.id)}::text[])
+        AND EXISTS (SELECT 1 FROM change)
+      RETURNING id
+    ), dropped_rows AS (
       UPDATE shifts SET effective_state = 'SUPERSEDED', superseded_at = NOW(), change_id = ${changeId}, updated_at = NOW()
-      WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-    `),
-    ...dutyRows.map((row) => txn`
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND id::text = ANY(${dropped.map((row) => row.id)}::text[])
+        AND EXISTS (SELECT 1 FROM change)
+      RETURNING id
+    ), duty_rows AS (
       UPDATE shifts SET effective_state = 'METADATA_ONLY', duty_role = 'shift_lead', change_id = ${changeId}, updated_at = NOW()
-      WHERE id = ${row.id} AND organization_id = ${ctx.organizationId} AND employee_id = ${employeeId}
-    `),
-  ]);
+      WHERE organization_id = ${ctx.organizationId} AND employee_id = ${employeeId} AND id::text = ANY(${dutyRows.map((row) => row.id)}::text[])
+        AND EXISTS (SELECT 1 FROM change)
+      RETURNING id
+    )
+    SELECT (SELECT ok FROM gate) AS gate_ok, (SELECT COUNT(*)::integer FROM change) AS changes_written
+  `]);
+  if (!gated?.[0]?.gate_ok || Number(gated?.[0]?.changes_written ?? 0) !== 1) throw dayChangedError();
+
   await recordAuditEvent(sql, ctx, {
     eventType: 'CALENDAR_DAY_RECONCILED',
     targetType: 'EMPLOYEE',
@@ -616,10 +671,113 @@ export async function reconcileCalendarDay(sql, ctx, input) {
       eventType: 'time_off_request.manual_override',
       targetType: 'TIME_OFF_REQUEST',
       targetId: requestId,
-      metadata: { changeId, date, employeeId, actorRole: ctx.role, replacedShiftIds: overriddenAbsences.filter((row) => row.time_off_request_id === requestId).map((row) => row.id), keptShiftIds: kept.map((row) => row.id) },
+      metadata: { changeId, date, employeeId, actorRole: ctx.role, replacedShiftIds: overriddenAbsences.filter((row) => row.time_off_request_id === requestId).map((row) => row.id) },
     });
   }
   return { changeId, date, employeeId, kept: kept.length, dropped: dropped.length, overriddenAbsences: overriddenAbsences.length };
+}
+
+/** Authorisation shared by every reconciliation entry point: a manager, the employee in scope, `EDIT_SHIFT` on that target. */
+async function assertMayReconcile(sql, ctx, employeeId) {
+  if (ctx.role === 'EMPLOYEE') throw new HttpError(403, 'Only administrators can reconcile days');
+  await assertEmployeeInScope(sql, ctx, employeeId);
+  const areaId = await loadEmployeeArea(sql, ctx, employeeId);
+  if (!can(actorFromContext(ctx), ACTIONS.EDIT_SHIFT, { employeeId, areaId })) {
+    throw new HttpError(403, 'Not allowed to reconcile this employee calendar');
+  }
+}
+
+/**
+ * Explicit resolution of a REQUIRES_REVIEW day: the administrator names the
+ * rows that remain effective; every other pending/effective row of the day is
+ * superseded (kept for audit). Recorded as a RECONCILIATION change.
+ * `expectedDayToken` (from the day history the user was looking at) makes a stale decision a 409 DAY_CHANGED; whatever the client
+ * sends, the write itself is gated on the state this function read (see `applyReconciliation`).
+ */
+export async function reconcileCalendarDay(sql, ctx, input) {
+  const employeeId = String(input?.employeeId ?? '').trim();
+  const date = String(input?.date ?? '').trim();
+  const reason = String(input?.reason ?? '').trim();
+  if (!employeeId || !DATE_RE.test(date)) throw badRequest('employeeId and date are required', 'INVALID_INPUT');
+  if (!reason || reason.length > MAX_REASON) throw badRequest('A reason (1-2000 chars) is required', 'REASON_REQUIRED');
+  await assertMayReconcile(sql, ctx, employeeId);
+  const keepIds = new Set((Array.isArray(input?.keepShiftIds) ? input.keepShiftIds : []).map(String));
+  const dayRows = await loadDayRows(sql, ctx, employeeId, date);
+  const expectedToken = String(input?.expectedDayToken ?? '').trim();
+  if (expectedToken && expectedToken !== dayStateToken(dayRows)) throw dayChangedError();
+  if (!dayRows.some((row) => row.effective_state === REQUIRES_REVIEW_STATE)) throw badRequest('The day has nothing to reconcile', 'NOTHING_TO_RECONCILE');
+  return applyReconciliation(sql, ctx, { employeeId, date, reason, keepIds, dayRows });
+}
+
+export const KEEP_CURRENT_MAX_DATES = 50;
+
+const label = (row) => {
+  const normalized = normalizeCalendarRow(row);
+  return { type: classifyKind(normalized).type, startTime: normalized.startTime ?? null, endTime: normalized.endTime ?? null };
+};
+
+/**
+ * Bulk «Mantener actual» (F4-M03 / OD-F4-04). v1 is deliberately the conservative action: the rows that are effective NOW stay, every
+ * pending proposal is superseded. `mode: 'preview'` reads and reports (no write); `mode: 'apply'` needs the `dayTokens` of the preview.
+ * One employee, 1–50 distinct dates, one common reason that is recorded on EACH day. Every date is its own gated write (own
+ * `calendar_changes` row, own audit event) and its own result: one stale or ineligible day never blocks, nor is silently applied with, the rest.
+ */
+export async function keepCurrentForDays(sql, ctx, input) {
+  const employeeId = String(input?.employeeId ?? '').trim();
+  const mode = String(input?.mode ?? 'apply').trim();
+  if (!employeeId) throw badRequest('employeeId is required', 'INVALID_INPUT');
+  if (!['preview', 'apply'].includes(mode)) throw badRequest('mode must be preview or apply', 'INVALID_INPUT');
+  if (String(input?.action ?? 'KEEP_CURRENT') !== 'KEEP_CURRENT') throw badRequest('Only KEEP_CURRENT is supported', 'ACTION_NOT_SUPPORTED');
+  const rawDates = Array.isArray(input?.dates) ? input.dates.map((value) => String(value ?? '').trim()) : [];
+  const dates = [...new Set(rawDates)];
+  if (dates.length < 1 || dates.length > KEEP_CURRENT_MAX_DATES || dates.some((value) => !DATE_RE.test(value))) {
+    throw badRequest(`dates must be 1 to ${KEEP_CURRENT_MAX_DATES} distinct YYYY-MM-DD values`, 'INVALID_INPUT');
+  }
+  const reason = String(input?.reason ?? '').trim();
+  if (mode === 'apply' && (!reason || reason.length > MAX_REASON)) throw badRequest('A reason (1-2000 chars) is required', 'REASON_REQUIRED');
+  const tokens = input?.dayTokens && typeof input.dayTokens === 'object' ? input.dayTokens : {};
+  if (mode === 'apply' && dates.some((date) => typeof tokens[date] !== 'string' || !tokens[date])) {
+    throw badRequest('dayTokens (from the preview) are required for every date', 'DAY_TOKENS_REQUIRED');
+  }
+  await assertMayReconcile(sql, ctx, employeeId);
+
+  const results = [];
+  for (const date of dates) {
+    const dayRows = await loadDayRows(sql, ctx, employeeId, date);
+    const plan = planKeepCurrent(dayRows, date);
+    const dayToken = dayStateToken(dayRows);
+    const protectedRow = dayRows.find((row) => row.effective_state === 'EFFECTIVE' && row.time_off_request_id);
+    if (mode === 'preview') {
+      results.push({
+        date, eligible: !plan.skipReason, code: plan.skipReason, dayToken,
+        keep: plan.keep.map(label), drop: plan.drop.map(label), protectedAbsence: Boolean(protectedRow),
+      });
+      continue;
+    }
+    if (plan.skipReason) {
+      // A retry of a finished day lands here: nothing is pending any more, so nothing is written and nothing is audited again.
+      results.push({ date, ok: false, status: 409, code: plan.skipReason === 'NOTHING_TO_RECONCILE' ? 'ALREADY_RECONCILED' : plan.skipReason });
+      continue;
+    }
+    if (tokens[date] !== dayToken) {
+      results.push({ date, ok: false, status: 409, code: 'DAY_CHANGED' });
+      continue;
+    }
+    try {
+      await applyReconciliation(sql, ctx, { employeeId, date, reason, keepIds: new Set(plan.keep.map((row) => row.id)), dayRows });
+      results.push({ date, ok: true });
+    } catch (error) {
+      if (error?.status >= 400 && error?.status < 500) results.push({ date, ok: false, status: error.status, code: error.code ?? 'ERROR' });
+      else {
+        console.error('[api] keep-current day failed', { date, message: error?.message });
+        results.push({ date, ok: false, status: 500, code: 'ERROR' });
+      }
+    }
+  }
+  const approved = results.filter((item) => item.ok).length;
+  return mode === 'preview'
+    ? { employeeId, mode, results }
+    : { employeeId, mode, results, summary: { requested: dates.length, applied: approved, failed: dates.length - approved } };
 }
 
 /** Full provenance of one day: every row ever recorded plus the change trail. */
@@ -658,6 +816,8 @@ export async function getDayHistory(sql, ctx, employeeId, date) {
   return {
     employeeId: targetEmployeeId,
     date,
+    // State token of the day: sent back with a reconciliation so a decision taken on stale data is a 409 DAY_CHANGED.
+    dayToken: dayStateToken(rows),
     rows: rows.map(mapShiftRow),
     changes: mappedChanges,
     provenance: buildDayProvenance(rows, mappedChanges),

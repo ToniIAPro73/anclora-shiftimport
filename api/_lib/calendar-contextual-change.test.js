@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { applyCalendarChange, getDayHistory } from './calendar.js';
+import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 
 /**
  * Contextual shift operations (SDD "Sustituir / Añadir") over the EXISTING `applyCalendarChange` flow.
@@ -40,19 +41,17 @@ function makeSql() {
     const statements = [];
     const txn = (strings, ...values) => { statements.push({ text: text(strings), values }); return { text: text(strings), values }; };
     const list = build(txn);
-    // The day changed between the application read and the write: the guard aborts the transaction (division_by_zero).
-    const guard = list.find((entry) => entry.text.includes('day_unchanged'));
-    if (guard) {
-      const expected = guard.values[guard.values.length - 1];
+    // The day changed between the application read and the write: the gate statement stores `false`, every write is conditioned on it
+    // and the last statement reports it (modelled here as: nothing is committed and `applied` is false).
+    const gate = list.find((entry) => entry.text.includes("set_config('f4.day_ok'"));
+    let applied = true;
+    if (gate) {
+      const expected = gate.values[gate.values.length - 1];
       const current = state.liveRows.filter((r) => r.effective_state === 'EFFECTIVE' && r.shift_type.toLowerCase() !== 'jt').map((r) => r.id).sort();
-      if (JSON.stringify(expected) !== JSON.stringify(current)) {
-        const error = new Error('division by zero');
-        error.code = '22012';
-        throw error;
-      }
+      applied = JSON.stringify(expected) === JSON.stringify(current);
     }
-    state.committed.push(...list);
-    return [];
+    if (applied) state.committed.push(...list.filter((entry) => !entry.text.includes('AS applied')));
+    return [...list.slice(0, -1).map(() => []), [{ applied }]];
   };
   return sql;
 }
@@ -155,12 +154,15 @@ describe('ADD', () => {
 });
 
 describe('concurrency', () => {
-  it('the in-transaction guard divides by a value that depends on the comparison (a constant 1/0 in a CASE is folded at plan time and always fails)', async () => {
+  it('the in-transaction guard is an explicit flag: no error is provoked, every write is conditioned on it, and the last statement reports it', async () => {
     setDay(row('reg', 'Regular', '08:00', '16:00'));
     await change({ changeType: 'ADD_EXTRA', after: [{ shiftType: 'Extras', startTime: '18:00', endTime: '21:00' }] });
-    const guard = state.committed.find((entry) => entry.text.includes('day_unchanged'));
-    expect(guard.text).toMatch(/SELECT 1 \/ \(CASE WHEN/);
-    expect(guard.text).not.toMatch(/ELSE 1 \/ 0/);
+    const gate = state.committed.find((entry) => entry.text.includes("set_config('f4.day_ok'"));
+    expect(gate.text).toContain(', true)'); // transaction-local
+    expect(gate.text).not.toMatch(/\/\s*\(|1 \/ 0|day_unchanged/); // no division by zero
+    const writes = state.committed.filter((entry) => /^(INSERT|UPDATE)/.test(entry.text));
+    expect(writes.length).toBeGreaterThan(1);
+    expect(writes.every((entry) => entry.text.includes("current_setting('f4.day_ok', true) = 'true'"))).toBe(true);
     expect(state.committed.some((entry) => entry.text.includes('FOR UPDATE'))).toBe(true);
   });
 
@@ -172,7 +174,7 @@ describe('concurrency', () => {
     expect(state.committed).toHaveLength(0);
   });
 
-  it('a change landing between the read and the write aborts the transaction: no partial write', async () => {
+  it('a change landing between the read and the write writes NOTHING (the gate is false): no partial write', async () => {
     setDay(row('reg', 'Regular', '08:00', '16:00'));
     state.liveRows = [row('reg', 'Regular', '08:00', '16:00'), row('sneaky', 'Extras', '18:00', '20:00')];
     const error = await reject(change({ changeType: 'TIME_CHANGE', supersedeShiftIds: ['reg'], after: [{ shiftType: 'Regular', startTime: '09:00', endTime: '17:00' }] }));
@@ -193,13 +195,19 @@ describe('F3 vacation protection', () => {
     expect(state.committed).toHaveLength(0);
   });
 
-  it('a PLANNER cannot replace an approved vacation', async () => {
+  it('a PLANNER cannot replace an approved vacation: today/future is closed by the direct-write rule, history by the override rule', async () => {
+    const today = getOperationalDate();
+    const replace = { changeType: 'TYPE_CHANGE', supersedeShiftIds: ['vac'], after: [{ shiftType: 'Extras', startTime: '16:00', endTime: '19:00' }] };
     setDay(vacation());
-    const error = await reject(change({ changeType: 'TYPE_CHANGE', supersedeShiftIds: ['vac'], after: [{ shiftType: 'Extras', startTime: '16:00', endTime: '19:00' }] }, ctx('PLANNER')));
-    expect(error.statusCode ?? error.status).toBe(403);
-    expect(error.code).toBe('PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN');
+    const future = await reject(change({ ...replace, date: shiftOperationalDate(today, 30) }, ctx('PLANNER')));
+    expect(future.statusCode ?? future.status).toBe(403);
+    expect(future.code).toBe('PLANNER_DIRECT_WRITE_FORBIDDEN');
+    const history = await reject(change({ ...replace, date: shiftOperationalDate(today, -3) }, ctx('PLANNER')));
+    expect(history.statusCode ?? history.status).toBe(403);
+    expect(history.code).toBe('PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN');
     expect(state.committed).toHaveLength(0);
   });
+
 
   it('an ADMIN/OWNER can replace it explicitly and the override is audited against the request', async () => {
     for (const role of ['ADMIN', 'OWNER']) {
@@ -251,5 +259,71 @@ describe('day history exposure', () => {
     setDay(row('off', 'Libre', null, null, { effective_state: 'SUPERSEDED' }), row('ex', 'Extras', '08:00', '15:00'));
     const history = await getDayHistory(makeSql(), ctx('ADMIN'), EMP, DATE);
     expect(history.rows.map((r) => `${r.shiftType}:${r.effectiveState}`).sort()).toEqual(['Extras:EFFECTIVE', 'Libre:SUPERSEDED']);
+  });
+});
+
+describe('F4-M03 OD-F4-03: PLANNER and the operational calendar (POST /api/calendar/changes)', () => {
+  const today = getOperationalDate();
+  const future = shiftOperationalDate(today, 14);
+  const past = shiftOperationalDate(today, -5);
+  const planner = ctx('PLANNER');
+  const add = { changeType: 'ADD_EXTRA', after: [{ shiftType: 'Extras', startTime: '16:00', endTime: '19:00' }] };
+  const replaceOff = { changeType: 'TYPE_CHANGE', supersedeShiftIds: ['off'], after: [{ shiftType: 'Extras', startTime: '16:00', endTime: '19:00' }], expectedEffectiveShiftIds: ['off'] };
+
+  it.each([['today', today], ['a future day', future]])('direct ADD on %s is DENIED (403) and writes nothing', async (_label, date) => {
+    setDay(row('reg', 'Regular', '08:00', '12:00'));
+    const error = await reject(change({ ...add, date, expectedEffectiveShiftIds: ['reg'] }, planner));
+    expect(error.statusCode ?? error.status).toBe(403);
+    expect(error.code).toBe('PLANNER_DIRECT_WRITE_FORBIDDEN');
+    expect(state.committed).toHaveLength(0);
+  });
+
+  it.each([['today', today], ['a future day', future]])('direct REPLACE on %s is DENIED (403) and writes nothing', async (_label, date) => {
+    setDay(row('off', 'Libre', null, null));
+    const error = await reject(change({ ...replaceOff, date }, planner));
+    expect(error.statusCode ?? error.status).toBe(403);
+    expect(error.code).toBe('PLANNER_DIRECT_WRITE_FORBIDDEN');
+    expect(state.committed).toHaveLength(0);
+  });
+
+  it('a PLANNER with a narrower scope is denied the same way (the date rule does not depend on the scope)', async () => {
+    setDay(row('off', 'Libre', null, null));
+    const scoped = ctx('PLANNER', { plannerScopeType: 'EMPLOYEES', plannerEmployeeIds: ['99999999-9999-4999-8999-999999999999'] });
+    const error = await reject(change({ ...replaceOff, date: future }, scoped));
+    expect(error.statusCode ?? error.status).toBe(403);
+    expect(state.committed).toHaveLength(0);
+  });
+
+  it('HISTORY stays allowed: a PLANNER in scope registers a change on a past day', async () => {
+    setDay();
+    await change({ ...add, date: past }, planner);
+    expect(inserts()).toHaveLength(1);
+  });
+
+  it('OWNER/ADMIN direct changes on today and the future are unaffected', async () => {
+    for (const role of ['OWNER', 'ADMIN']) {
+      for (const date of [today, future]) {
+        state = { rows: [], liveRows: [], committed: [], audit: [], orgOfEmployee: ORG };
+        setDay(row('off', 'Libre', null, null));
+        await change({ ...replaceOff, date }, ctx(role));
+        expect(inserts()).toHaveLength(1);
+      }
+    }
+  });
+});
+
+describe('F4-AUD-03: concurrency of REPLACE / ADD', () => {
+  it('the employee-day is serialised by an advisory lock that is the FIRST statement of the transaction (also when the day has no row to lock)', async () => {
+    setDay(); // an empty day: nothing for FOR UPDATE to lock
+    await change({ changeType: 'ADD_SHIFT', after: [{ shiftType: 'Regular', startTime: '08:00', endTime: '12:00' }], expectedEffectiveShiftIds: [] });
+    expect(state.committed[0].text).toContain('pg_advisory_xact_lock');
+    expect(state.committed[0].values[0]).toBe(`day:${ORG}:${EMP}:${DATE}`);
+    expect(state.committed[1].text).toContain('FOR UPDATE'); // the row lock stays as well
+  });
+
+  it('a REPLACE takes the same day lock', async () => {
+    setDay(row('off', 'Libre', null, null));
+    await change({ changeType: 'TYPE_CHANGE', supersedeShiftIds: ['off'], after: [{ shiftType: 'Extras', startTime: '16:00', endTime: '19:00' }], expectedEffectiveShiftIds: ['off'] });
+    expect(state.committed[0].text).toContain('pg_advisory_xact_lock');
   });
 });
