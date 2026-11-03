@@ -1,3 +1,4 @@
+import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { describe, expect, it } from 'vitest';
 import {
   addMember,
@@ -20,6 +21,7 @@ import {
   updateImportOutcome,
   updateMemberRole,
   upsertShifts,
+  assertEmployeeInScope,
 } from './data.js';
 
 describe('configured shift time semantics', () => {
@@ -117,6 +119,19 @@ function makeFakeSql({ employees = [], memberships = [], imports = [], users = [
       return Promise.resolve(areas.filter(
         (a) => a.id === values[0] && a.organization_id === values[1] && a.active !== false,
       ).map((a) => ({ id: a.id })));
+    }
+    // assertEmployeeInScope for AREAS / EMPLOYEES scopes (values: [employeeId, organizationId])
+    if (text.startsWith('SELECT id, area_id FROM employees WHERE id')) {
+      return Promise.resolve(employees.filter((e) => e.id === values[0] && e.organization_id === values[1]).map((e) => ({ id: e.id, area_id: e.area_id ?? null })));
+    }
+    // F4-M03 planner write guard: the import must exist in the organisation AND belong to the acting user (values: [id, org, user])
+    if (text.startsWith('SELECT 1 AS found FROM imports')) {
+      const found = imports.find((i) => i.id === values[0] && i.organization_id === values[1] && i.imported_by_user_id === values[2]);
+      return Promise.resolve(found ? [{ found: 1 }] : []);
+    }
+    // deleteShiftsByIds target lookup (values: [id, organizationId])
+    if (text.startsWith("SELECT employee_id, area_id, TO_CHAR(date, 'YYYY-MM-DD') AS date FROM shifts")) {
+      return Promise.resolve(shifts.filter((s) => s.id === values[0] && s.organization_id === values[1]));
     }
     // upsertShifts area snapshot: import/employee area lookups
     if (text.startsWith('SELECT area_id FROM imports')) {
@@ -1721,5 +1736,106 @@ describe('organization settings (R2-M01)', () => {
     const { sql } = makeFakeSql({ organizations: [{ id: ORG_B, name: 'Other Org', plan: 'team' }] });
     await expect(updateOrganizationName(sql, adminCtx, 'New Name'))
       .rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('F4-M03 OD-F4-03: a PLANNER never writes the current/future operational calendar directly', () => {
+  const today = getOperationalDate();
+  const tomorrow = shiftOperationalDate(today, 1);
+  const yesterday = shiftOperationalDate(today, -1);
+  const IMPORT = '55555555-5555-4555-8555-555555555555';
+  const plannerMembership = [{ user_id: 'user-planner', organization_id: ORG_A, role: 'PLANNER', planner_scope_type: 'ORGANIZATION' }];
+  const base = () => ({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })], memberships: plannerMembership });
+  const wrote = (calls) => calls.some((call) => call.text.startsWith('INSERT INTO shifts') || call.text.startsWith('DELETE FROM shifts'));
+
+  it.each([['today', today], ['tomorrow', tomorrow]])('PATCH /api/shifts: MAN shift %s is denied', async (_label, date) => {
+    const { sql, calls } = makeFakeSql(base());
+    await expect(upsertShifts(sql, plannerCtx, [shiftInput({ origin: 'MAN', date })])).rejects.toMatchObject({ status: 400 });
+    expect(wrote(calls)).toBe(false);
+  });
+
+  it.each([['today', today], ['tomorrow', tomorrow]])('BYPASS CLOSED: claiming origin IMP with no import for %s is denied (403 PLANNER_DIRECT_WRITE_FORBIDDEN)', async (_label, date) => {
+    const { sql, calls } = makeFakeSql(base());
+    await expect(upsertShifts(sql, plannerCtx, [shiftInput({ origin: 'IMP', date })]))
+      .rejects.toMatchObject({ status: 403, code: 'PLANNER_DIRECT_WRITE_FORBIDDEN' });
+    expect(wrote(calls)).toBe(false);
+  });
+
+  it('BYPASS CLOSED: a made-up importId, or another user\'s import, is the same as no import', async () => {
+    const imports = [{ id: IMPORT, organization_id: ORG_A, imported_by_user_id: 'someone-else' }];
+    const { sql, calls } = makeFakeSql({ ...base(), imports });
+    for (const importId of [IMPORT, '66666666-6666-4666-8666-666666666666']) {
+      await expect(upsertShifts(sql, plannerCtx, [shiftInput({ origin: 'IMP', date: tomorrow, importId })], { importId }))
+        .rejects.toMatchObject({ status: 403, code: 'PLANNER_DIRECT_WRITE_FORBIDDEN' });
+    }
+    expect(wrote(calls)).toBe(false);
+  });
+
+  it('an import the PLANNER itself started may still write current/future rows (imports are a separate, authorised path)', async () => {
+    const imports = [{ id: IMPORT, organization_id: ORG_A, imported_by_user_id: 'user-planner' }];
+    const { sql } = makeFakeSql({ ...base(), imports });
+    const saved = await upsertShifts(sql, plannerCtx, [shiftInput({ origin: 'IMP', date: tomorrow, importId: IMPORT })], { importId: IMPORT });
+    expect(saved).toHaveLength(1);
+  });
+
+  it('HISTORY stays allowed: a PLANNER may register a manual shift for a past date', async () => {
+    const { sql } = makeFakeSql(base());
+    const saved = await upsertShifts(sql, plannerCtx, [shiftInput({ origin: 'MAN', date: yesterday })]);
+    expect(saved).toHaveLength(1);
+  });
+
+  it('OWNER/ADMIN keep their direct manual writes (no regression)', async () => {
+    const { sql } = makeFakeSql({ employees: [employeeRow(EMP_A1, ORG_A, { status: 'active' })] });
+    expect(await upsertShifts(sql, adminCtx, [shiftInput({ origin: 'MAN', date: tomorrow })])).toHaveLength(1);
+    expect(await upsertShifts(sql, ownerCtx, [shiftInput({ origin: 'MAN', date: today })])).toHaveLength(1);
+  });
+
+  it.each([['today', today], ['tomorrow', tomorrow]])('DELETE of a %s shift by a PLANNER is denied; history delete is allowed; ADMIN is unaffected', async (_label, date) => {
+    const shifts = [{ id: UUID, organization_id: ORG_A, employee_id: EMP_A1, area_id: null, date }];
+    const planner = makeFakeSql({ ...base(), shifts });
+    await expect(deleteShiftsByIds(planner.sql, plannerCtx, [UUID], EMP_A1)).rejects.toMatchObject({ status: 403, code: 'PLANNER_DIRECT_WRITE_FORBIDDEN' });
+    expect(wrote(planner.calls)).toBe(false);
+    const past = makeFakeSql({ ...base(), shifts: [{ ...shifts[0], date: yesterday }] });
+    await deleteShiftsByIds(past.sql, plannerCtx, [UUID], EMP_A1);
+    expect(past.calls.some((call) => call.text.startsWith('DELETE FROM shifts'))).toBe(true);
+    const admin = makeFakeSql({ ...base(), shifts });
+    await deleteShiftsByIds(admin.sql, adminCtx, [UUID], EMP_A1);
+    expect(admin.calls.some((call) => call.text.startsWith('DELETE FROM shifts'))).toBe(true);
+  });
+
+  it('a PLANNER may delete a current/future shift only as part of its own import (replace-style import)', async () => {
+    const imports = [{ id: IMPORT, organization_id: ORG_A, imported_by_user_id: 'user-planner' }];
+    const shifts = [{ id: UUID, organization_id: ORG_A, employee_id: EMP_A1, area_id: null, date: tomorrow }];
+    const { sql } = makeFakeSql({ ...base(), imports, shifts });
+    await expect(deleteShiftsByIds(sql, plannerCtx, [UUID], EMP_A1, { importId: IMPORT })).resolves.toBeDefined();
+  });
+});
+
+describe('F4-REM-01: assertEmployeeInScope enforces the AREAS and EMPLOYEES scopes of a PLANNER', () => {
+  const AREA_A = 'area-a'; const AREA_B = 'area-b';
+  const emps = [
+    employeeRow('emp-in', ORG_A, { status: 'active', area_id: AREA_A }),
+    employeeRow('emp-out', ORG_A, { status: 'active', area_id: AREA_B }),
+    employeeRow('emp-none', ORG_A, { status: 'active', area_id: null }),
+  ];
+  const planner = (extra) => ({ ...plannerCtx, ...extra });
+  const run = (ctx, id) => assertEmployeeInScope(makeFakeSql({ employees: emps }).sql, ctx, id);
+
+  it('AREAS: an employee of the planner\u2019s areas passes; another area, or no area, is 403 SCOPE_FORBIDDEN', async () => {
+    const ctx = planner({ plannerScopeType: 'AREAS', scopedAreaIds: [AREA_A] });
+    await expect(run(ctx, 'emp-in')).resolves.toBeDefined();
+    await expect(run(ctx, 'emp-out')).rejects.toMatchObject({ status: 403, code: 'SCOPE_FORBIDDEN' });
+    await expect(run(ctx, 'emp-none')).rejects.toMatchObject({ status: 403, code: 'SCOPE_FORBIDDEN' });
+  });
+  it('EMPLOYEES: only the listed employees pass', async () => {
+    const ctx = planner({ plannerScopeType: 'EMPLOYEES', scopedEmployeeIds: ['emp-in'] });
+    await expect(run(ctx, 'emp-in')).resolves.toBeDefined();
+    await expect(run(ctx, 'emp-out')).rejects.toMatchObject({ status: 403, code: 'SCOPE_FORBIDDEN' });
+  });
+  it('ORGANIZATION planners, ADMIN and OWNER are not restricted; another tenant\u2019s employee is still refused', async () => {
+    await expect(run(planner({ plannerScopeType: 'ORGANIZATION' }), 'emp-out')).resolves.toBeDefined();
+    await expect(run(adminCtx, 'emp-out')).resolves.toBeDefined();
+    await expect(run(ownerCtx, 'emp-out')).resolves.toBeDefined();
+    await expect(run(orgBCtx, 'emp-in')).rejects.toMatchObject({ status: 403 });
   });
 });

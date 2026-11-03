@@ -34,7 +34,7 @@ function makeSql({ status = 'DRAFT' } = {}) {
       return Promise.resolve([{ id: EMPLOYEE, area_id: AREA, status: 'active' }]);
     }
     if (text.startsWith('INSERT INTO shift_assignments')) {
-      const row = { id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: values[2], start_time: values[3], end_time: values[4], location: values[5], shift_type: values[6], counts_as_work: values[7], created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' };
+      const row = { id: ASSIGNMENT, schedule_version_id: VERSION, employee_id: EMPLOYEE, date: values[1], start_time: values[2], end_time: values[3], location: values[4], shift_type: values[5], counts_as_work: values[6], created_at: '2026-09-01T00:00:00.000Z', updated_at: '2026-09-01T00:00:00.000Z' };
       state.assignments.push(row);
       return Promise.resolve([row]);
     }

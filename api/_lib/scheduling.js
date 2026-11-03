@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError, employeeRowInScope, requireRole, resolveEffectiveAccessScope } from './auth.js';
-import { createShiftPublishedNotifications } from './data.js';
-import { getOperationalDate } from './operational-date.js';
+import { createShiftPublishedNotifications, recordAuditEvent } from './data.js';
+import { getOperationalDate, shiftOperationalDate } from './operational-date.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict, getShiftSemantics } from './shift-compatibility.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -156,6 +156,20 @@ export function rangesOverlap(startTime, endTime, existingStartTime, existingEnd
     && timeToMinutes(endTime) > timeToMinutes(existingStartTime);
 }
 
+/** The employee-level scope the SQL statements enforce for a non-organisation-wide actor (see `publishScheduleVersionTx`). */
+function scopeGuardOf(scope) {
+  if (scope.type === 'AREA') return { scopeMode: 'AREAS', scopeIds: [scope.areaId] };
+  if (scope.type === 'AREAS') return { scopeMode: 'AREAS', scopeIds: scope.areaIds || [] };
+  if (scope.type === 'EMPLOYEES') return { scopeMode: 'EMPLOYEES', scopeIds: scope.employeeIds || [] };
+  return { scopeMode: 'NONE', scopeIds: [] };
+}
+
+function employeeScopeError() {
+  const error = new HttpError(403, 'Employee is outside your assigned scope');
+  error.code = 'SCOPE_FORBIDDEN';
+  return error;
+}
+
 function scheduleScopeError() {
   const error = new HttpError(403, 'Schedule is outside your assigned area');
   error.code = 'SCOPE_FORBIDDEN';
@@ -204,6 +218,8 @@ async function assertEmployeeForSchedule(sql, ctx, schedule, employeeId) {
   if (rows.length === 0) throw new HttpError(404, 'Employee not found');
   if (rows[0].status !== 'active') throw new HttpError(409, 'Employee is not active');
   if (schedule.area_id && rows[0].area_id !== schedule.area_id) throw scheduleScopeError();
+  // F4-REM-01: the schedule's area is NOT a substitute for the actor's scope over this employee.
+  if (!employeeRowInScope(await resolveEffectiveAccessScope(sql, ctx), rows[0])) throw employeeScopeError();
 }
 
 /**
@@ -311,6 +327,8 @@ function mapAssignment(row) {
     countsAsWork: row.counts_as_work !== false,
     // DRAFT only: a later manual calendar change contradicts this assignment (spec §4.5); it is kept but never published.
     staleAgainstCalendar: row.stale_against_calendar === true,
+    // PUBLISHED/LOCKED/COMPLETED only: derived from the shifts the publication created (never stored); drives the header counters.
+    excludedFromPublication: row.excluded_from_publication === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -500,7 +518,18 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
                        m.date + btrim(m.end_time)::time
                          + CASE WHEN btrim(m.end_time)::time <= btrim(m.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END))
             )
-        )) AS stale_against_calendar
+        )) AS stale_against_calendar,
+             -- Published versions only: the publication did not materialize this assignment (same key the publication uses to dedupe).
+             (${schedule.status !== 'DRAFT'}::boolean AND NOT EXISTS (
+          SELECT 1 FROM shifts pub
+          WHERE pub.organization_id = ${ctx.organizationId} AND pub.schedule_version_id = sa.schedule_version_id
+            AND pub.employee_id = sa.employee_id AND pub.date = sa.date
+            AND pub.start_time IS NOT DISTINCT FROM TO_CHAR(sa.start_time, 'HH24:MI')
+            AND pub.end_time IS NOT DISTINCT FROM TO_CHAR(sa.end_time, 'HH24:MI')
+            AND lower(btrim(COALESCE(pub.shift_type, ''))) = lower(btrim(COALESCE(sa.shift_type, '')))
+            AND pub.counts_as_work IS NOT DISTINCT FROM sa.counts_as_work
+            AND pub.location IS NOT DISTINCT FROM COALESCE(sa.location, '')
+        )) AS excluded_from_publication
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
       WHERE sa.schedule_version_id = ${versionId}
@@ -541,7 +570,18 @@ export async function getScheduleSnapshot(sql, ctx, scheduleId, versionId) {
                        m.date + btrim(m.end_time)::time
                          + CASE WHEN btrim(m.end_time)::time <= btrim(m.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END))
             )
-        )) AS stale_against_calendar
+        )) AS stale_against_calendar,
+             -- Published versions only: the publication did not materialize this assignment (same key the publication uses to dedupe).
+             (${schedule.status !== 'DRAFT'}::boolean AND NOT EXISTS (
+          SELECT 1 FROM shifts pub
+          WHERE pub.organization_id = ${ctx.organizationId} AND pub.schedule_version_id = sa.schedule_version_id
+            AND pub.employee_id = sa.employee_id AND pub.date = sa.date
+            AND pub.start_time IS NOT DISTINCT FROM TO_CHAR(sa.start_time, 'HH24:MI')
+            AND pub.end_time IS NOT DISTINCT FROM TO_CHAR(sa.end_time, 'HH24:MI')
+            AND lower(btrim(COALESCE(pub.shift_type, ''))) = lower(btrim(COALESCE(sa.shift_type, '')))
+            AND pub.counts_as_work IS NOT DISTINCT FROM sa.counts_as_work
+            AND pub.location IS NOT DISTINCT FROM COALESCE(sa.location, '')
+        )) AS excluded_from_publication
       FROM shift_assignments sa
       JOIN employees e ON e.id = sa.employee_id
       WHERE sa.schedule_version_id = ${versionId}
@@ -632,13 +672,21 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, shiftType, countsAsWork,
   });
   const location = input.location === undefined || input.location === null ? null : String(input.location).trim() || null;
+  // The same scope the check above applied is enforced again BY the insert (no window between check and write).
+  const { scopeMode, scopeIds } = scopeGuardOf(await resolveEffectiveAccessScope(sql, ctx));
   const rows = await sql`
     INSERT INTO shift_assignments
       (schedule_version_id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work)
-    VALUES (${versionId}, ${employeeId}, ${date}, ${startTime}, ${endTime}, ${location}, ${shiftType}, ${countsAsWork})
+    SELECT ${versionId}::uuid, e.id, ${date}::date, ${startTime}::time, ${endTime}::time, ${location}::text, ${shiftType}::text, ${countsAsWork}::boolean
+    FROM employees e
+    WHERE e.id = ${employeeId}::uuid AND e.organization_id = ${ctx.organizationId}
+      AND (${scopeMode}::text = 'NONE' OR (CASE ${scopeMode}::text
+             WHEN 'EMPLOYEES' THEN e.id::text = ANY(${scopeIds}::text[])
+             ELSE COALESCE(e.area_id::text = ANY(${scopeIds}::text[]), FALSE) END))
     RETURNING id, schedule_version_id, employee_id, date, start_time, end_time,
               location, shift_type, counts_as_work, created_at, updated_at
   `;
+  if (rows.length === 0) throw employeeScopeError();
   return mapAssignment(rows[0]);
 }
 
@@ -664,6 +712,8 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   const { startTime, endTime, shiftType, countsAsWork } = semantics;
   assertPlanningDate(date);
   assertAssignmentDateInPeriod(date, schedule);
+  // An assignment is also protected against being MOVED away from an employee the actor cannot manage.
+  if (employeeId !== assignment.employee_id) await assertEmployeeForSchedule(sql, ctx, schedule, assignment.employee_id);
   await assertEmployeeForSchedule(sql, ctx, schedule, employeeId);
   await assertNotProtectedAbsenceDay(sql, ctx, employeeId, date);
   await assertNoAssignmentOverlap(sql, {
@@ -673,28 +723,49 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, shiftType, countsAsWork, excludeId: assignmentId,
   });
   const location = input.location === undefined ? assignment.location : (input.location === null ? null : String(input.location).trim() || null);
+  const { scopeMode, scopeIds } = scopeGuardOf(await resolveEffectiveAccessScope(sql, ctx));
   const rows = await sql`
     UPDATE shift_assignments
     SET employee_id = ${employeeId}, date = ${date}, start_time = ${startTime},
         end_time = ${endTime}, location = ${location}, shift_type = ${shiftType},
         counts_as_work = ${countsAsWork}, updated_at = NOW()
     WHERE id = ${assignmentId} AND schedule_version_id = ${versionId}
+      AND (${scopeMode}::text = 'NONE' OR (
+        EXISTS (SELECT 1 FROM employees e WHERE e.id = shift_assignments.employee_id AND e.organization_id = ${ctx.organizationId}
+                  AND (CASE ${scopeMode}::text WHEN 'EMPLOYEES' THEN e.id::text = ANY(${scopeIds}::text[])
+                       ELSE COALESCE(e.area_id::text = ANY(${scopeIds}::text[]), FALSE) END))
+        AND EXISTS (SELECT 1 FROM employees e WHERE e.id = ${employeeId}::uuid AND e.organization_id = ${ctx.organizationId}
+                  AND (CASE ${scopeMode}::text WHEN 'EMPLOYEES' THEN e.id::text = ANY(${scopeIds}::text[])
+                       ELSE COALESCE(e.area_id::text = ANY(${scopeIds}::text[]), FALSE) END))))
     RETURNING id, schedule_version_id, employee_id, date, start_time, end_time,
               location, shift_type, counts_as_work, created_at, updated_at
   `;
-  if (rows.length === 0) throw new HttpError(404, 'Assignment not found');
+  if (rows.length === 0) {
+    const exists = await sql`SELECT 1 FROM shift_assignments WHERE id = ${assignmentId} AND schedule_version_id = ${versionId}`;
+    throw exists.length > 0 ? employeeScopeError() : new HttpError(404, 'Assignment not found');
+  }
   return mapAssignment(rows[0]);
 }
 
 export async function deleteAssignment(sql, ctx, scheduleId, versionId, assignmentId) {
   requireRole(ctx, 'PLANNER');
-  await loadAssignment(sql, ctx, scheduleId, versionId, assignmentId);
+  const { schedule, assignment } = await loadAssignment(sql, ctx, scheduleId, versionId, assignmentId);
+  // Deleting is a write over that employee's plan: the actor needs scope over THEM, not just over the schedule.
+  await assertEmployeeForSchedule(sql, ctx, schedule, assignment.employee_id);
+  const { scopeMode, scopeIds } = scopeGuardOf(await resolveEffectiveAccessScope(sql, ctx));
   const rows = await sql`
     DELETE FROM shift_assignments
     WHERE id = ${assignmentId} AND schedule_version_id = ${versionId}
+      AND (${scopeMode}::text = 'NONE' OR EXISTS (
+        SELECT 1 FROM employees e WHERE e.id = shift_assignments.employee_id AND e.organization_id = ${ctx.organizationId}
+          AND (CASE ${scopeMode}::text WHEN 'EMPLOYEES' THEN e.id::text = ANY(${scopeIds}::text[])
+               ELSE COALESCE(e.area_id::text = ANY(${scopeIds}::text[]), FALSE) END)))
     RETURNING id
   `;
-  if (rows.length === 0) throw new HttpError(404, 'Assignment not found');
+  if (rows.length === 0) {
+    const exists = await sql`SELECT 1 FROM shift_assignments WHERE id = ${assignmentId} AND schedule_version_id = ${versionId}`;
+    throw exists.length > 0 ? employeeScopeError() : new HttpError(404, 'Assignment not found');
+  }
 }
 
 async function assertScheduleArea(sql, ctx, areaId) {
@@ -783,7 +854,7 @@ export async function createScheduleDraft(sql, ctx, input = {}) {
   };
 }
 
-export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, newVersionId, isAreaScoped = false, scopedAreaId = null) {
+export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, newVersionId, isAreaScoped = false, scopedAreaId = null, { scopeMode = 'NONE', scopeIds = [] } = {}) {
   requireRole(ctx, 'PLANNER');
   if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId) || !UUID_RE.test(newVersionId)) {
     throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
@@ -815,6 +886,17 @@ export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, new
         LEFT JOIN schedule_versions sv ON sv.schedule_id = t.schedule_id
         GROUP BY t.schedule_id, t.status, t.area_id
       ),
+      scope_check AS MATERIALIZED (
+        -- F4-REM-01: copying a version writes assignments of EVERY employee in it; refuse (and write nothing) when any of them is outside the actor's scope.
+        SELECT EXISTS (
+          SELECT 1 FROM shift_assignments sa
+          JOIN target t ON t.version_id = sa.schedule_version_id
+          JOIN employees e ON e.id = sa.employee_id
+          WHERE ${scopeMode}::text <> 'NONE'
+            AND NOT (CASE ${scopeMode}::text WHEN 'EMPLOYEES' THEN e.id::text = ANY(${scopeIds}::text[])
+                     ELSE COALESCE(e.area_id::text = ANY(${scopeIds}::text[]), FALSE) END)
+        ) AS blocked
+      ),
       created AS (
         INSERT INTO schedule_versions
           (id, schedule_id, version_number, status, created_by_user_id)
@@ -822,6 +904,7 @@ export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, new
         FROM next_version n
         WHERE n.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
           AND n.draft_version_id IS NULL
+          AND NOT (SELECT blocked FROM scope_check)
           AND (${isAreaScoped} = FALSE OR n.area_id = ${scopedAreaId})
         RETURNING id, schedule_id, version_number
       ),
@@ -845,6 +928,7 @@ export function createNewDraftFromVersionTx(txn, ctx, scheduleId, versionId, new
         EXISTS (SELECT 1 FROM target) AS found,
         (SELECT status FROM target LIMIT 1) AS current_status,
         (SELECT area_id FROM target LIMIT 1) AS area_id,
+        (SELECT blocked FROM scope_check) AS scope_blocked,
         (SELECT draft_version_id FROM draft_conflict LIMIT 1) AS draft_version_id,
         (SELECT id FROM created LIMIT 1) AS new_version_id,
         (SELECT schedule_id FROM created LIMIT 1) AS schedule_id,
@@ -867,7 +951,7 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
   let transactionResult;
   try {
     transactionResult = await sql.transaction((txn) => [createNewDraftFromVersionTx(
-      txn, ctx, scheduleId, versionId, newVersionId, isAreaScoped, scopedAreaId,
+      txn, ctx, scheduleId, versionId, newVersionId, isAreaScoped, scopedAreaId, scopeGuardOf(scope),
     )]);
   } catch (error) {
     if (error?.code === '23505') {
@@ -881,6 +965,7 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
   const outcome = transactionResult?.[0]?.[0];
   if (!outcome?.found) throw new HttpError(404, 'Schedule version not found');
   if (scope.type === 'AREA' && outcome.area_id !== scope.areaId) throw scheduleScopeError();
+  if (outcome.scope_blocked) throw publishScopeError();
   if (outcome.current_status === 'DRAFT') {
     const error = new HttpError(409, 'Only a published version can create a new draft');
     error.code = 'VERSION_NOT_PUBLISHED';
@@ -916,7 +1001,13 @@ export async function createNewDraftFromVersion(sql, ctx, scheduleId, versionId)
  * the database either returns a published result with every insert, or makes
  * no write at all.
  */
-export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
+/**
+ * `scopeGuard` (F4-M03): for a PLANNER whose scope is not the whole organisation, the statement itself refuses (SCOPE_FORBIDDEN, nothing
+ * written) when ANY assignment of the version belongs to an employee outside that scope. Publishing supersedes and creates shifts for
+ * exactly the employees of the version's assignments, so this covers the rows replaced as well as the rows created, and it is evaluated
+ * in the same statement that publishes (no window between check and write). `dryRun` runs every validation and writes nothing.
+ */
+export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId, { dryRun = false, scopeMode = 'NONE', scopeIds = [] } = {}) {
   requireRole(ctx, 'PLANNER');
   if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
     throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
@@ -1001,7 +1092,10 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
       JOIN assignment_intervals b
         ON a.employee_id = b.employee_id
        AND a.id < b.id
-      WHERE NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
+      -- F4-REM-02: the 11 h rest separates DIFFERENT days, exactly as when the assignment is created (assertMinimumRest): two compatible
+      -- segments of the same day (Regular 08-16 + Extras 18-21) are one working day. Overlaps stay blocked by overlap_conflicts.
+      WHERE a.date <> b.date
+        AND NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
         AND (
           (b.start_at >= a.end_at AND b.start_at - a.end_at < INTERVAL '11 hours')
           OR (a.start_at >= b.end_at AND a.start_at - b.end_at < INTERVAL '11 hours')
@@ -1010,7 +1104,19 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
       LIMIT 1
     ),
     conflicts AS (
-      SELECT 'OVERLAP'::text AS error_code, conflicting_assignment_id, NULL::integer AS minimum_rest_hours, 1 AS priority
+      SELECT 'SCOPE_FORBIDDEN'::text AS error_code, NULL::uuid AS conflicting_assignment_id, NULL::integer AS minimum_rest_hours, 0 AS priority
+      FROM target
+      WHERE ${scopeMode}::text <> 'NONE'
+        AND EXISTS (
+          SELECT 1 FROM all_assignments a
+          JOIN employees e ON e.id = a.employee_id
+          WHERE NOT (CASE ${scopeMode}::text
+                       WHEN 'EMPLOYEES' THEN e.id::text = ANY(${scopeIds}::text[])
+                       ELSE COALESCE(e.area_id::text = ANY(${scopeIds}::text[]), FALSE)
+                     END)
+        )
+      UNION ALL
+      SELECT 'OVERLAP'::text, conflicting_assignment_id, NULL::integer, 1
       FROM overlap_conflicts
       UNION ALL
       SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 2
@@ -1046,6 +1152,7 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId) {
       WHERE sv.id = t.version_id
         AND t.status = 'DRAFT'
         AND v.error_code IS NULL
+        AND NOT ${dryRun}::boolean
       RETURNING sv.id, sv.published_at
     ),
     superseded AS (
@@ -1177,7 +1284,7 @@ export function publishImportedPairsTx(txn, ctx, { scheduleId, versionId, pairs,
     rest_conflicts AS (
       SELECT a.id AS conflicting_assignment_id
       FROM assignment_intervals a JOIN assignment_intervals b ON a.employee_id = b.employee_id AND a.id < b.id
-      WHERE NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
+      WHERE a.date <> b.date AND NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
         AND ((b.start_at >= a.end_at AND b.start_at - a.end_at < INTERVAL '11 hours')
           OR (a.start_at >= b.end_at AND a.start_at - b.end_at < INTERVAL '11 hours'))
       ORDER BY a.id, b.id LIMIT 1
@@ -1263,21 +1370,38 @@ export function publishImportedPairsTx(txn, ctx, { scheduleId, versionId, pairs,
   `;
 }
 
-export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
-  requireRole(ctx, 'PLANNER');
-  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
-    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
-  }
+function publishScopeError() {
+  // Deliberately says nothing about WHICH employee is out of scope: the actor must not learn about people they cannot see.
+  const error = new HttpError(403, 'This version includes employees outside your assigned scope');
+  error.code = 'SCOPE_FORBIDDEN';
+  return error;
+}
 
+/**
+ * Who may publish a version: the schedule must be inside the actor's scope and every employee the publication touches too (see
+ * `publishScheduleVersionTx`). Returns the guard the publishing statement enforces itself.
+ */
+async function publishScopeGuard(sql, ctx, scheduleId) {
   const scope = await resolveEffectiveAccessScope(sql, ctx);
   const scheduleRows = await sql`
     SELECT area_id FROM schedules
     WHERE id = ${scheduleId} AND organization_id = ${ctx.organizationId}
   `;
   if (scheduleRows.length === 0) throw new HttpError(404, 'Schedule version not found');
-  if (scope.type === 'AREA' && scheduleRows[0].area_id !== scope.areaId) throw scheduleScopeError();
+  const areaId = scheduleRows[0].area_id ?? null;
+  if (scope.type === 'AREA' && areaId !== scope.areaId) throw scheduleScopeError();
+  if (scope.type === 'AREAS' && areaId && !(scope.areaIds || []).includes(areaId)) throw scheduleScopeError();
+  return scopeGuardOf(scope);
+}
 
-  const transactionResult = await sql.transaction((txn) => [publishScheduleVersionTx(txn, ctx, scheduleId, versionId)]);
+export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) {
+    throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  }
+
+  const guard = await publishScopeGuard(sql, ctx, scheduleId);
+  const transactionResult = await sql.transaction((txn) => [publishScheduleVersionTx(txn, ctx, scheduleId, versionId, guard)]);
 
   const outcome = transactionResult?.[0]?.[0];
   if (!outcome?.found) {
@@ -1288,6 +1412,7 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
     error.code = 'VERSION_NOT_EDITABLE';
     throw error;
   }
+  if (outcome.error_code === 'SCOPE_FORBIDDEN') throw publishScopeError();
   if (outcome.error_code === 'OVERLAP') {
     const error = new HttpError(422, 'Assignment overlaps an existing assignment');
     error.code = 'OVERLAP';
@@ -1323,4 +1448,336 @@ export async function publishScheduleVersion(sql, ctx, scheduleId, versionId) {
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// F4-M03 / OD-F4-01 — copy the previous week's PUBLISHED plan into a draft.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+export const COPY_WEEK_SKIP_REASONS = Object.freeze([
+  'ALREADY_ASSIGNED', 'PROTECTED_ABSENCE_DAY', 'PAST_DATE', 'INACTIVE_EMPLOYEE', 'OUT_OF_SCOPE', 'OVERLAP',
+  'REST_RULE_VIOLATION', 'STALE_SOURCE', 'SOURCE_ABSENCE',
+]);
+
+const sameText = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+const clock = (value) => (value === null || value === undefined ? null : String(value).slice(0, 5));
+const identityOf = (row) => [
+  row.employee_id, databaseDateToIso(row.date), clock(row.start_time) ?? '', clock(row.end_time) ?? '',
+  String(row.shift_type ?? '').trim().toLowerCase(), row.counts_as_work !== false, String(row.location ?? '').trim().toLowerCase(),
+].join('|');
+
+/**
+ * Plans (and, in `apply`, performs) the copy of the latest PUBLISHED version of `sourceWeekStart` into the DRAFT `versionId`.
+ *
+ * Source = the assignments that publication REALLY materialized and that are still the calendar's current shift (a shift with the
+ * same key, `effective_state = 'EFFECTIVE'`, born from that version). Never copied: excluded assignments, replaced ones, manual extras
+ * and operational substitutions (they are not assignments of that version), approved vacations, anything of a draft source.
+ * Target = an EXISTING draft; nothing is created or published here, and nothing existing is overwritten.
+ * Every candidate row passes the rules of a manual assignment (date not past, active employee in scope, approved-vacation day, overlap /
+ * whole-day compatibility, minimum rest) plus the rest across the week boundary. `preview` writes nothing.
+ */
+export async function copyWeekIntoDraft(sql, ctx, scheduleId, versionId, input = {}) {
+  requireRole(ctx, 'PLANNER');
+  if (!UUID_RE.test(scheduleId) || !UUID_RE.test(versionId)) throw new HttpError(400, 'scheduleId and versionId must be valid UUIDs');
+  const mode = String(input.mode ?? 'preview').trim();
+  if (!['preview', 'apply'].includes(mode)) throw new HttpError(400, 'mode must be preview or apply');
+  const sourceWeekStart = String(input.sourceWeekStart ?? '').trim();
+  if (!ISO_DATE_RE.test(sourceWeekStart)) {
+    const error = new HttpError(400, 'sourceWeekStart must be YYYY-MM-DD');
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+
+  const target = await loadScheduleVersion(sql, ctx, scheduleId, versionId); // 404 / scope / 409 VERSION_NOT_EDITABLE unless DRAFT
+  const { scope } = await schedulingScope(sql, ctx, target.area_id ?? null);
+  if (sourceWeekStart === target.period_start) {
+    const error = new HttpError(400, 'The source week must be a different week');
+    error.code = 'INVALID_SOURCE_WEEK';
+    throw error;
+  }
+
+  const sources = await sql`
+    SELECT sv.id AS version_id, sv.version_number, s.id AS schedule_id,
+           s.period_start, s.period_end
+    FROM schedules s
+    JOIN schedule_versions sv ON sv.schedule_id = s.id
+    WHERE s.organization_id = ${ctx.organizationId}
+      AND s.period_start = ${sourceWeekStart}
+      AND s.area_id IS NOT DISTINCT FROM ${target.area_id ?? null}
+      AND sv.status IN ('PUBLISHED', 'LOCKED', 'COMPLETED')
+    ORDER BY sv.version_number DESC
+    LIMIT 1
+  `;
+  if (sources.length === 0) {
+    const error = new HttpError(404, 'The source week has no published version');
+    error.code = 'SOURCE_NOT_PUBLISHED';
+    throw error;
+  }
+  const source = { ...sources[0], period_start: databaseDateToIso(sources[0].period_start), period_end: databaseDateToIso(sources[0].period_end) };
+  const delta = Math.round((Date.parse(`${target.period_start}T00:00:00Z`) - Date.parse(`${source.period_start}T00:00:00Z`)) / 86_400_000);
+  const sourceLength = Math.round((Date.parse(`${source.period_end}T00:00:00Z`) - Date.parse(`${source.period_start}T00:00:00Z`)) / 86_400_000);
+  const targetLength = Math.round((Date.parse(`${target.period_end}T00:00:00Z`) - Date.parse(`${target.period_start}T00:00:00Z`)) / 86_400_000);
+  if (sourceLength !== targetLength) {
+    const error = new HttpError(400, 'The source and target weeks must have the same length');
+    error.code = 'INVALID_SOURCE_WEEK';
+    throw error;
+  }
+
+  const sourceRows = await sql`
+    SELECT sa.id, sa.employee_id, sa.date, sa.start_time, sa.end_time, sa.location, sa.shift_type, sa.counts_as_work,
+           EXISTS (
+             SELECT 1 FROM shifts pub
+             WHERE pub.organization_id = ${ctx.organizationId} AND pub.schedule_version_id = sa.schedule_version_id
+               AND pub.employee_id = sa.employee_id AND pub.date = sa.date
+               AND pub.start_time IS NOT DISTINCT FROM TO_CHAR(sa.start_time, 'HH24:MI')
+               AND pub.end_time IS NOT DISTINCT FROM TO_CHAR(sa.end_time, 'HH24:MI')
+               AND lower(btrim(COALESCE(pub.shift_type, ''))) = lower(btrim(COALESCE(sa.shift_type, '')))
+               AND pub.counts_as_work IS NOT DISTINCT FROM sa.counts_as_work
+               AND pub.location IS NOT DISTINCT FROM COALESCE(sa.location, '')
+               AND pub.effective_state = 'EFFECTIVE'
+           ) AS still_current
+    FROM shift_assignments sa
+    WHERE sa.schedule_version_id = ${source.version_id}
+    ORDER BY sa.date, sa.start_time NULLS FIRST, sa.id
+  `;
+  const employeeIds = [...new Set(sourceRows.map((row) => row.employee_id))];
+  const employees = employeeIds.length === 0 ? [] : await sql`
+    SELECT id, name, area_id, status FROM employees
+    WHERE organization_id = ${ctx.organizationId} AND id::text = ANY(${employeeIds}::text[])
+  `;
+  const employeeById = new Map(employees.map((row) => [row.id, row]));
+  const existing = await sql`
+    SELECT id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work
+    FROM shift_assignments WHERE schedule_version_id = ${versionId}
+  `;
+  const protectedDays = employeeIds.length === 0 ? [] : await sql`
+    SELECT employee_id, date FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND effective_state = 'EFFECTIVE' AND time_off_request_id IS NOT NULL
+      AND date BETWEEN ${target.period_start} AND ${target.period_end} AND employee_id::text = ANY(${employeeIds}::text[])
+  `;
+  const boundary = employeeIds.length === 0 ? [] : await sql`
+    SELECT employee_id, date, start_time, end_time, shift_type, counts_as_work FROM shifts
+    WHERE organization_id = ${ctx.organizationId} AND effective_state = 'EFFECTIVE' AND employee_id::text = ANY(${employeeIds}::text[])
+      AND date IN (${shiftOperationalDate(target.period_start, -1)}, ${shiftOperationalDate(target.period_end, 1)})
+  `;
+
+  const today = getOperationalDate();
+  const protectedKeys = new Set(protectedDays.map((row) => `${row.employee_id}|${databaseDateToIso(row.date)}`));
+  const planned = existing.map((row) => ({ ...row, date: databaseDateToIso(row.date) })); // grows with each accepted candidate
+  const copy = [];
+  const skipped = [];
+  const skip = (row, targetDate, reason, employee, visible = true) => skipped.push({
+    reason, sourceAssignmentId: visible ? row.id : null, targetDate,
+    employeeId: visible ? row.employee_id : null, employeeName: visible ? (employee?.name ?? null) : null,
+    shiftType: visible ? row.shift_type : null, startTime: visible ? clock(row.start_time) : null, endTime: visible ? clock(row.end_time) : null,
+  });
+
+  for (const row of sourceRows) {
+    const sourceDate = databaseDateToIso(row.date);
+    const targetDate = shiftOperationalDate(sourceDate, delta);
+    const employee = employeeById.get(row.employee_id);
+    // Out of scope first: nothing about an employee the actor cannot see (not even a name) is reported.
+    if (!employee || !employeeRowInScope(scope, employee) || (target.area_id && employee.area_id !== target.area_id)) {
+      skip(row, targetDate, 'OUT_OF_SCOPE', null, false);
+      continue;
+    }
+    if (sameText(row.shift_type, 'Vacaciones')) { skip(row, targetDate, 'SOURCE_ABSENCE', employee); continue; }
+    if (!row.still_current) { skip(row, targetDate, 'STALE_SOURCE', employee); continue; }
+    if (employee.status !== 'active') { skip(row, targetDate, 'INACTIVE_EMPLOYEE', employee); continue; }
+    if (targetDate < today) { skip(row, targetDate, 'PAST_DATE', employee); continue; }
+    if (targetDate < target.period_start || targetDate > target.period_end) { skip(row, targetDate, 'PAST_DATE', employee); continue; }
+    if (protectedKeys.has(`${row.employee_id}|${targetDate}`)) { skip(row, targetDate, 'PROTECTED_ABSENCE_DAY', employee); continue; }
+
+    const candidate = { ...row, date: targetDate };
+    if (planned.some((other) => identityOf(other) === identityOf(candidate))) { skip(row, targetDate, 'ALREADY_ASSIGNED', employee); continue; }
+    const sameDay = planned.filter((other) => other.employee_id === row.employee_id && other.date === targetDate);
+    const conflict = findAssignmentConflict(sameDay, {
+      id: null, date: targetDate, startTime: clock(row.start_time), endTime: clock(row.end_time), shiftType: row.shift_type, countsAsWork: row.counts_as_work !== false,
+    });
+    if (conflict) { skip(row, targetDate, 'OVERLAP', employee); continue; }
+    const semantics = getShiftSemantics({ ...candidate, start_time: row.start_time, end_time: row.end_time });
+    if (semantics.contributesWorkedTime) {
+      const neighbours = [
+        ...planned.filter((other) => other.employee_id === row.employee_id && other.date !== targetDate && Math.abs(Date.parse(`${other.date}T00:00:00Z`) - Date.parse(`${targetDate}T00:00:00Z`)) <= 2 * 86_400_000),
+        // The week boundary: what the employee really works the day before / after the target week.
+        ...boundary.filter((other) => other.employee_id === row.employee_id).map((other) => ({ ...other, date: databaseDateToIso(other.date) })),
+      ].filter((other) => other.date !== targetDate && getShiftSemantics(other).contributesWorkedTime);
+      const tooClose = neighbours.some((other) => {
+        const gap = calculateRestGapMinutes(candidate, other);
+        return gap !== null && gap < MINIMUM_REST_MINUTES;
+      });
+      if (tooClose) { skip(row, targetDate, 'REST_RULE_VIOLATION', employee); continue; }
+    }
+    planned.push({ ...candidate, id: row.id });
+    copy.push({
+      sourceAssignmentId: row.id, employeeId: row.employee_id, employeeName: employee.name ?? null, sourceDate, targetDate,
+      shiftType: row.shift_type ?? 'Regular', startTime: clock(row.start_time), endTime: clock(row.end_time),
+      location: row.location ?? null, countsAsWork: row.counts_as_work !== false,
+    });
+  }
+
+  const byReason = skipped.reduce((acc, item) => ({ ...acc, [item.reason]: (acc[item.reason] ?? 0) + 1 }), {});
+  const base = {
+    mode,
+    source: { scheduleId: source.schedule_id, versionId: source.version_id, versionNumber: Number(source.version_number), periodStart: source.period_start, periodEnd: source.period_end },
+    target: { scheduleId, versionId, periodStart: target.period_start, periodEnd: target.period_end },
+    candidates: copy,
+    skipped,
+    summary: { candidates: copy.length, skipped: skipped.length, byReason },
+  };
+  if (mode === 'preview' || copy.length === 0) return { ...base, created: 0, createdAssignmentIds: [] };
+
+  // Apply: the version row is locked FIRST (publication takes the same lock), then the insert runs as a NEW statement of the same
+  // transaction, so it sees whatever a concurrent copy just committed. A row already present (same identity) is never inserted twice.
+  const payload = JSON.stringify(copy.map((item) => ({
+    employee_id: item.employeeId, date: item.targetDate, start_time: item.startTime, end_time: item.endTime,
+    location: item.location, shift_type: item.shiftType, counts_as_work: item.countsAsWork,
+  })));
+  const copyGuard = scopeGuardOf(scope);
+  const [, inserted] = await sql.transaction((txn) => [
+    txn`SELECT id FROM schedule_versions WHERE id = ${versionId} AND status = 'DRAFT' FOR UPDATE`,
+    txn`
+      INSERT INTO shift_assignments (schedule_version_id, employee_id, date, start_time, end_time, location, shift_type, counts_as_work)
+      SELECT ${versionId}, x.employee_id, x.date, x.start_time, x.end_time, x.location, x.shift_type, x.counts_as_work
+      FROM jsonb_to_recordset(${payload}::jsonb) AS x(employee_id uuid, date date, start_time time, end_time time, location text, shift_type text, counts_as_work boolean)
+      JOIN employees emp ON emp.id = x.employee_id AND emp.organization_id = ${ctx.organizationId}
+      WHERE EXISTS (SELECT 1 FROM schedule_versions WHERE id = ${versionId} AND status = 'DRAFT')
+        -- scope enforced again by the statement that writes (an employee's scope may have changed since the preview)
+        AND (${copyGuard.scopeMode}::text = 'NONE' OR (CASE ${copyGuard.scopeMode}::text
+               WHEN 'EMPLOYEES' THEN emp.id::text = ANY(${copyGuard.scopeIds}::text[])
+               ELSE COALESCE(emp.area_id::text = ANY(${copyGuard.scopeIds}::text[]), FALSE) END))
+        AND NOT EXISTS (
+          SELECT 1 FROM shift_assignments t
+          WHERE t.schedule_version_id = ${versionId} AND t.employee_id = x.employee_id AND t.date = x.date
+            AND t.start_time IS NOT DISTINCT FROM x.start_time AND t.end_time IS NOT DISTINCT FROM x.end_time
+            AND lower(btrim(COALESCE(t.shift_type, ''))) = lower(btrim(COALESCE(x.shift_type, '')))
+            AND t.counts_as_work IS NOT DISTINCT FROM x.counts_as_work
+            AND COALESCE(t.location, '') = COALESCE(x.location, '')
+        )
+      RETURNING id, employee_id, date
+    `,
+  ]);
+  const createdRows = inserted ?? [];
+  if (createdRows.length === 0 && copy.length > 0) {
+    // Nothing was inserted: either everything was already there (a concurrent copy) or the draft stopped being a draft.
+    const [version] = await sql`SELECT status FROM schedule_versions WHERE id = ${versionId}`;
+    if (!version || version.status !== 'DRAFT') {
+      const error = new HttpError(409, 'Schedule version is not editable');
+      error.code = 'VERSION_NOT_EDITABLE';
+      throw error;
+    }
+  }
+  await recordAuditEvent(sql, ctx, {
+    // `schedule.week_copied` is NOT in the organization_audit_events CHECK (no migration allowed here), so the write failed silently:
+    // the allowed «assignments created» type carries the operation in its metadata instead.
+    eventType: 'ASSIGNMENT_CREATED',
+    targetType: 'SCHEDULE_VERSION',
+    targetId: versionId,
+    metadata: { operation: 'WEEK_COPIED', sourceVersionId: source.version_id, sourceWeekStart, targetPeriodStart: target.period_start, created: createdRows.length, skipped: skipped.length, byReason },
+  });
+  return { ...base, created: createdRows.length, createdAssignmentIds: createdRows.map((row) => row.id) };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// F4-M03 / OD-F4-02 — publish up to 12 pending weeks, one canonical publication per week.
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+export const PUBLISH_PENDING_MAX = 12;
+
+function fail(versionId, status, code, extra = {}) {
+  return { versionId, ok: false, status, code, excluded: [], ...extra };
+}
+
+/** Every validation of the real publication, run against the current data, with NOTHING written (`dryRun`). */
+async function inspectPublication(sql, ctx, scheduleId, versionId, guard) {
+  const transactionResult = await sql.transaction((txn) => [publishScheduleVersionTx(txn, ctx, scheduleId, versionId, { ...guard, dryRun: true })]);
+  const outcome = transactionResult?.[0]?.[0];
+  if (!outcome?.found) return { eligible: false, status: 404, code: 'NOT_FOUND' };
+  if (outcome.current_status !== 'DRAFT') return { eligible: false, status: 409, code: 'VERSION_NOT_EDITABLE' };
+  if (outcome.error_code === 'SCOPE_FORBIDDEN') return { eligible: false, status: 403, code: 'SCOPE_FORBIDDEN' };
+  if (outcome.error_code) return { eligible: false, status: 422, code: outcome.error_code };
+  const excluded = Array.isArray(outcome.excluded_assignments) ? outcome.excluded_assignments : [];
+  return {
+    eligible: true,
+    excludedCount: Number(outcome.excluded_count ?? 0),
+    excludedByReason: excluded.reduce((acc, item) => ({ ...acc, [item.reason]: (acc[item.reason] ?? 0) + 1 }), {}),
+  };
+}
+
+/**
+ * Publishes (or, with `mode: 'preview'`, only checks) 1–12 distinct DRAFT versions. Each version is decided on its own by the SAME
+ * publication the single button uses (`publishScheduleVersion`): its own transaction, its own scope check over every employee it
+ * touches, its own conflicts, its own notifications. A version that cannot be published is reported and writes nothing; the others go on.
+ *
+ * Temporal rule (bulk only): a version whose assignments include a date already past is NOT eligible. Publishing it would replace
+ * the calendar's history for those days, and a batch must never do that silently; it can still be published on its own, where the user
+ * sees exactly that.
+ */
+export async function publishPendingVersions(sql, ctx, input = {}) {
+  requireRole(ctx, 'PLANNER');
+  const mode = String(input.mode ?? 'apply').trim();
+  if (!['preview', 'apply'].includes(mode)) {
+    const error = new HttpError(400, 'mode must be preview or apply');
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+  const ids = input.versionIds;
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > PUBLISH_PENDING_MAX || ids.some((id) => typeof id !== 'string' || !UUID_RE.test(id))) {
+    const error = new HttpError(400, `versionIds must be an array of 1 to ${PUBLISH_PENDING_MAX} valid UUIDs`);
+    error.code = 'INVALID_INPUT';
+    throw error;
+  }
+  if (new Set(ids).size !== ids.length) {
+    const error = new HttpError(400, 'versionIds must not contain duplicates');
+    error.code = 'DUPLICATE_VERSION_IDS';
+    throw error;
+  }
+
+  const today = getOperationalDate();
+  const results = [];
+  for (const versionId of ids) {
+    try {
+      const rows = await sql`
+        SELECT sv.schedule_id, sv.status, TO_CHAR(s.period_start, 'YYYY-MM-DD') AS period_start, TO_CHAR(s.period_end, 'YYYY-MM-DD') AS period_end
+        FROM schedule_versions sv JOIN schedules s ON s.id = sv.schedule_id
+        WHERE sv.id = ${versionId} AND s.organization_id = ${ctx.organizationId}
+      `;
+      if (rows.length === 0) { results.push(fail(versionId, 404, 'NOT_FOUND')); continue; }
+      const scheduleId = rows[0].schedule_id;
+      // Scope first: nothing about a version outside it (not even its dates) is reported.
+      const guard = await publishScopeGuard(sql, ctx, scheduleId);
+      const meta = { scheduleId, periodStart: rows[0].period_start, periodEnd: rows[0].period_end };
+      if (rows[0].status !== 'DRAFT') { results.push(fail(versionId, 409, 'VERSION_NOT_EDITABLE', meta)); continue; }
+      const counts = (await sql`
+        SELECT COUNT(*)::integer AS total, COUNT(*) FILTER (WHERE date < ${today})::integer AS past
+        FROM shift_assignments WHERE schedule_version_id = ${versionId}
+      `)[0] ?? { total: 0, past: 0 };
+      const assignmentCount = Number(counts.total);
+      const pastAssignmentCount = Number(counts.past);
+      if (meta.periodEnd < today || pastAssignmentCount > 0) {
+        results.push(fail(versionId, 422, 'PAST_DATES_AFFECTED', { ...meta, assignmentCount, pastAssignmentCount }));
+        continue;
+      }
+      if (mode === 'preview') {
+        const verdict = await inspectPublication(sql, ctx, scheduleId, versionId, guard);
+        results.push(verdict.eligible
+          ? { versionId, ok: true, ...meta, assignmentCount, excludedCount: verdict.excludedCount, excludedByReason: verdict.excludedByReason, excluded: [] }
+          : fail(versionId, verdict.status, verdict.code, { ...meta, assignmentCount }));
+        continue;
+      }
+      const published = await publishScheduleVersion(sql, ctx, scheduleId, versionId);
+      results.push({
+        versionId, ok: true, ...meta, createdShiftCount: published.createdShiftCount,
+        excluded: published.excludedAssignments, excludedAssignmentCount: published.excludedAssignmentCount,
+      });
+    } catch (error) {
+      if (error?.status >= 400 && error?.status < 500) results.push(fail(versionId, error.status, error.code ?? 'ERROR'));
+      else {
+        console.error('[api] publish-pending item failed', { versionId, message: error?.message });
+        results.push(fail(versionId, 500, 'ERROR'));
+      }
+    }
+  }
+  const ok = results.filter((item) => item.ok).length;
+  return { mode, results, summary: { requested: ids.length, ok, failed: ids.length - ok } };
 }

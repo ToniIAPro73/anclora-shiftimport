@@ -45,5 +45,7 @@ describe('getScheduleSnapshot: stale draft assignments', () => {
     expect(assignmentQuery.values).toContain(false);
     expect(assignmentQuery.text).toContain('mat.schedule_version_id = sa.schedule_version_id');
     expect(assignmentQuery.text).toContain('NOT EXISTS');
+    // F4-FIX-01: the header counters come from what the publication really materialized
+    expect(assignmentQuery.text).toContain('AS excluded_from_publication');
   });
 });

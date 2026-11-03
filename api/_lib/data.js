@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { HttpError, employeeRowInScope, requireRole, resolveAccessScope, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, checkLimit, PlanLimitError, requireFeature, requireWithinLimit } from './plans.js';
 import { getOperationalDate, isHistoricalDate } from './operational-date.js';
+import { assertPlannerImportAttribution } from './planner-write-guard.js';
 import { assertTimedTypeHasTimes, findAssignmentConflict, getShiftSemantics } from './shift-compatibility.js';
 import { importReversibility } from './import-reversion.js';
 import { LEDGER_PREFIX_LENGTH, ledgerPrefix } from './import-ledger.js';
@@ -335,6 +336,13 @@ export async function assertEmployeeInScope(sql, ctx, employeeId) {
       WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
     `;
     assertScopedResource(scope, { employeeId, areaId: areaRows[0]?.area_id ?? null });
+  } else if (scope.type === 'AREAS' || scope.type === 'EMPLOYEES') {
+    // F4-REM-01: a PLANNER scoped to AREAS / EMPLOYEES reaches only those employees (this check used to ignore both scopes).
+    const rows = await sql`
+      SELECT id, area_id FROM employees
+      WHERE id = ${employeeId} AND organization_id = ${ctx.organizationId}
+    `;
+    if (!employeeRowInScope(scope, rows[0])) throw scopeForbidden('Employee is outside your assigned scope');
   } else {
     assertScopedResource(scope, { employeeId });
   }
@@ -2927,6 +2935,8 @@ export async function upsertShifts(sql, ctx, rawShifts, { importId = null } = {}
       error.code = 'MANUAL_SHIFT_HISTORICAL_ONLY';
       throw error;
     }
+    // OD-F4-03: whatever `origin` the client claims, a PLANNER writes a current/future row only inside an import it started.
+    if (ctx.role === 'PLANNER' && !isHistoricalDate(shift.date)) await assertPlannerImportAttribution(sql, ctx, shift.importId ?? importId);
     const employeeId = scope.type === 'SELF' ? scope.employeeId : effectiveEmployeeId(ctx, shift.employeeId);
     const employee = await assertEmployeeInScope(sql, ctx, employeeId);
 
@@ -3159,7 +3169,7 @@ export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId, {
   let deleted = 0;
   for (const id of ids) {
     const existing = await sql`
-      SELECT employee_id, area_id FROM shifts
+      SELECT employee_id, area_id, TO_CHAR(date, 'YYYY-MM-DD') AS date FROM shifts
       WHERE id = ${id} AND organization_id = ${ctx.organizationId}
     `;
     if (existing.length > 0) {
@@ -3167,6 +3177,8 @@ export async function deleteShiftsByIds(sql, ctx, rawIds, requestedEmployeeId, {
         employeeId: existing[0].employee_id,
         areaId: existing[0].area_id,
       });
+      // OD-F4-03: deleting a current/future shift is a direct operational change; only the import that created it may replace it.
+      if (ctx.role === 'PLANNER' && !isHistoricalDate(existing[0].date)) await assertPlannerImportAttribution(sql, ctx, importId);
     }
     const rows = employeeId
       ? await run((q) => q`

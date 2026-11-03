@@ -172,4 +172,12 @@ describe('stale draft assignments (a later manual calendar change contradicts th
     // the assignment itself is never deleted by publication
     expect(statement).not.toMatch(/DELETE FROM shift_assignments/);
   });
+  it('F4-REM-02: the 11 h rest is evaluated between DIFFERENT days (same semantics as creating the assignment), overlaps stay blocked', async () => {
+    const sql = makeSql({ found: true, current_status: 'DRAFT', error_code: null, published_at: 'x', created_shift_count: 2, excluded_count: 0, excluded_assignments: [] });
+    await publishScheduleVersion(sql, ctx, SCHEDULE, VERSION);
+    const text = sql.transactionQueries[0].replace(/\s+/g, ' ');
+    expect(text).toMatch(/rest_conflicts AS \( SELECT a.id AS conflicting_assignment_id FROM assignment_intervals a JOIN assignment_intervals b ON a.employee_id = b.employee_id AND a.id < b.id[^W]*WHERE a.date <> b.date AND NOT \(a.start_at < b.end_at AND b.start_at < a.end_at\)/);
+    expect(text).toContain('overlap_conflicts AS'); // the overlap rule is untouched
+    expect(text).toContain("INTERVAL '11 hours'"); // and so is the rest rule
+  });
 });
