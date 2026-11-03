@@ -75,6 +75,12 @@ qa/1.2b-visual/
 qa/e2e-acceptance/artifacts/ux-remediation-baseline/
 qa/e2e-acceptance/test-results-uxr-f0-baseline/
 
+# F4-M04: mobile E2E screenshots (regenerable via `npm --prefix qa/e2e-acceptance run test:f4-mobile`)
+# — evidence kept on disk, never committed; runner output and run-scoped fixture are local too.
+qa/e2e-acceptance/artifacts/F4-MOBILE/
+qa/e2e-acceptance/artifacts/f4-mobile-fixture.json
+qa/e2e-acceptance/test-results-f4-mobile/
+
 # Agent task docs (temporary working docs)
 .agent-tasks/
 

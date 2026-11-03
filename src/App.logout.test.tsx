@@ -37,7 +37,12 @@ const mockedListRemoteAreas = vi.mocked(remote.listRemoteAreas);
 const mockedListRemoteScheduleVersions = vi.mocked(remote.listRemoteScheduleVersions);
 
 setupLocalStorageMock();
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // Tests replace globals (`fetch` answering 401, `matchMedia`): they must not leak into the next test. The shell now loads the
+  // pending-requests badge on mount (F4-M01), so a leaked 401 `fetch` would end the session of an unrelated test.
+  vi.unstubAllGlobals();
+});
 beforeEach(() => {
   vi.clearAllMocks();
   mockedLoadRemoteTodayShifts.mockResolvedValue([]);
@@ -205,6 +210,46 @@ describe('App — deterministic logout', () => {
 
     await waitFor(() => expect(document.querySelector('#auth-email')).toBeTruthy());
     expect(document.querySelector('.team-bar')).toBeNull();
+  });
+
+  it('a bfcache restore with a still-valid session keeps the app and the data', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
+
+    mockedFetchSession.mockResolvedValue(adminSession);
+    const pageShow = new Event('pageshow') as PageTransitionEvent;
+    Object.defineProperty(pageShow, 'persisted', { value: true });
+    await act(async () => {
+      window.dispatchEvent(pageShow);
+    });
+
+    await waitFor(() => expect(mockedFetchSession).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('calendar-toolbar')).toBeTruthy();
+    expect(document.querySelector('#auth-email')).toBeNull();
+    expect(window.location.pathname).toBe('/app');
+  });
+
+  it('a pageshow that is not a bfcache restore does not re-validate or close the session', async () => {
+    mockedFetchResolvedSession.mockResolvedValue({ session: adminSession, needsOrgChoice: false });
+    mockedListRemoteEmployees.mockResolvedValue(employees);
+    mockedLoadRemoteShifts.mockResolvedValue([]);
+
+    renderApp();
+    await waitFor(() => expect(screen.getByTestId('calendar-toolbar')).toBeTruthy());
+
+    mockedFetchSession.mockResolvedValue(null);
+    const pageShow = new Event('pageshow') as PageTransitionEvent;
+    Object.defineProperty(pageShow, 'persisted', { value: false });
+    await act(async () => {
+      window.dispatchEvent(pageShow);
+    });
+
+    expect(mockedFetchSession).not.toHaveBeenCalled();
+    expect(screen.getByTestId('calendar-toolbar')).toBeTruthy();
   });
 
   it('does not render the app shell while the first session resolution is in flight', async () => {
