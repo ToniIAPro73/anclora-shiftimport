@@ -178,3 +178,10 @@
 .day-history__conflict-note { color: var(--text-muted); font-size: 0.8rem; }
 .day-history__conflict-error { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--color-danger, #f87171); border-radius: 8px; }
 .recon-row__reason--vacation { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+/* Bulk «Mantener actual» in the reconciliation worklist (F4-M03): the checkbox sits with the date; nothing else in the row moves. */
+.recon-row__datecell { display: inline-flex; align-items: center; gap: 8px; }
+.recon-row__datecell input[type='checkbox'], .recon-bulk input[type='checkbox'] { width: 18px; height: 18px; flex: none; accent-color: var(--color-accent, #34d399); }
+.recon-bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 8px; padding: 8px 8px; border: 1px solid var(--glass-border); border-radius: 10px; }
+.recon-bulk__all { display: inline-flex; align-items: center; gap: 8px; font-size: 0.84rem; cursor: pointer; }
+.recon-bulk__hint { font-size: 0.78rem; color: var(--text-muted); }

@@ -7,6 +7,7 @@ import { ModalShell } from '../ui/ModalShell';
 import { SegmentedTabs, type SegmentedTab } from '../ui/SegmentedTabs';
 import { summarizeReason } from './reconciliation-display';
 import { pageWindow, reconciliationPageSize } from './reconciliation-paging';
+import { KEEP_CURRENT_MAX, KeepCurrentDialog } from './KeepCurrentDialog';
 import './CalendarModals.css';
 
 type Filter = 'pending' | 'resolved' | 'all';
@@ -22,6 +23,10 @@ interface ReconciliationModalProps {
   onReview: (date: string) => void;
   /** Closes the list and shows the day in the calendar. */
   onViewDay: (date: string) => void;
+  /** The user may resolve days (same rule as the day detail): shows the bulk «Mantener actual». */
+  canKeepCurrent?: boolean;
+  /** Some days were resolved: reload the worklist and the calendar. */
+  onResolved?: () => void;
 }
 
 function formatDate(date: string): string {
@@ -30,11 +35,13 @@ function formatDate(date: string): string {
 }
 
 export function ReconciliationModal({
-  isOpen, onClose, worklist, loading, failed, onRetry, onReview, onViewDay,
+  isOpen, onClose, worklist, loading, failed, onRetry, onReview, onViewDay, canKeepCurrent = false, onResolved,
 }: ReconciliationModalProps) {
   const { t, locale } = useI18n();
   const [filter, setFilter] = useState<Filter>('pending');
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [keepOpen, setKeepOpen] = useState(false);
   // Rows per page follow the room the window really has (pagination instead of an outer scroll).
   const [pageSize, setPageSize] = useState(() => reconciliationPageSize(typeof window === 'undefined' ? undefined : window.innerHeight));
   useEffect(() => {
@@ -45,7 +52,7 @@ export function ReconciliationModal({
   }, []);
 
   useEffect(() => {
-    if (isOpen) { setFilter('pending'); setPage(1); }
+    if (isOpen) { setFilter('pending'); setPage(1); setSelected(new Set()); setKeepOpen(false); }
   }, [isOpen]);
 
   const visible = useMemo<ReconciliationItem[]>(
@@ -56,6 +63,10 @@ export function ReconciliationModal({
   const safePage = Math.min(page, totalPages);
   const pageItems = visible.slice((safePage - 1) * pageSize, safePage * pageSize);
   const pendingCount = worklist?.pendingCount ?? 0;
+  const pendingDates = useMemo(() => (worklist?.items ?? []).filter((item) => item.status === 'PENDING').map((item) => item.date), [worklist]);
+  const bulkEnabled = canKeepCurrent && filter === 'pending' && pendingDates.length > 0 && Boolean(worklist);
+  const toggleDate = (date: string) => setSelected((current) => { const next = new Set(current); if (next.has(date)) next.delete(date); else if (next.size < KEEP_CURRENT_MAX) next.add(date); return next; });
+  const allPendingSelected = pendingDates.length > 0 && pendingDates.slice(0, KEEP_CURRENT_MAX).every((date) => selected.has(date));
 
   const describe = (labels: ReconciliationShiftLabel[]) => {
     if (!labels.length) return t('reconModal.noRecord');
@@ -117,6 +128,18 @@ export function ReconciliationModal({
           {worklist && visible.length === 0 && <p className="eff-contract__empty" data-testid="recon-empty">{t('reconModal.empty')}</p>}
           {worklist && visible.length > 0 && (
             <>
+              {bulkEnabled && (
+                <div className="recon-bulk" data-testid="recon-bulk-bar">
+                  <label className="recon-bulk__all">
+                    <input type="checkbox" checked={allPendingSelected} onChange={() => setSelected(allPendingSelected ? new Set() : new Set(pendingDates.slice(0, KEEP_CURRENT_MAX)))} data-testid="recon-select-all" />
+                    <span>{t('reconModal.keepCurrent.selectAll', { count: Math.min(pendingDates.length, KEEP_CURRENT_MAX) })}</span>
+                  </label>
+                  <button type="button" className="eff-button eff-button--primary" disabled={selected.size === 0} onClick={() => setKeepOpen(true)} data-testid="recon-keep-current">
+                    {t('reconModal.keepCurrent.action', { count: selected.size })}
+                  </button>
+                  {selected.size >= KEEP_CURRENT_MAX && <span className="recon-bulk__hint">{t('reconModal.keepCurrent.limit', { max: KEEP_CURRENT_MAX })}</span>}
+                </div>
+              )}
               <div className="recon-list__head" aria-hidden="true">
                 <span>{t('reconModal.colDate')}</span>
                 <span>{t('reconModal.colEffective')}</span>
@@ -134,7 +157,19 @@ export function ReconciliationModal({
                   const pending = item.status === 'PENDING';
                   return (
                     <li key={item.date} className="recon-row" data-testid={`recon-row-${item.date}`} data-status={item.status}>
-                      <strong className="recon-row__date">{formatDate(item.date)}</strong>
+                      <span className="recon-row__datecell">
+                        {bulkEnabled && pending && (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(item.date)}
+                            disabled={!selected.has(item.date) && selected.size >= KEEP_CURRENT_MAX}
+                            onChange={() => toggleDate(item.date)}
+                            aria-label={t('reconModal.keepCurrent.select', { date: formatDate(item.date) })}
+                            data-testid={`recon-select-${item.date}`}
+                          />
+                        )}
+                        <strong className="recon-row__date">{formatDate(item.date)}</strong>
+                      </span>
                       <span className="recon-row__cell recon-row__cell--current" data-label={t('reconModal.colEffective')} data-testid={`recon-current-${item.date}`}>
                         {describe(item.current)}
                       </span>
@@ -216,6 +251,15 @@ export function ReconciliationModal({
           )}
         </div>
       </div>
+      {worklist && (
+        <KeepCurrentDialog
+          isOpen={keepOpen}
+          employeeId={worklist.employeeId}
+          dates={[...selected].sort()}
+          onClose={() => setKeepOpen(false)}
+          onDone={() => { setSelected(new Set()); onResolved?.(); }}
+        />
+      )}
     </ModalShell>
   );
 }

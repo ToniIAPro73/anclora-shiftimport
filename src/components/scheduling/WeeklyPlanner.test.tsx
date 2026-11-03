@@ -162,7 +162,7 @@ describe('WeeklyPlanner', () => {
 
     await waitFor(() => expect(screen.getByText('Ya en calendario')).toBeInTheDocument());
     expect(screen.getByText('Extras · 21:00–02:00')).toBeInTheDocument();
-    expect(screen.getByText('0 turnos')).toBeInTheDocument();
+    expect(screen.getByText('0 planificadas')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Extras/ })).not.toBeInTheDocument();
   });
 
@@ -656,5 +656,62 @@ describe('WeeklyPlanner: stale draft assignments', () => {
     renderPlanner();
 
     await waitFor(() => expect(screen.getByTestId('planner-stale-assignment')).toHaveTextContent('Excluida de publicación · Desactualizada respecto al calendario'));
+  });
+  it('header of a published version separates published from excluded; a draft counts planned and outdated', async () => {
+    const published = version({ status: 'PUBLISHED' });
+    mockedList.mockResolvedValue([published]);
+    mockedLoad.mockResolvedValue(snapshot({
+      version: published,
+      assignments: [
+        assignment({ id: 'stale', shiftType: 'Libre', startTime: null, endTime: null, countsAsWork: false, staleAgainstCalendar: true, excludedFromPublication: true }),
+        assignment({ id: 'ok', date: '2026-09-29' }),
+      ],
+    }));
+    renderPlanner();
+    await waitFor(() => expect(screen.getByTestId('planner-count')).toHaveTextContent('1 publicado · 1 excluido'));
+  });
+
+  it('a published version with no published assignment reads 0 published · 1 excluded', async () => {
+    const published = version({ status: 'PUBLISHED' });
+    mockedList.mockResolvedValue([published]);
+    mockedLoad.mockResolvedValue(snapshot({
+      version: published,
+      assignments: [assignment({ id: 'stale', shiftType: 'Libre', startTime: null, endTime: null, countsAsWork: false, staleAgainstCalendar: true, excludedFromPublication: true })],
+    }));
+    renderPlanner();
+    await waitFor(() => expect(screen.getByTestId('planner-count')).toHaveTextContent('0 publicados · 1 excluido'));
+  });
+
+  it('a draft header counts planned assignments and flags the outdated ones', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot({
+      assignments: [
+        assignment({ id: 'stale', shiftType: 'Libre', startTime: null, endTime: null, countsAsWork: false, staleAgainstCalendar: true }),
+        assignment({ id: 'ok', date: '2026-09-29' }),
+      ],
+    }));
+    renderPlanner();
+    await waitFor(() => expect(screen.getByTestId('planner-count')).toHaveTextContent('2 planificadas · 1 desactualizada'));
+  });
+  it('F4-M03: «Copiar semana anterior» is offered only while the version is an editable draft', async () => {
+    mockedList.mockResolvedValue([version()]);
+    mockedLoad.mockResolvedValue(snapshot());
+    renderPlanner();
+    expect(await screen.findByTestId('copy-week-open')).toBeInTheDocument();
+    cleanup();
+    const published = version({ status: 'PUBLISHED' });
+    mockedList.mockResolvedValue([published]);
+    mockedLoad.mockResolvedValue(snapshot({ version: published }));
+    renderPlanner();
+    await waitFor(() => expect(screen.getByTestId('planner-count')).toBeInTheDocument());
+    expect(screen.queryByTestId('copy-week-open')).toBeNull();
+  });
+
+  it('F4-M03: «Publicar semanas pendientes» is offered to whoever can edit, even while viewing a published week', async () => {
+    const published = version({ status: 'PUBLISHED' });
+    mockedList.mockResolvedValue([published]);
+    mockedLoad.mockResolvedValue(snapshot({ version: published }));
+    renderPlanner();
+    expect(await screen.findByTestId('publish-pending-open')).toBeInTheDocument();
   });
 });

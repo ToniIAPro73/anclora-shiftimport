@@ -68,12 +68,16 @@ export const SearchableSelect = ({
       return;
     }
     const rect = trigger.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_GAP;
-    const spaceAbove = rect.top - VIEWPORT_GAP;
+    // The visual viewport is what is actually visible when a software keyboard is open.
+    const viewport = window.visualViewport;
+    const viewTop = viewport?.offsetTop ?? 0;
+    const viewHeight = viewport?.height ?? window.innerHeight;
+    const spaceBelow = viewTop + viewHeight - rect.bottom - VIEWPORT_GAP;
+    const spaceAbove = rect.top - viewTop - VIEWPORT_GAP;
     const openUp = spaceBelow < MIN_USEFUL_SPACE && spaceAbove > spaceBelow;
     const available = Math.max(120, Math.min(MENU_MAX_HEIGHT, openUp ? spaceAbove : spaceBelow));
     setMenuPosition(openUp
-      ? { position: 'fixed', left: rect.left, width: rect.width, bottom: window.innerHeight - rect.top + 6, maxHeight: available }
+      ? { position: 'fixed', left: rect.left, width: rect.width, top: rect.top - 6, transform: 'translateY(-100%)', maxHeight: available }
       : { position: 'fixed', left: rect.left, width: rect.width, top: rect.bottom + 6, maxHeight: available });
   }, []);
 
@@ -93,7 +97,16 @@ export const SearchableSelect = ({
     }
     setQuery('');
     setHighlightIndex(Math.max(0, options.findIndex((option) => option.value === value)));
-    searchRef.current?.focus();
+    // Make sure the trigger is on screen before anchoring the menu to it.
+    triggerRef.current?.scrollIntoView?.({ block: 'nearest' });
+    // On a touch screen focusing the search box opens the software keyboard, which shrinks the viewport, re-centres the modal and
+    // pushes the menu off screen. There the list opens first; the search box is still one tap away.
+    const touch = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    if (!touch) {
+      searchRef.current?.focus();
+    }
+    const frame = window.requestAnimationFrame?.(() => updateMenuPosition());
+    return () => { if (frame !== undefined) window.cancelAnimationFrame?.(frame); };
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -111,15 +124,29 @@ export const SearchableSelect = ({
         setOpen(false);
       }
     };
+    // Escape closes the menu whatever has focus (on touch screens focus stays on the trigger, not in the search box).
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
     window.addEventListener('mousedown', handlePointerDown);
     // Capture scroll from any ancestor (modal cards scroll internally) so the
     // anchored menu never detaches from its trigger.
     window.addEventListener('scroll', updateMenuPosition, true);
     window.addEventListener('resize', updateMenuPosition);
+    window.visualViewport?.addEventListener('resize', updateMenuPosition);
+    window.visualViewport?.addEventListener('scroll', updateMenuPosition);
     return () => {
+      document.removeEventListener('keydown', handleEscape);
       window.removeEventListener('mousedown', handlePointerDown);
       window.removeEventListener('scroll', updateMenuPosition, true);
       window.removeEventListener('resize', updateMenuPosition);
+      window.visualViewport?.removeEventListener('resize', updateMenuPosition);
+      window.visualViewport?.removeEventListener('scroll', updateMenuPosition);
     };
   }, [open, updateMenuPosition]);
 
@@ -193,7 +220,7 @@ export const SearchableSelect = ({
           <ul
             id="searchable-select-listbox"
             role="listbox"
-            style={{ listStyle: 'none', margin: 0, padding: 0, overflowY: 'auto', flex: 1, minHeight: 0 }}
+            style={{ listStyle: 'none', margin: 0, padding: 0, overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}
           >
             {filtered.length === 0 ? (
               <li style={{ padding: '10px 12px', color: 'var(--text-subtle)', fontSize: '0.82rem' }}>{emptyMessage}</li>

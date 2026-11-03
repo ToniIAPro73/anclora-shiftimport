@@ -33,7 +33,7 @@ import {
   createRemoteImport,
   updateRemoteImportOutcome,
   listRemoteAreas,
-  listRemoteApprovalRequests,
+  listRemoteApprovals,
   listRemoteEmployees,
   listRemoteScheduleVersions,
   loadRemoteScheduleSnapshot,
@@ -77,7 +77,9 @@ import { FormatProfilesModal } from './components/shift-dashboard/FormatProfiles
 import { TeamImportModal } from './components/shift-dashboard/TeamImportModal';
 import { ImportResultModal, ImportOutcomeReport, TemporalImportReport } from './components/shift-dashboard/ImportResultModal';
 import { ModalShell } from './components/ui/ModalShell';
-import { ApprovalInboxModal } from './components/shift-dashboard/ApprovalInboxModal';
+import { RequestCenterModal, type RequestCenterTab } from './components/requests/RequestCenterModal';
+import { isDecidable } from './lib/approvals';
+import { isTimeOffUiEnabled } from './lib/flags';
 import { NewChangeRequestModal } from './components/employee-portal/NewChangeRequestModal';
 import { RequestStatus, RequestView } from './components/employee-portal/RequestStatus';
 import { WeeklyPlanner } from './components/scheduling/WeeklyPlanner';
@@ -247,6 +249,7 @@ function App() {
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const [isFormatProfilesOpen, setIsFormatProfilesOpen] = useState(false);
   const [isApprovalsOpen, setIsApprovalsOpen] = useState(false);
+  const [requestCenterTab, setRequestCenterTab] = useState<RequestCenterTab>('pending');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
   const [isEmployeeRequestsOpen, setIsEmployeeRequestsOpen] = useState(false);
   const [employeeRequestView, setEmployeeRequestView] = useState<RequestView>('list');
@@ -936,8 +939,9 @@ function App() {
         }
 
         try {
-          const reqs = await listRemoteApprovalRequests();
-          setPendingApprovalsCount(reqs.length);
+          // Badge = what THIS person can still decide (vacations and shift changes), not everything that exists.
+          const page = await listRemoteApprovals({ kind: isTimeOffUiEnabled() ? 'ALL' : 'SHIFT_CHANGE', status: 'PENDING', limit: 100 });
+          setPendingApprovalsCount(page.requests.filter((item) => isDecidable(item, session?.employeeId)).length);
         } catch {
           // ignore pending approvals refresh errors
         }
@@ -948,6 +952,21 @@ function App() {
       setIsRefreshingCalendar(false);
     }
   }, [session, selectedEmployeeId, needsOrgChoice, effectiveAreaId]);
+
+  // The sidebar/topbar badge must be right on load, not only after the first action: managers read what they can still decide.
+  const managesRequests = Boolean(session && (session.role === 'PLANNER' || isAdminRole(session.role)));
+  const sessionEmployeeId = session?.employeeId;
+  useEffect(() => {
+    if (!managesRequests || needsOrgChoice) {
+      setPendingApprovalsCount(0);
+      return undefined;
+    }
+    let cancelled = false;
+    listRemoteApprovals({ kind: isTimeOffUiEnabled() ? 'ALL' : 'SHIFT_CHANGE', status: 'PENDING', limit: 100 })
+      .then((page) => { if (!cancelled) setPendingApprovalsCount(page.requests.filter((item) => isDecidable(item, sessionEmployeeId)).length); })
+      .catch(() => { /* the badge is a convenience; the inbox reports its own errors */ });
+    return () => { cancelled = true; };
+  }, [managesRequests, needsOrgChoice, sessionEmployeeId, effectiveAreaId]);
 
   const prevRouteRef = useRef(route);
   useEffect(() => {
@@ -964,6 +983,12 @@ function App() {
     const d = new Date(currentYear, currentMonth + delta, 1);
     setCurrentYear(d.getFullYear());
     setCurrentMonth(d.getMonth());
+  };
+
+  const openRequestCenter = (tab: RequestCenterTab) => {
+    if (isImporting) return;
+    setRequestCenterTab(tab);
+    setIsApprovalsOpen(true);
   };
 
   const toContextRow = (row: Shift): ContextRowInput => ({
@@ -1031,6 +1056,8 @@ function App() {
     if (isImporting || isSavingShift) {
       return;
     }
+    // A previous validation alert must not outlive the attempt that follows it.
+    setAppFeedback((current) => (current?.kind === 'alert' ? null : current));
     if (!isHistoricalDate(shift.date) && !isAdminRole(session?.role)) {
       setAppFeedback({ kind: 'alert', message: t('shiftModal.historicalOnly') });
       return;
@@ -2197,7 +2224,7 @@ function App() {
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
-          onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+          onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => openRequestCenter('pending') : undefined}
           pendingRequestsCount={pendingApprovalsCount}
           onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -2232,7 +2259,7 @@ function App() {
           onAddShift={() => { if (!isImporting) { setEditingShiftId(null); setDraftShiftDate(null); setIsModalOpen(true); } }}
           onHistory={() => { if (!isImporting) setIsImportHistoryOpen(true); }}
           onPlanner={() => navigate('/app/schedule')}
-          onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+          onApprovals={(session?.role === 'PLANNER' || isAdminRole(session.role)) ? () => openRequestCenter('pending') : undefined}
           pendingRequestsCount={pendingApprovalsCount}
           onTeam={isAdminRole(session.role) ? () => setIsEquipoOpen(true) : undefined}
           onFormatProfiles={() => setIsFormatProfilesOpen(true)}
@@ -2294,12 +2321,10 @@ function App() {
       onRequests={session?.role === 'EMPLOYEE' && session.employeeId ? () => {
         if (!isImporting) setIsEmployeeRequestsOpen(true);
       } : undefined}
-      onMyRequests={session && session.role !== 'EMPLOYEE' && session.employeeId ? () => {
-        if (!isImporting) setIsEmployeeRequestsOpen(true);
-      } : undefined}
+      onMyRequests={session && session.role !== 'EMPLOYEE' && session.employeeId ? () => openRequestCenter('mine') : undefined}
       onHistory={session ? () => { if (!isImporting) setIsImportHistoryOpen(true); } : undefined}
       onPlanner={session && session.role !== 'EMPLOYEE' ? () => navigate('/app/schedule') : undefined}
-      onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => setIsApprovalsOpen(true) : undefined}
+      onApprovals={session && (session.role === 'PLANNER' || isAdminRole(session.role)) ? () => openRequestCenter('pending') : undefined}
       pendingRequestsCount={pendingApprovalsCount}
       onTeam={session && isAdminRole(session.role) ? () => { if (!isImporting) setIsEquipoOpen(true); } : undefined}
       onFormatProfiles={session ? () => { if (!isImporting) setIsFormatProfilesOpen(true); } : undefined}
@@ -2320,7 +2345,7 @@ function App() {
           onRefresh={() => { if (!isImporting) void refreshCalendarData(); }}
           isRefreshing={isRefreshingCalendar}
         />
-        {appFeedback && (
+        {appFeedback && !(isModalOpen && appFeedback.kind === 'alert') && (
           <div
             role={appFeedback.kind === 'alert' ? 'alert' : 'status'}
             aria-live={appFeedback.kind === 'alert' ? 'assertive' : 'polite'}
@@ -2414,6 +2439,8 @@ function App() {
           loading={reconciliationLoading}
           failed={reconciliationFailed}
           onRetry={() => setReconciliationAttempt((value) => value + 1)}
+          canKeepCurrent={Boolean(canConfigureTarget)}
+          onResolved={() => { setReconciliationAttempt((value) => value + 1); void refreshCalendarData(); }}
           onReview={(date) => {
             setReconciliationOpen(false);
             setCurrentYear(Number(date.slice(0, 4)));
@@ -2479,6 +2506,7 @@ function App() {
         isSaving={isSavingShift}
         sessionRole={session?.role}
         currentEmployeeId={session?.employeeId}
+        feedback={isModalOpen && appFeedback?.kind === 'alert' ? appFeedback.message : null}
         onAcknowledged={(shiftId, acknowledgedAt) => {
           setShifts((prev) =>
             prev.map((s) =>
@@ -2494,6 +2522,7 @@ function App() {
           }
           setIsModalOpen(false);
           setDraftShiftDate(null);
+          setAppFeedback((current) => (current?.kind === 'alert' ? null : current));
         }}
         onSave={handleSaveShift}
         onDelete={handleDeleteShift}
@@ -2532,14 +2561,30 @@ function App() {
         }}
       />
 
-      <ApprovalInboxModal
+      <RequestCenterModal
         isOpen={isApprovalsOpen && !isImporting}
-        onClose={() => { setIsApprovalsOpen(false); void refreshCalendarData(); }}
+        onClose={() => { setIsApprovalsOpen(false); setEmployeeRequestView('list'); void refreshCalendarData(); }}
+        initialTab={requestCenterTab}
+        canManage={Boolean(session && (session.role === 'PLANNER' || isAdminRole(session.role)))}
+        hasEmployee={Boolean(session?.employeeId)}
         currentEmployeeId={session?.employeeId}
         currentUserId={session?.user?.id}
+        areas={activeAreas.map((area) => ({ id: area.id, name: area.name }))}
+        pendingCount={pendingApprovalsCount}
+        onPendingCountChange={setPendingApprovalsCount}
+        mine={session?.employeeId ? (
+          <RequestStatus
+            employeeId={session.employeeId}
+            view={employeeRequestView}
+            onViewChange={setEmployeeRequestView}
+            onSelectShift={handleOpenAssociatedShift}
+            refreshSignal={employeeRequestRefreshSignal}
+            onRefresh={() => setEmployeeRequestRefreshSignal((current) => current + 1)}
+          />
+        ) : null}
       />
 
-      {session?.employeeId && (
+      {session?.role === 'EMPLOYEE' && session.employeeId && (
         <ModalShell
           isOpen={isEmployeeRequestsOpen && !isImporting}
           onClose={() => {

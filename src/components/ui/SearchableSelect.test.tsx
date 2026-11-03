@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { SearchableSelect } from './SearchableSelect';
+import { ModalShell } from './ModalShell';
 
 afterEach(cleanup);
 
@@ -99,5 +100,70 @@ describe('SearchableSelect', () => {
     const menu = screen.getByRole('listbox').closest('.modal-select-menu');
     expect(menu).not.toBeNull();
     expect(menu!.parentElement).toBe(document.body);
+  });
+
+  function mockPointer(coarse: boolean) {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: /pointer:\s*coarse/.test(query) ? coarse : false,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+    }));
+  }
+
+  it('focuses the search box with a fine pointer', () => {
+    mockPointer(false);
+    renderSelect();
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+    expect(document.activeElement).toBe(screen.getByPlaceholderText('Buscar empleado…'));
+    vi.unstubAllGlobals();
+  });
+
+  it('does not focus the search box on a touch screen (it would open the keyboard and shift the host modal)', () => {
+    mockPointer(true);
+    renderSelect();
+    fireEvent.click(screen.getByRole('button', { name: 'Empleado:' }));
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    expect(document.activeElement).not.toBe(screen.getByPlaceholderText('Buscar empleado…'));
+    vi.unstubAllGlobals();
+  });
+
+  it('Escape inside the open menu closes only the menu, not the modal hosting it', () => {
+    mockPointer(false);
+    const onClose = vi.fn();
+    render(
+      <ModalShell isOpen onClose={onClose} title="Host" closeAriaLabel="Cerrar">
+        <SearchableSelect label="Tipo" value="e1" options={options} onChange={vi.fn()} searchPlaceholder="Buscar…" ariaLabel="Tipo" />
+      </ModalShell>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tipo' }));
+    fireEvent.keyDown(screen.getByPlaceholderText('Buscar…'), { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    // With the menu closed, Escape reaches the modal as before.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Tipo' }), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('on a touch screen (focus stays on the trigger) Escape still closes only the menu, then the modal', () => {
+    mockPointer(true);
+    const onClose = vi.fn();
+    render(
+      <ModalShell isOpen onClose={onClose} title="Host" closeAriaLabel="Cerrar">
+        <SearchableSelect label="Tipo" value="e1" options={options} onChange={vi.fn()} searchPlaceholder="Buscar…" ariaLabel="Tipo" />
+      </ModalShell>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Tipo' });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
   });
 });

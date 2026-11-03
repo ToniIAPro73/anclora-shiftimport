@@ -1,0 +1,14 @@
+/* «Mantener actual» in bulk: what stays and what is discarded are written out (icon + words), never colour alone. */
+.keep-current { display: grid; gap: 10px; font-size: 0.9rem; }
+.keep-current p { margin: 0; }
+.keep-current__days { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
+.keep-current__days li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 8px 10px; border: 1px solid var(--glass-border); border-radius: 9px; overflow-wrap: anywhere; }
+.keep-current__days li span { display: inline-flex; align-items: center; gap: 4px; }
+.keep-current__drop, .keep-current__hint { color: var(--text-muted); }
+.keep-current__hint { font-size: 0.78rem; }
+.keep-current__skip { font-weight: 700; }
+:root:not([data-theme='light']) .keep-current__skip { color: var(--warning, #f59e0b); }
+:root[data-theme='light'] .keep-current__skip { color: #92400e; }
+.keep-current__error { padding: 8px 10px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--danger, #f87171) 50%, transparent); }
+.keep-current__label { font-weight: 700; font-size: 0.84rem; }
+.keep-current__days:focus-visible { outline: 2px solid var(--color-accent, #34d399); outline-offset: 2px; }

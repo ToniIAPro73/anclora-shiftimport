@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useId, useState, useEffect } from 'react';
 import { Shift } from '../../lib/types';
 import { getShiftType, normalizeShiftTypeLabel, preserveShiftTimesOnTypeChange } from '../../lib/shifts';
 import { getShiftTypes } from '../../lib/shift-types';
@@ -27,6 +27,8 @@ interface ShiftModalProps {
   sessionRole?: Role | null;
   currentEmployeeId?: string | null;
   onAcknowledged?: (shiftId: string, acknowledgedAt: string | null) => void;
+  /** Validation/save error to show INSIDE the modal (the page banner sits behind the overlay while it is open). */
+  feedback?: string | null;
 }
 
 export const ShiftModal = ({
@@ -41,8 +43,10 @@ export const ShiftModal = ({
   sessionRole = null,
   currentEmployeeId = null,
   onAcknowledged,
+  feedback = null,
 }: ShiftModalProps) => {
   const { locale, t } = useI18n();
+  const fieldId = useId();
   const shiftTypeOptions = getShiftTypes().map((type) => ({ value: type.label, label: translateShiftTypeLabel(type.id, locale, type.label) }));
   const [formData, setFormData] = useState<Shift>({
     id: '',
@@ -201,6 +205,8 @@ export const ShiftModal = ({
     );
   }
 
+  const fieldLabelStyle = { display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' } as const;
+
   return (
     <ModalShell
       isOpen={isOpen}
@@ -209,14 +215,43 @@ export const ShiftModal = ({
       closeAriaLabel={t('common.close')}
       maxWidth="520px"
       initialFocus="input[type='date']"
+      // Fixed header + one scroll region + footer actions: title, close, «Confirm» and «Delete» stay reachable on short phones and
+      // with the keyboard open (the card never scrolls as a whole).
+      workspace
+      height="auto"
+      footer={(
+        <div className="shift-modal__actions">
+          <button
+            className="btn-gold shift-modal__confirm"
+            disabled={isSaving}
+            aria-busy={isSaving}
+            style={{ cursor: isSaving ? 'wait' : undefined }}
+            onClick={() => { if (!isSaving) onSave(formData); }}
+          >
+            <Save size={18} aria-hidden="true" /> <span aria-live="polite">{isSaving ? t('shiftModal.working') : t('shiftModal.confirm')}</span>
+          </button>
+          {editingShift && onDelete && (
+            <button
+              className="shift-modal__delete"
+              onClick={() => onDelete(formData.id)}
+              disabled={isSaving}
+              aria-label={t('common.delete')}
+            >
+              <Trash2 size={20} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      )}
     >
-        <fieldset disabled={isSaving} style={{ border: 'none', padding: 0, margin: 0, minWidth: 0 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-lg)' }}>
+      <fieldset disabled={isSaving} className="shift-modal__body">
+        <div className="shift-modal__fields">
+          {feedback && <p className="shift-modal__feedback" role="alert" data-testid="shift-modal-feedback">{feedback}</p>}
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
+            <label htmlFor={`${fieldId}-date`} style={fieldLabelStyle}>
               {t('shiftModal.dateLabel')}
             </label>
             <input
+              id={`${fieldId}-date`}
               type="date"
               className="modal-input"
               value={formData.date}
@@ -226,12 +261,13 @@ export const ShiftModal = ({
             {maxDate && <p className="modal-field-hint" role="note">{t('shiftModal.historicalOnly')}</p>}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-lg)' }}>
+          <div className="shift-modal__times">
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
+              <label htmlFor={`${fieldId}-start`} style={fieldLabelStyle}>
                 {t('shiftModal.startLabel')}
               </label>
               <input
+                id={`${fieldId}-start`}
                 type="time"
                 className="modal-input"
                 value={formData.startTime}
@@ -239,10 +275,11 @@ export const ShiftModal = ({
               />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
+              <label htmlFor={`${fieldId}-end`} style={fieldLabelStyle}>
                 {t('shiftModal.endLabel')}
               </label>
               <input
+                id={`${fieldId}-end`}
                 type="time"
                 className="modal-input"
                 value={formData.endTime}
@@ -252,7 +289,7 @@ export const ShiftModal = ({
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: '700', marginBottom: 'var(--space-xs)', textTransform: 'uppercase', color: 'var(--color-accent)' }}>
+            <label style={fieldLabelStyle}>
               {t('shiftModal.typeLabel')}
             </label>
             <SearchableSelect
@@ -280,39 +317,8 @@ export const ShiftModal = ({
               ]}
             />
           </div>
-
-          <div style={{ display: 'flex', gap: 'var(--space-md)', marginTop: 'var(--space-md)' }}>
-            <button
-              className="btn-gold"
-              disabled={isSaving}
-              aria-busy={isSaving}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: isSaving ? 'wait' : undefined }}
-              onClick={() => { if (!isSaving) onSave(formData); }}
-            >
-              <Save size={18} /> <span aria-live="polite">{isSaving ? t('shiftModal.working') : t('shiftModal.confirm')}</span>
-            </button>
-            {editingShift && onDelete && (
-              <button
-                onClick={() => onDelete(formData.id)}
-                aria-label={t('common.delete')}
-                style={{
-                  padding: 'var(--space-sm) var(--space-md)',
-                  color: 'var(--danger)',
-                  border: '1px solid var(--danger-border)',
-                  borderRadius: '12px',
-                  background: 'var(--danger-bg)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <Trash2 size={20} />
-              </button>
-            )}
-          </div>
         </div>
-        </fieldset>
+      </fieldset>
     </ModalShell>
   );
 };

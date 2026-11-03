@@ -1,0 +1,45 @@
+/* Request Center inbox (F4-M02): filters, vacation facts, overlap badge, bulk bar. States use text + icon, never colour alone. */
+.approval-inbox__heading { margin-bottom: 12px; }
+.approval-inbox__filters { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: end; margin: 0 0 12px; }
+.approval-inbox__filter { display: grid; gap: 4px; min-width: 150px; font-size: 0.78rem; color: var(--text-muted); }
+.approval-inbox__filter--search { flex: 1 1 200px; }
+.approval-inbox__search { display: flex; align-items: center; gap: 6px; }
+.approval-inbox__search .field-input { flex: 1; min-width: 0; }
+.approval-inbox__item-title { display: flex; align-items: flex-start; gap: 10px; }
+.approval-inbox__item-title input[type='checkbox'], .approval-inbox__check input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--color-accent, #34d399); }
+.approval-inbox__impact, .approval-inbox__overlap, .approval-inbox__started { display: flex; align-items: flex-start; gap: 6px; margin: 6px 0 0; font-size: 0.8rem; line-height: 1.35; overflow-wrap: anywhere; }
+.approval-inbox__overlap--warn, .approval-inbox__started { color: var(--warning, #f59e0b); font-weight: 700; }
+.approval-inbox__overlap--clear { color: var(--success, #34d399); }
+.approval-inbox__impact svg, .approval-inbox__overlap svg, .approval-inbox__started svg { flex: none; margin-top: 2px; }
+.approval-inbox__notice { margin: 0 0 10px; padding: 8px 10px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--success, #34d399) 40%, transparent); font-size: 0.82rem; }
+.approval-inbox__bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--glass-border); }
+.approval-inbox__bulk-bar .approval-inbox__approve { width: auto; margin-top: 0; padding: 0 16px; flex: 0 0 auto; }
+.approval-inbox__check { display: inline-flex; align-items: center; gap: 8px; font-size: 0.84rem; cursor: pointer; }
+.approval-inbox__hint { font-size: 0.78rem; color: var(--text-muted); }
+.approval-inbox__bulk-result { margin: 0 0 10px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--glass-border); font-size: 0.84rem; }
+.approval-inbox__bulk-result p { margin: 0 0 4px; }
+.approval-inbox__bulk-result ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.approval-inbox__bulk-result li { display: flex; gap: 6px; align-items: flex-start; overflow-wrap: anywhere; }
+.approval-inbox__resolution { margin: 8px 0 0; font-size: 0.8rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.approval-inbox__badge--approved::before { content: '✓ '; }
+.approval-inbox__badge--rejected::before { content: '✕ '; }
+.approval-inbox__badge--cancelled::before { content: '— '; }
+.approval-inbox__more { display: flex; justify-content: center; margin: 12px 0 0; }
+@media (max-width: 640px) {
+  .approval-inbox__filter { min-width: 0; flex: 1 1 calc(50% - 6px); }
+  .approval-inbox__filter--search { flex: 1 1 100%; }
+  .approval-inbox__bulk-bar { align-items: stretch; }
+  .approval-inbox__bulk-bar .approval-inbox__approve { width: 100%; flex: 1 1 100%; }
+}
+
+/* Inside the Request Center the tabs already frame the list: no second card. */
+.request-center .approval-inbox { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.request-center .approval-inbox__eyebrow { display: none; }
+.request-center .approval-inbox__heading { align-items: center; margin-bottom: 8px; }
+.request-center .approval-inbox h2 { margin: 0; font-size: 1rem; }
+
+/* Light theme: the dark-theme accents are too pale on white (text states need >= 4.5:1). */
+:root[data-theme='light'] .approval-inbox__overlap--warn,
+:root[data-theme='light'] .approval-inbox__started { color: #92400e; }
+:root[data-theme='light'] .approval-inbox__overlap--clear { color: #047857; }
+:root[data-theme='light'] .approval-inbox__notice { border-color: #047857; }

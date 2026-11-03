@@ -293,3 +293,59 @@ describe('ShiftModal failure and retry without duplicate action (UXR-F3-M04 / CX
     );
   });
 });
+
+describe('ShiftModal mobile layout contract', () => {
+  const renderForm = (props: Partial<React.ComponentProps<typeof ShiftModal>> = {}) => render(
+    <I18nProvider>
+      <ShiftModal isOpen editingShift={null} onClose={vi.fn()} onSave={vi.fn()} sessionRole="OWNER" {...props} />
+    </I18nProvider>,
+  );
+
+  it('associates every visible label with its field', () => {
+    renderForm();
+    const date = document.querySelector('input[type="date"]') as HTMLInputElement;
+    const [start, end] = Array.from(document.querySelectorAll('input[type="time"]')) as HTMLInputElement[];
+    for (const input of [date, start, end]) {
+      expect(input.id).not.toBe('');
+      expect(document.querySelector(`label[for="${input.id}"]`)).not.toBeNull();
+    }
+  });
+
+  it('keeps both time fields in a wrapping grid that can fall back to one column', () => {
+    renderForm();
+    const times = document.querySelector('.shift-modal__times');
+    expect(times).not.toBeNull();
+    expect(times!.querySelectorAll('input[type="time"]')).toHaveLength(2);
+  });
+
+  it('puts the confirm action in the modal footer, outside the scrolling body', () => {
+    renderForm();
+    const confirm = document.querySelector('.shift-modal__confirm') as HTMLElement;
+    expect(confirm).not.toBeNull();
+    expect(confirm.closest('.shift-modal__body')).toBeNull();
+    expect(document.querySelector('.shift-modal__body')).not.toBeNull();
+  });
+
+  it('shows a save/validation error inside the modal as an alert', () => {
+    renderForm({ feedback: 'Faltan horas' });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Faltan horas');
+    expect(alert.closest('.shift-modal__body')).not.toBeNull();
+  });
+
+  it('calls onSave with the form data from the footer button', () => {
+    const onSave = vi.fn();
+    renderForm({ onSave });
+    fireEvent.click(document.querySelector('.shift-modal__confirm') as HTMLElement);
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps «Delete» available when editing, next to the confirm action', () => {
+    const onDelete = vi.fn();
+    renderForm({ editingShift: draftManualShift, onDelete });
+    const del = document.querySelector('.shift-modal__delete') as HTMLElement;
+    expect(del).not.toBeNull();
+    fireEvent.click(del);
+    expect(onDelete).toHaveBeenCalledWith('shift-man-1');
+  });
+});

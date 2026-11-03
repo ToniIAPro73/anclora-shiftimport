@@ -88,6 +88,8 @@ export interface ShiftAssignment {
   location: string | null;
   /** DRAFT assignment contradicted by a later manual calendar change: kept for review, never shown as current, never published. */
   staleAgainstCalendar?: boolean;
+  /** Non-DRAFT version: the publication did not materialize this assignment (derived, not stored). */
+  excludedFromPublication?: boolean;
 }
 
 export interface RemoteShiftDetail {
@@ -148,13 +150,11 @@ export interface ApprovalRequest {
   shiftLocation: string;
 }
 
-export async function listRemoteApprovalRequests(): Promise<ApprovalRequest[]> {
-  const payload = await apiFetch<{ requests: ApprovalRequest[] }>('/api/approval-requests?status=pending');
-  return payload.requests;
-}
+export interface ApprovalOutcome { requestedDays?: number; materializedDays?: number; skippedPastDays?: number }
 
-export async function approveRemoteApprovalRequest(approvalRequestId: string): Promise<void> {
-  await apiFetch(`/api/approval-requests/${encodeURIComponent(approvalRequestId)}/approve`, {
+/** Decides either kind (the server dispatches by subject). A vacation answers with how many days were really applied (OD-08). */
+export async function approveRemoteApprovalRequest(approvalRequestId: string): Promise<ApprovalOutcome | undefined> {
+  return apiFetch<ApprovalOutcome | undefined>(`/api/approval-requests/${encodeURIComponent(approvalRequestId)}/approve`, {
     method: 'POST',
     body: JSON.stringify({}),
   });
@@ -164,6 +164,93 @@ export async function rejectRemoteApprovalRequest(approvalRequestId: string, rea
   await apiFetch(`/api/approval-requests/${encodeURIComponent(approvalRequestId)}/reject`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
+  });
+}
+
+export type ApprovalKind = 'ALL' | 'SHIFT_CHANGE' | 'TIME_OFF';
+export type ApprovalListStatus = 'PENDING' | 'HISTORY';
+export type CannotDecideReason = 'SELF_REQUEST' | 'OUT_OF_SCOPE' | 'POLICY';
+
+export interface ApprovalOverlap { employeeId: string; name: string; startDate: string; endDate: string; status: string }
+
+/** Unified-feed item (spec §4.3.1). `kind` discriminates; `sortAt` is the keyset cursor value. */
+export interface ShiftChangeApprovalItem extends ApprovalRequest {
+  kind: 'SHIFT_CHANGE';
+  resolvedAt?: string | null;
+  resolvedByName?: string | null;
+  rejectionReason?: string | null;
+  sortAt?: string;
+  /** Shift changes carry no per-item eligibility: the feed already excludes what the actor cannot decide. */
+  canDecide?: boolean;
+  cannotDecideReason?: CannotDecideReason | null;
+}
+
+export interface TimeOffApprovalItem {
+  kind: 'TIME_OFF';
+  id: string;
+  timeOffRequestId: string;
+  employeeId: string;
+  employeeName: string;
+  areaId: string | null;
+  areaName: string | null;
+  requestType: string;
+  startDate: string;
+  endDate: string;
+  requestedDays: number;
+  comment: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  createdAt: string;
+  resolvedAt: string | null;
+  sortAt: string;
+  resolvedByName: string | null;
+  rejectionReason: string | null;
+  overlapping: ApprovalOverlap[];
+  affectedShifts: { published: number; draft: number };
+  alreadyStarted: boolean;
+  effectiveStartDate: string;
+  materializableDays: number;
+  skippedPastDays: number;
+  canDecide: boolean;
+  cannotDecideReason: CannotDecideReason | null;
+}
+
+export type ApprovalItem = ShiftChangeApprovalItem | TimeOffApprovalItem;
+
+export interface ApprovalListQuery {
+  kind: ApprovalKind;
+  status: ApprovalListStatus;
+  areaId?: string | null;
+  employeeId?: string | null;
+  q?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export async function listRemoteApprovals(query: ApprovalListQuery): Promise<{ requests: ApprovalItem[]; nextCursor: string | null }> {
+  const params = new URLSearchParams({ kind: query.kind, status: query.status });
+  if (query.areaId) params.set('areaId', query.areaId);
+  if (query.employeeId) params.set('employeeId', query.employeeId);
+  if (query.q?.trim()) params.set('q', query.q.trim());
+  if (query.limit) params.set('limit', String(query.limit));
+  if (query.cursor) params.set('cursor', query.cursor);
+  const payload = await apiFetch<{ requests: ApprovalItem[]; nextCursor?: string | null }>(`/api/approval-requests?${params.toString()}`);
+  return { requests: payload.requests, nextCursor: payload.nextCursor ?? null };
+}
+
+export type BulkApproveItemResult =
+  | { id: string; ok: true; status: 'APPROVED'; requestedDays: number; materializedDays: number; skippedPastDays: number }
+  | { id: string; ok: false; status: number; code: string };
+
+export interface BulkApproveResponse {
+  results: BulkApproveItemResult[];
+  summary: { requested: number; approved: number; failed: number };
+}
+
+/** TIME_OFF only (1–50). Each item is decided on its own: the response is partial by design, never all-or-nothing. */
+export async function bulkApproveRemoteApprovals(ids: string[]): Promise<BulkApproveResponse> {
+  return apiFetch<BulkApproveResponse>('/api/approval-requests/bulk-approve', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
   });
 }
 
@@ -642,6 +729,76 @@ export async function publishRemoteScheduleVersion(
   return apiFetch<SchedulePublicationResult>(
     `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/publish`,
     { method: 'POST' },
+  );
+}
+
+/** F4-M03 / OD-F4-02 — publish up to 12 pending weeks (preview first; each week is its own publication and its own result). */
+export type PublishPendingItem =
+  | {
+    versionId: string; ok: true; scheduleId: string; periodStart: string; periodEnd: string;
+    assignmentCount?: number; excludedCount?: number; excludedByReason?: Record<string, number>;
+    createdShiftCount?: number; excludedAssignmentCount?: number;
+  }
+  | {
+    versionId: string; ok: false; status: number; code: string;
+    scheduleId?: string; periodStart?: string; periodEnd?: string; assignmentCount?: number; pastAssignmentCount?: number;
+  };
+export interface PublishPendingResponse {
+  mode: 'preview' | 'apply';
+  results: PublishPendingItem[];
+  summary: { requested: number; ok: number; failed: number };
+}
+
+export async function publishPendingRemoteVersions(versionIds: string[], mode: 'preview' | 'apply'): Promise<PublishPendingResponse> {
+  return apiFetch<PublishPendingResponse>('/api/schedules/publish-pending', { method: 'POST', body: JSON.stringify({ versionIds, mode }) });
+}
+
+/** F4-M03 / OD-F4-01 — copy the previous week's PUBLISHED plan into a draft (preview writes nothing). */
+export type CopyWeekSkipReason =
+  | 'ALREADY_ASSIGNED' | 'PROTECTED_ABSENCE_DAY' | 'PAST_DATE' | 'INACTIVE_EMPLOYEE' | 'OUT_OF_SCOPE' | 'OVERLAP'
+  | 'REST_RULE_VIOLATION' | 'STALE_SOURCE' | 'SOURCE_ABSENCE';
+
+export interface CopyWeekCandidate {
+  sourceAssignmentId: string;
+  employeeId: string;
+  employeeName: string | null;
+  sourceDate: string;
+  targetDate: string;
+  shiftType: string;
+  startTime: string | null;
+  endTime: string | null;
+  location: string | null;
+}
+export interface CopyWeekSkipped {
+  reason: CopyWeekSkipReason;
+  targetDate: string;
+  /** null when the employee is outside the actor's scope: nothing identifying is returned. */
+  sourceAssignmentId: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  shiftType: string | null;
+  startTime: string | null;
+  endTime: string | null;
+}
+export interface CopyWeekResult {
+  mode: 'preview' | 'apply';
+  source: { scheduleId: string; versionId: string; versionNumber: number; periodStart: string; periodEnd: string };
+  target: { scheduleId: string; versionId: string; periodStart: string; periodEnd: string };
+  candidates: CopyWeekCandidate[];
+  skipped: CopyWeekSkipped[];
+  summary: { candidates: number; skipped: number; byReason: Record<string, number> };
+  created: number;
+  createdAssignmentIds: string[];
+}
+
+export async function copyRemoteScheduleWeek(
+  scheduleId: string,
+  versionId: string,
+  input: { sourceWeekStart: string; mode: 'preview' | 'apply' },
+): Promise<CopyWeekResult> {
+  return apiFetch<CopyWeekResult>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/versions/${encodeURIComponent(versionId)}/copy-week`,
+    { method: 'POST', body: JSON.stringify(input) },
   );
 }
 
@@ -1568,6 +1725,8 @@ export interface ProtectedAbsence {
 export interface RemoteDayHistory {
   employeeId: string;
   date: string;
+  /** State token of the day: carried back with a reconciliation so a decision taken on stale data is a 409 DAY_CHANGED. */
+  dayToken?: string;
   rows: RemoteShiftRow[];
   changes: RemoteCalendarChange[];
   provenance: DayProvenance;
@@ -1605,10 +1764,39 @@ export async function reconcileCalendarDayRemote(input: {
   date: string;
   keepShiftIds: string[];
   reason: string;
+  /** `dayToken` of the history the user was looking at; a day that changed since then answers 409 DAY_CHANGED. */
+  expectedDayToken?: string;
 }) {
   return apiFetch<{ result: { changeId: string } }>('/api/calendar/changes', {
     method: 'POST',
     body: JSON.stringify({ action: 'RECONCILE', ...input }),
+  });
+}
+
+/** Bulk «Mantener actual» (F4-M03 / OD-F4-04): preview first, then apply with the day tokens of the preview. */
+export interface KeepCurrentPreviewDay {
+  date: string;
+  eligible: boolean;
+  code: 'NOTHING_TO_RECONCILE' | 'NO_CURRENT_TO_KEEP' | 'RESULT_INCONSISTENT' | null;
+  dayToken: string;
+  keep: Array<{ type: string; startTime: string | null; endTime: string | null }>;
+  drop: Array<{ type: string; startTime: string | null; endTime: string | null }>;
+  protectedAbsence: boolean;
+}
+export type KeepCurrentDayResult = { date: string; ok: true } | { date: string; ok: false; status: number; code: string };
+
+export async function previewKeepCurrentRemote(employeeId: string, dates: string[]): Promise<KeepCurrentPreviewDay[]> {
+  const payload = await apiFetch<{ results: KeepCurrentPreviewDay[] }>('/api/calendar/reconciliation/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ employeeId, dates, action: 'KEEP_CURRENT', mode: 'preview' }),
+  });
+  return payload.results;
+}
+
+export async function applyKeepCurrentRemote(input: { employeeId: string; dates: string[]; reason: string; dayTokens: Record<string, string> }) {
+  return apiFetch<{ results: KeepCurrentDayResult[]; summary: { requested: number; applied: number; failed: number } }>('/api/calendar/reconciliation/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ ...input, action: 'KEEP_CURRENT', mode: 'apply' }),
   });
 }
 

@@ -3316,6 +3316,96 @@ select:disabled {
   color-scheme: light;
 }
 
+/* Add/edit shift modal (ShiftModal): header and actions stay fixed, ONE scroll region in the body. */
+.shift-modal__body {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.shift-modal__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+/* Two columns only when BOTH time fields fit (the widest native picker, 12 h «08:00 AM», needs ~9.5rem); otherwise one column. */
+.shift-modal__times {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: var(--space-md) var(--space-lg);
+}
+
+.shift-modal__times > *,
+.shift-modal__fields > * {
+  min-width: 0;
+}
+
+.shift-modal__body .modal-input {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.shift-modal__feedback {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.shift-modal__actions {
+  display: flex;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.shift-modal__confirm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+}
+
+.shift-modal__delete {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+  border-radius: 12px;
+  background: var(--danger-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shift-modal__delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 16 px on touch screens: below that, iOS Safari zooms the page when a field is focused (the modal appears to jump). */
+@media (pointer: coarse) {
+  .shift-modal__body .modal-input {
+    font-size: 16px;
+    min-height: 44px;
+  }
+}
+
 .modal-select-trigger {
   width: 100%;
   min-height: 44px;

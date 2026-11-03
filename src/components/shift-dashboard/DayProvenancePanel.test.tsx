@@ -64,6 +64,30 @@ describe('DayProvenancePanel (compact two-column layout pieces)', () => {
     await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-06-02', keepShiftIds: ['c'], reason: 'confirmado' }));
   });
 
+  it('F4-M03: sends the state token of the day it displayed along with the decision', async () => {
+    loadDayHistory.mockResolvedValue(history({ dayToken: 'tok-1' }));
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'confirmado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar decisión' }));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledWith({ employeeId: 'e1', date: '2026-06-02', keepShiftIds: ['c'], reason: 'confirmado', expectedDayToken: 'tok-1' }));
+  });
+
+  it('F4-M03: a day that changed (409 DAY_CHANGED) says so, reloads the fresh state and clears the stale selection', async () => {
+    const { ApiError } = await import('../../lib/session');
+    loadDayHistory.mockResolvedValueOnce(history({ dayToken: 'tok-1' })).mockResolvedValue(history({ dayToken: 'tok-2' }));
+    reconcile.mockRejectedValueOnce(new ApiError(409, 'The day changed', 'DAY_CHANGED'));
+    renderPanel();
+    await screen.findByTestId('day-history-pending');
+    fireEvent.click(screen.getAllByRole('checkbox')[0]);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'confirmado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar decisión' }));
+    expect((await screen.findAllByTestId('day-changed'))[0]).toHaveTextContent('El día cambió mientras tanto');
+    expect(loadDayHistory).toHaveBeenCalledTimes(2);
+    expect((screen.getAllByRole('checkbox')[0] as HTMLInputElement).checked).toBe(false);
+  });
+
   it('a non-reconciling role sees the pending notice but no decision controls', async () => {
     loadDayHistory.mockResolvedValue(history());
     renderPanel(false);

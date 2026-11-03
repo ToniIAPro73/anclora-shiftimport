@@ -103,6 +103,9 @@ export const ModalShell = ({
         ? event.target.closest('[role="dialog"], [role="alertdialog"]')
         : null;
       if (nestedDialog && nestedDialog !== contentRef.current) return;
+      // An open searchable-select menu (portal) handles its own Escape wherever focus is (search box, trigger, touch screens with no
+      // autofocus): it closes the menu, not the modal that hosts it.
+      if (event.key === 'Escape' && document.querySelector('.modal-select-menu')) return;
       if (event.key === 'Escape') {
         if (blockingRef.current || suppressEscapeRef.current) {
           return;
@@ -120,6 +123,14 @@ export const ModalShell = ({
       }
       const first = items[0];
       const last = items[items.length - 1];
+      // Focus parked on a non-tabbable element of the dialog (a result region focused by code) or lost to <body>: Tab re-enters the
+      // dialog instead of leaving it. Elements outside the shell (the select menu portal) keep their native Tab behaviour.
+      const active = document.activeElement;
+      if (!items.includes(active as HTMLElement) && (active === document.body || contentRef.current?.contains(active))) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();

@@ -13,3 +13,6 @@
   .weekly-planner__assignment span.weekly-planner__stale-short { display: inline !important; white-space: nowrap !important; color: inherit; font-size: inherit; }
 }
 .weekly-planner__stale > svg { flex: none; margin-top: 1px; }
+
+/* Light theme: the dark-theme warning tone is too pale on white. */
+:root[data-theme='light'] .weekly-planner__assignment span.weekly-planner__stale[data-testid] { color: #92400e; }

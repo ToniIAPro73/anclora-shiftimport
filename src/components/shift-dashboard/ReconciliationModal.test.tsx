@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { I18nProvider } from '../../lib/i18n-react';
 import type { ReconciliationItem, ReconciliationWorklist } from '../../lib/remote';
 import { ReconciliationModal } from './ReconciliationModal';
 import { pageWindow } from './reconciliation-paging';
+import * as remote from '../../lib/remote';
+
+vi.mock('../../lib/remote', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/remote')>()),
+  previewKeepCurrentRemote: vi.fn(),
+  applyKeepCurrentRemote: vi.fn(),
+}));
+const previewKeep = vi.mocked(remote.previewKeepCurrentRemote);
+const applyKeep = vi.mocked(remote.applyKeepCurrentRemote);
 
 afterEach(cleanup);
 beforeEach(() => window.localStorage?.setItem?.('anclora_shiftimport_locale_v1', 'es'));
@@ -182,5 +191,101 @@ describe('ReconciliationModal — presentation', () => {
     expect(why).toHaveTextContent('Conflicto con Vacaciones aprobadas (12/08–18/08)');
     expect(why).not.toHaveTextContent('Diferencia pendiente');
     expect(why.querySelector('svg')).toBeTruthy();
+  });
+});
+
+describe('ReconciliationModal — bulk «Mantener actual» (F4-M03 / OD-F4-04)', () => {
+  beforeEach(() => { previewKeep.mockReset(); applyKeep.mockReset(); });
+  const day = (date: string, over: Partial<remote.KeepCurrentPreviewDay> = {}): remote.KeepCurrentPreviewDay => ({
+    date, eligible: true, code: null, dayToken: `tok-${date}`, protectedAbsence: false,
+    keep: [{ type: 'Regular', startTime: '17:00', endTime: '01:00' }], drop: [{ type: 'Libre', startTime: null, endTime: null }], ...over,
+  });
+
+  it('offers no selection at all unless the user may resolve days', () => {
+    renderModal(worklist(2));
+    expect(screen.queryByTestId('recon-bulk-bar')).toBeNull();
+    expect(screen.queryByTestId('recon-select-2026-01-01')).toBeNull();
+  });
+
+  it('selects pending days only (never a resolved one) and the action stays disabled until something is selected', () => {
+    renderModal(worklist(2), { canKeepCurrent: true });
+    expect(screen.getByTestId('recon-keep-current')).toBeDisabled();
+    expect(screen.getByTestId('recon-select-2026-01-01')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('recon-tab-resolved'));
+    expect(screen.queryByTestId('recon-bulk-bar')).toBeNull();
+  });
+
+  it('PREVIEWS first (what stays, what is discarded), needs a common reason, applies with the preview tokens and shows each day\u2019s own result', async () => {
+    previewKeep.mockResolvedValue([day('2026-01-01'), day('2026-01-02', { eligible: false, code: 'NO_CURRENT_TO_KEEP', keep: [], drop: [] })]);
+    applyKeep.mockResolvedValue({ summary: { requested: 1, applied: 1, failed: 0 }, results: [{ date: '2026-01-01', ok: true }] });
+    const onResolved = vi.fn();
+    renderModal(worklist(2), { canKeepCurrent: true, onResolved });
+    fireEvent.click(screen.getByTestId('recon-select-all'));
+    fireEvent.click(screen.getByTestId('recon-keep-current'));
+    await screen.findByTestId('keep-current-days');
+    expect(previewKeep).toHaveBeenCalledWith('e1', ['2026-01-01', '2026-01-02']);
+    expect(applyKeep).not.toHaveBeenCalled();
+    expect(screen.getByTestId('keep-current-day-2026-01-01')).toHaveTextContent('Se mantiene');
+    expect(screen.getByTestId('keep-current-skip-2026-01-02')).toHaveTextContent('No hay turno actual que mantener');
+    expect(screen.getByTestId('keep-current-confirm')).toBeDisabled(); // no reason yet
+    fireEvent.change(screen.getByTestId('keep-current-reason'), { target: { value: 'Se conserva la planificación vigente' } });
+    fireEvent.click(screen.getByTestId('keep-current-confirm'));
+    await screen.findByTestId('keep-current-results');
+    expect(applyKeep).toHaveBeenCalledWith({ employeeId: 'e1', dates: ['2026-01-01'], reason: 'Se conserva la planificación vigente', dayTokens: { '2026-01-01': 'tok-2026-01-01' } });
+    expect(screen.getByTestId('keep-current-result-2026-01-01')).toHaveTextContent('Resuelto');
+    expect(onResolved).toHaveBeenCalledTimes(1);
+  });
+
+  it('PARTIAL: a day that changed since the preview says so and nothing is claimed as done for it', async () => {
+    previewKeep.mockResolvedValue([day('2026-01-01'), day('2026-01-02')]);
+    applyKeep.mockResolvedValue({ summary: { requested: 2, applied: 1, failed: 1 }, results: [{ date: '2026-01-01', ok: true }, { date: '2026-01-02', ok: false, status: 409, code: 'DAY_CHANGED' }] });
+    renderModal(worklist(2), { canKeepCurrent: true });
+    fireEvent.click(screen.getByTestId('recon-select-all'));
+    fireEvent.click(screen.getByTestId('recon-keep-current'));
+    await screen.findByTestId('keep-current-days');
+    fireEvent.change(screen.getByTestId('keep-current-reason'), { target: { value: 'ok' } });
+    fireEvent.click(screen.getByTestId('keep-current-confirm'));
+    await screen.findByTestId('keep-current-results');
+    expect(screen.getByTestId('keep-current-result-2026-01-02')).toHaveTextContent('El día cambió desde la vista previa: no se ha escrito nada');
+    expect(screen.getByTestId('keep-current-result-2026-01-01')).toHaveTextContent('Resuelto');
+  });
+
+  it('a protected approved vacation is flagged as kept before confirming', async () => {
+    previewKeep.mockResolvedValue([day('2026-01-01', { protectedAbsence: true, keep: [{ type: 'Vacaciones', startTime: null, endTime: null }] })]);
+    renderModal(worklist(1), { canKeepCurrent: true });
+    fireEvent.click(screen.getByTestId('recon-select-2026-01-01'));
+    fireEvent.click(screen.getByTestId('recon-keep-current'));
+    expect(await screen.findByTestId('keep-current-day-2026-01-01')).toHaveTextContent('Vacaciones aprobadas: se conservan');
+  });
+
+  it('a validation failure (422) of one day is explained in plain words, and the results list is valid markup (status on a wrapper, not on the list)', async () => {
+    previewKeep.mockResolvedValue([day('2026-01-01')]);
+    applyKeep.mockResolvedValue({ summary: { requested: 1, applied: 0, failed: 1 }, results: [{ date: '2026-01-01', ok: false, status: 422, code: 'FULL_DAY_WITH_WORK' }] });
+    renderModal(worklist(1), { canKeepCurrent: true });
+    fireEvent.click(screen.getByTestId('recon-select-2026-01-01'));
+    fireEvent.click(screen.getByTestId('recon-keep-current'));
+    await screen.findByTestId('keep-current-days');
+    fireEvent.change(screen.getByTestId('keep-current-reason'), { target: { value: 'ok' } });
+    fireEvent.click(screen.getByTestId('keep-current-confirm'));
+    const results = await screen.findByTestId('keep-current-results');
+    expect(results).toHaveAttribute('role', 'status');
+    expect(results.querySelector('ul')).not.toHaveAttribute('role');
+    expect(screen.getByTestId('keep-current-result-2026-01-01')).toHaveTextContent('ya es incoherente');
+  });
+
+  it('caps the selection at 50 days', () => {
+    renderModal(worklist(60, false), { canKeepCurrent: true });
+    fireEvent.click(screen.getByTestId('recon-select-all'));
+    expect(screen.getByTestId('recon-keep-current')).toHaveTextContent('Mantener actual (50)');
+    expect(screen.getByTestId('recon-bulk-bar')).toHaveTextContent('Máximo 50 días por operación');
+  });
+
+  it('a failed preview says nothing was changed and offers no confirmation', async () => {
+    previewKeep.mockRejectedValue(new Error('network'));
+    renderModal(worklist(1), { canKeepCurrent: true });
+    fireEvent.click(screen.getByTestId('recon-select-2026-01-01'));
+    fireEvent.click(screen.getByTestId('recon-keep-current'));
+    expect(await screen.findByTestId('keep-current-error')).toHaveTextContent('No se ha cambiado nada');
+    await waitFor(() => expect(screen.queryByTestId('keep-current-confirm')).toBeDisabled());
   });
 });

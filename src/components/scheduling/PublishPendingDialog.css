@@ -1,0 +1,18 @@
+/* Publish pending weeks: every state is text + icon (never colour alone); long names wrap instead of widening the modal. */
+.publish-pending { display: grid; gap: 12px; font-size: 0.9rem; }
+.publish-pending h3 { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 0.92rem; }
+.publish-pending__note { margin: 0; font-size: 0.8rem; color: var(--text-muted); }
+.publish-pending__state { display: flex; align-items: center; gap: 8px; margin: 0; }
+.publish-pending__error { margin: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid color-mix(in srgb, var(--danger, #f87171) 50%, transparent); }
+.publish-pending__all { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.publish-pending input[type='checkbox'] { width: 18px; height: 18px; flex: none; accent-color: var(--color-accent, #34d399); }
+.publish-pending__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+.publish-pending__list li { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border: 1px solid var(--glass-border); border-radius: 9px; overflow-wrap: anywhere; }
+.publish-pending__list li > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.publish-pending__list li > svg { flex: none; margin-top: 3px; }
+.publish-pending__list li[data-eligible='false'] { opacity: 0.92; }
+.publish-pending__status { font-size: 0.74rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); }
+.publish-pending__problem { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; }
+:root:not([data-theme='light']) .publish-pending__problem { color: var(--warning, #f59e0b); }
+:root[data-theme='light'] .publish-pending__problem { color: #92400e; }
+.publish-pending__list:focus-visible { outline: 2px solid var(--color-accent, #34d399); outline-offset: 2px; }

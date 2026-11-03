@@ -47,6 +47,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, canOverride
   const [saving, setSaving] = useState(false);
   const [reconcileError, setReconcileError] = useState(false);
   const [overrideForbidden, setOverrideForbidden] = useState(false);
+  const [dayChanged, setDayChanged] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -79,15 +80,21 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, canOverride
     setSaving(true);
     setReconcileError(false);
     setOverrideForbidden(false);
+    setDayChanged(false);
     try {
-      await reconcileCalendarDayRemote({ employeeId, date, keepShiftIds: ids, reason });
+      await reconcileCalendarDayRemote({ employeeId, date, keepShiftIds: ids, reason, expectedDayToken: history.dayToken });
       setKeepIds([]);
       setReason('');
       await load();
       onChanged?.();
     } catch (error) {
       if (error instanceof ApiError && error.code === 'PROTECTED_ABSENCE_OVERRIDE_FORBIDDEN') setOverrideForbidden(true);
-      else setReconcileError(true);
+      else if (error instanceof ApiError && error.code === 'DAY_CHANGED') {
+        // The day moved under the decision: drop it, reload the fresh state and let the user decide again.
+        setDayChanged(true);
+        setKeepIds([]);
+        await load();
+      } else setReconcileError(true);
     } finally {
       setSaving(false);
     }
@@ -208,6 +215,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, canOverride
               <p>{t('dayHistory.vacationConflict.forbiddenAction')}</p>
             </div>
           )}
+          {dayChanged && <p role="alert" data-testid="day-changed">{t('dayHistory.dayChanged')}</p>}
           {reconcileError && <p role="alert">{t('dayHistory.reconcileError')}</p>}
         </div>
       )}
@@ -238,6 +246,7 @@ export function DayProvenancePanel({ employeeId, date, canReconcile, canOverride
                 <span>{t('dayHistory.reconcileReason')}</span>
                 <textarea value={reason} maxLength={2000} rows={2} onChange={(event) => setReason(event.target.value)} />
               </label>
+              {dayChanged && <p role="alert" data-testid="day-changed">{t('dayHistory.dayChanged')}</p>}
               {reconcileError && <p role="alert">{t('dayHistory.reconcileError')}</p>}
               <button type="button" className="eff-button eff-button--primary day-history__cta" disabled={saving || !reason.trim()} onClick={() => void submitReconcile()}>
                 {saving ? t('dayHistory.reconciling') : t('dayHistory.reconcile')}

@@ -30,6 +30,9 @@ import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssig
 import { ScheduleVersionHistory } from './ScheduleVersionHistory';
 import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
 import { formatEmployeeProfileLabel } from '../../lib/personas';
+import { plannerCounts } from '../../lib/planner-counts';
+import { CopyWeekDialog } from './CopyWeekDialog';
+import { PublishPendingDialog } from './PublishPendingDialog';
 
 interface WeeklyPlannerProps {
   areaId?: string | null;
@@ -125,6 +128,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublishOpen, setIsPublishOpen] = useState(false);
+  const [isCopyWeekOpen, setIsCopyWeekOpen] = useState(false);
+  const [isPublishPendingOpen, setIsPublishPendingOpen] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -174,6 +179,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     }
     return byCell;
   }, [snapshot]);
+  const counts = plannerCounts(snapshot?.version.status ?? 'DRAFT', snapshot?.assignments ?? []);
   const editable = canEdit && snapshot?.version.status === 'DRAFT' && !isViewingHistoricalVersion;
   const previousWeekDisabled = addDays(periodStart, -1) < today;
 
@@ -545,7 +551,17 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
               <span className={`weekly-planner__status weekly-planner__status--${snapshot.version.status.toLowerCase()}`}>
                 {snapshot.version.status === 'DRAFT' ? t('planner.statusDraft') : t('planner.statusReadOnly')}
               </span>
-              <span className="weekly-planner__meta">{t(snapshot.assignments.length === 1 ? 'planner.assignmentCountOne' : 'planner.assignmentCount', { count: snapshot.assignments.length })}</span>
+              <span className="weekly-planner__meta" data-testid="planner-count">
+                {counts.mode === 'draft'
+                  ? [
+                    t(counts.planned === 1 ? 'planner.countPlannedOne' : 'planner.countPlanned', { count: counts.planned }),
+                    counts.stale > 0 ? t(counts.stale === 1 ? 'planner.countStaleOne' : 'planner.countStale', { count: counts.stale }) : null,
+                  ].filter(Boolean).join(' · ')
+                  : [
+                    t(counts.published === 1 ? 'planner.countPublishedOne' : 'planner.countPublished', { count: counts.published }),
+                    counts.excluded > 0 ? t(counts.excluded === 1 ? 'planner.countExcludedOne' : 'planner.countExcluded', { count: counts.excluded }) : null,
+                  ].filter(Boolean).join(' · ')}
+              </span>
             </div>
             <div className="weekly-planner__employee-filter">
               <SearchableSelect
@@ -627,6 +643,8 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
               {snapshot.version.status === 'PUBLISHED' && <button type="button" className="btn-outline" onClick={() => void handleCreateNewVersion()} disabled={isCreatingVersion}>
                 {isCreatingVersion ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isCreatingVersion ? t('planner.creatingNewVersion') : t('planner.createNewVersion')}
               </button>}
+              {canEdit && <button type="button" className="btn-outline" onClick={() => setIsPublishPendingOpen(true)} data-testid="publish-pending-open">{t('planner.publishPending.open')}</button>}
+              {editable && <button type="button" className="btn-outline" onClick={() => setIsCopyWeekOpen(true)} data-testid="copy-week-open">{t('planner.copyWeek.open')}</button>}
               {editable && <button type="button" className="btn-gold" onClick={() => { setPublishError(null); setIsPublishOpen(true); }} disabled={isPublishing || snapshot.assignments.length === 0}>
                 {isPublishing ? <Loader2 className="icon-spin" size={16} aria-hidden="true" /> : null} {isPublishing ? t('planner.publishing') : t('planner.publish')}
               </button>}
@@ -705,6 +723,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                     );
                                     const hasTimes = Boolean(assignment.startTime && assignment.endTime);
                                     const isAssignmentSelected = editor?.id === assignment.id;
+                                    const flagged = Boolean(assignment.staleAgainstCalendar || assignment.excludedFromPublication);
 
                                     return (
                                       <button
@@ -717,16 +736,16 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                                         onClick={() => { if (editable && day >= today) handleEdit(employee.id, day, assignment); }}
                                         disabled={!editable || day < today}
                                         data-editor-target={`${employee.id}:${day}`}
-                                        data-stale={assignment.staleAgainstCalendar || undefined}
-                                        title={assignment.staleAgainstCalendar ? t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignmentHint' : 'planner.excludedAssignmentHint') : (editable ? t('planner.editAssignment') : t('planner.locked'))}
+                                        data-stale={flagged || undefined}
+                                        title={flagged ? t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignmentHint' : assignment.staleAgainstCalendar ? 'planner.excludedAssignmentHint' : 'planner.excludedAssignmentGenericHint') : (editable ? t('planner.editAssignment') : t('planner.locked'))}
                                       >
                                         {hasTimes && <span className="weekly-planner__assignment-type">{displayType}</span>}
                                         <strong>{hasTimes
                                           ? `${assignment.startTime!.slice(0, 5)}–${assignment.endTime!.slice(0, 5)}`
                                           : displayType}</strong>
                                         {assignment.location && <span>{assignment.location}</span>}
-                                        {assignment.staleAgainstCalendar && (
-                                          <span className="weekly-planner__stale" data-testid="planner-stale-assignment"><AlertTriangle size={11} aria-hidden="true" /><span className="weekly-planner__stale-full">{t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignment' : 'planner.excludedAssignment')}</span><span className="weekly-planner__stale-short" aria-hidden="true">{t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignmentShort' : 'planner.excludedAssignmentShort')}</span></span>
+                                        {flagged && (
+                                          <span className="weekly-planner__stale" data-testid="planner-stale-assignment"><AlertTriangle size={11} aria-hidden="true" /><span className="weekly-planner__stale-full">{t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignment' : assignment.staleAgainstCalendar ? 'planner.excludedAssignment' : 'planner.excludedAssignmentGeneric')}</span><span className="weekly-planner__stale-short" aria-hidden="true">{t(snapshot?.version.status === 'DRAFT' ? 'planner.staleAssignmentShort' : 'planner.excludedAssignmentShort')}</span></span>
                                         )}
                                       </button>
                                     );
@@ -807,6 +826,26 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
           minimumDate={today}
         />}
       </ModalShell>}
+
+      {canEdit && (
+        <PublishPendingDialog
+          isOpen={isPublishPendingOpen}
+          areaId={areaId}
+          onClose={() => setIsPublishPendingOpen(false)}
+          onPublished={() => { void refresh(); }}
+        />
+      )}
+
+      {snapshot && editable && (
+        <CopyWeekDialog
+          isOpen={isCopyWeekOpen}
+          scheduleId={snapshot.version.scheduleId}
+          versionId={snapshot.version.id}
+          periodStart={snapshot.version.periodStart}
+          onClose={() => setIsCopyWeekOpen(false)}
+          onCopied={() => { void refresh(); }}
+        />
+      )}
 
       {snapshot && editable && (
         <ModalShell
