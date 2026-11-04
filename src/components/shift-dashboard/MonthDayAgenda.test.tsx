@@ -128,7 +128,7 @@ describe('compact month (≤640px) — F1-M03', () => {
     expect(within(agenda).getAllByRole('button')).toHaveLength(1);
   });
 
-  it('a day with only a comment and a DCF (no shifts) still offers them, plus the detail', () => {
+  it('a day with only a comment and a DCF (no shifts) still offers them, without a duplicate "Ver detalle"', () => {
     const annotation = (id: string, kind: 'DCF' | 'COMMENT'): DayAnnotation => ({ id, employeeId: 'e1', date: '2026-08-12', kind, text: kind === 'COMMENT' ? 'nota' : null, startTime: null, endTime: null, completeness: null, origin: 'MANUAL', sourceKind: null });
     renderGrid(true, { annotations: [annotation('1', 'COMMENT'), annotation('2', 'DCF')] });
     fireEvent.click(screen.getByTestId('month-day-select-2026-08-12'));
@@ -137,9 +137,18 @@ describe('compact month (≤640px) — F1-M03', () => {
     expect(within(agenda).getByTestId('month-day-agenda-comments')).toBeInTheDocument();
     expect(within(agenda).queryByTestId('month-day-agenda-warnings')).toBeNull();
     expect(within(agenda).queryByTestId('month-day-agenda-history')).toBeNull();
-    expect(within(agenda).getByTestId('month-day-agenda-detail')).toBeInTheDocument();
+    // the accesses already open the day detail: a separate "Ver detalle" would be a duplicate
+    expect(within(agenda).queryByTestId('month-day-agenda-detail')).toBeNull();
     // annotations never appear inside the grid cell
     expect(screen.getByTestId('month-day-select-2026-08-12')).toHaveTextContent(/^12$/);
+  });
+
+  it('"Ver detalle" appears only when no warning/DCF/comment/history access already opens the day detail', () => {
+    renderGrid(true);
+    fireEvent.click(screen.getByTestId('month-day-select-2026-08-03')); // two shifts, nothing else
+    const agenda = screen.getByTestId('month-day-agenda');
+    expect(within(agenda).getByTestId('month-day-agenda-detail')).toBeInTheDocument();
+    expect(agenda.querySelector('.month-day-agenda__pills')).toBeNull();
   });
 
   it('an employee cannot add a future shift: the button is disabled and the reason is visible', () => {

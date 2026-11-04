@@ -56,6 +56,7 @@ export const MonthDayAgenda = ({ date, shifts, extras, addDisabled, addBlockedRe
   const hidden = Math.max(0, shifts.length - AGENDA_VISIBLE_ROWS);
   const rows = expanded ? shifts : shifts.slice(0, AGENDA_VISIBLE_ROWS);
   const hasExtras = extras.warnings > 0 || extras.dcf > 0 || extras.comments > 0 || extras.changed;
+  // "See details" is the way into the day detail; when warnings/DCF/comments/history are shown they already open it, so it would be a duplicate.
   const hasDetail = shifts.length > 0 || hasExtras || extras.pendingVacation;
   const countLabel = shifts.length === 1 ? t('calendar.agendaCountOne') : t('calendar.agendaCountMany', { count: shifts.length });
 
@@ -148,7 +149,7 @@ export const MonthDayAgenda = ({ date, shifts, extras, addDisabled, addBlockedRe
           <Plus size={18} strokeWidth={2.4} aria-hidden="true" />
           {t('calendar.agendaAdd')}
         </button>
-        {hasDetail && (
+        {hasDetail && pills.length === 0 && (
           <button type="button" className="month-day-agenda__detail" onClick={onOpenDetail} data-testid="month-day-agenda-detail">
             {t('calendar.agendaDetail')}
           </button>

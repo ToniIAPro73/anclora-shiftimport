@@ -280,6 +280,11 @@
   .app-shell__user-trigger { transition: none; }
 }
 
+/* The TopBar creates its own stacking context (backdrop-filter) at z-index:auto, so the account menu (z-index:1000 INSIDE it) was painted
+   under later page content (the month navigator arrow and the employee select showed through it). While the menu is open the bar rises above
+   the content; it is not raised permanently so the mobile drawer is unaffected. */
+.app-shell__topbar:has(.app-shell__user-menu) { position: relative; z-index: 60; }
+
 /* OD-06 — compact TopBar (≤640px): the whole context (organization, role, employee, area) moves to the account menu, so no information
    is lost and the authorization context is unchanged. The organization used to stay on the main line, but it never fits there beside
    the account controls (it was cut to "ORGANI… / ShiftImp…"). >640px is untouched. */
@@ -287,6 +292,8 @@
 
 @media (max-width: 640px) {
   .app-shell__context-topbar { display: none; }
+  /* The month already appears in the month navigator right below: the big title would only repeat it (kept for screen readers). */
+  .calendar-toolbar__title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .app-shell__user-menu-context { display: grid; gap: 8px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border-soft); }
   .app-shell__user-menu-context .app-shell__context-summary-item { display: grid; }
   .app-shell__user-menu-context .app-shell__context-summary-item strong { max-width: 240px; }
