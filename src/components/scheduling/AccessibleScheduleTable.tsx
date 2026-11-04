@@ -1,4 +1,4 @@
-import { FormEvent } from 'react';
+import { FormEvent, useRef } from 'react';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { Locale, translateShiftTypeLabel } from '../../lib/i18n';
 import { formatEmployeeProfileLabel } from '../../lib/personas';
@@ -7,6 +7,8 @@ import { useI18n } from '../../lib/use-i18n';
 import { getAssignmentShiftType } from '../../lib/shifts';
 import { getShiftTypeDefinition } from '../../lib/shift-types';
 import { AssignmentEditorState, ScheduleAssignmentEditor } from './ScheduleAssignmentEditor';
+import { ScrollHintButtons } from './ScrollHints';
+import { useVerticalScrollHints } from './use-vertical-scroll-hints';
 
 interface AccessibleScheduleTableProps {
   days: string[];
@@ -60,6 +62,8 @@ export function AccessibleScheduleTable({
   onDelete,
 }: AccessibleScheduleTableProps) {
   const { t } = useI18n();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const hints = useVerticalScrollHints(wrapRef, [snapshot, assignmentsByCell]);
   const today = minimumDate ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
 
   return (
@@ -67,7 +71,8 @@ export function AccessibleScheduleTable({
       <div className="weekly-planner__overflow-hint" aria-hidden="true" data-testid="table-overflow-hint">
         <span>{t('planner.scrollHint')}</span>
       </div>
-      <div className="weekly-planner__table-wrap" role="region" aria-label={t('planner.tableLabel')} tabIndex={0}>
+      <div className="scroll-hint-frame" data-has-down={hints.down || undefined}>
+      <div ref={wrapRef} className="weekly-planner__table-wrap" role="region" aria-label={t('planner.tableLabel')} tabIndex={0}>
         <table className="weekly-planner__table">
           <caption className="sr-only">{t('planner.tableCaption')}</caption>
           <thead>
@@ -150,6 +155,8 @@ export function AccessibleScheduleTable({
             }))}
           </tbody>
         </table>
+      </div>
+      <ScrollHintButtons canUp={hints.up} canDown={hints.down} onScroll={hints.scrollBy} />
       </div>
       {showEditor && editor && (
         <ScheduleAssignmentEditor

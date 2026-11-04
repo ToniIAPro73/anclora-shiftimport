@@ -1,0 +1,33 @@
+/* Frame around a scrolling planner region: it only positions the floating buttons; the scroller keeps its own rules. */
+.scroll-hint-frame {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scroll-hint-frame > .weekly-planner__grid-wrap,
+.scroll-hint-frame > .weekly-planner__table-wrap { flex: 1 1 auto; min-height: 0; min-width: 0; max-width: 100%; }
+
+.scroll-hint {
+  position: absolute;
+  right: 16px;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--text-on-accent);
+  background: var(--color-accent);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 4px 14px rgba(4, 10, 34, 0.35);
+  transform: none;
+}
+
+.scroll-hint--down { bottom: 14px; }
+.scroll-hint--up { top: 58px; }
+.scroll-hint:focus-visible { outline: 2px solid var(--focus-ring, var(--color-accent)); outline-offset: 2px; }
+.scroll-hint-frame[data-has-down]::after { content: ''; position: absolute; right: 1px; bottom: 1px; left: 1px; height: 36px; pointer-events: none; background: linear-gradient(0deg, color-mix(in srgb, var(--color-bg-base) 80%, transparent), transparent); border-radius: 0 0 15px 15px; }

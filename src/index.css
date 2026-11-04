@@ -4504,6 +4504,7 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='Regular'],
 .month-dot[data-shift-type='Regular'],
+.planner-m-chip[data-shift-type='Regular'],
 .shift-card[data-shift-type='Regular'],
 .weekly-planner__assignment[data-shift-type='Regular'],
 .day-detail-item[data-shift-type='Regular'] {
@@ -4514,8 +4515,10 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='JT'],
 .month-dot[data-shift-type='JT'],
+.planner-m-chip[data-shift-type='JT'],
 .month-shift-badge[data-shift-type='Jefe de turno'],
 .month-dot[data-shift-type='Jefe de turno'],
+.planner-m-chip[data-shift-type='Jefe de turno'],
 .shift-card[data-shift-type='JT'],
 .shift-card[data-shift-type='Jefe de turno'],
 .weekly-planner__assignment[data-shift-type='JT'],
@@ -4529,8 +4532,10 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='Ausencia'],
 .month-dot[data-shift-type='Ausencia'],
+.planner-m-chip[data-shift-type='Ausencia'],
 .month-shift-badge[data-shift-type='Ausencias'],
 .month-dot[data-shift-type='Ausencias'],
+.planner-m-chip[data-shift-type='Ausencias'],
 .shift-card[data-shift-type='Ausencia'],
 .shift-card[data-shift-type='Ausencias'],
 .weekly-planner__assignment[data-shift-type='Ausencia'],
@@ -4544,6 +4549,7 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='Libre'],
 .month-dot[data-shift-type='Libre'],
+.planner-m-chip[data-shift-type='Libre'],
 .shift-card[data-shift-type='Libre'],
 .weekly-planner__assignment[data-shift-type='Libre'],
 .day-detail-item[data-shift-type='Libre'] {
@@ -4554,6 +4560,7 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='Vacaciones'],
 .month-dot[data-shift-type='Vacaciones'],
+.planner-m-chip[data-shift-type='Vacaciones'],
 .shift-card[data-shift-type='Vacaciones'],
 .weekly-planner__assignment[data-shift-type='Vacaciones'],
 .day-detail-item[data-shift-type='Vacaciones'] {
@@ -4564,6 +4571,7 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='Extras'],
 .month-dot[data-shift-type='Extras'],
+.planner-m-chip[data-shift-type='Extras'],
 .shift-card[data-shift-type='Extras'],
 .weekly-planner__assignment[data-shift-type='Extras'],
 .day-detail-item[data-shift-type='Extras'] {
@@ -4574,6 +4582,7 @@ button[aria-busy='true'] {
 
 .month-shift-badge[data-shift-type='Baja'],
 .month-dot[data-shift-type='Baja'],
+.planner-m-chip[data-shift-type='Baja'],
 .shift-card[data-shift-type='Baja'],
 .weekly-planner__assignment[data-shift-type='Baja'],
 .day-detail-item[data-shift-type='Baja'] {

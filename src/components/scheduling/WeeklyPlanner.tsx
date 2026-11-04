@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './StaleAssignment.css';
-import { AlertTriangle, CalendarRange, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Lock, Plus, Table2, X } from 'lucide-react';
+import { AlertTriangle, Ban, CalendarRange, Check, ChevronLeft, ChevronRight, LayoutGrid, Loader2, Lock, Pencil, Plus, Table2, X } from 'lucide-react';
 import { ApiError } from '../../lib/session';
 import {
   createRemoteAssignment,
@@ -17,6 +17,7 @@ import {
   updateRemoteAssignment,
 } from '../../lib/remote';
 import { useI18n } from '../../lib/use-i18n';
+import { useMediaQuery } from '../../lib/use-media-query';
 import { getOperationalDate } from '../../lib/operational-date';
 import { getPlannerWeekStartPreference, PLANNER_WEEK_START_PREFERENCE_KEY } from '../../lib/week';
 import { getShiftTypeDefinition, getShiftTypeSemantics, shiftTypeCountsAsWork } from '../../lib/shift-types';
@@ -33,6 +34,19 @@ import { formatEmployeeProfileLabel } from '../../lib/personas';
 import { plannerCounts } from '../../lib/planner-counts';
 import { CopyWeekDialog } from './CopyWeekDialog';
 import { PublishPendingDialog } from './PublishPendingDialog';
+import { ScrollHintButtons } from './ScrollHints';
+import { useVerticalScrollHints } from './use-vertical-scroll-hints';
+import {
+  PlannerAgenda,
+  PlannerCellSheet,
+  PlannerDetailSheet,
+  PlannerManageAction,
+  PlannerManageSheet,
+  PlannerMatrix,
+  PlannerMobileBar,
+  PlannerMobileView,
+} from './PlannerMobile';
+import type { PlannerDayRow } from './planner-mobile-model';
 
 interface WeeklyPlannerProps {
   areaId?: string | null;
@@ -46,6 +60,8 @@ interface WeeklyPlannerProps {
 }
 
 const VIEW_PREFERENCE_KEY = 'anclora_shiftimport_planner_view_v1';
+// Phones have their own preference (Agenda by default) so choosing a view there never rewrites the desktop one.
+const MOBILE_VIEW_PREFERENCE_KEY = 'anclora_shiftimport_planner_view_mobile_v1';
 type PlannerView = 'grid' | 'table';
 type WeekStart = 'monday' | 'sunday';
 
@@ -111,6 +127,7 @@ function errorCopy(error: unknown, t: (key: string) => string): string {
 export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false, initialDate, initialPeriodStart, modalHeader = false, onClose }: WeeklyPlannerProps) {
   const { locale, t } = useI18n();
   const today = getOperationalDate();
+  const isCompact = useMediaQuery('(max-width: 640px)');
   const [weekStart, setWeekStart] = useState<WeekStart>(getPlannerWeekStartPreference);
   const [periodStart, setPeriodStart] = useState(() => {
     const preference = getPlannerWeekStartPreference();
@@ -141,7 +158,21 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
   const [editor, setEditor] = useState<AssignmentEditorState | null>(null);
   const [employeeFilter, setEmployeeFilter] = useState('all');
   const [selectedCell, setSelectedCell] = useState<{ employeeId: string; date: string } | null>(null);
-  const [activeDay, setActiveDay] = useState(initialDate ?? periodStart);
+  const [activeDay, setActiveDay] = useState(() => {
+    if (initialDate) return initialDate;
+    // On phones the agenda opens on today when it belongs to the visible week; the desktop grid keeps focusing the first day.
+    return isCompact && today >= periodStart && today <= addDays(periodStart, 6) ? today : periodStart;
+  });
+  const [mobileView, setMobileView] = useState<PlannerMobileView>(() => {
+    try {
+      return window.localStorage.getItem(MOBILE_VIEW_PREFERENCE_KEY) === 'matrix' ? 'matrix' : 'agenda';
+    } catch {
+      return 'agenda';
+    }
+  });
+  const [isManageOpen, setIsManageOpen] = useState(false);
+  const [detailRow, setDetailRow] = useState<PlannerDayRow | null>(null);
+  const [cellTarget, setCellTarget] = useState<{ employee: ScheduleSnapshot['employees'][number]; day: string; rows: PlannerDayRow[] } | null>(null);
   const [editorFocusKey, setEditorFocusKey] = useState(0);
   const [mobileEditorOpen, setMobileEditorOpen] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
@@ -155,6 +186,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
   });
   const requestId = useRef(0);
   const gridWrapRef = useRef<HTMLDivElement>(null);
+  const gridHints = useVerticalScrollHints(gridWrapRef, [snapshot, employeeFilter, view, isCompact]);
   const focusReturnKey = useRef<string | null>(null);
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(periodStart, index)), [periodStart]);
@@ -273,6 +305,14 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
       // Presentation preference is best-effort when storage is unavailable.
     }
   }, [view]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(MOBILE_VIEW_PREFERENCE_KEY, mobileView);
+    } catch {
+      // Presentation preference is best-effort when storage is unavailable.
+    }
+  }, [mobileView]);
 
   useEffect(() => {
     try {
@@ -493,8 +533,76 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     }
   };
 
+  const openPlannerRow = (row: PlannerDayRow) => {
+    setCellTarget(null);
+    // Same rule as the desktop grid: only an editable draft on a non-past day opens the editor; anything else is a read-only look.
+    if (row.assignment && editable && row.day >= today) handleEdit(row.employee.id, row.day, row.assignment);
+    else if (row.assignment) setDetailRow(row);
+  };
+
+  const addFromAgenda = (day: string, employeeId?: string) => {
+    const target = employeeId ?? (employeeFilter !== 'all' ? employeeFilter : visibleEmployees[0]?.id);
+    if (!target) return;
+    setCellTarget(null);
+    handleAdd(target, day);
+  };
+
+  const openMatrixCell = (employee: ScheduleSnapshot['employees'][number], day: string, rows: PlannerDayRow[]) => {
+    const planned = rows.filter((row) => row.assignment);
+    if (rows.length === 0) addFromAgenda(day, employee.id);
+    else if (rows.length === 1 && planned.length === 1) openPlannerRow(planned[0]);
+    else setCellTarget({ employee, day, rows });
+  };
+
+  const employeeSelect = (
+    <SearchableSelect
+      label={t('planner.employeeFilter')}
+      value={employeeFilter}
+      options={employeeOptions}
+      onChange={handleEmployeeFilterChange}
+      searchPlaceholder={t('planner.employeeSearchPlaceholder')}
+      emptyMessage={t('planner.employeeSearchEmpty')}
+      ariaLabel={t('planner.employeeFilter')}
+      disabled={!snapshot || snapshot.employees.length === 0}
+    />
+  );
+  const weekStartSelect = (
+    <SearchableSelect
+      label={t('planner.weekStartLabel')}
+      value={weekStart}
+      options={[
+        { value: 'monday', label: t('planner.weekStartMonday') },
+        { value: 'sunday', label: t('planner.weekStartSunday') },
+      ]}
+      onChange={handleWeekStartChange}
+      ariaLabel={t('planner.weekStartLabel')}
+    />
+  );
+
+  const closeManageThen = (action: () => void) => () => { setIsManageOpen(false); action(); };
+  // Exactly the actions the desktop toolbar offers, under the same conditions: nothing here is a new capability.
+  const manageActions: PlannerManageAction[] = snapshot ? [
+    { id: 'history', icon: 'history', label: t('planner.versionHistory'), hint: t('planner.mobile.historyHint'), onSelect: closeManageThen(() => void handleOpenHistory()) },
+    ...(isViewingHistoricalVersion ? [{ id: 'back', icon: 'back' as const, label: t('planner.backToCurrent'), hint: t('planner.mobile.backToCurrentHint'), onSelect: closeManageThen(() => void refresh()) }] : []),
+    ...(snapshot.version.status === 'PUBLISHED' ? [{ id: 'version', icon: 'version' as const, label: isCreatingVersion ? t('planner.creatingNewVersion') : t('planner.createNewVersion'), hint: t('planner.mobile.createVersionHint'), disabled: isCreatingVersion, onSelect: closeManageThen(() => void handleCreateNewVersion()) }] : []),
+    ...(canEdit ? [{ id: 'pending', icon: 'pending' as const, label: t('planner.publishPending.open'), hint: t('planner.mobile.publishPendingHint'), onSelect: closeManageThen(() => setIsPublishPendingOpen(true)) }] : []),
+    ...(editable ? [
+      { id: 'copy', icon: 'copy' as const, label: t('planner.copyWeek.open'), hint: t('planner.mobile.copyWeekHint'), onSelect: closeManageThen(() => setIsCopyWeekOpen(true)) },
+      { id: 'publish', icon: 'publish' as const, label: isPublishing ? t('planner.publishing') : t('planner.publish'), hint: t('planner.mobile.publishHint'), disabled: isPublishing || snapshot.assignments.length === 0, onSelect: closeManageThen(() => { setPublishError(null); setIsPublishOpen(true); }) },
+    ] : []),
+  ] : [];
+  const statusChips = counts.mode === 'draft'
+    ? [
+      { id: 'planned', icon: <Pencil size={14} aria-hidden="true" />, label: t(counts.planned === 1 ? 'planner.countPlannedOne' : 'planner.countPlanned', { count: counts.planned }) },
+      ...(counts.stale > 0 ? [{ id: 'stale', icon: <AlertTriangle size={14} aria-hidden="true" />, label: t(counts.stale === 1 ? 'planner.countStaleOne' : 'planner.countStale', { count: counts.stale }) }] : []),
+    ]
+    : [
+      { id: 'published', icon: <Check size={14} aria-hidden="true" />, label: t(counts.published === 1 ? 'planner.countPublishedOne' : 'planner.countPublished', { count: counts.published }) },
+      ...(counts.excluded > 0 ? [{ id: 'excluded', icon: <Ban size={14} aria-hidden="true" />, label: t(counts.excluded === 1 ? 'planner.countExcludedOne' : 'planner.countExcluded', { count: counts.excluded }) }] : []),
+    ];
+
   return (
-    <div className={`weekly-planner${embedded ? ' weekly-planner--embedded' : ''}`} data-testid="weekly-planner" data-state={isLoading ? 'loading' : error ? 'error' : snapshot && !editable ? 'disabled' : snapshot ? 'ready' : 'empty'}>
+    <div className={`weekly-planner${embedded ? ' weekly-planner--embedded' : ''}`} data-compact={isCompact || undefined} data-testid="weekly-planner" data-state={isLoading ? 'loading' : error ? 'error' : snapshot && !editable ? 'disabled' : snapshot ? 'ready' : 'empty'}>
       <header className="weekly-planner__header">
         <div className="weekly-planner__heading">
           {!embedded && onBack && <button type="button" className="weekly-planner__back" onClick={onBack}>
@@ -546,6 +654,19 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
 
       {!isLoading && !error && snapshot && (
         <>
+          {isCompact ? (
+            <PlannerMobileBar
+              versionStatus={snapshot.version.status}
+              readOnly={!editable}
+              statusChips={statusChips}
+              employeeFilter={employeeSelect}
+              weekStartFilter={weekStartSelect}
+              view={mobileView}
+              onViewChange={setMobileView}
+              onManage={() => setIsManageOpen(true)}
+              manageOpen={isManageOpen}
+            />
+          ) : (
           <div className="weekly-planner__toolbar">
             <div className="weekly-planner__toolbar-summary">
               <span className={`weekly-planner__status weekly-planner__status--${snapshot.version.status.toLowerCase()}`}>
@@ -650,12 +771,49 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
               </button>}
             </div>
           </div>
+          )}
+          {isCompact && operationError && !editor && <p className="weekly-planner__editor-error" role="alert">{operationError}</p>}
 
           {snapshot.employees.length === 0 ? (
             <div className="weekly-planner__state weekly-planner__state--empty">
               <h2>{t('planner.noEmployeesTitle')}</h2>
               <p>{t('planner.noEmployeesDescription')}</p>
             </div>
+          ) : isCompact ? (
+            visibleEmployees.length === 0 ? (
+              <div className="weekly-planner__state weekly-planner__state--empty">
+                <h2>{t('planner.employeeFilterEmptyTitle')}</h2>
+                <p>{t('planner.employeeFilterEmptyDescription')}</p>
+              </div>
+            ) : mobileView === 'agenda' ? (
+              <PlannerAgenda
+                days={days}
+                activeDay={activeDay}
+                today={today}
+                locale={locale}
+                versionStatus={snapshot.version.status}
+                employees={visibleEmployees}
+                allEmployees={employeeFilter === 'all'}
+                assignmentsByCell={assignmentsByCell}
+                calendarShiftsByCell={calendarShiftsByCell}
+                canAdd={Boolean(editable)}
+                onSelectDay={setActiveDay}
+                onAdd={(day) => addFromAgenda(day)}
+                onOpen={openPlannerRow}
+              />
+            ) : (
+              <PlannerMatrix
+                days={days}
+                today={today}
+                locale={locale}
+                versionStatus={snapshot.version.status}
+                employees={visibleEmployees}
+                assignmentsByCell={assignmentsByCell}
+                calendarShiftsByCell={calendarShiftsByCell}
+                canAdd={Boolean(editable)}
+                onCell={openMatrixCell}
+              />
+            )
           ) : (
           <div
             className="weekly-planner__workspace"
@@ -693,6 +851,7 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                   <div className="weekly-planner__overflow-hint" aria-hidden="true" data-testid="planner-overflow-hint">
                     <span>{t('planner.scrollHint')}</span>
                   </div>
+                  <div className="scroll-hint-frame" data-has-down={gridHints.down || undefined}>
                   <div ref={gridWrapRef} className="weekly-planner__grid-wrap" role="region" aria-label={t('planner.gridLabel')} tabIndex={0}>
                     <table className="weekly-planner__grid">
                     <caption className="sr-only">{t('planner.gridCaption')}</caption>
@@ -794,12 +953,23 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
                     </tbody>
                   </table>
                 </div>
+                  <ScrollHintButtons canUp={gridHints.up} canDown={gridHints.down} onScroll={gridHints.scrollBy} />
+                  </div>
                 </>
               )}
             </div>
 
           </div>
           )}
+        </>
+      )}
+
+      {isCompact && snapshot && (
+        <>
+          <PlannerManageSheet isOpen={isManageOpen} onClose={() => setIsManageOpen(false)} actions={manageActions} />
+          <PlannerCellSheet target={cellTarget} versionStatus={snapshot.version.status} locale={locale} canAdd={Boolean(editable)} today={today}
+            onClose={() => setCellTarget(null)} onOpen={openPlannerRow} onAdd={(employeeId, day) => addFromAgenda(day, employeeId)} />
+          <PlannerDetailSheet row={detailRow} versionStatus={snapshot.version.status} locale={locale} onClose={() => setDetailRow(null)} />
         </>
       )}
 
