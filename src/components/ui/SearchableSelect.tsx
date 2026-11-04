@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 
@@ -80,6 +80,15 @@ export const SearchableSelect = ({
       ? { position: 'fixed', left: rect.left, width: rect.width, top: rect.top - 6, transform: 'translateY(-100%)', maxHeight: available }
       : { position: 'fixed', left: rect.left, width: rect.width, top: rect.bottom + 6, maxHeight: available });
   }, []);
+
+  // The portal mounts with an empty style (`menuPosition` starts as `{}`), so anchoring it only in a passive effect or the next
+  // animation frame leaves one frame where it sits unpositioned at the end of <body>, below the viewport (first opening after load).
+  // A layout effect positions it before the browser paints.
+  useLayoutEffect(() => {
+    if (open) {
+      updateMenuPosition();
+    }
+  }, [open, updateMenuPosition]);
 
   const selectedOption = options.find((option) => option.value === value);
 

@@ -238,13 +238,28 @@ test('E · Shift modal on mobile: selector stable, times side-by-side or stacked
 
   const top = async () => (await dialog.boundingBox())!.y;
   const before = await top();
+  // Records the menu rectangle at the instant it is inserted: the first opening after a page load used to mount unpositioned
+  // (`position: absolute`, below the viewport) for one frame before the effect anchored it to the trigger.
+  await page.evaluate(() => {
+    const w = window as unknown as { __menuFirst?: { bottom: number; position: string } };
+    new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (!(node instanceof Element) || w.__menuFirst) continue;
+          const menuEl = node.matches('.modal-select-menu') ? node : node.querySelector('.modal-select-menu');
+          if (menuEl) w.__menuFirst = { bottom: menuEl.getBoundingClientRect().bottom, position: getComputedStyle(menuEl).position };
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
   await dialog.locator('button[aria-haspopup=listbox]').click();
   const menu = page.locator('.modal-select-menu');
   await expect(menu).toBeVisible();
+  const first = await page.evaluate(() => (window as unknown as { __menuFirst?: { bottom: number; position: string } }).__menuFirst);
+  expect(first?.position, 'menu is anchored on its first frame').toBe('fixed');
+  expect(first!.bottom, 'menu is inside the viewport on its first frame').toBeLessThanOrEqual(812);
   expect(Math.abs((await top()) - before), 'modal does not move when the selector opens').toBeLessThanOrEqual(1);
-  const box = (await menu.boundingBox())!;
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.y + box.height).toBeLessThanOrEqual(812);
+  await expect.poll(async () => { const box = (await menu.boundingBox())!; return box.y >= 0 && box.y + box.height <= 812; }, { message: 'menu settles inside the viewport' }).toBe(true);
   await shot(page, 'E1-selector-open');
 
   // Escape closes the menu first, not the modal.

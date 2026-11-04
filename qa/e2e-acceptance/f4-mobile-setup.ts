@@ -26,6 +26,9 @@ async function login(email: string, password: string) {
   return cookie;
 }
 
+/** The few response fields the seeding reads; anything else stays untyped on purpose. */
+interface ApiJson { request?: { id?: string }; scheduleId?: string; scheduleVersionId?: string; [key: string]: unknown }
+
 function client(cookie: string, organizationId: string) {
   return async (method: string, path: string, body?: unknown) => {
     const res = await fetch(`${BASE_URL}${path}`, {
@@ -34,12 +37,12 @@ function client(cookie: string, organizationId: string) {
       body: body ? JSON.stringify(body) : undefined,
     });
     const json = await res.json().catch(() => ({}));
-    return { status: res.status, json: json as Record<string, any> };
+    return { status: res.status, json: json as ApiJson };
   };
 }
 
 /** Creates the run-scoped synthetic tenant (E2E-SHIFT-<runId>) on the canonical QA database. Returns the fixture. */
-async function createTenant(db: { query: (sql: string, params?: unknown[]) => Promise<{ rows: any[] }> }) {
+async function createTenant(db: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> }) {
   const runId = randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase();
   const password = 'E2e-pass-1234';
   const hash = hashPassword(password);
