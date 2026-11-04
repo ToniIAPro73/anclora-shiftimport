@@ -260,8 +260,9 @@
   .app-shell__main { padding: 12px 10px 16px; }
   .app-shell__main-context { margin-bottom: 8px; }
   .app-shell__main-context .team-bar { grid-template-columns: 1fr; gap: 8px; padding-bottom: 8px; }
-  .calendar-toolbar { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 8px; }
-  .calendar-toolbar__controls { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+  .calendar-toolbar { align-items: flex-start; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+  .calendar-toolbar__controls { width: 100%; flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+  .calendar-toolbar__employee-filter .modal-select-trigger { min-height: 36px; padding-top: 4px; padding-bottom: 4px; }
   .calendar-toolbar__area-filter,
   .calendar-toolbar__employee-filter { min-width: 0; max-width: none; flex: 1 1 170px; }
   .calendar-toolbar__employee-readonly,
@@ -279,14 +280,14 @@
   .app-shell__user-trigger { transition: none; }
 }
 
-/* OD-06 — compact TopBar (≤640px): only the organization stays on the main line. Role and employee move to the account menu,
-   so no information is lost and the authorization context is unchanged. >640px is untouched. */
+/* OD-06 — compact TopBar (≤640px): the whole context (organization, role, employee, area) moves to the account menu, so no information
+   is lost and the authorization context is unchanged. The organization used to stay on the main line, but it never fits there beside
+   the account controls (it was cut to "ORGANI… / ShiftImp…"). >640px is untouched. */
 .app-shell__user-menu-context { display: none; }
 
 @media (max-width: 640px) {
-  .app-shell__context-summary-item:nth-child(n+2) { display: none; }
+  .app-shell__context-topbar { display: none; }
   .app-shell__user-menu-context { display: grid; gap: 8px; padding: 8px 10px 10px; border-bottom: 1px solid var(--border-soft); }
-  .app-shell__user-menu-context .app-shell__context-summary-item:first-child { display: none; }
   .app-shell__user-menu-context .app-shell__context-summary-item { display: grid; }
   .app-shell__user-menu-context .app-shell__context-summary-item strong { max-width: 240px; }
 }

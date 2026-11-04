@@ -10,7 +10,7 @@ import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 import { sortDayShifts } from '../../lib/shifts';
 import { DayDetailModal } from './DayDetailModal';
-import { MonthDayAgenda } from './MonthDayAgenda';
+import { MonthDayAgenda, type DayAgendaExtras } from './MonthDayAgenda';
 import { useMediaQuery } from '../../lib/use-media-query';
 import { getShiftTypeDefinition } from '../../lib/shift-types';
 import type { DayAnnotation } from '../../lib/remote';
@@ -18,6 +18,8 @@ import { getShiftVisualTokenKey } from '../../lib/shift-visuals';
 import { projectCurrentCalendarRows } from '../../lib/effective-calendar.js';
 
 export const MAX_VISIBLE_DAY_ITEMS = 2;
+/** Compact (≤640px) cells show one dot per effective shift, up to this many, then +N. */
+export const MAX_COMPACT_DOTS = 3;
 
 interface MonthGridProps {
   year: number;
@@ -123,11 +125,6 @@ export const MonthGrid = ({
   };
 
   const handleShiftPress = (shift: Shift) => {
-    if (isCompact) {
-      // Compact month: the cell only shows a short chip; the day panel carries the detail.
-      setAgendaDate(shift.date);
-      return;
-    }
     // Planning drafts are reviewed and published from Planning; from the Calendar they only open the day.
     if (shift.isDraft) {
       setSelectedDayDetailDate(shift.date);
@@ -211,17 +208,29 @@ export const MonthGrid = ({
     const input = { date: selectedAgendaDate, today: todayISO, role, hasEditableSchedule: editableScheduleDates.has(selectedAgendaDate), hasVacation };
     const action = getCalendarAction(input);
     const reason = calendarActionReason(action, input);
-    const addLabel = reason === 'employee_future'
-      ? t('calendar.employeeFutureBlocked')
-      : reason === 'no_schedule'
-        ? t('calendar.noEditableSchedule')
-        : reason === 'vacation'
-          ? t('calendar.addShiftBlockedAria', { date: selectedAgendaDate })
-          : action === 'DIRECT_ADD' || isHistoricalDate(selectedAgendaDate, todayISO)
-            ? t('calendar.addShiftAria', { date: selectedAgendaDate })
-            : t('calendar.planShiftAria', { date: selectedAgendaDate });
-    return { date: selectedAgendaDate, shifts: current, addDisabled: action === 'DISABLED', addLabel };
-  }, [isCompact, shifts, selectedAgendaDate, todayISO, role, editableScheduleDates, t]);
+    const addBlockedReason = action !== 'DISABLED'
+      ? null
+      : reason === 'employee_future'
+        ? t('calendar.employeeFutureBlocked')
+        : reason === 'no_schedule'
+          ? t('calendar.noEditableSchedule')
+          : reason === 'vacation' ? t('calendar.addShiftBlockedTitle') : null;
+    const dayAnnotations = annotations.filter((item) => item.date === selectedAgendaDate);
+    const extras: DayAgendaExtras = {
+      warnings: provenanceEnabled ? dayShifts.filter((shift) => shift.effectiveState === 'REQUIRES_REVIEW').length : 0,
+      dcf: dayAnnotations.filter((item) => item.kind === 'DCF').length,
+      comments: dayAnnotations.filter((item) => item.kind === 'COMMENT').length,
+      changed: provenanceEnabled && dayShifts.some((shift) => shift.layer === 'CHANGE' || shift.hasHistory === true),
+      pendingVacation: pendingTimeOff.some((request) => request.startDate <= selectedAgendaDate && selectedAgendaDate <= request.endDate) && !hasVacation,
+    };
+    return { date: selectedAgendaDate, shifts: current, extras, addDisabled: action === 'DISABLED', addBlockedReason };
+  }, [isCompact, shifts, selectedAgendaDate, todayISO, role, editableScheduleDates, t, annotations, provenanceEnabled, pendingTimeOff]);
+
+  /** Opens the day detail from the panel; focus returns to the control that opened it. */
+  const openDayDetailFromPanel = (date: string) => {
+    dayDetailTriggerRef.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    setSelectedDayDetailDate(date);
+  };
 
   return (
     <div className="month-grid-shell">
@@ -238,7 +247,7 @@ export const MonthGrid = ({
           ))}
         </div>
 
-        <div className="month-grid-cells" style={{ gridTemplateRows: `repeat(${cells.length / 7}, minmax(0, 1fr))` }}>
+        <div className="month-grid-cells" style={isCompact ? undefined : { gridTemplateRows: `repeat(${cells.length / 7}, minmax(0, 1fr))` }}>
           {cells.map((day, index) => {
             if (day === null) {
               return <div key={`blank-${index}`} className="month-grid-blank" />;
@@ -277,46 +286,71 @@ export const MonthGrid = ({
                   ? t('calendar.addShiftBlockedAria', { date: iso })
                   : action === 'DIRECT_ADD' || isHistorical ? t('calendar.addShiftAria', { date: iso }) : t('calendar.planShiftAria', { date: iso });
 
+            if (isCompact) {
+              const isSelected = iso === selectedAgendaDate;
+              const dots = sortedDayShifts.slice(0, MAX_COMPACT_DOTS);
+              const dotsMore = sortedDayShifts.length - MAX_COMPACT_DOTS;
+              const showWarning = provenanceEnabled && needsReview;
+              const showChange = provenanceEnabled && hasChange && !needsReview;
+              const summary = [
+                sortedDayShifts.length === 0 ? t('calendar.daySummaryNone') : sortedDayShifts.length === 1 ? t('calendar.agendaCountOne') : t('calendar.agendaCountMany', { count: sortedDayShifts.length }),
+                showWarning ? t('calendar.daySummaryWarning') : null,
+                hasDcf ? t('calendar.daySummaryDcf') : null,
+                hasComment ? t('calendar.daySummaryComment') : null,
+                showChange ? t('calendar.daySummaryChange') : null,
+                pendingVacation ? t('calendar.daySummaryPending') : null,
+              ].filter(Boolean).join(', ');
+              return (
+                <div
+                  key={day}
+                  className="month-day-cell"
+                  data-today={isToday || undefined}
+                  data-selected={isSelected ? 'true' : undefined}
+                  data-weekend={isWeekend || undefined}
+                >
+                  <button
+                    type="button"
+                    className="month-day-select"
+                    aria-pressed={isSelected}
+                    aria-label={t('calendar.selectDaySummaryAria', { date: iso, summary })}
+                    data-testid={`month-day-select-${iso}`}
+                    onClick={() => setAgendaDate(iso)}
+                  >
+                    <span className="month-day-select__number">{day}</span>
+                    <span className="month-day-dots" data-testid={`month-day-dots-${iso}`} data-count={sortedDayShifts.length} aria-hidden="true">
+                      {dots.map((shift) => {
+                        const typeId = getShiftType(shift);
+                        return <span key={shift.id} className="month-dot" data-shift-type={typeId} data-shift-visual={getShiftVisualTokenKey(typeId)} data-draft={shift.isDraft || undefined} />;
+                      })}
+                      {dotsMore > 0 && <span className="month-dot-more">+{dotsMore}</span>}
+                    </span>
+                  </button>
+                </div>
+              );
+            }
+
             return (
               <div
                 key={day}
                 className={hasVacationShift && actionDisabled ? 'month-day-cell has-add-disabled' : 'month-day-cell'}
                 data-today={isToday || undefined}
                 onClick={() => {
-                  if (isCompact) {
-                    setAgendaDate(iso);
-                  }
                   if (expandedShiftId) {
                     setExpandedShiftId(null);
                   }
                 }}
-                data-selected={isCompact && iso === selectedAgendaDate ? 'true' : undefined}
                 style={{
                   background: isToday ? 'var(--day-today-bg)' : 'var(--glass-bg)',
                   border: isToday ? '1px solid var(--color-gold)' : '1px solid var(--border-soft)',
                 }}
               >
                 <div className="month-day-header">
-                  {isCompact ? (
-                    <button
-                      type="button"
-                      className="month-day-number month-day-select"
-                      style={{ color: isToday ? 'var(--color-gold)' : isWeekend ? 'var(--text-muted)' : 'var(--text-primary)' }}
-                      aria-pressed={iso === selectedAgendaDate}
-                      aria-label={t('calendar.selectDayAria', { date: iso })}
-                      data-testid={`month-day-select-${iso}`}
-                      onClick={(event) => { event.stopPropagation(); setAgendaDate(iso); }}
-                    >
-                      {day}
-                    </button>
-                  ) : (
-                    <div
-                      className="month-day-number"
-                      style={{ color: isToday ? 'var(--color-gold)' : isWeekend ? 'var(--text-muted)' : 'var(--text-primary)' }}
-                    >
-                      {day}
-                    </div>
-                  )}
+                  <div
+                    className="month-day-number"
+                    style={{ color: isToday ? 'var(--color-gold)' : isWeekend ? 'var(--text-muted)' : 'var(--text-primary)' }}
+                  >
+                    {day}
+                  </div>
                   {(hasDcf || hasComment) && (
                     <span className="month-day-annotations" data-testid={`day-annotations-${iso}`}>
                       {hasDcf && (
@@ -401,10 +435,6 @@ export const MonthGrid = ({
                       className="month-day-more-button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (isCompact) {
-                          setAgendaDate(iso);
-                          return;
-                        }
                         dayDetailTriggerRef.current = event.currentTarget;
                         setSelectedDayDetailDate(iso);
                       }}
@@ -428,12 +458,14 @@ export const MonthGrid = ({
         <MonthDayAgenda
           date={agendaModel.date}
           shifts={agendaModel.shifts}
+          extras={agendaModel.extras}
           addDisabled={agendaModel.addDisabled}
-          addLabel={agendaModel.addLabel}
+          addBlockedReason={agendaModel.addBlockedReason}
           onAdd={() => { if (!agendaModel.addDisabled) onCreateShift(agendaModel.date); }}
-          onOpenDetail={() => { setSelectedDayDetailDate(agendaModel.date); }}
+          onOpenDetail={() => openDayDetailFromPanel(agendaModel.date)}
+          onOpenSection={() => openDayDetailFromPanel(agendaModel.date)}
           onOpenShift={(shift) => {
-            if (shift.isDraft) { setSelectedDayDetailDate(shift.date); return; }
+            if (shift.isDraft) { openDayDetailFromPanel(shift.date); return; }
             onEditShift(shift.id);
           }}
         />

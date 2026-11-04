@@ -102,3 +102,6 @@ qa/e2e-acceptance/test-results-qa-mirror/
 
 # Temporary agent-browser screenshot and snapshot evidence
 artifacts/qa/
+
+# Design mocks used as visual references (they can show real employee names): never versioned, never published with the app.
+public/mocks/
