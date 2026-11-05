@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clock, Hourglass, History, Lock, MessageSquare, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, ChevronDown, ChevronRight, ChevronUp, Clock, Hourglass, History, Lock, MessageSquare, Plus } from 'lucide-react';
 import type { Shift } from '../../lib/types';
 import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { translateShiftTypeLabel } from '../../lib/i18n';
@@ -48,10 +48,16 @@ export const MonthDayAgenda = ({ date, shifts, extras, addDisabled, addBlockedRe
   const [expanded, setExpanded] = useState(false);
   useEffect(() => { setExpanded(false); }, [date]);
 
-  const parts = new Intl.DateTimeFormat(locale === 'es' ? 'es-ES' : 'en-GB', { weekday: 'long', day: 'numeric', timeZone: 'UTC' }).formatToParts(new Date(`${date}T00:00:00Z`));
-  const weekday = parts.find((part) => part.type === 'weekday')?.value ?? '';
-  const dayNumber = parts.find((part) => part.type === 'day')?.value ?? '';
-  const title = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${dayNumber}`;
+  const date_ = new Date(`${date}T00:00:00Z`);
+  const intl = locale === 'es' ? 'es-ES' : 'en-GB';
+  const short = new Intl.DateTimeFormat(intl, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).formatToParts(date_);
+  const pick = (type: string) => short.find((part) => part.type === type)?.value ?? '';
+  const capital = (value: string) => `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+  // One short line ("Jue 5 nov." / "Thu 5 Nov"); the complete weekday + month stays available to assistive technology.
+  const weekday = pick('weekday').replace('.', '');
+  const month = pick('month');
+  const title = locale === 'es' ? `${capital(weekday)} ${pick('day')} ${month.endsWith('.') ? month : `${month}.`}` : `${capital(weekday)} ${pick('day')} ${capital(month)}`;
+  const fullDate = new Intl.DateTimeFormat(intl, { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(date_);
 
   const hidden = Math.max(0, shifts.length - AGENDA_VISIBLE_ROWS);
   const rows = expanded ? shifts : shifts.slice(0, AGENDA_VISIBLE_ROWS);
@@ -69,14 +75,34 @@ export const MonthDayAgenda = ({ date, shifts, extras, addDisabled, addBlockedRe
   return (
     <section className="month-day-agenda" data-testid="month-day-agenda" data-date={date} data-empty={shifts.length === 0 || undefined} aria-labelledby={headingId}>
       <header className="month-day-agenda__header">
-        <h3 id={headingId} className="month-day-agenda__title">{title}</h3>
-        {shifts.length > 0 && <span className="month-day-agenda__count" data-testid="month-day-agenda-count">{countLabel}</span>}
+        <h3 id={headingId} className="month-day-agenda__title" aria-label={fullDate}>{title}</h3>
+        <div className="month-day-agenda__header-actions">
+          {hasDetail && pills.length === 0 && (
+            <button type="button" className="month-day-agenda__detail" onClick={onOpenDetail} aria-label={t('calendar.agendaDetail')} title={t('calendar.agendaDetail')} data-testid="month-day-agenda-detail">
+              <ArrowUpRight size={18} aria-hidden="true" />
+            </button>
+          )}
+          <button
+            type="button"
+            className="month-day-agenda__add"
+            onClick={onAdd}
+            disabled={addDisabled}
+            aria-label={t('calendar.agendaAdd')}
+            aria-describedby={addDisabled && addBlockedReason ? reasonId : undefined}
+            data-testid="month-day-agenda-add"
+          >
+            <Plus size={16} strokeWidth={2.4} aria-hidden="true" />
+            <span aria-hidden="true">{t('calendar.agendaAddShort')}</span>
+          </button>
+        </div>
       </header>
+
+      {addDisabled && addBlockedReason && <p id={reasonId} className="month-day-agenda__blocked" data-testid="month-day-agenda-blocked">{addBlockedReason}</p>}
 
       {shifts.length === 0 ? (
         <p className="month-day-agenda__empty" role="status">{t('calendar.agendaEmpty')}</p>
       ) : (
-        <ul className="month-day-agenda__list">
+        <ul className="month-day-agenda__list" aria-label={countLabel} data-testid="month-day-agenda-list">
           {rows.map((shift) => {
             const typeId = getShiftType(shift);
             const label = translateShiftTypeLabel(typeId, locale, typeId);
@@ -137,25 +163,6 @@ export const MonthDayAgenda = ({ date, shifts, extras, addDisabled, addBlockedRe
         </div>
       )}
 
-      <div className="month-day-agenda__footer">
-        <button
-          type="button"
-          className="month-day-agenda__add"
-          onClick={onAdd}
-          disabled={addDisabled}
-          aria-describedby={addDisabled && addBlockedReason ? reasonId : undefined}
-          data-testid="month-day-agenda-add"
-        >
-          <Plus size={18} strokeWidth={2.4} aria-hidden="true" />
-          {t('calendar.agendaAdd')}
-        </button>
-        {hasDetail && pills.length === 0 && (
-          <button type="button" className="month-day-agenda__detail" onClick={onOpenDetail} data-testid="month-day-agenda-detail">
-            {t('calendar.agendaDetail')}
-          </button>
-        )}
-      </div>
-      {addDisabled && addBlockedReason && <p id={reasonId} className="month-day-agenda__blocked" data-testid="month-day-agenda-blocked">{addBlockedReason}</p>}
     </section>
   );
 };

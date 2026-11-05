@@ -5,7 +5,7 @@ import { getShiftOrigin, getShiftType, hasShiftTimes } from '../../lib/shifts';
 import { getWeekStartsOn, translateShiftTypeLabel } from '../../lib/i18n';
 import { useI18n } from '../../lib/use-i18n';
 import { getOperationalDate, isHistoricalDate } from '../../lib/operational-date';
-import { AlertTriangle, History, Lock, MessageSquare, Plus } from 'lucide-react';
+import { AlertTriangle, History, Info, Lock, MessageSquare, Plus } from 'lucide-react';
 import type { Role } from '../../lib/session';
 import { calendarActionReason, getCalendarAction } from '../../lib/calendar-actions';
 import { sortDayShifts } from '../../lib/shifts';
@@ -292,6 +292,9 @@ export const MonthGrid = ({
               const dotsMore = sortedDayShifts.length - MAX_COMPACT_DOTS;
               const showWarning = provenanceEnabled && needsReview;
               const showChange = provenanceEnabled && hasChange && !needsReview;
+              // Decorative, non-interactive markers (the whole cell stays the single touch target; their meaning is in the cell's aria-label).
+              // Info: extra information that exists and is allowed (DCF, comments, visible change/history). Warning: a real REQUIRES_REVIEW only.
+              const showInfo = hasDcf || hasComment || (provenanceEnabled && hasChange);
               const summary = [
                 sortedDayShifts.length === 0 ? t('calendar.daySummaryNone') : sortedDayShifts.length === 1 ? t('calendar.agendaCountOne') : t('calendar.agendaCountMany', { count: sortedDayShifts.length }),
                 showWarning ? t('calendar.daySummaryWarning') : null,
@@ -316,8 +319,16 @@ export const MonthGrid = ({
                     data-testid={`month-day-select-${iso}`}
                     onClick={() => setAgendaDate(iso)}
                   >
-                    <span className="month-day-select__number">{day}</span>
-                    <span className="month-day-dots" data-testid={`month-day-dots-${iso}`} data-count={sortedDayShifts.length} aria-hidden="true">
+                    <span className="month-day-select__top">
+                      <span className="month-day-select__slot month-day-select__slot--start">
+                        {showInfo && <span className="month-day-marker" data-marker="info" aria-hidden="true"><Info size={10} strokeWidth={2.4} /></span>}
+                      </span>
+                      <span className="month-day-select__number">{day}</span>
+                      <span className="month-day-select__slot month-day-select__slot--end">
+                        {showWarning && <span className="month-day-marker" data-marker="warning" aria-hidden="true"><AlertTriangle size={10} strokeWidth={2.4} /></span>}
+                      </span>
+                    </span>
+                    <span className="month-day-dots" data-testid={`month-day-dots-${iso}`} data-count={sortedDayShifts.length} data-more={dotsMore > 0 || undefined} aria-hidden="true">
                       {dots.map((shift) => {
                         const typeId = getShiftType(shift);
                         return <span key={shift.id} className="month-dot" data-shift-type={typeId} data-shift-visual={getShiftVisualTokenKey(typeId)} data-draft={shift.isDraft || undefined} />;

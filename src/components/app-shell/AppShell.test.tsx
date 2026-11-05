@@ -143,11 +143,80 @@ describe('AppShell', () => {
     fireEvent.click(trigger);
     expect(screen.getByTestId('app-shell')).toHaveClass('is-drawer-open');
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-modal', 'true');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cerrar navegación' }));
+    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement); // focus starts inside the drawer, on the first destination
+    expect(document.activeElement).toBe(screen.getByTestId('sidebar-calendar'));
+    // the close button sits last, where the desktop collapse/expand toggle is (which is not rendered while the drawer is open)
+    expect(screen.getByTestId('app-shell-sidebar').lastElementChild).toBe(screen.getByRole('button', { name: 'Cerrar navegación' }));
+    expect(screen.queryByTestId('sidebar-collapse')).not.toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.getByTestId('app-shell')).not.toHaveClass('is-drawer-open');
     expect(screen.getByRole('heading', { name: 'Calendar workspace' })).toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  describe('drawer presentation (≤980px) is independent of the desktop sidebar preference', () => {
+    const mockDrawerViewport = (drawer: boolean) => {
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: drawer && query.includes('max-width: 980px'), media: query, onchange: null,
+        addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+      }));
+    };
+    afterEach(() => { mockDrawerViewport(false); });
+
+    it('a saved COLLAPSED desktop preference never collapses the drawer, which has no collapse control and leaves the preference untouched', () => {
+      window.localStorage.setItem('anclora_shiftimport_sidebar_v1', 'collapsed');
+      mockDrawerViewport(true);
+      renderShell('OWNER');
+      const shell = screen.getByTestId('app-shell');
+      expect(shell).toHaveClass('is-expanded');
+      expect(shell).not.toHaveClass('is-collapsed');
+      expect(screen.queryByTestId('sidebar-collapse')).not.toBeInTheDocument();
+      expect(screen.getByTestId('sidebar-import')).not.toHaveAttribute('title'); // labels are shown, not icon tooltips
+      fireEvent.click(screen.getByTestId('app-shell-mobile-menu'));
+      expect(shell).toHaveClass('is-drawer-open');
+      expect(shell).toHaveClass('is-expanded');
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar navegación' }));
+      expect(shell).not.toHaveClass('is-drawer-open');
+      expect(window.localStorage.getItem('anclora_shiftimport_sidebar_v1')).toBe('collapsed');
+    });
+
+    it('closes with the X, the backdrop, Escape and by choosing a destination, but not by tapping inside the drawer', () => {
+      mockDrawerViewport(true);
+      const callbacks = renderShell('OWNER');
+      const shell = screen.getByTestId('app-shell');
+      const open = () => fireEvent.click(screen.getByTestId('app-shell-mobile-menu'));
+      open();
+      fireEvent.click(screen.getByTestId('app-shell-sidebar'));
+      expect(shell).toHaveClass('is-drawer-open');
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar navegación' }));
+      expect(shell).not.toHaveClass('is-drawer-open');
+      open();
+      fireEvent.click(document.querySelector('.app-shell__mobile-backdrop') as Element);
+      expect(shell).not.toHaveClass('is-drawer-open');
+      open();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(shell).not.toHaveClass('is-drawer-open');
+      open();
+      fireEvent.click(screen.getByTestId('sidebar-import'));
+      expect(callbacks.onImport).toHaveBeenCalledTimes(1);
+      expect(shell).not.toHaveClass('is-drawer-open');
+    });
+
+    it('desktop keeps the collapsible sidebar and its saved preference', () => {
+      window.localStorage.setItem('anclora_shiftimport_sidebar_v1', 'collapsed');
+      mockDrawerViewport(false);
+      renderShell('OWNER');
+      expect(screen.getByTestId('app-shell')).toHaveClass('is-collapsed');
+      expect(screen.getByTestId('sidebar-collapse')).toBeInTheDocument();
+    });
+
+    it('does not show administrative entries to EMPLOYEE in the drawer', () => {
+      mockDrawerViewport(true);
+      renderShell('EMPLOYEE');
+      fireEvent.click(screen.getByTestId('app-shell-mobile-menu'));
+      expect(screen.getByTestId('sidebar-calendar')).toBeInTheDocument();
+      for (const id of ['sidebar-planner', 'sidebar-team', 'sidebar-settings', 'sidebar-approvals', 'sidebar-formats']) expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+    });
   });
 
   it('renders unified Equipo entry point in Gestión group and separates Configuración', () => {

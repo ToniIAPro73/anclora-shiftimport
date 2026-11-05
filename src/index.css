@@ -5279,6 +5279,35 @@ button[aria-busy='true'] {
     line-height: 1;
   }
 
+  /* Top row: [info] number [warning]. The slots are equal columns so the number stays centred whether or not a marker exists.
+     Markers are decorative and NOT interactive: the whole cell remains the only touch target (their meaning is in its aria-label). */
+  .month-day-select__top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    width: 100%;
+    padding-inline: 1px;
+  }
+
+  .month-day-select__slot { display: flex; min-width: 0; }
+  .month-day-select__slot--start { justify-content: flex-end; padding-right: 1px; }
+  .month-day-select__slot--end { justify-content: flex-start; padding-left: 1px; }
+
+  .month-day-marker {
+    display: inline-grid;
+    place-items: center;
+    width: 9px;
+    height: 9px;
+    line-height: 0;
+    pointer-events: none;
+  }
+
+  .month-day-marker svg { width: 9px; height: 9px; }
+  .month-day-marker[data-marker='info'] { color: var(--month-marker-info, #7fa8e8); }
+  .month-day-marker[data-marker='warning'] { color: var(--warning, #f59e0b); }
+  :root[data-theme='light'] .month-day-marker[data-marker='info'] { color: var(--month-marker-info, #2f5fb0); }
+  :root[data-theme='light'] .month-day-marker[data-marker='warning'] { color: var(--warning, #b45309); }
+
   .month-day-select[aria-pressed='true'] .month-day-select__number {
     text-decoration: underline;
     text-underline-offset: 3px;
@@ -5312,6 +5341,11 @@ button[aria-busy='true'] {
     line-height: 1;
     color: var(--text-muted);
   }
+
+  /* Three dots + "+N" must fit the narrowest cells (320px ≈ 39px wide): the dots shrink only when "+N" is present. */
+  .month-day-dots[data-more] { gap: 1.5px; }
+  .month-day-dots[data-more] .month-dot { width: 6px; height: 6px; }
+  .month-day-dots[data-more] .month-dot-more { font-size: 0.58rem; }
 
 }
 
@@ -7644,9 +7678,9 @@ button[aria-busy='true'] {
 /* Day panel of the compact month (F1-M03) */
 .month-day-agenda {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
-  padding: 10px 10px 10px;
+  padding: 6px 10px 10px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: 20px 20px 12px 12px;
@@ -7657,26 +7691,27 @@ button[aria-busy='true'] {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-height: 44px;
 }
 
 .month-day-agenda__title {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.15;
   color: var(--text-primary);
 }
 
-.month-day-agenda__count {
-  padding: 4px 10px;
-  white-space: nowrap;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  background: var(--panel-muted-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
+.month-day-agenda__header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .month-day-agenda__empty {
@@ -7807,28 +7842,24 @@ button[aria-busy='true'] {
   border-radius: 999px;
 }
 
-.month-day-agenda__footer {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: 10px;
-}
-
 .month-day-agenda__add,
 .month-day-agenda__detail {
-  min-height: 40px;
+  /* Compact visuals, 44px touch target (WCAG 2.5.8 / platform guidance). */
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   font: inherit;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 800;
   border-radius: 12px;
   cursor: pointer;
 }
 
 .month-day-agenda__add {
+  padding: 0 14px;
   color: var(--text-on-accent);
   background: var(--color-accent);
   border: 0;
@@ -7840,6 +7871,7 @@ button[aria-busy='true'] {
 }
 
 .month-day-agenda__detail {
+  padding: 0;
   color: var(--text-primary);
   background: transparent;
   border: 1px solid var(--glass-border);

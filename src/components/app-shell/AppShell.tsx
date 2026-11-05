@@ -1,3 +1,4 @@
+import { useMediaQuery } from '../../lib/use-media-query';
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import {
   AlertTriangle,
@@ -25,6 +26,8 @@ import { TurnosLogo } from '../branding/TurnosLogo';
 import './AppShell.css';
 
 const SIDEBAR_STATE_KEY = 'anclora_shiftimport_sidebar_v1';
+/** Same breakpoint as the drawer layout in AppShell.css (`@media (max-width: 980px)`). */
+const DRAWER_MEDIA_QUERY = '(max-width: 980px)';
 
 export type ShellSection = 'calendar' | 'planner';
 
@@ -339,12 +342,20 @@ export function AppShell({
     return window.localStorage.getItem(SIDEBAR_STATE_KEY) !== 'collapsed';
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Below the drawer breakpoint the sidebar is a temporary overlay, never the persistent (collapsible) desktop sidebar: its presentation
+  // ignores the desktop `expanded` preference (which is neither read nor written by opening/closing the drawer).
+  const isDrawerViewport = useMediaQuery(DRAWER_MEDIA_QUERY);
+  const sidebarExpanded = isDrawerViewport || expanded;
   const drawerRef = useRef<HTMLElement | null>(null);
   const menuTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, expanded ? 'expanded' : 'collapsed');
   }, [expanded]);
+
+  // Leaving the drawer layout (resize / rotation) or navigating elsewhere closes the overlay.
+  useEffect(() => { if (!isDrawerViewport) setDrawerOpen(false); }, [isDrawerViewport]);
+  useEffect(() => { setDrawerOpen(false); }, [activeSection]);
 
   useEffect(() => {
     if (!drawerOpen) return undefined;
@@ -390,7 +401,7 @@ export function AppShell({
   const SidebarElement = drawerOpen ? 'div' : 'aside';
 
   return (
-    <div className={`app-shell${expanded ? ' is-expanded' : ' is-collapsed'}${drawerOpen ? ' is-drawer-open' : ''}`} data-testid="app-shell">
+    <div className={`app-shell${sidebarExpanded ? ' is-expanded' : ' is-collapsed'}${drawerOpen ? ' is-drawer-open' : ''}`} data-testid="app-shell">
       <a className="app-shell__skip-link" href="#main-content">{t('shell.skipToMain')}</a>
       <div className="app-shell__mobile-backdrop ac-drawer-backdrop" aria-hidden="true" hidden={!drawerOpen} onClick={closeDrawer} />
       <SidebarElement
@@ -410,34 +421,33 @@ export function AppShell({
               <span>{t('header.subtitle')}</span>
             </div>
           </div>
-          {drawerOpen && <button type="button" className="app-shell__mobile-close ac-button ac-button--ghost ac-button--icon" aria-label={t('shell.closeNavigation')} onClick={closeDrawer}><X size={20} aria-hidden="true" /></button>}
 
           <nav className="app-shell__nav" aria-label={t('shell.navigationLabel')}>
             {/* OPERACIÓN: Calendario, Planificar, Importar, Añadir turno, Solicitudes */}
             <SidebarGroup label={t('shell.operation')}>
-              <SidebarItem label={t('shell.calendar')} icon={<CalendarDays size={18} />} active={activeSection === 'calendar'} collapsed={!expanded} onClick={() => runAction()} testId="sidebar-calendar" />
+              <SidebarItem label={t('shell.calendar')} icon={<CalendarDays size={18} />} active={activeSection === 'calendar'} collapsed={!sidebarExpanded} onClick={() => runAction()} testId="sidebar-calendar" />
               {isEmployee ? (
                 <>
-                  {onSelfImport && <SidebarItem label={t('employeePortal.importSelf')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onSelfImport)} testId="sidebar-self-import" />}
-                  {onHistoricalAdd && <SidebarItem label={t('employeePortal.addHistorical')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onHistoricalAdd)} testId="sidebar-historical-add" />}
-                  {onRequests && <SidebarItem label={t('employeePortal.requests')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onRequests)} testId="sidebar-requests" />}
+                  {onSelfImport && <SidebarItem label={t('employeePortal.importSelf')} icon={<Upload size={18} />} collapsed={!sidebarExpanded} onClick={() => runAction(onSelfImport)} testId="sidebar-self-import" />}
+                  {onHistoricalAdd && <SidebarItem label={t('employeePortal.addHistorical')} icon={<Plus size={18} />} collapsed={!sidebarExpanded} onClick={() => runAction(onHistoricalAdd)} testId="sidebar-historical-add" />}
+                  {onRequests && <SidebarItem label={t('employeePortal.requests')} icon={<FileCog size={18} />} collapsed={!sidebarExpanded} onClick={() => runAction(onRequests)} testId="sidebar-requests" />}
                 </>
               ) : (
                 <>
-                  {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!expanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
-                  {onImport && <SidebarItem label={t('shell.import')} icon={<Upload size={18} />} collapsed={!expanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
-                  {onAddShift && <SidebarItem label={t('shell.addShift')} icon={<Plus size={18} />} collapsed={!expanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
+                  {onPlanner && <SidebarItem label={t('planner.navLabel')} icon={<AreaChart size={18} />} active={activeSection === 'planner'} collapsed={!sidebarExpanded} onClick={() => runAction(onPlanner)} testId="sidebar-planner" />}
+                  {onImport && <SidebarItem label={t('shell.import')} icon={<Upload size={18} />} collapsed={!sidebarExpanded} onClick={() => runAction(onImport)} testId="sidebar-import" />}
+                  {onAddShift && <SidebarItem label={t('shell.addShift')} icon={<Plus size={18} />} collapsed={!sidebarExpanded} onClick={() => runAction(onAddShift)} testId="sidebar-add-shift" />}
                   {(onApprovals || onRequests) && (
                     <SidebarItem
                       label={t('approvalInbox.navLabel')}
                       icon={<FileCog size={18} />}
                       badge={typeof pendingRequestsCount === 'number' && pendingRequestsCount > 0 ? pendingRequestsCount : undefined}
-                      collapsed={!expanded}
+                      collapsed={!sidebarExpanded}
                       onClick={() => runAction(onApprovals || onRequests)}
                       testId="sidebar-approvals"
                     />
                   )}
-                  {onMyRequests && <SidebarItem label={t('employeePortal.myRequests')} icon={<FileCog size={18} />} collapsed={!expanded} onClick={() => runAction(onMyRequests)} testId="sidebar-my-requests" />}
+                  {onMyRequests && <SidebarItem label={t('employeePortal.myRequests')} icon={<FileCog size={18} />} collapsed={!sidebarExpanded} onClick={() => runAction(onMyRequests)} testId="sidebar-my-requests" />}
                 </>
               )}
             </SidebarGroup>
@@ -449,7 +459,7 @@ export function AppShell({
                   <SidebarItem
                     label={t('shell.team')}
                     icon={<UsersRound size={18} />}
-                    collapsed={!expanded}
+                    collapsed={!sidebarExpanded}
                     onClick={() => runAction(onTeam)}
                     testId="sidebar-team"
                   />
@@ -458,7 +468,7 @@ export function AppShell({
                   <SidebarItem
                     label={t('shell.history')}
                     icon={<History size={18} />}
-                    collapsed={!expanded}
+                    collapsed={!sidebarExpanded}
                     onClick={() => runAction(onHistory)}
                     testId="sidebar-history"
                   />
@@ -467,7 +477,7 @@ export function AppShell({
                   <SidebarItem
                     label={t('formatProfiles.manage')}
                     icon={<FileCog size={18} />}
-                    collapsed={!expanded}
+                    collapsed={!sidebarExpanded}
                     onClick={() => runAction(onFormatProfiles)}
                     testId="sidebar-formats"
                   />
@@ -481,7 +491,7 @@ export function AppShell({
                 <SidebarItem
                   label={t('settings.title')}
                   icon={<Settings2 size={18} />}
-                  collapsed={!expanded}
+                  collapsed={!sidebarExpanded}
                   onClick={() => runAction(onSettings)}
                   testId="sidebar-settings"
                 />
@@ -489,17 +499,25 @@ export function AppShell({
             )}
           </nav>
 
-          <button
-            type="button"
-            className="app-shell__collapse"
-            onClick={() => setExpanded((value) => !value)}
-            aria-expanded={expanded}
-            aria-label={expanded ? t('shell.collapseSidebar') : t('shell.expandSidebar')}
-            title={expanded ? t('shell.collapseSidebar') : t('shell.expandSidebar')}
-            data-testid="sidebar-collapse"
-          >
-            {expanded ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
-          </button>
+          {drawerOpen && (
+            // Drawer: the control that sits where the desktop collapse/expand toggle is becomes the close button (X).
+            <button type="button" className="app-shell__mobile-close" aria-label={t('shell.closeNavigation')} title={t('shell.closeNavigation')} onClick={closeDrawer} data-testid="app-shell-drawer-close">
+              <X size={20} aria-hidden="true" />
+            </button>
+          )}
+          {!drawerOpen && !isDrawerViewport && (
+            <button
+              type="button"
+              className="app-shell__collapse"
+              onClick={() => setExpanded((value) => !value)}
+              aria-expanded={expanded}
+              aria-label={expanded ? t('shell.collapseSidebar') : t('shell.expandSidebar')}
+              title={expanded ? t('shell.collapseSidebar') : t('shell.expandSidebar')}
+              data-testid="sidebar-collapse"
+            >
+              {expanded ? <PanelLeftClose size={18} aria-hidden="true" /> : <PanelLeftOpen size={18} aria-hidden="true" />}
+            </button>
+          )}
         </SidebarElement>
 
       <div className="app-shell__content" aria-hidden={drawerOpen || undefined}>
