@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowRight,
+  CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Layers,
   Mail,
+  Search,
   Shield,
   UserPlus,
   Users,
@@ -32,6 +37,8 @@ import {
 } from '../../lib/remote';
 import type { Role } from '../../lib/session';
 import { useI18n } from '../../lib/use-i18n';
+import { useMediaQuery } from '../../lib/use-media-query';
+import { useScrollAffordance } from './useScrollAffordance';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { ModalShell } from '../ui/ModalShell';
 import { BulkCsvImportModal } from './BulkCsvImportModal';
@@ -52,6 +59,9 @@ export interface EquipoModalProps {
   initialEmployeeId?: string | null;
 }
 
+/** Phones and portrait tablets (≤900px wide) and landscape phones (short screens up to 932px wide, e.g. 844×390). Same query as the compact blocks of EquipoModal.css. */
+const COMPACT_QUERY = '(max-width: 900px), (max-width: 932px) and (max-height: 480px)';
+
 export function EquipoModal({
   isOpen,
   onClose,
@@ -64,6 +74,8 @@ export function EquipoModal({
   initialEmployeeId = null,
 }: EquipoModalProps) {
   const { t, locale } = useI18n();
+  /** ≤640px: the tables become card lists and the actions move to thumb reach (desktop and tablet keep the tables). */
+  const isCompact = useMediaQuery(COMPACT_QUERY);
   const [activeTab, setActiveTab] = useState<'personas' | 'roles' | 'areas' | 'assignments'>(initialTab);
   const [members, setMembers] = useState<RemoteMember[]>([]);
   const [invitations, setInvitations] = useState<RemoteAccessInvitation[]>([]);
@@ -204,6 +216,9 @@ export function EquipoModal({
 
   // Tab 4: Asignaciones state
   const [assignmentSubTab, setAssignmentSubTab] = useState<'employees_to_area' | 'planner_scopes'>('employees_to_area');
+  const [rolesSearch, setRolesSearch] = useState('');
+  const mainTabsRef = useScrollAffordance<HTMLDivElement>(activeTab);
+  const subTabsRef = useScrollAffordance<HTMLDivElement>(assignmentSubTab);
   const [selectedBulkEmployeeIds, setSelectedBulkEmployeeIds] = useState<string[]>([]);
   const [bulkTargetAreaId, setBulkTargetAreaId] = useState<string>('');
   const [bulkEffectiveDate, setBulkEffectiveDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -453,9 +468,9 @@ export function EquipoModal({
         effectiveDate: bulkEffectiveDate || undefined,
       });
       const areaName = targetAreaId
-        ? effectiveAreas.find((a) => a.id === targetAreaId)?.name || 'Área'
-        : 'Sin área';
-      setBulkSuccessMessage(`${res.count} empleados asignados a "${areaName}" con fecha de efecto ${res.effectiveDate}.`);
+        ? effectiveAreas.find((a) => a.id === targetAreaId)?.name || t('teamWorkspace.areaFallback')
+        : t('teamWorkspace.bulkNoArea');
+      setBulkSuccessMessage(t('teamWorkspace.areaMoveSuccess', { count: res.count, area: areaName, date: res.effectiveDate }));
       setSelectedBulkEmployeeIds([]);
       onChanged();
       await fetchMembers();
@@ -482,7 +497,7 @@ export function EquipoModal({
           scopedEmployeeIds: tab4ScopeType === 'EMPLOYEES' ? tab4ScopedEmployees : [],
         },
       );
-      setPlannerScopeSuccessMessage('Ámbito de planificación guardado correctamente.');
+      setPlannerScopeSuccessMessage(t('teamWorkspace.plannerScopeSaved'));
       onChanged();
       await fetchMembers();
     } catch (err) {
@@ -498,6 +513,81 @@ export function EquipoModal({
 
   const effectiveRole = currentMember ? currentMember.role : currentUserRole;
   const isOwner = effectiveRole === 'OWNER';
+
+  // Shared by the roles table (desktop/tablet) and the roles cards (≤640px): one rule set, never two.
+  const roleLabelOf = (role: RemoteMember['role']) => (
+    role === 'OWNER' ? t('teamWorkspace.roleOwner') : role === 'ADMIN' ? t('teamWorkspace.roleAdmin') : role === 'PLANNER' ? t('teamWorkspace.rolePlanner') : t('teamWorkspace.roleEmployee')
+  );
+  const scopeLabelOf = (m: RemoteMember) => {
+    if (m.role === 'EMPLOYEE') return t('teamWorkspace.scopeSelf');
+    if (m.role === 'PLANNER') {
+      if (m.plannerScopeType === 'AREAS' && (m.scopedAreaIds?.length || m.scopedAreaId)) return t('teamWorkspace.scopeAreasShort', { count: m.scopedAreaIds?.length || 1 });
+      if (m.plannerScopeType === 'EMPLOYEES' && m.scopedEmployeeIds?.length) return t('teamWorkspace.scopeEmployeesShort', { count: m.scopedEmployeeIds.length });
+    }
+    return t('teamWorkspace.scopeOrgLabel');
+  };
+  // Shared by the areas table (desktop/tablet) and the area cards (≤640px).
+  const areaStats = (a: { id: string }) => ({
+    empCount: employees.filter((e) => e.areaId === a.id).length,
+    assignedPlanners: members.filter(
+      (m) =>
+        m.role === 'PLANNER' &&
+        (m.scopedAreaId === a.id ||
+          (m.plannerScopeType === 'AREAS' && m.scopedAreaIds?.includes(a.id)) ||
+          m.plannerScopeType === 'ORGANIZATION'),
+    ),
+  });
+  const openAreaAssignments = (a: { id: string }) => {
+    setActiveTab('assignments');
+    setAssignmentSubTab('employees_to_area');
+    setBulkTargetAreaId(a.id);
+    setBulkFilterCurrentArea('all');
+  };
+  const visibleRoleMembers = useMemo(() => {
+    const q = rolesSearch.trim().toLowerCase();
+    if (!q) return members;
+    return members.filter((m) => `${m.displayName ?? ''} ${m.email}`.toLowerCase().includes(q));
+  }, [members, rolesSearch]);
+  const openChangeRole = (m: RemoteMember) => {
+    const persona = personas.find((p) => p.userId === m.userId);
+    if (!persona) return;
+    setEditingRolePersona(persona);
+    setNewRoleSelection(m.role as 'ADMIN' | 'PLANNER' | 'EMPLOYEE');
+    setNewRoleScopeType(m.plannerScopeType || 'ORGANIZATION');
+    setNewRoleScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
+    setNewRoleScopedEmployees(m.scopedEmployeeIds || []);
+    setRoleEmployeeSearch('');
+  };
+  const wizardStepNames = [
+    t('teamWorkspace.stepIdentity'), t('teamWorkspace.stepAccess'), t('teamWorkspace.stepEmployment'), t('teamWorkspace.stepScope'), t('teamWorkspace.stepConfirm'),
+  ];
+  // One primary action: inline in the bar on desktop/tablet, in the pinned footer below the list on phones (never both).
+  const applyBulkButton = (
+    <button
+      type="button"
+      className="equipo-btn equipo-btn--primary"
+      disabled={selectedBulkEmployeeIds.length === 0 || !bulkTargetAreaId || bulkSubmitting}
+      onClick={() => void handleApplyBulkMove()}
+      data-testid="apply-bulk-move-button"
+    >
+      {bulkSubmitting
+        ? t('teamWorkspace.reassigning')
+        : t(selectedBulkEmployeeIds.length === 1 ? 'teamWorkspace.applyToOne' : 'teamWorkspace.applyToMany', { count: selectedBulkEmployeeIds.length })}
+    </button>
+  );
+  const selectedBulkLabel = selectedBulkEmployeeIds.length === 1
+    ? t('teamWorkspace.bulkSelectedOne')
+    : t('teamWorkspace.bulkSelectedMany', { count: selectedBulkEmployeeIds.length });
+  const openManageScope = (m: RemoteMember) => {
+    const persona = personas.find((p) => p.userId === m.userId);
+    if (!persona) return;
+    setEditingRolePersona(persona);
+    setNewRoleSelection('PLANNER');
+    setNewRoleScopeType(m.plannerScopeType || (m.scopedAreaId ? 'AREAS' : 'ORGANIZATION'));
+    setNewRoleScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
+    setNewRoleScopedEmployees(m.scopedEmployeeIds || []);
+    setRoleEmployeeSearch('');
+  };
 
   const currentOwner = useMemo(() => {
     return members.find((m) => m.role === 'OWNER');
@@ -669,7 +759,7 @@ export function EquipoModal({
     >
       <div className="equipo-modal" data-testid="equipo-modal">
         {/* Workspace Tabs */}
-        <div className="equipo-modal__tabs" role="tablist">
+        <div className="equipo-modal__tabs" role="tablist" ref={mainTabsRef}>
           <button
             type="button"
             className={`equipo-modal__tab${activeTab === 'personas' ? ' is-active' : ''}`}
@@ -725,7 +815,7 @@ export function EquipoModal({
 
         {/* TAB 1: PERSONAS */}
         {activeTab === 'personas' && (
-          <>
+          <div className="equipo-pane" data-testid="personas-pane">
             <div className="equipo-modal__toolbar">
               <div className="equipo-modal__filters">
                 <input
@@ -1019,17 +1109,18 @@ export function EquipoModal({
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
 
         {/* TAB 2: ROLES Y ACCESO */}
         {activeTab === 'roles' && (
-          <>
-            <div className="equipo-modal__toolbar">
+          <div className="equipo-pane" data-testid="roles-pane">
+            <div className="equipo-modal__toolbar equipo-roles-head">
+              {isCompact && <span className="equipo-roles-head__icon" aria-hidden="true"><Shield size={22} /></span>}
               <div>
-                <h3 style={{ margin: 0, fontSize: '1rem' }}>Autoridad, permisos y ámbitos de planificación</h3>
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>{t('teamWorkspace.rolesHeading')}</h3>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Asigna roles organizativos y define el alcance de acción de los planificadores.
+                  {t('teamWorkspace.rolesSubtitle')}
                 </p>
               </div>
 
@@ -1042,20 +1133,88 @@ export function EquipoModal({
                 >
                   <Shield size={16} />
                   {t('teamWorkspace.transferOwnership')}
+                  {isCompact && <ChevronRight size={18} aria-hidden="true" className="equipo-transfer-chevron" />}
                 </button>
               )}
             </div>
 
+            {isCompact && (
+              <div className="equipo-roles-tools">
+                <label className="equipo-roles-search">
+                  <Search size={18} aria-hidden="true" />
+                  <input
+                    type="search"
+                    className="equipo-modal__search"
+                    placeholder={t('teamWorkspace.rolesSearchPlaceholder')}
+                    aria-label={t('teamWorkspace.rolesSearchPlaceholder')}
+                    value={rolesSearch}
+                    onChange={(e) => setRolesSearch(e.target.value)}
+                    data-testid="roles-search"
+                  />
+                </label>
+                <p className="equipo-roles-count" role="status" aria-live="polite" data-testid="roles-count">
+                  {t('teamWorkspace.rolesCount', { count: visibleRoleMembers.length })}
+                </p>
+              </div>
+            )}
+
+            {isCompact ? (
+              <ul className="equipo-role-cards" data-testid="roles-cards" aria-label={t('teamWorkspace.tabRoles')}>
+                {visibleRoleMembers.map((m) => {
+                  const initials = (m.displayName || m.email).slice(0, 2).toUpperCase();
+                  const areaNames = (m.scopedAreaIds?.length ? m.scopedAreaIds : m.scopedAreaId ? [m.scopedAreaId] : [])
+                    .map((id) => areas.find((a) => a.id === id)?.name).filter(Boolean) as string[];
+                  const showAreas = m.role === 'PLANNER' && m.plannerScopeType === 'AREAS' && areaNames.length > 0;
+                  const employeeCount = m.role === 'PLANNER' && m.plannerScopeType === 'EMPLOYEES' ? (m.scopedEmployeeIds?.length ?? 0) : 0;
+                  return (
+                    <li key={m.userId} className="equipo-role-card" data-testid={`role-row-${m.userId}`}>
+                      <div className="equipo-role-card__head">
+                        <span className="equipo-avatar" aria-hidden="true">{initials}</span>
+                        <div className="equipo-role-card__who">
+                          <strong>{m.displayName || m.email}{m.userId === currentUserId && <span className="equipo-role-card__you"> (Tú)</span>}</strong>
+                          <span className="equipo-role-card__email">{m.email}</span>
+                          <span className={`equipo-badge equipo-badge--${m.role.toLowerCase()}`}>{roleLabelOf(m.role)}</span>
+                        </div>
+                      </div>
+                      <dl className="equipo-role-card__facts">
+                        <div className="equipo-role-card__scope"><Layers size={16} aria-hidden="true" /><dt>{t('teamWorkspace.scopeFieldLabel')}:</dt><dd>{scopeLabelOf(m)}</dd></div>
+                        {showAreas && <div><dd className="equipo-role-card__detail">{t('teamWorkspace.scopeAreasNames', { names: areaNames.join(', ') })}</dd></div>}
+                        {employeeCount > 0 && <div><dd className="equipo-role-card__detail">{t('teamWorkspace.scopeEmployeesCount', { count: employeeCount })}</dd></div>}
+                        <div>
+                          <dt>{t('teamWorkspace.linked')}</dt>
+                          <dd>{m.employeeId
+                            ? formatEmployeeProfileLabel(m.employeeName, m.employeeExternalId, t('teamWorkspace.linked'))
+                            : <span className="equipo-role-card__muted">{t('teamWorkspace.noEmployeeRecord')}</span>}</dd>
+                        </div>
+                      </dl>
+                      {m.role !== 'OWNER' && (
+                        <div className="equipo-role-card__actions">
+                          <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => openChangeRole(m)} data-testid={`change-role-${m.userId}`}>
+                            {t('teamWorkspace.changeRole')}
+                          </button>
+                          {m.role === 'PLANNER' && (
+                            <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => openManageScope(m)} data-testid={`manage-scope-${m.userId}`}>
+                              {t('teamWorkspace.manageScope')}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
             <div className="equipo-modal__table-container">
+              <div className="equipo-modal__table-scroll">
               <table className="equipo-table" data-testid="roles-table">
                 <thead>
                   <tr>
-                    <th>Persona</th>
-                    <th>Rol</th>
-                    <th>Ámbito / Scope</th>
-                    <th>Email de acceso</th>
-                    <th>Ficha Empleado</th>
-                    <th>Acciones</th>
+                    <th>{t('teamWorkspace.thPerson')}</th>
+                    <th>{t('teamWorkspace.thRole')}</th>
+                    <th>{t('teamWorkspace.thScope')}</th>
+                    <th>{t('teamWorkspace.thAccessEmail')}</th>
+                    <th>{t('teamWorkspace.thEmployeeRecord')}</th>
+                    <th>{t('teamWorkspace.thActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1063,18 +1222,7 @@ export function EquipoModal({
                     const initials = (m.displayName || m.email).slice(0, 2).toUpperCase();
                     const isItemCurrentUser = m.userId === currentUserId;
 
-                    let scopeLabel = 'Toda la organización';
-                    if (m.role === 'EMPLOYEE') {
-                      scopeLabel = 'Personal (Self)';
-                    } else if (m.role === 'PLANNER') {
-                      if (m.plannerScopeType === 'AREAS' && (m.scopedAreaIds?.length || m.scopedAreaId)) {
-                        scopeLabel = `Áreas (${m.scopedAreaIds?.length || 1})`;
-                      } else if (m.plannerScopeType === 'EMPLOYEES' && m.scopedEmployeeIds?.length) {
-                        scopeLabel = `Empleados (${m.scopedEmployeeIds.length})`;
-                      } else {
-                        scopeLabel = 'Toda la organización';
-                      }
-                    }
+                    const scopeLabel = scopeLabelOf(m);
 
                     return (
                       <tr key={m.userId} data-testid={`role-row-${m.userId}`}>
@@ -1093,10 +1241,7 @@ export function EquipoModal({
                         </td>
                         <td>
                           <span className={`equipo-badge equipo-badge--${m.role.toLowerCase()}`}>
-                            {m.role === 'OWNER' && 'Propietario'}
-                            {m.role === 'ADMIN' && 'Administrador'}
-                            {m.role === 'PLANNER' && 'Planificador'}
-                            {m.role === 'EMPLOYEE' && 'Empleado'}
+                            {roleLabelOf(m.role)}
                           </span>
                         </td>
                         <td>
@@ -1118,17 +1263,7 @@ export function EquipoModal({
                               <button
                                 type="button"
                                 className="equipo-btn equipo-btn--secondary"
-                                onClick={() => {
-                                  const persona = personas.find((p) => p.userId === m.userId);
-                                   if (persona) {
-                                    setEditingRolePersona(persona);
-                                    setNewRoleSelection(m.role as 'ADMIN' | 'PLANNER' | 'EMPLOYEE');
-                                    setNewRoleScopeType(m.plannerScopeType || 'ORGANIZATION');
-                                    setNewRoleScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
-                                    setNewRoleScopedEmployees(m.scopedEmployeeIds || []);
-                                    setRoleEmployeeSearch('');
-                                  }
-                                }}
+                                onClick={() => openChangeRole(m)}
                                 data-testid={`change-role-${m.userId}`}
                               >
                                 {t('teamWorkspace.changeRole')}
@@ -1138,17 +1273,7 @@ export function EquipoModal({
                               <button
                                 type="button"
                                 className="equipo-btn equipo-btn--secondary"
-                                onClick={() => {
-                                  const persona = personas.find((p) => p.userId === m.userId);
-                                  if (persona) {
-                                    setEditingRolePersona(persona);
-                                    setNewRoleSelection('PLANNER');
-                                    setNewRoleScopeType(m.plannerScopeType || (m.scopedAreaId ? 'AREAS' : 'ORGANIZATION'));
-                                    setNewRoleScopedAreas(m.scopedAreaIds || (m.scopedAreaId ? [m.scopedAreaId] : []));
-                                    setNewRoleScopedEmployees(m.scopedEmployeeIds || []);
-                                    setRoleEmployeeSearch('');
-                                  }
-                                }}
+                                onClick={() => openManageScope(m)}
                                 data-testid={`manage-scope-${m.userId}`}
                               >
                                 {t('teamWorkspace.manageScope')}
@@ -1161,18 +1286,20 @@ export function EquipoModal({
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
-          </>
+            )}
+          </div>
         )}
 
         {/* TAB 3: ÁREAS */}
         {activeTab === 'areas' && (
-          <>
+          <div className="equipo-pane" data-testid="areas-pane">
             <div className="equipo-modal__toolbar">
               <div>
-                <h3 style={{ margin: 0, fontSize: '1rem' }}>Áreas organizativas</h3>
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>{t('teamWorkspace.areasHeading')}</h3>
                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Estructura departamental y centros de trabajo (opcional).
+                  {t('teamWorkspace.areasSubtitle')}
                 </p>
               </div>
 
@@ -1205,28 +1332,51 @@ export function EquipoModal({
                     {t('teamWorkspace.createFirstArea')}
                   </button>
                 </div>
+              ) : isCompact ? (
+                <ul className="equipo-area-cards" data-testid="areas-cards" aria-label={t('teamWorkspace.tabAreas')}>
+                  {effectiveAreas.map((a) => {
+                    const { empCount, assignedPlanners } = areaStats(a);
+                    return (
+                      <li key={a.id} className="equipo-area-card" data-testid={`area-row-${a.id}`}>
+                        <div className="equipo-area-card__head">
+                          <strong>{a.name}</strong>
+                          <span className={`equipo-badge equipo-badge--${a.active ? 'active' : 'inactive'}`}>
+                            {a.active ? t('teamWorkspace.areaStatusActive') : t('teamWorkspace.areaStatusInactive')}
+                          </span>
+                        </div>
+                        {a.code && <span className="equipo-badge equipo-badge--neutral equipo-area-card__code">{a.code}</span>}
+                        <dl className="equipo-area-card__facts">
+                          <div><dt>{t('teamWorkspace.thAssignedEmployees')}</dt><dd>{empCount}</dd></div>
+                          <div><dt>{t('teamWorkspace.thAssignedPlanners')}</dt><dd>{assignedPlanners.length > 0 ? assignedPlanners.length : t('teamWorkspace.noPlanners')}</dd></div>
+                        </dl>
+                        <div className="equipo-area-card__actions">
+                          <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => handleOpenEditArea(a)} data-testid={`edit-area-${a.id}`}>
+                            {t('teamWorkspace.edit')}
+                          </button>
+                          <button type="button" className="equipo-btn equipo-btn--secondary" onClick={() => openAreaAssignments(a)} data-testid={`manage-area-assignments-${a.id}`}>
+                            {t('teamWorkspace.manageAssignments')}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               ) : (
+                <div className="equipo-modal__table-scroll">
                 <table className="equipo-table" data-testid="areas-table">
                   <thead>
                     <tr>
-                      <th>Área</th>
-                      <th>Código</th>
-                      <th>Estado</th>
-                      <th>Empleados asignados</th>
-                      <th>Planificadores asignados</th>
-                      <th>Acciones</th>
+                      <th>{t('teamWorkspace.thArea')}</th>
+                      <th>{t('teamWorkspace.thCode')}</th>
+                      <th>{t('teamWorkspace.thStatus')}</th>
+                      <th>{t('teamWorkspace.thAssignedEmployees')}</th>
+                      <th>{t('teamWorkspace.thAssignedPlanners')}</th>
+                      <th>{t('teamWorkspace.thActions')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {effectiveAreas.map((a) => {
-                      const empCount = employees.filter((e) => e.areaId === a.id).length;
-                      const assignedPlanners = members.filter(
-                        (m) =>
-                          m.role === 'PLANNER' &&
-                          (m.scopedAreaId === a.id ||
-                            (m.plannerScopeType === 'AREAS' && m.scopedAreaIds?.includes(a.id)) ||
-                            m.plannerScopeType === 'ORGANIZATION')
-                      );
+                      const { empCount, assignedPlanners } = areaStats(a);
 
                       return (
                         <tr key={a.id} data-testid={`area-row-${a.id}`}>
@@ -1242,17 +1392,17 @@ export function EquipoModal({
                           </td>
                           <td>
                             <span className={`equipo-badge equipo-badge--${a.active ? 'active' : 'inactive'}`}>
-                              {a.active ? 'Activa' : 'Inactiva'}
+                              {a.active ? t('teamWorkspace.areaStatusActive') : t('teamWorkspace.areaStatusInactive')}
                             </span>
                           </td>
-                          <td>{empCount} {empCount === 1 ? 'empleado' : 'empleados'}</td>
+                          <td>{t(empCount === 1 ? 'teamWorkspace.employeesCountOne' : 'teamWorkspace.employeesCountMany', { count: empCount })}</td>
                           <td>
                             {assignedPlanners.length > 0 ? (
                               <span style={{ fontSize: '0.85rem' }}>
-                                {assignedPlanners.length} {assignedPlanners.length === 1 ? 'planificador' : 'planificadores'}
+                                {t(assignedPlanners.length === 1 ? 'teamWorkspace.plannersCountOne' : 'teamWorkspace.plannersCountMany', { count: assignedPlanners.length })}
                               </span>
                             ) : (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Sin planificadores</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('teamWorkspace.noPlanners')}</span>
                             )}
                           </td>
                           <td>
@@ -1268,12 +1418,7 @@ export function EquipoModal({
                               <button
                                 type="button"
                                 className="equipo-btn equipo-btn--secondary"
-                                onClick={() => {
-                                  setActiveTab('assignments');
-                                  setAssignmentSubTab('employees_to_area');
-                                  setBulkTargetAreaId(a.id);
-                                  setBulkFilterCurrentArea('all');
-                                }}
+                                onClick={() => openAreaAssignments(a)}
                                 data-testid={`manage-area-assignments-${a.id}`}
                               >
                                 {t('teamWorkspace.manageAssignments')}
@@ -1285,16 +1430,17 @@ export function EquipoModal({
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
-          </>
+          </div>
         )}
 
         {/* TAB 4: ASIGNACIONES */}
         {activeTab === 'assignments' && (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }} data-testid="assignments-tab">
+          <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, gap: '12px' }} data-testid="assignments-tab">
             {/* Sub-tab navigation */}
-            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }} role="tablist">
+            <div className="equipo-modal__subtabs" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }} role="tablist" ref={subTabsRef}>
               <button
                 type="button"
                 className={`equipo-modal__tab ${assignmentSubTab === 'employees_to_area' ? 'is-active' : ''}`}
@@ -1303,7 +1449,7 @@ export function EquipoModal({
                 aria-selected={assignmentSubTab === 'employees_to_area'}
                 data-testid="subtab-employees-to-area"
               >
-                Empleados → Área (Cambio masivo)
+                {t('teamWorkspace.subtabEmployeesToArea')}
               </button>
               <button
                 type="button"
@@ -1313,14 +1459,14 @@ export function EquipoModal({
                 aria-selected={assignmentSubTab === 'planner_scopes'}
                 data-testid="subtab-planner-scopes"
               >
-                Planificadores → Ámbitos
+                {t('teamWorkspace.subtabPlannerScopes')}
               </button>
             </div>
 
             {assignmentSubTab === 'employees_to_area' && (
               <>
                 {/* Bulk Operation Action Bar */}
-                <div className="equipo-panel" style={{
+                <div className="equipo-panel equipo-bulk-bar" style={{
                   display: 'flex',
                   flexWrap: 'wrap',
                   alignItems: 'center',
@@ -1328,42 +1474,44 @@ export function EquipoModal({
                   justifyContent: 'space-between',
                   padding: '12px 16px',
                 }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Área de destino:</label>
+                  <div className="equipo-bulk-bar__fields" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+                    <div className="equipo-bulk-field">
+                    <span className="equipo-bulk-field__icon" aria-hidden="true"><Layers size={18} /></span>
+                    <div className="equipo-bulk-field__stack">
+                    <label htmlFor="bulk-target-area" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t('teamWorkspace.targetAreaLabel')}</label>
                     <select
+                      id="bulk-target-area"
                       className="equipo-modal__select"
                       value={bulkTargetAreaId}
                       onChange={(e) => setBulkTargetAreaId(e.target.value)}
                       data-testid="bulk-target-area-select"
                     >
-                      <option value="">Selecciona área de destino…</option>
+                      <option value="">{t('teamWorkspace.targetAreaPlaceholder')}</option>
                       {effectiveAreas.map((a) => (
                         <option key={a.id} value={a.id}>{a.name} {a.code ? `(${a.code})` : ''}</option>
                       ))}
-                      <option value="__NONE__">Sin área / Desasignar</option>
+                      <option value="__NONE__">{t('teamWorkspace.noAreaUnassign')}</option>
                     </select>
 
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Fecha de efecto:</label>
+                    </div>
+                    </div>
+                    <div className="equipo-bulk-field">
+                    <span className="equipo-bulk-field__icon" aria-hidden="true"><CalendarDays size={18} /></span>
+                    <div className="equipo-bulk-field__stack">
+                    <label htmlFor="bulk-effective-date" style={{ fontSize: '0.85rem', fontWeight: 600 }}>{t('teamWorkspace.effectiveDateLabel')}</label>
                     <input
+                      id="bulk-effective-date"
                       type="date"
                       className="equipo-modal__input"
                       value={bulkEffectiveDate}
                       onChange={(e) => setBulkEffectiveDate(e.target.value)}
                       data-testid="bulk-effective-date-input"
                     />
+                    </div>
+                    </div>
                   </div>
 
-                  <button
-                    type="button"
-                    className="equipo-btn equipo-btn--primary"
-                    disabled={selectedBulkEmployeeIds.length === 0 || !bulkTargetAreaId || bulkSubmitting}
-                    onClick={() => void handleApplyBulkMove()}
-                    data-testid="apply-bulk-move-button"
-                  >
-                    {bulkSubmitting
-                      ? 'Reasignando…'
-                      : `Aplicar a ${selectedBulkEmployeeIds.length} ${selectedBulkEmployeeIds.length === 1 ? 'empleado' : 'empleados'}`}
-                  </button>
+                  {!isCompact && applyBulkButton}
                 </div>
 
                 {bulkSuccessMessage && (
@@ -1373,12 +1521,13 @@ export function EquipoModal({
                 )}
 
                 {/* Filter and selection tools */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
+                <div className="equipo-bulk-tools" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div className="equipo-bulk-tools__filters" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px' }}>
                     <input
                       type="text"
+                      aria-label={t('teamWorkspace.bulkSearchAria')}
                       className="equipo-modal__search"
-                      placeholder="Buscar por nombre o ID de empleado…"
+                      placeholder={t('teamWorkspace.bulkSearchPlaceholder')}
                       value={bulkSearch}
                       onChange={(e) => setBulkSearch(e.target.value)}
                       data-testid="bulk-employee-search"
@@ -1388,35 +1537,74 @@ export function EquipoModal({
                       value={bulkFilterCurrentArea}
                       onChange={(e) => setBulkFilterCurrentArea(e.target.value)}
                       data-testid="bulk-filter-current-area"
+                      aria-label={t('teamWorkspace.currentAreaAria')}
                     >
-                      <option value="all">Área actual: Todas</option>
-                      <option value="none">Sin área asignada</option>
+                      <option value="all">{t('teamWorkspace.currentAreaAll')}</option>
+                      <option value="none">{t('teamWorkspace.currentAreaNone')}</option>
                       {effectiveAreas.map((a) => (
                         <option key={a.id} value={a.id}>{a.name}</option>
                       ))}
                     </select>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }} data-testid="bulk-selection-count">
-                      {selectedBulkEmployeeIds.length} de {filteredBulkEmployees.length} seleccionados
+                  <div className="equipo-bulk-tools__select" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="equipo-bulk-count" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }} data-testid="bulk-selection-count">
+                      {t('teamWorkspace.bulkSelectionCount', { selected: selectedBulkEmployeeIds.length, total: filteredBulkEmployees.length })}
                     </span>
                     <button
                       type="button"
-                      className="equipo-btn equipo-btn--secondary"
+                      className="equipo-btn equipo-btn--secondary equipo-bulk-selectall"
                       style={{ fontSize: '0.8rem', padding: '4px 8px' }}
                       onClick={handleToggleSelectAllBulk}
                       data-testid="bulk-select-all-button"
                     >
                       {selectedBulkEmployeeIds.length === filteredBulkEmployees.length && filteredBulkEmployees.length > 0
-                        ? 'Deseleccionar todos'
-                        : 'Seleccionar todos'}
+                        ? t('teamWorkspace.deselectAll')
+                        : t('teamWorkspace.selectAll')}
                     </button>
                   </div>
                 </div>
 
-                {/* Employee table with selection checkboxes */}
+                {/* Employee list with selection checkboxes: cards on phones (no truncated columns), table on larger screens */}
+                {isCompact ? (
+                  <ul className="equipo-bulk-cards" data-testid="bulk-employees-cards" aria-label={t('teamWorkspace.employeesListAria')}>
+                    {filteredBulkEmployees.length === 0 ? (
+                      <li className="equipo-bulk-cards__empty">{t('teamWorkspace.bulkNoResults')}</li>
+                    ) : filteredBulkEmployees.map((emp) => {
+                      const isSelected = selectedBulkEmployeeIds.includes(emp.id);
+                      const area = emp.areaId ? effectiveAreas.find((a) => a.id === emp.areaId) : null;
+                      return (
+                        <li key={emp.id} className={`equipo-bulk-card${isSelected ? ' is-selected' : ''}`} data-testid={`bulk-employee-row-${emp.id}`}>
+                          <label className="equipo-bulk-card__label">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedBulkEmployeeIds([...selectedBulkEmployeeIds, emp.id]);
+                                else setSelectedBulkEmployeeIds(selectedBulkEmployeeIds.filter((id) => id !== emp.id));
+                              }}
+                              data-testid={`select-emp-${emp.id}`}
+                              aria-label={emp.name}
+                            />
+                            <span className="equipo-avatar equipo-bulk-card__avatar" aria-hidden="true">{emp.name.slice(0, 2).toUpperCase()}</span>
+                            <span className="equipo-bulk-card__main">
+                              <strong>{emp.name}</strong>
+                              <span className="equipo-bulk-card__meta">
+                                <span>{t('teamWorkspace.bulkEmployeeId')}: {emp.externalEmployeeId || '—'}</span>
+                                {area
+                                  ? <span className="equipo-badge equipo-badge--neutral equipo-bulk-card__area"><Layers size={13} aria-hidden="true" />{area.name}</span>
+                                  : <span className="equipo-badge equipo-badge--neutral equipo-bulk-card__area is-empty"><Layers size={13} aria-hidden="true" />{t('teamWorkspace.bulkNoArea')}</span>}
+                              </span>
+                            </span>
+                            <span className={`equipo-badge equipo-badge--${emp.status}`}>{emp.status === 'active' ? t('teamWorkspace.employeeStatusActive') : t('teamWorkspace.employeeStatusPending')}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
                 <div className="equipo-modal__table-container">
+                  <div className="equipo-modal__table-scroll">
                   <table className="equipo-table" data-testid="bulk-employees-table">
                     <thead>
                       <tr>
@@ -1427,17 +1615,17 @@ export function EquipoModal({
                             onChange={handleToggleSelectAllBulk}
                           />
                         </th>
-                        <th>Empleado</th>
-                        <th>ID Externo</th>
-                        <th>Área actual</th>
-                        <th>Estado</th>
+                        <th>{t('teamWorkspace.thEmployee')}</th>
+                        <th>{t('teamWorkspace.thExternalId')}</th>
+                        <th>{t('teamWorkspace.thCurrentArea')}</th>
+                        <th>{t('teamWorkspace.thStatus')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredBulkEmployees.length === 0 ? (
                         <tr>
                           <td colSpan={5} style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
-                            No se encontraron empleados con los filtros aplicados.
+                            {t('teamWorkspace.bulkNoResults')}
                           </td>
                         </tr>
                       ) : (
@@ -1470,12 +1658,12 @@ export function EquipoModal({
                                 {area ? (
                                   <span className="equipo-badge equipo-badge--neutral">{area.name}</span>
                                 ) : (
-                                  <span style={{ color: 'var(--text-muted)' }}>Sin área</span>
+                                  <span style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.bulkNoArea')}</span>
                                 )}
                               </td>
                               <td>
                                 <span className={`equipo-badge equipo-badge--${emp.status}`}>
-                                  {emp.status === 'active' ? 'Activo' : 'Pendiente'}
+                                  {emp.status === 'active' ? t('teamWorkspace.employeeStatusActive') : t('teamWorkspace.employeeStatusPending')}
                                 </span>
                               </td>
                             </tr>
@@ -1484,7 +1672,16 @@ export function EquipoModal({
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
+                )}
+
+                {isCompact && (
+                  <div className="equipo-bulk-footer" data-testid="bulk-footer">
+                    <span className="equipo-bulk-footer__summary" role="status" aria-live="polite">{selectedBulkLabel}</span>
+                    {applyBulkButton}
+                  </div>
+                )}
               </>
             )}
 
@@ -1495,9 +1692,9 @@ export function EquipoModal({
                   flexDirection: 'column',
                   gap: '12px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="equipo-planner-pick" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <label htmlFor="tab4-planner-select" style={{ fontWeight: 600, fontSize: '0.9rem' }}>
-                      Seleccionar planificador:
+                      {t('teamWorkspace.pickPlannerLabel')}
                     </label>
                     <select
                       id="tab4-planner-select"
@@ -1506,7 +1703,7 @@ export function EquipoModal({
                       onChange={(e) => setSelectedPlannerUserId(e.target.value)}
                       data-testid="tab4-planner-select"
                     >
-                      <option value="">Selecciona un usuario…</option>
+                      <option value="">{t('teamWorkspace.pickPlannerPlaceholder')}</option>
                       {members.filter((m) => m.role === 'PLANNER' || m.role === 'ADMIN').map((m) => (
                         <option key={m.userId} value={m.userId}>
                           {m.displayName || m.email} ({m.role})
@@ -1523,7 +1720,7 @@ export function EquipoModal({
 
                   {selectedPlannerUserId && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
-                      <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>Ámbito de gestión:</p>
+                      <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>{t('teamWorkspace.scopeOfManagement')}</p>
 
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
                         <input
@@ -1549,7 +1746,7 @@ export function EquipoModal({
                           {t('teamWorkspace.scopeAreas')}
                           {effectiveAreas.length === 0 && (
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
-                              (No hay áreas)
+                              {t('teamWorkspace.noAreasNote')}
                             </span>
                           )}
                         </span>
@@ -1599,7 +1796,7 @@ export function EquipoModal({
                               data-testid="tab4-scope-employee-search"
                             />
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }} data-testid="tab4-scope-employees-count">
-                              {tab4ScopedEmployees.length} seleccionados
+                              {t('teamWorkspace.selectedCountLabel', { count: tab4ScopedEmployees.length })}
                             </span>
                           </div>
                           <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1634,7 +1831,7 @@ export function EquipoModal({
                           onClick={() => void handleSaveTab4PlannerScope()}
                           data-testid="save-tab4-planner-scope-button"
                         >
-                          {plannerScopeSubmitting ? 'Guardando…' : 'Guardar ámbito de planificador'}
+                          {plannerScopeSubmitting ? t('teamWorkspace.savingDots') : t('teamWorkspace.savePlannerScope')}
                         </button>
                       </div>
                     </div>
@@ -1655,6 +1852,25 @@ export function EquipoModal({
             maxWidth="560px"
           >
             <div className="equipo-wizard" data-testid="add-persona-wizard">
+                  {isCompact ? (
+                    <div className="equipo-wizard__progress" role="group" aria-label={t('teamWorkspace.wizardStepsLabel')} data-testid="wizard-progress">
+                      <p className="equipo-wizard__progress-title" aria-live="polite">
+                        {t('teamWorkspace.wizardStepPrefix', { current: wizardStep, total: wizardStepNames.length })} · <span className="equipo-wizard__progress-name">{wizardStepNames[wizardStep - 1]}</span>
+                      </p>
+                      <ol className="equipo-wizard__progress-bar">
+                        {wizardStepNames.map((name, index) => {
+                          const n = index + 1;
+                          const state = n < wizardStep ? 'done' : n === wizardStep ? 'current' : 'pending';
+                          return (
+                            <li key={name} className={`equipo-wizard__progress-step is-${state}`} aria-current={state === 'current' ? 'step' : undefined}>
+                              <span className="equipo-wizard__progress-dot" aria-hidden="true">{state === 'done' ? <Check size={12} strokeWidth={3} /> : null}</span>
+                              <span className="sr-only">{`${n}. ${name} — ${t(state === 'done' ? 'teamWorkspace.stepStateDone' : state === 'current' ? 'teamWorkspace.stepStateCurrent' : 'teamWorkspace.stepStatePending')}`}</span>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  ) : (
                   <div className="equipo-wizard__steps">
                     <span className={`equipo-wizard__step-indicator${wizardStep === 1 ? ' is-active' : ''}`}>1. {t('teamWorkspace.stepIdentity')}</span>
                     <span className={`equipo-wizard__step-indicator${wizardStep === 2 ? ' is-active' : ''}`}>2. {t('teamWorkspace.stepAccess')}</span>
@@ -1662,6 +1878,7 @@ export function EquipoModal({
                     <span className={`equipo-wizard__step-indicator${wizardStep === 4 ? ' is-active' : ''}`}>4. {t('teamWorkspace.stepScope')}</span>
                     <span className={`equipo-wizard__step-indicator${wizardStep === 5 ? ' is-active' : ''}`}>5. {t('teamWorkspace.stepConfirm')}</span>
                   </div>
+                  )}
 
                   {/* Step 1: Identidad */}
                   {wizardStep === 1 && (
@@ -1671,7 +1888,7 @@ export function EquipoModal({
                         id="wizard-name"
                         type="text"
                         className="equipo-modal__search"
-                        placeholder="Ej. Carmen Santos"
+                        placeholder={t('teamWorkspace.wizardNamePlaceholder')}
                         value={wizardName}
                         onChange={(e) => setWizardName(e.target.value)}
                         data-testid="wizard-name-input"
@@ -1712,7 +1929,7 @@ export function EquipoModal({
                               id="wizard-email"
                               type="email"
                               className="equipo-modal__search"
-                              placeholder="carmen@empresa.com"
+                              placeholder={t('teamWorkspace.wizardEmailPlaceholder')}
                               value={wizardEmail}
                               onChange={(e) => setWizardEmail(e.target.value)}
                               data-testid="wizard-email-input"
@@ -1761,7 +1978,7 @@ export function EquipoModal({
                               id="wizard-ext-id"
                               type="text"
                               className="equipo-modal__search"
-                              placeholder="Ej. EMP-1042"
+                              placeholder={t('teamWorkspace.wizardExternalIdPlaceholder')}
                               value={wizardExternalId}
                               onChange={(e) => setWizardExternalId(e.target.value)}
                             />
@@ -1893,6 +2110,15 @@ export function EquipoModal({
                       >
                         {t('teamWorkspace.back')}
                       </button>
+                    ) : isCompact ? (
+                      <button
+                        type="button"
+                        className="equipo-btn equipo-btn--secondary"
+                        onClick={() => { setIsWizardOpen(false); resetWizard(); }}
+                        data-testid="wizard-cancel-button"
+                      >
+                        {t('teamWorkspace.cancel')}
+                      </button>
                     ) : <div />}
 
                     {wizardStep < 5 ? (
@@ -1904,6 +2130,7 @@ export function EquipoModal({
                         data-testid="wizard-next-button"
                       >
                         {t('teamWorkspace.next')}
+                        {isCompact && <ArrowRight size={18} aria-hidden="true" />}
                       </button>
                     ) : (
                       <button
@@ -1926,14 +2153,14 @@ export function EquipoModal({
           <ModalShell
             isOpen={Boolean(editingRolePersona)}
             onClose={() => setEditingRolePersona(null)}
-            title={`Cambiar rol de ${editingRolePersona.name}`}
-            closeAriaLabel="Cerrar"
+            title={t('teamWorkspace.roleChangeTitle', { name: editingRolePersona.name })}
+            closeAriaLabel={t('teamWorkspace.close')}
             maxWidth="480px"
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }} data-testid="change-role-modal">
               <div>
                 <label htmlFor="select-new-role" style={{ display: 'block', fontWeight: 600, marginBottom: '6px' }}>
-                  Selecciona el nuevo rol:
+                  {t('teamWorkspace.selectNewRole')}
                 </label>
                 <select
                   id="select-new-role"
@@ -1943,15 +2170,15 @@ export function EquipoModal({
                   onChange={(e) => setNewRoleSelection(e.target.value as typeof newRoleSelection)}
                   data-testid="select-new-role"
                 >
-                  <option value="EMPLOYEE">Empleado</option>
-                  <option value="PLANNER">Planificador</option>
-                  <option value="ADMIN">Administrador</option>
+                  <option value="EMPLOYEE">{t('teamWorkspace.roleEmployee')}</option>
+                  <option value="PLANNER">{t('teamWorkspace.rolePlanner')}</option>
+                  <option value="ADMIN">{t('teamWorkspace.roleAdmin')}</option>
                 </select>
               </div>
 
               {newRoleSelection === 'PLANNER' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>Ámbito de planificación</p>
+                  <p style={{ fontWeight: 600, fontSize: '0.85rem', margin: 0 }}>{t('teamWorkspace.planningScopeHeading')}</p>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', cursor: 'pointer' }}>
                     <input
                       type="radio"
@@ -1976,7 +2203,7 @@ export function EquipoModal({
                       {t('teamWorkspace.scopeAreas')}
                       {effectiveAreas.length === 0 && (
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
-                          (No hay áreas)
+                          {t('teamWorkspace.noAreasNote')}
                         </span>
                       )}
                     </span>
@@ -2061,7 +2288,7 @@ export function EquipoModal({
                   className="equipo-btn equipo-btn--secondary"
                   onClick={() => setEditingRolePersona(null)}
                 >
-                  Cancelar
+                  {t('teamWorkspace.cancel')}
                 </button>
                 <button
                   type="button"
@@ -2070,7 +2297,7 @@ export function EquipoModal({
                   onClick={() => void handleRoleChangeSubmit()}
                   data-testid="save-role-change-button"
                 >
-                  {roleChangeSubmitting ? 'Guardando…' : 'Guardar rol'}
+                  {roleChangeSubmitting ? t('teamWorkspace.savingDots') : t('teamWorkspace.saveRole')}
                 </button>
               </div>
             </div>
@@ -2083,8 +2310,9 @@ export function EquipoModal({
             isOpen={isTransferOpen}
             onClose={() => setIsTransferOpen(false)}
             title={t('teamWorkspace.transferOwnershipTitle')}
-            closeAriaLabel="Cerrar"
+            closeAriaLabel={t('teamWorkspace.close')}
             maxWidth="520px"
+            className="equipo-transfer-modal"
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }} data-testid="transfer-ownership-dialog">
               <div className="ownership-transfer-card">
@@ -2107,7 +2335,7 @@ export function EquipoModal({
                 fontSize: '0.85rem',
               }}>
                 <div><strong>{t('teamWorkspace.currentOwnerLabel')}:</strong> {currentOwner?.displayName || currentOwner?.email || 'Tú'} ({currentOwner?.email})</div>
-                <div style={{ color: 'var(--text-muted)' }}>Esta acción es transaccional y cederá el control total de la organización.</div>
+                <div style={{ color: 'var(--text-muted)' }}>{t('teamWorkspace.transferCommitment')}</div>
               </div>
 
               {transferSuccessMsg && (
@@ -2128,7 +2356,7 @@ export function EquipoModal({
                   onChange={(e) => setTransferTargetUserId(e.target.value)}
                   data-testid="new-owner-select"
                 >
-                  <option value="">Selecciona al nuevo propietario…</option>
+                  <option value="">{t('teamWorkspace.selectNewOwner')}</option>
                   {transferCandidates.map((m) => (
                     <option key={m.userId} value={m.userId}>
                       {m.displayName || m.email} ({m.role}) — {m.email}
@@ -2149,8 +2377,8 @@ export function EquipoModal({
                   onChange={(e) => setPreviousOwnerRole(e.target.value as 'ADMIN' | 'PLANNER')}
                   data-testid="previous-owner-role-select"
                 >
-                  <option value="ADMIN">Administrador (recomendado)</option>
-                  <option value="PLANNER">Planificador</option>
+                  <option value="ADMIN">{t('teamWorkspace.adminRecommended')}</option>
+                  <option value="PLANNER">{t('teamWorkspace.rolePlanner')}</option>
                 </select>
               </div>
 
@@ -2161,7 +2389,7 @@ export function EquipoModal({
                   onChange={(e) => setTransferConfirmed(e.target.checked)}
                   data-testid="transfer-confirm-checkbox"
                 />
-                <span>Entiendo que cederé el rol de Propietario y esta acción no puede deshacerse de forma unilateral.</span>
+                <span>{t('teamWorkspace.transferAck')}</span>
               </label>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
@@ -2192,7 +2420,7 @@ export function EquipoModal({
             isOpen={true}
             title={editingArea ? t('teamWorkspace.editArea') : t('teamWorkspace.newArea')}
             onClose={() => setIsAreaModalOpen(false)}
-            closeAriaLabel="Cerrar"
+            closeAriaLabel={t('teamWorkspace.close')}
             maxWidth="480px"
           >
             <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: '16px' }} data-testid="area-modal">
@@ -2210,7 +2438,7 @@ export function EquipoModal({
                   id="area-name"
                   type="text"
                   className="equipo-modal__input"
-                  placeholder="Ej. Operaciones, Rampa, Administración"
+                  placeholder={t('teamWorkspace.areaNamePlaceholder')}
                   value={areaName}
                   onChange={(e) => setAreaName(e.target.value)}
                   data-testid="area-name-input"
@@ -2227,7 +2455,7 @@ export function EquipoModal({
                   type="text"
                   maxLength={10}
                   className="equipo-modal__input"
-                  placeholder="Ej. OPS, MAD, ADM"
+                  placeholder={t('teamWorkspace.areaCodePlaceholder')}
                   value={areaCode}
                   onChange={(e) => setAreaCode(e.target.value.toUpperCase())}
                   data-testid="area-code-input"
@@ -2273,8 +2501,8 @@ export function EquipoModal({
           <ModalShell
             isOpen={Boolean(editingEmployee)}
             onClose={() => setEditingEmployee(null)}
-            title={`Editar ficha de ${editingEmployee.name}`}
-            closeAriaLabel="Cerrar"
+            title={t('teamWorkspace.editFileTitle', { name: editingEmployee.name })}
+            closeAriaLabel={t('teamWorkspace.close')}
             maxWidth="480px"
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '8px 0' }} data-testid="edit-employee-modal">
@@ -2285,7 +2513,7 @@ export function EquipoModal({
               )}
               <div>
                 <label htmlFor="edit-emp-name" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
-                  Nombre y apellidos:
+                  {t('teamWorkspace.editFullName')}
                 </label>
                 <input
                   id="edit-emp-name"
@@ -2300,7 +2528,7 @@ export function EquipoModal({
 
               <div>
                 <label htmlFor="edit-emp-external-id" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
-                  Identificador externo (opcional):
+                  {t('teamWorkspace.editExternalId')}
                 </label>
                 <input
                   id="edit-emp-external-id"
@@ -2309,14 +2537,14 @@ export function EquipoModal({
                   style={{ width: '100%' }}
                   value={editEmployeeExternalId}
                   onChange={(e) => setEditEmployeeExternalId(e.target.value)}
-                  placeholder="Ej. EMP-042"
+                  placeholder={t('teamWorkspace.editExternalIdPlaceholder')}
                   data-testid="edit-employee-external-id-input"
                 />
               </div>
 
               <div>
                 <label htmlFor="edit-emp-area" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
-                  Área asignada:
+                  {t('teamWorkspace.assignedAreaLabel')}
                 </label>
                 <select
                   id="edit-emp-area"
@@ -2326,7 +2554,7 @@ export function EquipoModal({
                   onChange={(e) => setEditEmployeeAreaId(e.target.value)}
                   data-testid="edit-employee-area-select"
                 >
-                  <option value="">Sin área</option>
+                  <option value="">{t('teamWorkspace.bulkNoArea')}</option>
                   {areas.map((a) => (
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
@@ -2335,7 +2563,7 @@ export function EquipoModal({
 
               <div>
                 <label htmlFor="edit-emp-status" style={{ display: 'block', fontWeight: 600, marginBottom: '6px', fontSize: '0.85rem' }}>
-                  Estado operativo:
+                  {t('teamWorkspace.operationalStatusLabel')}
                 </label>
                 <select
                   id="edit-emp-status"
@@ -2345,8 +2573,8 @@ export function EquipoModal({
                   onChange={(e) => setEditEmployeeStatus(e.target.value as 'active' | 'inactive')}
                   data-testid="edit-employee-status-select"
                 >
-                  <option value="active">Activo</option>
-                  <option value="inactive">Inactivo</option>
+                  <option value="active">{t('teamWorkspace.employeeStatusActive')}</option>
+                  <option value="inactive">{t('teamWorkspace.employeeStatusInactive')}</option>
                 </select>
               </div>
 
@@ -2357,7 +2585,7 @@ export function EquipoModal({
                   onClick={() => setEditingEmployee(null)}
                   disabled={editEmployeeSubmitting}
                 >
-                  Cancelar
+                  {t('teamWorkspace.cancel')}
                 </button>
                 <button
                   type="button"
@@ -2366,7 +2594,7 @@ export function EquipoModal({
                   disabled={editEmployeeSubmitting}
                   data-testid="save-employee-button"
                 >
-                  {editEmployeeSubmitting ? 'Guardando…' : 'Guardar ficha'}
+                  {editEmployeeSubmitting ? t('teamWorkspace.savingDots') : t('teamWorkspace.saveFile')}
                 </button>
               </div>
             </div>
