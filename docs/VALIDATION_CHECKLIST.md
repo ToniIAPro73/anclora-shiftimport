@@ -10,6 +10,17 @@
 
 > **Estado vigente (2026-11-05, F4-M05):** el bloque siguiente es el cierre de la puerta F4 y **supersede** los valores `PENDING`/`NOT_STARTED`/`NOT_VERIFIED` de este documento y de las secciones de abajo, que se conservan como histórico de cada entrega. Origen de la validación humana: atestación del Product Owner; el agente no observó los dispositivos.
 
+> **Estado vigente (2026-11-05, F5):** `F5_GATE=PASS_WITH_GAPS` (G7 corregida y verificada con umbral de 12 h; gaps G2–G6 y G8 aceptados con propietario; emitido tras commit y push verificados a `origin/development`, ver informe de entrega). Detalle y evidencia en la spec, §20.1 «F5».
+
+```text
+F5 (SHA base a19dc47, local, tenants sintéticos A/B, residuo 0)
+ROLE_SCOPE_HTTP_MATRIX=PASS 306/306 (re-ejecutada tras G7/12 h) (8 roles/scopes x 26 capacidades x 2 tenants + cross-tenant ambos sentidos)
+IMPORT_AUTOPUBLISH_REVERSION_E2E=PASS 8/8   VACATION_APPROVAL_PROTECTION_E2E=PASS 6/6 (F3) + 4/4 + 1/1 flag OFF (F2)
+MOBILE_375x812_E2E=PASS 6/6   A11Y_F1=PASS 4/4   LINT/TSC/BUILD=PASS   TEST_F3=658/658   SUITE=2703/2703 + 7 PostgreSQL local
+G7_CROSS_WEEK_REST=FIXED_VERIFIED (12 h dentro y entre semanas en crear/editar/publicar/importar; 12:00 válido, 11:59 no; regla general ET 34.3, sin excepciones sectoriales)   OD-06=CONFIRMED   OPERATIONAL_ORG_WRITES=0 (huella antes/después idéntica en la ejecución focal post-G7)
+DEPLOY=NONE   PROMOTION=NOT_AUTHORIZED (staging/production/main intactas)
+```
+
 ```text
 F4_GATE=PASS_WITH_GAPS  (2026-11-05, SHA 61253af; gaps G1–G8 en la spec, «Cierre formal F4»)
 F4_M01=VERIFIED  F4_M02=VERIFIED  F4_M03=VERIFIED  F4_M04=VERIFIED_WITH_GAPS  F4_M05=PASS_WITH_GAPS

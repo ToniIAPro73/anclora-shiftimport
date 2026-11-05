@@ -1,6 +1,6 @@
 # Historical Import and Future Planning Draft Contract
 
-**Estado**: vigente · actualizado 2026-10-30 (enmienda F0 aprobada: auto-publicación condicionada; **no implementada hasta F1**, por lo que el runtime actual sigue sin publicar)
+**Estado**: vigente · actualizado 2026-11-05 (enmienda F0 de auto-publicación condicionada **implementada en F1** y revalidada de extremo a extremo en F5; solo publica con la decisión `historical-and-auto-publish` y el switch de servidor `IMPORT_AUTO_PUBLISH_ENABLED` activo, apagado por defecto: con el switch apagado el runtime sigue sin publicar y la decisión responde `409 AUTO_PUBLISH_UNAVAILABLE`)
 
 Autoridad de implementación de la enmienda: `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (§0.3, §4.1).
 

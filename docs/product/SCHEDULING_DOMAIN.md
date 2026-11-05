@@ -140,6 +140,6 @@ assignments into `shifts`. The explicit decision `historical-and-auto-publish` m
 of the import contract (see below). Company-plan revisions are retired from the active runtime. See
 [`FUTURE_IMPORT_DRAFT_CONTRACT.md`](FUTURE_IMPORT_DRAFT_CONTRACT.md).
 
-## Auto-published versions (amendment F0, not implemented until F1)
+## Auto-published versions (amendment F0, implemented in F1 behind `IMPORT_AUTO_PUBLISH_ENABLED`, re-validated in F5)
 
 A version may end up `PUBLISHED` because an import published it, but only through the granular operation described in the canonical spec (§4.1): only the `(employee, date)` pairs present in that import are materialised; everything else is retained in a new draft with a reason code. A week that holds a foreign draft (assignments for pairs not in the file) is retained as a draft entirely. No new `schedule_versions.status` or `shifts.effective_state` values are introduced. Approved time off protects planning: an assignment on a protected absence day is rejected (`PROTECTED_ABSENCE_DAY`), excluded on publication and not copied into a new draft (`TIME_OFF_REQUEST_CONTRACT.md`).

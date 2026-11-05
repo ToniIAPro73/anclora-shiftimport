@@ -377,6 +377,8 @@ Si tienes permiso para planificar, un archivo con fechas de hoy o posteriores of
 
 ![Decisión sobre fechas futuras: crear borradores no publica los turnos automáticamente](screenshots/future-decision-dark.png)
 
+> **Si tu entorno la tiene activada**, aparece una tercera opción, **Importar y publicar lo válido** (disponible para propietario, administrador y planificador dentro de su ámbito). Solo publica los turnos válidos de hoy en adelante que proceden de ese fichero y no pisan trabajo manual; el resumen previo indica cuántos se publicarán, cuántos quedarán en borrador y cuántos requerirán revisión. Un descanso insuficiente, un turno manual vigente, una procedencia desconocida o una vacación aprobada nunca se sobrescriben: esos turnos se retienen en borrador o pasan a revisión. Una importación publicada así se revierte desde **Historial** mientras nadie haya editado esos turnos ni existan datos que dependan de ellos; en otro caso la reversión se bloquea y explica el motivo. Las otras dos opciones nunca publican.
+
 **Si eres empleado**, el autoservicio excluye hoy y el futuro y muestra su recuento. Si el documento solo contiene fechas excluidas, no habrá turnos históricos que guardar. No intentes cambiar sus fechas para incorporarlos.
 
 **Resultado esperado para un gestor:** podrás consultar los pasados en calendario y abrir **Ver planificación** para revisar los borradores. Si el archivo cubre varias semanas, comprueba cada una. Un fallo de permisos sobre el futuro puede bloquear la operación: sigue el resultado concreto y no supongas que se guardó una parte.
@@ -551,6 +553,17 @@ En pantallas con menor ancho disponible (tablets en vertical o ventanas reducida
 
 ![Planificador en vista estrecha: el indicador superior avisa del contenido adicional y permite el desplazamiento accesible](screenshots/planner-responsive-dark.png)
 
+### Planificar desde el móvil: Agenda, Tabla y Gestionar
+
+En pantallas de hasta 640 px de ancho (móvil en vertical) el planificador cambia a una vista compacta; el escritorio y las tablets no cambian. Si en tu teléfono sigues viendo la cuadrícula completa, desactiva **Sitio de escritorio** en el navegador.
+
+- **Agenda:** elige uno de los siete días de la semana y lee sus turnos en filas. Cada fila indica empleado, horario y estado (**Borrador**, **Publicado**, **Obsoleta** o **Excluido**). Pulsa una fila para abrirla: en un borrador se edita; en una versión que no admite cambios se consulta en solo lectura. **Añadir asignación** crea un turno para ese día; **Ver N más** y **Ver menos** amplían o reducen la lista.
+- **Tabla:** matriz de empleados por días. Si no caben los siete días, los botones laterales y los degradados indican que hay más contenido; los botones **Ver más días** y **Volver a los primeros días** te llevan al final y de vuelta al principio.
+- **Gestionar:** abre la hoja **Gestionar planificación** con las acciones administrativas de la semana: historial de versiones, crear nueva versión (si está publicada), publicar semanas pendientes, copiar semana anterior y publicar el borrador, según tu permiso. El contenido de la semana sigue siendo lo principal.
+- La vista elegida (Agenda o Tabla) se recuerda en ese dispositivo.
+
+Las acciones son las mismas que en escritorio y siguen sujetas a tu rol y ámbito: el servidor las valida aunque un botón aparezca.
+
 ### Si no hay empleados o no hay ámbito
 
 No crees personas de relleno para abrir la cuadrícula. Comprueba el filtro y si existen empleados activos en el contexto. Si aparece un aviso de ámbito, un administrador debe revisar la asignación del planificador. No todos los responsables necesitan un área: el ámbito también puede ser toda la organización o empleados concretos.
@@ -575,7 +588,7 @@ No crees personas de relleno para abrir la cuadrícula. Comprueba el filtro y si
 | El horario se solapa con otro turno | Revisa los dos intervalos del mismo empleado y corrige uno |
 | No puedes combinar un evento de jornada completa con otros turnos | Libre o vacaciones ocupan todo el día; quita el otro turno o cambia la fecha |
 | Ausencia temporal y otros turnos horarios necesitan hora de inicio y fin | Completa **Inicio** y **Fin** |
-| Menos de 11 horas de descanso | Ajusta el final de una jornada o el inicio de la siguiente |
+| Menos de 12 horas de descanso | Ajusta el final de una jornada o el inicio de la siguiente. Exactamente 12 h es válido; 11 h 59 min no. Se comprueba también contra la semana contigua: el lunes a las 05:00 no es válido si el domingo anterior terminó a las 23:30. La aplicación aplica la regla general; no contempla jornadas especiales ni convenios que permitan descansos menores |
 | La versión ya no es editable | Recarga; otra persona puede haber publicado |
 | El turno queda fuera del ámbito | Vuelve al empleado o área que puedes gestionar |
 
@@ -673,6 +686,17 @@ Comprueba la fecha, el horario y la ubicación o tipo de jornada asignada. Para 
 ![Nueva solicitud: selecciona el turno afectado y explica el cambio que necesitas](screenshots/request-new-dark.png)
 
 **Ejemplo:** Ana solicita empezar a las 09:00 y acabar a las 17:00 por una cita. Hasta que se resuelva, no debe dar ese horario por confirmado. No envíes varias solicitudes idénticas si una sigue pendiente.
+
+### Solicitar vacaciones (cuando está activada)
+
+La solicitud de vacaciones es una función que se activa por entorno; si no ves **Solicitar vacaciones** en **Solicitudes**, todavía no está disponible para ti. Necesitas un usuario vinculado a un empleado activo.
+
+1. Entra en **Solicitudes** y pulsa **Solicitar vacaciones**.
+2. Indica **Desde** y **Hasta** (no pueden empezar en el pasado ni superar 366 días) y, si quieres, un comentario.
+3. Revisa **Qué afecta a tu calendario**: turnos publicados o en borradores de esas fechas y posibles solapes con otra solicitud.
+4. Pulsa **Enviar solicitud**. Queda pendiente hasta que tu responsable la apruebe o la rechace (el rechazo exige un motivo). Mientras esté pendiente puedes usar **Cancelar solicitud**.
+
+Al aprobarse, los días futuros se registran como **Vacaciones** de día completo, con referencia a la solicitud; nunca se retrocede a fechas pasadas y la aprobación indica cuántos días se aplicaron. Un día con vacación aprobada queda protegido: el planificador lo muestra bloqueado y una importación posterior que lo contradiga queda en revisión sin sustituir la ausencia (solo propietario o administrador pueden decidir mantenerla o sustituirla, y queda auditado). Solo se solicitan **Vacaciones**; otros tipos no están disponibles. Quien gestiona puede aprobar varias solicitudes a la vez con **Aprobar seleccionadas**, que solo incluye las elegibles según su ámbito y la política de la organización. Nadie aprueba su propia solicitud, aunque sea propietario.
 
 ### Consultar o cancelar
 

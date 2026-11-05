@@ -1,5 +1,14 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-11-05 · cierre F5 (planificación, móvil y vacaciones)
+
+- Capítulo 11: tercera opción **Importar y publicar lo válido** (según entorno), qué publica, qué retiene y cuándo se puede revertir.
+- Descanso mínimo de **12 horas** (regla general del art. 34.3 del Estatuto de los Trabajadores; antes 11 h), dentro de la semana y también **entre semanas contiguas** (crear, editar, publicar e importar). No contempla jornadas especiales ni convenios que permitan menos.
+- Capítulo 17: planificador móvil **Agenda · Tabla · Gestionar** (hasta 640 px) y recordatorio del modo «Sitio de escritorio».
+- Capítulo 21: **Solicitar vacaciones** (según entorno), aprobación, protección del calendario, importación en conflicto y aprobación en bloque.
+- Sin capturas nuevas: las imágenes existentes no se han regenerado; las capturas de estas pantallas quedan para la próxima recaptura (`RECAPTURE.md`).
+- Referencias funcionales: [`TIME_OFF_REQUEST_CONTRACT.md`](../product/TIME_OFF_REQUEST_CONTRACT.md), [`FUTURE_IMPORT_DRAFT_CONTRACT.md`](../product/FUTURE_IMPORT_DRAFT_CONTRACT.md), [`IMPORT_REVERSION_CONTRACT.md`](../product/IMPORT_REVERSION_CONTRACT.md).
+
 ## Actualización 2026-10-29 · objetivos de jornada
 
 - Los objetivos pueden ser contractuales u operativos y cubrir periodos anuales, semanales, mensuales o personalizados. Pueden indicar un valor exacto o un rango, y una fecha desde la que entran en vigor.

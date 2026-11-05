@@ -22,6 +22,8 @@ Reglas configurables por organización/convenio (motor de reglas genérico — e
 R3-M06.
 
 ## 7. Decisiones arquitectónicas
+> **Enmienda 2026-11-05 (G7):** el umbral vigente es ahora **12 h** (ET art. 34.3) y se aplica también entre semanas; este documento conserva el registro histórico del MVP (11 h). Ver spec §20.1 «G7».
+
 Valor de 11 horas hardcodeado como constante de dominio (no columna de configuración), documentado como decisión temporal MVP. Producto/legal aprobó explícitamente el valor el 2026-09-04. Si el piloto revela necesidad real de configurabilidad, eso se plantea como microfase nueva post-piloto, no se anticipa aquí (evitar over-engineering, §3 del prompt maestro).
 
 ## 8. Modelo de datos afectado

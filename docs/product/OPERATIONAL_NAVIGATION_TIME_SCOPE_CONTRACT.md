@@ -61,7 +61,7 @@ La zona operacional vigente es `Europe/Madrid`, centralizada en `src/lib/operati
 
 ## TopBar compacto (≤640 px) — enmienda F0 (OD-06 aprobada)
 
-En viewport ≤640 px el TopBar es compacto y mantiene visible la **Organización**. Rol y Empleado salen de la línea principal para evitar densidad y zoom-out, pero **siguen accesibles** desde el menú de contexto/cuenta. Requisitos: `information_not_lost` (nada deja de poder consultarse), contexto de autorización sin cambios y escritorio idéntico a hoy. Se aplican los contratos de accesibilidad y responsive. Aplica desde F1-M03.
+En viewport ≤640 px el TopBar es compacto: **todo el contexto** (Organización, Rol, Empleado y Área) sale de la línea principal y se muestra en el menú de cuenta (implementado en `1a84f21`; la Organización no cabía junto a los controles de cuenta y se truncaba). *Supersede* la redacción inicial de OD-06 («mantiene visible la Organización»); **confirmado por el Product Owner el 2026-11-05** (validado en Galaxy A16 e iPhone; no se revierte). Requisitos: `information_not_lost` (nada deja de poder consultarse), contexto de autorización sin cambios y escritorio idéntico a hoy. Se aplican los contratos de accesibilidad y responsive. Aplica desde F1-M03.
 
 ## Solicitudes de vacaciones
 
