@@ -810,6 +810,8 @@ Esta fecha permite distinguir el cambio nuevo de asignaciones anteriores. No la 
 
 ### Transferir la propiedad
 
+> **En el móvil y la tableta vertical (hasta 900 px) y en móvil apaisado:** Personas, **Roles y acceso**, **Áreas** y **Asignaciones** se muestran como tarjetas en lugar de tablas, sin columnas cortadas (en tableta, dos por fila). Cada pantalla se desplaza completa hasta el último registro. En Roles puedes buscar por nombre o correo y ver el ámbito (por ejemplo, las áreas autorizadas de un planificador). En Asignaciones, el botón **Aplicar a N empleados** queda fijo abajo junto al resumen de seleccionados. Las pestañas se desplazan dentro de su barra: el borde atenuado indica que hay más. El asistente **Añadir nueva persona** muestra «Paso X de 5 · Nombre» con una barra de progreso y añade **Cancelar** en el primer paso. En los cuadros de diálogo (cambiar rol, transferir propiedad, área, ficha), los botones de acción quedan siempre visibles abajo. Las acciones y los permisos son los mismos que en escritorio.
+
 Solo el propietario activo ve el botón. En **Roles y acceso**, pulsa **Transferir propiedad**, selecciona el nuevo titular y el rol que conservará el anterior, lee la advertencia y completa la confirmación. Comprueba la nueva titularidad al terminar. No se realiza escogiendo Propietario en un cambio de rol ordinario.
 
 ![Transferencia de propiedad: revisa al nuevo titular y tu rol posterior antes de confirmar](screenshots/ownership-transfer-dark.png)

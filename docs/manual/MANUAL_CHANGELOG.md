@@ -1,5 +1,11 @@
 # Manual de usuario — registro de reconstrucción 3.0
 
+## Actualización 2026-11-05 · móvil: menú, calendario y Equipo
+
+- Menú lateral en móvil y tableta (hasta 980 px): siempre con textos, una sola X de cierre abajo (donde en escritorio está el botón de contraer) y la preferencia de escritorio intacta.
+- Calendario móvil: panel del día en una línea con **Añadir**, indicadores discretos de información y aviso en cada día, tres puntos y «+N».
+- Equipo (móvil, tableta vertical y móvil apaisado): Personas, Roles y acceso, Áreas y Asignaciones como tarjetas; acción principal y botones de los cuadros de diálogo siempre visibles; pestañas con indicador de desplazamiento; progreso «Paso X de 5» en el alta de personas; textos en español e inglés; la tabla de Asignaciones, Roles y Áreas en escritorio ahora se desplaza cuando hay muchos registros.
+
 ## Actualización 2026-11-05 · cierre F5 (planificación, móvil y vacaciones)
 
 - Capítulo 11: tercera opción **Importar y publicar lo válido** (según entorno), qué publica, qué retiene y cuándo se puede revertir.
