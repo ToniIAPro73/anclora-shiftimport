@@ -86,13 +86,13 @@ describe('planAutoPublication — decision table (spec §2.2)', () => {
     expect(reasons(fullDay)['e1|2026-11-02']).toBe(RETENTION.FULL_DAY_CONFLICT);
   });
 
-  it('row 6: less than 11 h of rest against an accepted neighbour is retained; 11 h exactly is allowed', () => {
+  it('row 6: less than 12 h of rest against an accepted neighbour is retained; 12 h exactly is allowed', () => {
     const late = { startTime: '14:00', endTime: '22:00', shiftType: 'Regular', countsAsWork: true };
     const early = { startTime: '05:00', endTime: '13:00', shiftType: 'Regular', countsAsWork: true };
     const bad = plan({ fileDays: [day('e1', '2026-11-02', 'NEW', [late]), day('e1', '2026-11-03', 'NEW', [early])] });
     expect(reasons(bad)['e1|2026-11-03']).toBe(RETENTION.REST_RULE_VIOLATION);
     expect(bad.mode).toBe(WEEK_MODE.SPLIT);
-    const ok = plan({ fileDays: [day('e1', '2026-11-02', 'NEW', [{ ...late, endTime: '18:00' }]), day('e1', '2026-11-03', 'NEW', [early])] });
+    const ok = plan({ fileDays: [day('e1', '2026-11-02', 'NEW', [{ ...late, endTime: '17:00' }]), day('e1', '2026-11-03', 'NEW', [early])] });
     expect(ok.mode).toBe(WEEK_MODE.PUBLISH);
   });
 

@@ -162,7 +162,7 @@ test('planner rejects inactive, nonexistent, and cross-tenant employees for assi
   await page.getByRole('button', { name: 'Salir' }).click();
 });
 
-test('planner enforces 11 hours of rest and accepts the exact boundary', async ({ page }) => {
+test('planner enforces 12 hours of rest and accepts the exact boundary', async ({ page }) => {
   await loginAs(page, fixture.emails.planner);
   const headers = { 'x-organization-id': fixture.orgA };
   const scheduleResponse = await page.request.post('/api/schedules', {
@@ -182,16 +182,16 @@ test('planner enforces 11 hours of rest and accepts the exact boundary', async (
 
   const tooLittleRest = await page.request.post(assignmentUrl, {
     headers,
-    data: { employeeId: fixture.empA1, date: '2026-10-07', startTime: '03:59', endTime: '12:00' },
+    data: { employeeId: fixture.empA1, date: '2026-10-07', startTime: '04:59', endTime: '12:00' },
   });
   expect(tooLittleRest.status()).toBe(422);
   expect(await tooLittleRest.json()).toMatchObject({
-    code: 'REST_RULE_VIOLATION', minimumRestHours: 11, conflictingAssignmentId: first.assignment.id,
+    code: 'REST_RULE_VIOLATION', minimumRestHours: 12, conflictingAssignmentId: first.assignment.id,
   });
 
   const exactBoundary = await page.request.post(assignmentUrl, {
     headers,
-    data: { employeeId: fixture.empA1, date: '2026-10-07', startTime: '04:00', endTime: '12:00' },
+    data: { employeeId: fixture.empA1, date: '2026-10-07', startTime: '05:00', endTime: '12:00' },
   });
   expect(exactBoundary.status()).toBe(201);
   const boundary = await exactBoundary.json();

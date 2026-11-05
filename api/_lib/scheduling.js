@@ -119,7 +119,14 @@ function timeToMinutes(value) {
   return hours * 60 + minutes;
 }
 
-export const MINIMUM_REST_HOURS = 11;
+/**
+ * General minimum rest between two working days: 12 h (Estatuto de los Trabajadores, art. 34.3). Product decision of 2026-11-05
+ * (supersedes the 11 h MVP value of R3-M07). A rest of exactly 12:00 is valid, 11:59 is not.
+ * LIMIT: this is the GENERAL rule only. Special regimes (RD 1561/1995: some sectors, shift work, sea) and collective agreements may
+ * allow shorter rests with compensation; the application does not model them and there is no per-organisation configuration yet.
+ * Single source of truth: the SQL gates below interpolate this constant, never a literal.
+ */
+export const MINIMUM_REST_HOURS = 12;
 const MINIMUM_REST_MINUTES = MINIMUM_REST_HOURS * 60;
 
 function dateToDayNumber(value) {
@@ -148,6 +155,45 @@ export function calculateRestGapMinutes(first, second) {
   if (a.end <= b.start) return b.start - a.end;
   if (b.end <= a.start) return a.start - b.end;
   return null;
+}
+
+/**
+ * Rest rule ACROSS a planning-week boundary (G7). Same threshold and same interval convention as `calculateRestGapMinutes`, but an
+ * overlap with a neighbour from the adjacent week (e.g. a Sunday night shift running into Monday) is also a violation: inside a week
+ * the overlap is reported by its own rule, there is no such rule between weeks. Exactly `MINIMUM_REST_HOURS` of rest is valid.
+ */
+export function violatesCrossWeekRest(first, second) {
+  const a = assignmentInterval(first);
+  const b = assignmentInterval(second);
+  if (!a || !b) return false;
+  if (a.end <= b.start) return b.start - a.end < MINIMUM_REST_MINUTES;
+  if (b.end <= a.start) return a.start - b.end < MINIMUM_REST_MINUTES;
+  return true;
+}
+
+/**
+ * What the employees really work on the day before the period starts and the day after it ends (EFFECTIVE calendar shifts of any
+ * schedule). Read-only; ±1 day is enough because a rest below the minimum cannot span more than the adjacent day.
+ */
+export async function loadRestBoundaryShifts(sql, { organizationId, employeeIds, periodStart, periodEnd }) {
+  if (!employeeIds || employeeIds.length === 0) return [];
+  const rows = await sql`
+    SELECT employee_id, date, NULLIF(btrim(start_time), '') AS start_time, NULLIF(btrim(end_time), '') AS end_time,
+           shift_type, counts_as_work
+    FROM shifts
+    WHERE organization_id = ${organizationId} AND effective_state = 'EFFECTIVE'
+      AND employee_id::text = ANY(${employeeIds}::text[])
+      AND date IN (${shiftIsoDate(periodStart, -1)}::date, ${shiftIsoDate(periodEnd, 1)}::date)
+  `;
+  return rows
+    .map((row) => ({ ...row, date: databaseDateToIso(row.date) }))
+    .filter((row) => row.start_time && row.end_time && getShiftSemantics(row).contributesWorkedTime);
+}
+
+function shiftIsoDate(iso, days) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 /** Half-open interval rule: touching assignments are valid, overlap is not. */
@@ -275,7 +321,7 @@ async function assertNoAssignmentOverlap(sql, { scheduleVersionId, employeeId, d
 }
 
 async function assertMinimumRest(sql, {
-  scheduleVersionId, employeeId, date, startTime, endTime, shiftType = 'Regular', countsAsWork = true, excludeId = null,
+  scheduleVersionId, employeeId, date, startTime, endTime, shiftType = 'Regular', countsAsWork = true, excludeId = null, period = null,
 }) {
   const rows = excludeId
     ? await sql`
@@ -310,6 +356,19 @@ async function assertMinimumRest(sql, {
     error.minimumRestHours = MINIMUM_REST_HOURS;
     error.conflictingAssignmentId = conflict.row.id;
     throw error;
+  }
+  // G7: the first / last day of a week is also bound by what the employee works in the ADJACENT week (published calendar).
+  if (period && (date === period.periodStart || date === period.periodEnd)) {
+    const neighbours = await loadRestBoundaryShifts(sql, { ...period, employeeIds: [employeeId] });
+    const crossing = neighbours.find((other) => other.date !== date && violatesCrossWeekRest(candidate, other));
+    if (crossing) {
+      const error = new HttpError(422, `Minimum rest period is ${MINIMUM_REST_HOURS} hours`);
+      error.code = 'REST_RULE_VIOLATION';
+      error.minimumRestHours = MINIMUM_REST_HOURS;
+      error.conflictingAssignmentId = null;
+      error.crossWeek = true;
+      throw error;
+    }
   }
 }
 
@@ -670,6 +729,7 @@ export async function createAssignment(sql, ctx, scheduleId, versionId, input = 
   });
   await assertMinimumRest(sql, {
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, shiftType, countsAsWork,
+    period: { organizationId: ctx.organizationId, periodStart: schedule.period_start, periodEnd: schedule.period_end },
   });
   const location = input.location === undefined || input.location === null ? null : String(input.location).trim() || null;
   // The same scope the check above applied is enforced again BY the insert (no window between check and write).
@@ -721,6 +781,7 @@ export async function updateAssignment(sql, ctx, scheduleId, versionId, assignme
   });
   await assertMinimumRest(sql, {
     scheduleVersionId: versionId, employeeId, date, startTime, endTime, shiftType, countsAsWork, excludeId: assignmentId,
+    period: { organizationId: ctx.organizationId, periodStart: schedule.period_start, periodEnd: schedule.period_end },
   });
   const location = input.location === undefined ? assignment.location : (input.location === null ? null : String(input.location).trim() || null);
   const { scopeMode, scopeIds } = scopeGuardOf(await resolveEffectiveAccessScope(sql, ctx));
@@ -1015,7 +1076,7 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId, { dryR
   return txn`
     WITH target AS MATERIALIZED (
       SELECT sv.id AS version_id, sv.schedule_id, sv.status,
-             s.organization_id, s.area_id
+             s.organization_id, s.area_id, s.period_start, s.period_end
       FROM schedule_versions sv
       JOIN schedules s ON s.id = sv.schedule_id
       WHERE sv.id = ${versionId}
@@ -1092,16 +1153,41 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId, { dryR
       JOIN assignment_intervals b
         ON a.employee_id = b.employee_id
        AND a.id < b.id
-      -- F4-REM-02: the 11 h rest separates DIFFERENT days, exactly as when the assignment is created (assertMinimumRest): two compatible
+      -- F4-REM-02: the minimum rest separates DIFFERENT days, exactly as when the assignment is created (assertMinimumRest): two compatible
       -- segments of the same day (Regular 08-16 + Extras 18-21) are one working day. Overlaps stay blocked by overlap_conflicts.
       WHERE a.date <> b.date
         AND NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
         AND (
-          (b.start_at >= a.end_at AND b.start_at - a.end_at < INTERVAL '11 hours')
-          OR (a.start_at >= b.end_at AND a.start_at - b.end_at < INTERVAL '11 hours')
+          (b.start_at >= a.end_at AND b.start_at - a.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
+          OR (a.start_at >= b.end_at AND a.start_at - b.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
         )
       ORDER BY a.id, b.id
       LIMIT 1
+    ),
+    boundary_intervals AS MATERIALIZED (
+      -- G7: the EFFECTIVE calendar the employee works the day before / after this week (any schedule). Same worked-time test as
+      -- getShiftSemantics (absences and whole-day types never count). Rows are outside the period, so never part of this version.
+      SELECT sh.employee_id,
+             (sh.date + btrim(sh.start_time)::time) AS start_at,
+             (sh.date + btrim(sh.end_time)::time
+               + CASE WHEN btrim(sh.end_time)::time <= btrim(sh.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AS end_at
+      FROM shifts sh
+      JOIN target t ON sh.organization_id = t.organization_id
+      WHERE sh.effective_state = 'EFFECTIVE'
+        AND (sh.date = t.period_start - 1 OR sh.date = t.period_end + 1)
+        AND sh.employee_id IN (SELECT employee_id FROM assignment_intervals)
+        AND COALESCE(sh.counts_as_work, TRUE) = TRUE
+        AND NULLIF(btrim(sh.start_time), '') IS NOT NULL AND NULLIF(btrim(sh.end_time), '') IS NOT NULL
+        AND lower(btrim(COALESCE(sh.shift_type, ''))) NOT IN ('ausencia', 'ausencias', 'absence', 'absences', 'libre', 'día libre', 'dia libre',
+                                                                'day off', 'off', 'vacaciones', 'vac', 'vac.', 'baja', 'leave', 'sick leave')
+    ),
+    boundary_rest_conflicts AS (
+      SELECT a.id AS conflicting_assignment_id
+      FROM assignment_intervals a JOIN boundary_intervals b ON a.employee_id = b.employee_id
+      WHERE (a.start_at < b.end_at AND b.start_at < a.end_at)
+         OR (a.start_at >= b.end_at AND a.start_at - b.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
+         OR (b.start_at >= a.end_at AND b.start_at - a.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
+      ORDER BY a.id LIMIT 1
     ),
     conflicts AS (
       SELECT 'SCOPE_FORBIDDEN'::text AS error_code, NULL::uuid AS conflicting_assignment_id, NULL::integer AS minimum_rest_hours, 0 AS priority
@@ -1121,6 +1207,9 @@ export function publishScheduleVersionTx(txn, ctx, scheduleId, versionId, { dryR
       UNION ALL
       SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 2
       FROM rest_conflicts
+      UNION ALL
+      SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 2
+      FROM boundary_rest_conflicts
     ),
     validation AS (
       SELECT
@@ -1252,7 +1341,7 @@ export function publishImportedPairsTx(txn, ctx, { scheduleId, versionId, pairs,
       ORDER BY created_at ASC LIMIT 1
     ),
     target AS MATERIALIZED (
-      SELECT sv.id AS version_id, sv.schedule_id, sv.status, s.organization_id, s.area_id
+      SELECT sv.id AS version_id, sv.schedule_id, sv.status, s.organization_id, s.area_id, s.period_start, s.period_end
       FROM schedule_versions sv
       JOIN schedules s ON s.id = sv.schedule_id
       WHERE sv.id = ${versionId} AND sv.schedule_id = ${scheduleId} AND s.organization_id = ${ctx.organizationId}
@@ -1285,9 +1374,34 @@ export function publishImportedPairsTx(txn, ctx, { scheduleId, versionId, pairs,
       SELECT a.id AS conflicting_assignment_id
       FROM assignment_intervals a JOIN assignment_intervals b ON a.employee_id = b.employee_id AND a.id < b.id
       WHERE a.date <> b.date AND NOT (a.start_at < b.end_at AND b.start_at < a.end_at)
-        AND ((b.start_at >= a.end_at AND b.start_at - a.end_at < INTERVAL '11 hours')
-          OR (a.start_at >= b.end_at AND a.start_at - b.end_at < INTERVAL '11 hours'))
+        AND ((b.start_at >= a.end_at AND b.start_at - a.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
+          OR (a.start_at >= b.end_at AND a.start_at - b.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour')))
       ORDER BY a.id, b.id LIMIT 1
+    ),
+    boundary_intervals AS MATERIALIZED (
+      -- G7: the EFFECTIVE calendar the employee works the day before / after this week (any schedule). Same worked-time test as
+      -- getShiftSemantics (absences and whole-day types never count). Rows are outside the period, so never part of this version.
+      SELECT sh.employee_id,
+             (sh.date + btrim(sh.start_time)::time) AS start_at,
+             (sh.date + btrim(sh.end_time)::time
+               + CASE WHEN btrim(sh.end_time)::time <= btrim(sh.start_time)::time THEN INTERVAL '1 day' ELSE INTERVAL '0 day' END) AS end_at
+      FROM shifts sh
+      JOIN target t ON sh.organization_id = t.organization_id
+      WHERE sh.effective_state = 'EFFECTIVE'
+        AND (sh.date = t.period_start - 1 OR sh.date = t.period_end + 1)
+        AND sh.employee_id IN (SELECT employee_id FROM assignment_intervals)
+        AND COALESCE(sh.counts_as_work, TRUE) = TRUE
+        AND NULLIF(btrim(sh.start_time), '') IS NOT NULL AND NULLIF(btrim(sh.end_time), '') IS NOT NULL
+        AND lower(btrim(COALESCE(sh.shift_type, ''))) NOT IN ('ausencia', 'ausencias', 'absence', 'absences', 'libre', 'día libre', 'dia libre',
+                                                                'day off', 'off', 'vacaciones', 'vac', 'vac.', 'baja', 'leave', 'sick leave')
+    ),
+    boundary_rest_conflicts AS (
+      SELECT a.id AS conflicting_assignment_id
+      FROM assignment_intervals a JOIN boundary_intervals b ON a.employee_id = b.employee_id
+      WHERE (a.start_at < b.end_at AND b.start_at < a.end_at)
+         OR (a.start_at >= b.end_at AND a.start_at - b.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
+         OR (b.start_at >= a.end_at AND b.start_at - a.end_at < (${MINIMUM_REST_HOURS}::integer * INTERVAL '1 hour'))
+      ORDER BY a.id LIMIT 1
     ),
     missing_pairs AS (
       SELECT 1 AS found FROM pair_list pl
@@ -1312,6 +1426,7 @@ export function publishImportedPairsTx(txn, ctx, { scheduleId, versionId, pairs,
       UNION ALL SELECT 'PROTECTED_CURRENT'::text, conflicting_assignment_id, NULL::integer, 3 FROM protected_current
       UNION ALL SELECT 'OVERLAP'::text, conflicting_assignment_id, NULL::integer, 4 FROM overlap_conflicts
       UNION ALL SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 5 FROM rest_conflicts
+      UNION ALL SELECT 'REST_RULE_VIOLATION'::text, conflicting_assignment_id, ${MINIMUM_REST_HOURS}::integer, 5 FROM boundary_rest_conflicts
     ),
     validation AS (
       SELECT (SELECT error_code FROM conflicts ORDER BY priority LIMIT 1) AS error_code,

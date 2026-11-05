@@ -10,7 +10,7 @@ import {
 import { HttpError, requireRole, resolveEffectiveAccessScope } from './auth.js';
 import { canUseFeature, requireFeature } from './plans.js';
 import { getOperationalDate } from './operational-date.js';
-import { createNewDraftFromVersionTx, publishImportedPairsTx } from './scheduling.js';
+import { createNewDraftFromVersionTx, loadRestBoundaryShifts, publishImportedPairsTx } from './scheduling.js';
 import { ACTIONS, can } from './authorization.js';
 import { WEEK_MODE, planAutoPublication } from './import-auto-publish-planner.js';
 import { isImportAutoPublishEnabled } from './import-flags.js';
@@ -374,6 +374,30 @@ const outcomeCounts = (summary) => ({
 
 
 /**
+ * G7: the worked assignments an employee has on the day before / after a planning week. Source of truth is the EFFECTIVE calendar,
+ * except for the pairs this very file replaces: for those, the file's own rows (any week of the batch) are the future state.
+ */
+async function loadAdjacentWeekAssignments(sql, ctx, week, byWeek) {
+  const employeeIds = [...new Set(week.fileDays.map((day) => day.employeeId))];
+  if (employeeIds.length === 0) return [];
+  const periodEnd = addDays(week.periodStart, 6);
+  const edgeDays = new Set([addDays(week.periodStart, -1), addDays(periodEnd, 1)]);
+  const replaced = new Set();
+  const incoming = [];
+  for (const other of byWeek.values()) {
+    for (const day of other.fileDays) {
+      if (!edgeDays.has(day.date) || !employeeIds.includes(day.employeeId)) continue;
+      if (day.outcome === 'NEW' || day.outcome === 'MODIFIED') {
+        replaced.add(pairKeyOf(day.employeeId, day.date));
+        incoming.push(...day.rows.map((row) => ({ ...row, employeeId: day.employeeId, date: day.date })));
+      }
+    }
+  }
+  const effective = await loadRestBoundaryShifts(sql, { organizationId: ctx.organizationId, employeeIds, periodStart: week.periodStart, periodEnd });
+  return [...effective.filter((row) => !replaced.has(pairKeyOf(row.employee_id, row.date))), ...incoming];
+}
+
+/**
  * Auto-publication plan per planning week. Read-only: loads the week's DRAFT and latest published base, runs the pure planner
  * and returns `Map<weekKey, { periodStart, areaId, mode, publishPairs, retainPairs, reviewPairs, scheduleId, ... }>`.
  */
@@ -410,7 +434,9 @@ async function planAutoPublishWeeks(sql, ctx, prepared, evaluation) {
         FROM shift_assignments WHERE schedule_version_id = ANY(${versionIds}::uuid[])
       `
       : [];
+    const boundaryAssignments = await loadAdjacentWeekAssignments(sql, ctx, week, byWeek);
     const result = planAutoPublication({
+      boundaryAssignments,
       periodStart: week.periodStart,
       areaId: week.areaId,
       fileDays: week.fileDays,

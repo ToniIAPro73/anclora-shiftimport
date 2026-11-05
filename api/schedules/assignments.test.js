@@ -56,7 +56,7 @@ describe('ShiftAssignment draft CRUD', () => {
     expect(rangesOverlap('10:00', '11:00', '09:00', '17:00')).toBe(true);
   });
 
-  it('calculates rest across dates, including the inclusive 11-hour boundary', () => {
+  it('calculates rest across dates, as exact minutes (the threshold itself is MINIMUM_REST_HOURS)', () => {
     const first = { date: '2026-09-29', start_time: '09:00', end_time: '17:00' };
     expect(calculateRestGapMinutes(first, {
       date: '2026-09-30', start_time: '04:00', end_time: '12:00',

@@ -8,7 +8,7 @@
  * The SQL gate of `publishImportedPairsTx` re-validates whatever this module accepts (defence in depth).
  */
 import { findAssignmentConflict, getShiftSemantics } from './shift-compatibility.js';
-import { MINIMUM_REST_HOURS, calculateRestGapMinutes } from './scheduling.js';
+import { MINIMUM_REST_HOURS, calculateRestGapMinutes, violatesCrossWeekRest } from './scheduling.js';
 
 export const RETENTION = Object.freeze({
   OVERLAP: 'OVERLAP',
@@ -77,7 +77,7 @@ function compareDays(a, b) {
   return 0;
 }
 
-/** Rest between two worked timed assignments on different dates: same rule as the manual publication (11 h, no cross-week). */
+/** Rest between two worked timed assignments on different dates: same rule as the manual publication (11 h). Cross-week is handled separately by `crossWeekRestViolation`. */
 function restViolation(candidate, others) {
   const candidateSemantics = getShiftSemantics(withSnake(candidate));
   if (!candidateSemantics.contributesWorkedTime) return false;
@@ -90,6 +90,14 @@ function restViolation(candidate, others) {
   });
 }
 
+/** G7: rest against the ADJACENT week (published calendar or the same file's neighbouring week). Overlap counts as a violation. */
+function crossWeekRestViolation(candidate, others) {
+  if (!getShiftSemantics(withSnake(candidate)).contributesWorkedTime) return false;
+  return others.some((other) => other.date !== candidate.date
+    && getShiftSemantics(withSnake(other)).contributesWorkedTime
+    && violatesCrossWeekRest(withSnake(candidate), withSnake(other)));
+}
+
 const dayDiff = (a, b) => Math.abs((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
 
 /**
@@ -99,6 +107,7 @@ const dayDiff = (a, b) => Math.abs((Date.parse(`${a}T00:00:00Z`) - Date.parse(`$
  *                     rows: Array<{startTime,endTime,shiftType,countsAsWork}> }>,
  *   draftAssignments?: Array<{ employeeId: string, date: string, importId: string|null }>,
  *   baseAssignments?: Array<object>,
+ *   boundaryAssignments?: Array<object>,  // worked assignments of the adjacent weeks (day before / after the period), see G7
  *   currentByDay?: Map<string, Array<{ provenance: string|null, importId?: string|null }>>,
  *   pendingModificationDays?: Set<string>,
  * }} input
@@ -111,6 +120,7 @@ export function planAutoPublication(input) {
     employeeId: row.employeeId ?? row.employee_id, date: String(row.date).slice(0, 10), importId: row.importId ?? row.import_id ?? null,
   }));
   const base = (input.baseAssignments ?? []).map(toAssignment);
+  const boundary = (input.boundaryAssignments ?? []).map(toAssignment);
   const currentByDay = input.currentByDay ?? new Map();
   const pending = input.pendingModificationDays ?? new Set();
 
@@ -173,7 +183,8 @@ export function planAutoPublication(input) {
 
     // Row 6: rest against neighbours (±1 day) already accepted or carried over from the base version.
     const neighbours = [...accepted, ...baseOthers].filter((other) => other.employeeId === day.employeeId && dayDiff(other.date, day.date) === 1);
-    if (incoming.some((row) => restViolation(row, neighbours))) { retain(RETENTION.REST_RULE_VIOLATION); continue; }
+    const adjacentWeek = boundary.filter((other) => other.employeeId === day.employeeId && dayDiff(other.date, day.date) === 1);
+    if (incoming.some((row) => restViolation(row, neighbours) || crossWeekRestViolation(row, adjacentWeek))) { retain(RETENTION.REST_RULE_VIOLATION); continue; }
 
     accepted.push(...incoming);
     publishPairs.push({ employeeId: day.employeeId, date: day.date });
