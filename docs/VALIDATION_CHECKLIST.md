@@ -1,154 +1,82 @@
-# Checklist de validación — F4 (primera entrega) + Solicitudes, Sustituir/Añadir y consistencia calendario ↔ planificador (2026-11-02)
+# Checklist de validación — UX móvil: menú, calendario y Equipo (2026-11-06)
 
-> Se sobrescribe en cada entrega; el historial queda en Git. El cierre de F3 se conserva en la sección «F3 (cerrada)».
+> Este fichero se sobrescribe en cada entrega. El historial queda en Git (el cierre de F5, `PASS_WITH_GAPS` en `5ead23f` y ya promocionado, consta en ese commit y en los anteriores).
 
 **Repositorio:** anclora-shiftimport
-**Rama:** development (commits `11d9605`, `b98be89`, `dd466a9` sobre `a6a4ec2`)
-**Spec canónica:** `docs/specs/SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` (§4.5 y §4.5.1)
-**Entorno de validación local:** runtime local con flags efímeros → Neon `main`; ninguna migración nueva; escrituras solo en tenants sintéticos `E2E-SHIFT-<runId>`.
-**Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce; residuo 0.
-
-> **Estado vigente (2026-11-05, F4-M05):** el bloque siguiente es el cierre de la puerta F4 y **supersede** los valores `PENDING`/`NOT_STARTED`/`NOT_VERIFIED` de este documento y de las secciones de abajo, que se conservan como histórico de cada entrega. Origen de la validación humana: atestación del Product Owner; el agente no observó los dispositivos.
-
-> **Estado vigente (2026-11-05, F5):** `F5_GATE=PASS_WITH_GAPS` (G7 corregida y verificada con umbral de 12 h; gaps G2–G6 y G8 aceptados con propietario; emitido tras commit y push verificados a `origin/development`, ver informe de entrega). Detalle y evidencia en la spec, §20.1 «F5».
-
-```text
-F5 (SHA base a19dc47, local, tenants sintéticos A/B, residuo 0)
-ROLE_SCOPE_HTTP_MATRIX=PASS 306/306 (re-ejecutada tras G7/12 h) (8 roles/scopes x 26 capacidades x 2 tenants + cross-tenant ambos sentidos)
-IMPORT_AUTOPUBLISH_REVERSION_E2E=PASS 8/8   VACATION_APPROVAL_PROTECTION_E2E=PASS 6/6 (F3) + 4/4 + 1/1 flag OFF (F2)
-MOBILE_375x812_E2E=PASS 6/6   A11Y_F1=PASS 4/4   LINT/TSC/BUILD=PASS   TEST_F3=658/658   SUITE=2703/2703 + 7 PostgreSQL local
-G7_CROSS_WEEK_REST=FIXED_VERIFIED (12 h dentro y entre semanas en crear/editar/publicar/importar; 12:00 válido, 11:59 no; regla general ET 34.3, sin excepciones sectoriales)   OD-06=CONFIRMED   OPERATIONAL_ORG_WRITES=0 (huella antes/después idéntica en la ejecución focal post-G7)
-DEPLOY=NONE   PROMOTION=NOT_AUTHORIZED (staging/production/main intactas)
-```
-
-```text
-F4_GATE=PASS_WITH_GAPS  (2026-11-05, SHA 61253af; gaps G1–G8 en la spec, «Cierre formal F4»)
-F4_M01=VERIFIED  F4_M02=VERIFIED  F4_M03=VERIFIED  F4_M04=VERIFIED_WITH_GAPS  F4_M05=PASS_WITH_GAPS
-HUMAN_VALIDATION=PASS_CONFIRMED_BY_PRODUCT_OWNER
-ANDROID_PHYSICAL=PASS_REPORTED_BY_PRODUCT_OWNER  IOS_PHYSICAL=PASS_REPORTED_BY_PRODUCT_OWNER
-PRODUCTION_DEPLOYMENT=61253af (dpl_BbQ7XdFdJaNVpKxgsx2i4tnRogYu, READY)  F5=NOT_STARTED  F5-M01=DESBLOQUEADA (G1 resuelta en development, pendiente de desplegar)
-G1=RESUELTA en development (commit fix(f4): restore mobile planner test aliases…); NO desplegada: test:f4-mobile B/C seguirá fallando contra production 61253af hasta una promoción autorizada
-```
-
-```text
-(histórico, 2026-11-02/03)
-AUTOMATED_QA=PASS
-HUMAN_VALIDATION=PENDING
-PREVIEW_INTEGRATED_QA=PENDING
-PRODUCTION_DEPLOYMENT=NOT_AUTHORIZED
-F4=NOT_STARTED
-```
-
-## F4 — primera entrega (Centro de Solicitudes, bandeja unificada, contadores) — **local, sin publicar**
-
-```text
-F4_M01=IMPLEMENTED  F4_M02=IMPLEMENTED  F4_M03=IMPLEMENTED_PENDING_GATE  F4_M04=PARTIAL  F4_M05=PENDING
-F4_FIX01_PLANNER_COUNTER=IMPLEMENTED
-AUTOMATED_QA=PASS (focal)  HUMAN_VALIDATION=PENDING  PREVIEW_INTEGRATED_QA=PENDING
-PRODUCTION_DEPLOYMENT=PROMOTED_8ad2edb (PROMOTE=FULL, 2026-11-03)  F4_GATE=PENDING_PREVIEW_VALIDATION  F5=NOT_STARTED
-```
-
-> Histórico: supersedido el 2026-11-05 por el cierre F4-M05 (`F4_GATE=PASS_WITH_GAPS`); ver el estado vigente arriba.
-
-- **Centro de Solicitudes**: «Solicitudes» abre un único modal con `Pendientes del equipo (N)`, `Historial del equipo` y `Mis solicitudes` (solo con empleado vinculado); roles sin gestión, solo `Mis solicitudes`; el portal de EMPLOYEE no cambia. El badge es correcto al cargar.
-- **Bandeja unificada**: cambios de turno y vacaciones, filtros (tipo, área, empleado), paginación, solape, turnos afectados, advertencia de vacaciones ya iniciadas (OD-08), motivo cuando no se puede decidir, rechazo con motivo obligatorio.
-- **Aprobación masiva** (`POST /api/approval-requests/bulk-approve`, solo vacaciones, 1–50): resultado parcial por elemento; nunca aprueba lo no elegible.
-- **Contador del planificador (F4-FIX-01)**: borrador `N planificadas · M desactualizadas`; versión publicada `N publicados · M excluidos` (derivado de lo realmente materializado, sin migración).
-- **Comprobado**: 28 comprobaciones contra Postgres real (alcances OWNER/ADMIN/PLANNER ORG-AREAS-EMPLOYEES/EMPLOYEE, autoaprobación, fuera de alcance, otro tenant, política, parcial); contadores en Postgres real; visual 1440/412/375; axe 0 violaciones; tests focales (ver informe). Residuo 0; ninguna escritura en organizaciones reales; ninguna migración.
-- **F4-M03 (decisiones OD-F4-01..04 aprobadas, implementadas en local)**:
-  - **Copiar semana anterior**: copia el plan *publicado y aún vigente* de la semana anterior a un borrador existente; vista previa, confirmación, no sobrescribe, idempotente; omite con motivo (vacaciones, pasados, solapes, descanso 11 h incluido el límite de semana, obsoletas, fuera de alcance).
-  - **Publicar semanas pendientes** (hasta 12): una publicación canónica por semana, resultado por semana, vista previa por ensayo, sin semanas con fechas ya pasadas, notificaciones como hoy. **Corrige un hueco previo**: ahora la publicación (individual y en lote) rechaza un horario con empleados fuera del alcance del PLANNER.
-  - **PLANNER sin edición operativa directa**: `403 PLANNER_DIRECT_WRITE_FORBIDDEN` en `POST /api/calendar/changes` y en `PATCH /api/shifts` (cerrado el bypass `origin: 'IMP'`, el borrado y los `importId` inventados). Planificar en borrador, registrar histórico y reconciliar siguen permitidos.
-  - **Reconciliación masiva «Mantener actual»** (≤ 50 días de un empleado, motivo común, vista previa, resultado por día) y **guardia de concurrencia `409 DAY_CHANGED`** también en la resolución individual (una sola sentencia con `FOR UPDATE`).
-  - **Comprobado**: 62 comprobaciones contra Postgres real (roles, alcances ORGANIZATION/AREAS/EMPLOYEES, aislamiento de tenant, concurrencia con 3 peticiones simultáneas → 1 sola escritura, vacaciones protegidas) + regresión de F4-M01/M02 (28/28) y del contador F4-FIX-01; visual 1440/412/375 (ES, y EN claro en muestra), `axe` 0 violaciones en los diálogos nuevos, recorrido real por teclado (Tab, Espacio, Enter, Escape, foco visible y atrapado). Sin migraciones; residuo 0.
-- **Pendiente / no ejecutado**: validación humana en dispositivo físico; QA en Preview tras el push. La matriz visual 834×1112 y 844×390 **sí se ejecutó** (abajo).
-- **Remediación (2026-11-03)**: **REM-01** alcance `AREAS`/`EMPLOYEES` en escrituras de planificación, borrador nuevo y copia — corregido; **REM-02** Regular + Extras el mismo día publicable (descanso solo entre días distintos) — corregido; **AUD-03** concurrencia por empleado+día — bloqueo `pg_advisory_xact_lock` + puerta explícita `set_config` (sustituye la división por cero) — corregido y verificado en Postgres real (remediación 37/37, F4-M03 62/62, F4-M01/M02 28/28, 60 peticiones/12 días ⇒ 12 escrituras, 0 duplicados).
-- **QA-04 (visual, `agent-browser`)**: 834×1112 PASS y 844×390 PASS en los 10 pasos (solicitudes, bandeja, masiva, contador, copiar, publicar pendientes, reconciliación, «Mantener actual»); sin desbordamiento horizontal, botón principal alcanzable, foco atrapado/visible, `axe` 0 violaciones en diálogos nuevos. Defecto corregido: foco a `<body>` al llegar los resultados (ahora pasa a «Cerrar»). Evidencia: `qa/e2e-acceptance/artifacts/F4-MOBILE/`.
-- **Cierre técnico F4 (2026-11-03)**: regresión `App.logout.test.tsx` (bfcache) **resuelta** — era una fuga de `fetch` 401 entre tests que F4-M01 (llamada al cargar) hizo visible; 9/9 ×5. **E2E móvil de Playwright** (`npm --prefix qa/e2e-acceptance run test:f4-mobile`, 375×812 táctil, datos sintéticos reales, teardown con residuo 0): **6/6** (solicitudes + masiva, copiar semana, publicar pendientes, reconciliación masiva verificada en BD, modal de turnos, sesión) + recorrido equivalente con `agent-browser`. Defectos corregidos: foco a `<body>` tras resultados, trampa de foco con foco no tabulable, Escape cerraba el modal con el selector abierto en táctil, y **auditoría de «copiar semana» perdida** (tipo fuera del CHECK; ahora `ASSIGNMENT_CREATED`). Evidencia: `qa/e2e-acceptance/artifacts/F4-MOBILE/e2e-mobile-375/`. **ANDROID_PHYSICAL=NOT_VERIFIED, IOS_PHYSICAL=NOT_VERIFIED**, WebKit no cubierto; bfcache real no provocable (se probó el manejador con `pageshow` persistido). Pruebas focalizadas finales: 1498/1498. **F4_M04 = PARTIAL (falta validación humana en dispositivo físico), F4_M05 = PENDING.**
-- **QA E2E en Preview sobre QA Mirror (2026-11-04)**: Preview `8ad2edb`, sesiones reales ADMIN/EMPLOYEE QA y PLANNER sintético temporal. Funcional/seguridad 46/46 (API + BD), visual/accesibilidad en 8 viewports y escenarios A–F de 375×812 con cambios reales: PASS; teardown verificado (Mirror idéntico a su línea base, `QA_TEMP_RESIDUE=0`, 0 escrituras en la organización operativa). Defecto P2 hallado: primer fotograma del selector «Tipo de turno» fuera del viewport (≤13 ms, solo en la primera apertura tras cargar); corregido en local con `useLayoutEffect` (**LOCAL_FIX_PASS / PREVIEW_RECHECK_PENDING**: requiere nuevo despliegue). Android/iOS físicos y teclado virtual real no verificados. **F4_M05 = PENDING, validación humana NO realizada.**
-- **QA focal local del código sin publicar (2026-11-04)**: 15/15 casos ejecutables PASS en Chromium emulado (selector primera apertura 0/6 en 360/375/390/412, interacciones y lista larga, modal móvil, viewport reducido, agenda móvil 5/5, historial real y bfcache real `persisted=true` con sesión muerta → `/login`), 0 incidentes de tenant, teardown único con Mirror y organización operativa idénticas a su línea base. `NOT_AVAILABLE` entonces: WebKit (cubierto después, ver la línea siguiente) y teclado virtual del SO (sin Xcode/simulador/SDK). `LOCAL_FIX_PASS`; **`DEPLOYED_PREVIEW_PASS=NOT_RUN`, F4_M05 = PENDING, validación humana NO realizada.**
-- **QA focal local en WebKit (2026-11-04)**: Playwright WebKit 26.5 instalado (no es Safari ni simulador iOS). 14 PASS: selector primera apertura 0/6 fuera del viewport en 360/375/390/412, interacciones y lista larga, modal móvil, viewport reducido, historial real y sesión muerta sin datos del tenant; teardown único con Mirror y organización operativa idénticas a su línea base. Diferencia de plataforma P3 documentada (Tab nativo solo en campos; foco a `body` al cerrar el modal porque WebKit no enfoca botones al hacer clic/toque; backlog en `ModalShell`/cajón). bfcache no observable en WebKit automatizado. Teclado virtual del SO y Safari/iOS reales **no verificados**. **`DEPLOYED_PREVIEW_PASS=NOT_RUN`, F4_M05 = PENDING, validación humana NO realizada.**
-- **Calendario móvil compacto (2026-11-04)**: en ≤640 px la rejilla usa celdas bajas (34 px: número y un punto por turno efectivo, máx. 3 y «+N», sin etiquetas, horarios ni iconos) y el panel del día queda justo debajo (turnos, accesos a Avisos/DCF/Comentarios/Historial solo si existen, «Añadir turno» y «Ver detalle»; un día sin turnos muestra solo el texto y «Añadir turno»); la organización pasa al menú de cuenta. Causa: el `grid-template-rows` en línea y las alturas de escritorio estiraban cada fila a 100 px (rejilla de 615 px, panel fuera de pantalla). Verificado en Chromium (360/375/390/412) y WebKit emulado (375/390), ES/EN, claro/oscuro; escritorio sin cambios; lint, build y 2673 tests. **Pendiente: revisión visual humana y validación en Galaxy A16; modales, teclado, rotación y roles no ejecutados en navegador; F4_M05 = PENDING.**
-- **Calendario móvil, ajustes tras prueba en Galaxy A16 (2026-11-04)**: «Ver detalle» solo aparece si no hay ya un acceso (Avisos/DCF/Comentarios/Historial) que abra el detalle del día; el menú de cuenta ya no deja ver la pantalla inferior (la barra superior sube de capa solo mientras el menú está abierto); en ≤640 px se oculta visualmente el título de mes repetido sobre el navegador de mes (sigue disponible para lectores de pantalla). Lint, build y 2674 tests en verde. **Pendiente: revisión visual humana y validación en Galaxy A16; F4_M05 = PENDING.**
-- **Planificador semanal móvil: Agenda · Tabla · Gestionar (2026-11-04)**: en ≤640 px la barra de herramientas (≈400 px apilados) pasa a una cabecera compacta (estado + contadores, empleado e inicio de semana, Agenda|Tabla y «Gestionar»); la **Agenda** (por defecto) muestra los siete días y las asignaciones del día seleccionado (varias del mismo empleado por separado, «Ver N más», estados Borrador/Obsoleta/Publicado/Excluido solo si vienen en los datos, turnos del calendario como filas de solo lectura); la **Tabla** es empleados × 7 días con desplazamiento contenido (columna de empleado fija, degradado y botones ‹ › para recorrer los días); «Gestionar» es una hoja inferior con las acciones que ya existían bajo las mismas condiciones. Todas las regiones con scroll interno (matriz móvil, cuadrícula y tabla de escritorio/tablet) muestran botones ↑/↓ y degradado solo cuando hay contenido que alcanzar. Causa: planificador de altura fija con la barra de herramientas apilada (primera asignación en y=622 de 844 y rejilla de 880 px en 362 px). Ahora la primera asignación queda en y≈426. Escritorio sin cambios (misma rama de código bajo `isCompact`). Preferencia de vista móvil en clave propia. Verificado en Chromium 360/390 y WebKit emulado 430, ES/EN, oscuro/claro, roles ADMIN y PLANNER; lint, build y 2683 tests. **Pendiente: revisión visual humana y validación en Galaxy A16 (con «Sitio de escritorio» desactivado) y en iPhone real; teclado, rotación y zoom no ejecutados; F4_M05 = PENDING.**
-- **Limitaciones**: descanso entre semanas no comprobado al crear/publicar (solo en copiar semana); contraste 4,49:1 del botón «Revisar» en claro (preexistente); `update` solo con `employeeId` ⇒ 400 (previo); Sustituir/Añadir conserva su guardia de concurrencia original. **F4_M04 = PARTIAL, F4_M05 = PENDING, validación humana NO realizada.**
-- **Hotfix UX móvil del modal de turnos (2026-11-03)**: (1) selector «Tipo de turno» ya no desplaza el modal ni queda fuera de pantalla (sin teclado forzado en táctil, posición con `visualViewport`, `Escape` cierra solo el menú); (2) Hora inicio/fin sin desbordar (rejilla `auto-fit`, una columna si no caben); (3) cabecera fija + una región de scroll + acciones en el pie; (4) etiquetas asociadas (axe 0) y error de validación visible dentro del modal. Verificado en 360/375/390/412/844×390 (muestra ES/EN y claro/oscuro) con `agent-browser`. **No verificado**: puntero táctil/teclado virtual reales y ancho del picker 12 h/iOS (emulados). **Validación humana en dispositivo real: PENDIENTE.** Evidencia: `qa/e2e-acceptance/artifacts/F4-MOBILE/shift-modal-hotfix/`.
-- **Limitaciones**: la fecha de creación de cada tarjeta se muestra en ISO (comportamiento previo); en `ORGANIZATION_ADMIN` un PLANNER de área ve las solicitudes pero no puede decidirlas (política, no error).
+**Rama y commit:** development @ `61adca0` (código: `73ff6be` mobile, `6b8815c` team, `61adca0` manual; este checklist va en el commit siguiente)
+**Entorno de validación:** Vista previa de Vercel de `development` tras el push (el CI debe estar en verde) · runtime local (`npm run qa:dev-runtime`) con Neon `main`
+**Datos:** ficticios (declaración de Toni). Cuenta: identidad QA del contrato o un propietario sintético; nunca la personal de Toni. Sin migraciones ni flags nuevos; solo interfaz.
 
 ## 1. Qué cambia
-### A. Solicitudes (`11d9605`)
-- El modal «Solicitudes» se adapta al viewport (altura máxima, scroll interior solo si hace falta), lista primero las solicitudes existentes y abre «Cambio de turno» y «Vacaciones» en modales separados con «Volver a solicitudes».
-- «Mis solicitudes»: un administrador/propietario con empleado vinculado puede pedir cambios de turno y vacaciones propios; la autoaprobación sigue prohibida. Las rutas `/api/me/change-requests*` exigen empleado vinculado en lugar del rol `EMPLOYEE`.
-- Estado vacío con dos tarjetas (cambio de turno y vacaciones).
+- Menú lateral en móvil y tableta (hasta 980 px): siempre con textos, una única X de cierre abajo (donde en escritorio está contraer/expandir); la preferencia de escritorio no se toca. El botón hamburguesa ya no aparece en escritorio.
+- Calendario móvil (hasta 640 px): panel del día en una línea con «Añadir», indicadores pasivos de información y aviso en cada día, tres puntos y «+N».
+- Equipo en móvil, tableta vertical (hasta 900 px) y móvil apaisado: Personas, Roles y acceso, Áreas y Asignaciones como tarjetas; el panel entero se desplaza hasta el último registro; acción principal fija en Asignaciones; pestañas con borde atenuado; asistente «Paso X de 5 · Nombre»; botones de los cuadros de diálogo siempre visibles; la transferencia de propiedad cabe en una pantalla.
+- Escritorio: las tablas de Roles, Áreas y Asignaciones ahora se desplazan dentro de su contenedor (antes cortaban filas sin scroll).
+- Accesibilidad: contrastes del avatar, del chip neutro y del botón primario en modo claro corregidos; textos de Equipo en español e inglés (modales y marcadores incluidos).
 
-### B. Sustituir / Añadir turnos (`b98be89`)
-- **D-01 APPROVED:** un día libre sustituido por trabajo pasa a `SUPERSEDED`, permanece en el historial y no cuenta en las estadísticas operativas (libres 0).
-- **D-02 APPROVED:** si el día ya tiene turnos vigentes, un diálogo recomienda `REPLACE` o `ADD` (preseleccionado) y exige confirmación y motivo; el servidor repite todas las validaciones.
-- **D-03 APPROVED:** `Regular` + `Extras` no solapados coexisten (`ADD`); cuentan una fecha trabajada.
-- **D-04 DEFERRED:** descansos parciales/compensatorios, bolsas de horas y retribución quedan fuera.
-- Mismo contrato `calendar_changes` (`ADD_SHIFT`/`ADD_EXTRA`, `TYPE_CHANGE`/`TIME_CHANGE`); historial y auditoría; concurrencia (`409 DAY_CHANGED`); vacaciones aprobadas protegidas (F3: `ADD` nunca; sustituirlas solo OWNER/ADMIN con auditoría).
+## 2. Ya comprobado por el agente
+| Comprobación | Comando o método | Resultado | SHA |
+| --- | --- | --- | --- |
+| Lint | `npm run lint` | PASS | 61adca0 |
+| Tipos | `npx tsc --noEmit` | PASS | 61adca0 |
+| Build | `npm run build` | PASS | 61adca0 |
+| Suite completa | `npx vitest run` (245 ficheros, 2940 tests) | PASS | 61adca0 |
+| Equipo: tarjetas, acciones, un solo CTA, asistente, cobertura de claves ES/EN | `EquipoModal.compact.test.tsx`, `EquipoModal.i18n.test.ts` | PASS | 6b8815c |
+| Navegador real (Chromium): 320×720, 360×800, 390×844, 430×932, 390×480, 844×390, 834×1194, 1440×900; ES/EN; claro/oscuro; sin desbordes, último registro alcanzable | script de auditoría con tenant sintético y escrituras bloqueadas | PASS | 61adca0 |
+| WebKit emulado (390 y 430): capturas inspeccionadas | idem | PASS | 61adca0 |
+| axe WCAG 2.2 AA en 20 pantallas de Equipo (claro/oscuro, ES/EN) | axe-core en navegador | 0 violaciones | 61adca0 |
+| Permisos: ADMIN sin «Transferir propiedad»; PLANNER y EMPLOYEE sin entrada a Equipo | navegador real por rol | PASS | 61adca0 |
+| Drawer y calendario sin regresiones | medición en navegador (390, 834, 1440) | PASS | 61adca0 |
+| Aislamiento: residuo 0 y huella de la organización operativa idéntica antes/después | `E2E-SHIFT-<runId>` con teardown por ID | PASS | 61adca0 |
 
-### C. Planificador y publicación (`dd466a9`)
-- Una asignación de borrador contradicha por un cambio manual posterior se marca **desactualizada** (`staleAgainstCalendar`) y se conserva.
-- Publicar la **excluye** (`STALE_AGAINST_CALENDAR`) y no puede reintroducirla; en una versión **publicada** se muestra como «Excluida de publicación · Desactualizada respecto al calendario».
-- Una versión nueva copia la asignación como evidencia, sigue marcada y se vuelve a excluir.
-- Calendario operativo: solo turnos vigentes. Historial del día: «Vigente»/«Sustituido», cambios del más reciente al más antiguo.
-
-## 2. Ya comprobado por el agente (`AUTOMATED_QA=PASS`)
-| Comprobación | Resultado |
+## 3. Pruebas no ejecutadas (NOT_RUN)
+| Prueba | Motivo concreto |
 | --- | --- |
-| Modal Solicitudes: layout 1366×768 y 375×812, sin clipping | PASS |
-| Sustituir/Añadir: matriz REPLACE/ADD, F3, RBAC, tenant, concurrencia (tests + E2E real en tenant sintético) | PASS |
-| Estadísticas: día libre sustituido = 0, Extras 420 min, regulares 0 | PASS |
-| Borrador obsoleto → publicación `created:0`, `excluded:[STALE_AGAINST_CALENDAR]`; versión publicada y nueva versión | PASS (Postgres real) |
-| Visual 1366×768 y 375×812 (calendario, historial, planificador antes/después de publicar) | PASS |
-| Commit B aislado: `tsc` + 38/38 tests focales; tests focales de C 76/76; `eslint` (0 warnings) y `tsc` | PASS |
-| Ninguna suite amplia ni completa; ninguna migración; residuo 0 | confirmado |
+| Safari / iPhone físico y Galaxy A16 | WebKit se validó emulado; la revisión en dispositivo real es tuya |
+| Teclado nativo abierto en dispositivo real | Se simuló con altura reducida (390×480); falta dispositivo |
+| `test:f4-mobile` y `a11y-f1` sobre este SHA | Superficie sin cambios desde su última ejecución en verde (6/6 y 4+4 omitidas); no se repiten |
+| Modales de importación CSV e invitaciones pendientes | Fuera del alcance de esta entrega |
+| Pasos de escritura reales del asistente y de los modales | La UI se probó con escrituras bloqueadas; la lógica de negocio no cambia y está cubierta por tests |
 
-## 3. NOT_RUN / gaps
-- **`PREVIEW_INTEGRATED_QA=PENDING`:** QA integrada sobre el Preview de Vercel del nuevo HEAD.
-- **`HUMAN_VALIDATION=PENDING`:** validación de Toni en Preview/development.
-- Regular + Extras (ADD) y vacaciones protegidas con Sustituir/Añadir: cubiertos por tests y por QA previa, no repetidos en navegador en esta entrega.
-- **Limitación UX conocida:** el contador «N turnos» de la cabecera del planificador aún puede incluir asignaciones excluidas/obsoletas.
-- La exclusión de una versión publicada se **deriva** (no se almacena); la ruta de publicación por importación (`publishImportedPairsTx`) no se tocó.
-- Falso positivo posible: un borrador planificado a propósito sobre un día con cambio manual contradictorio queda marcado y no se publica.
-- F4 (no iniciada). Suite histórica `specs-qa-mirror`: deuda técnica no bloqueante, no ejecutada.
+## 4. Checklist para validar en la aplicación
+Marca cada punto. Un fallo en un punto marcado **[BLOQUEANTE]** impide promocionar.
 
-## 4. Para Toni
-- Valida en Preview/development: Solicitudes (escritorio y móvil, administrador con empleado vinculado), sustituir un Día libre por Extras (calendario + historial), y publicar un borrador obsoleto.
-- No se promociona ni se activa Producción sin tu orden expresa.
+| # | Dónde | Pasos | Resultado esperado | Cuenta o configuración | Bloqueante |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Menú en móvil | 1. Abre el menú (☰). 2. Observa. 3. Cierra con la X de abajo, luego reábrelo y toca fuera, luego reábrelo y elige «Calendario». | Textos visibles desde el primer momento; sin botón de contraer; las tres formas de cerrar funcionan | Cualquiera, móvil, con el menú de escritorio contraído en una sesión previa | Sí |
+| 2 | Menú en escritorio | Abre la app en escritorio. | No hay botón ☰; el sidebar conserva su estado contraído/expandido | Cualquiera | Sí |
+| 3 | Calendario móvil | Selecciona un día con 4 turnos, un aviso y DCF o comentario. | Marcador de información a la izquierda del número, aviso a la derecha, tres puntos y «+1»; cabecera del día en una línea con «Añadir» | Empleado o propietario con datos | Sí |
+| 4 | Equipo › Asignaciones (móvil) | Elige un área y varios empleados; desplázate hasta el final. | Tarjetas legibles; el último empleado se ve entero; «Aplicar a N empleados» fijo abajo, sin duplicar | Propietario | Sí |
+| 5 | Equipo › Roles y acceso (móvil) | Revisa las tarjetas y busca por nombre. | Rol, ámbito (áreas autorizadas de un planificador) y solo las acciones permitidas | Propietario | Sí |
+| 6 | Equipo › Áreas (móvil) | Revisa las tarjetas; pulsa «Editar» y «Gestionar asignaciones». | Sin desbordes; Editar abre el área; Gestionar lleva a Asignaciones con el área elegida | Propietario | Sí |
+| 7 | Equipo › Personas (móvil) | Desplázate por la lista. | Filtros y lista se desplazan juntos; la paginación queda abajo | Propietario | No |
+| 8 | Equipo › Añadir persona | Recorre los cinco pasos con «Atrás»/«Siguiente»; en el paso 1 prueba «Cancelar». | «Paso X de 5 · Nombre»; los datos se conservan; el pie no tapa el campo con el teclado | Propietario | Sí |
+| 9 | Equipo › Roles › Transferir propiedad | Ábrelo en el móvil. | Se ve entero, incluido el check de confirmación y los botones; no se puede confirmar sin marcar | Propietario (sin confirmar la transferencia) | Sí |
+| 10 | Cambiar rol, Editar área, Editar ficha, Conceder acceso | Ábrelos en el móvil. | Los botones de acción quedan visibles abajo | Propietario | No |
+| 11 | Tableta vertical (834 px) | Abre Equipo. | Tarjetas de dos en dos; acciones alcanzables sin scroll lateral | Propietario | No |
+| 12 | Móvil apaisado | Abre Equipo › Roles y › Asignaciones. | Sin desbordes; el botón de aplicar queda tras la lista | Propietario | No |
+| 13 | Idioma y tema | Repite 4, 5 y 9 en inglés y en modo claro. | Sin claves sin traducir; texto legible | Propietario | No |
 
----
+### Casos negativos y de borde
+| # | Caso | Resultado esperado |
+| --- | --- | --- |
+| 1 | ADMIN abre Equipo › Roles | No ve «Transferir propiedad» |
+| 2 | PLANNER o EMPLOYEE | No tienen entrada a Equipo en el menú |
+| 3 | Tarjeta del propietario | No muestra «Cambiar rol» |
+| 4 | Escritorio con muchos empleados en Asignaciones | La tabla se desplaza dentro de su contenedor y se llega al último |
+| 5 | Nombre de empleado muy largo | Se muestra completo, ajustado en varias líneas |
 
-## F3 (cerrada) — histórico conservado
+### Estados de interfaz afectados
+- [ ] Vacío · [ ] Cargando · [ ] Error · [ ] Éxito · [ ] Móvil · [ ] Escritorio · [ ] Modo oscuro
 
-### F3.1 Qué cambia
-- **Aprobar y rechazar vacaciones** (`/api/approval-requests`, con `kind=TIME_OFF|SHIFT_CHANGE|ALL`; sin `kind` todo igual que antes). Scope real (ORGANIZATION/AREAS/EMPLOYEES) en la consulta, anti-autoaprobación por usuario y empleado, el propietario siempre decide, la política estrecha al resto.
-- **Materialización** al aprobar: los turnos previos pasan a `SUPERSEDED`, se crea `Vacaciones` por día (nunca `Baja`), con rastro en `calendar_changes`; si la solicitud ya había empezado solo se aplica de hoy en adelante y se informa de los días no aplicados.
-- **Protección**: el planificador rechaza planificar un día con vacaciones aprobadas (422), la publicación las excluye y los borradores nuevos no las copian; el planificador las muestra bloqueadas.
-- **Importaciones**: sobre un día con vacaciones aprobadas, una propuesta distinta queda pendiente de revisión (`APPROVED_VACATION_CONFLICT`); la ausencia sigue vigente.
-- **Override auditado**: solo propietario/administrador pueden sustituir las vacaciones por la propuesta; queda registrado con quién lo hizo. Un planificador recibe 403.
-- **UI**: insignia «protegida» (candado + texto) en el calendario, chip discontinuo «Vacaciones (Pendiente)» para tus solicitudes, origen y conflicto (con las cinco respuestas y dos acciones) en el detalle del día, motivo en la lista de diferencias, día bloqueado en el planificador.
+## 5. Riesgos y limitaciones
+- WebKit se validó emulado; falta Safari/iPhone real y el Galaxy A16.
+- En apaisado el panel útil es corto (unos 360 px): la lista se alcanza desplazando.
+- En escritorio y tableta horizontal los tabs y selects mantienen su densidad original (unos 33 px).
+- Los modales de importación CSV e invitaciones pendientes no se revisaron.
+- La promoción es independiente y requiere `PROMOTE=FULL` con SHA exacto.
 
-### F3.2 Ya comprobado por el agente
-| Comprobación | Resultado |
-| --- | --- |
-| 24 pruebas contra PostgreSQL real (materialización, OD-08, idempotencia/concurrencia, scope, tenant, planificador, override) | PASS |
-| E2E real con flags efímeros, 5 escenarios (aprobación, rechazo, planificador, importación en conflicto + override, regresión de cambio de turno) | 5/5, residuo 0 |
-| Flags apagados: rutas de vacaciones y `kind=TIME_OFF` ⇒ 404; `qa:local:smoke` | PASS |
-| Huella de la organización real `ShiftImport` antes/después | idéntica; Groundforce no existe en esta BD |
-| E2E real del feed unificado (`kind` × `status`, fusión ALL por resolución, cursor sin duplicados, tenant, rol, legacy sin `kind`) | PASS |
-| `npm run test:f3` (35 ficheros, 510 tests; incluye regresión de aprobación de cambio de turno, estadísticas, ledger, auto-publicación F1) | PASS |
-| Arnés accesibilidad/responsive (375/412/1440 × ES-oscuro / EN-claro) | 144/144 |
-| `eslint` (0 warnings, incluido el spec E2E), `tsc`, `build` | PASS |
-| Ninguna suite amplia ni completa ejecutada; ninguna migración nueva | confirmado |
-
-### F3.3 NOT_RUN / gaps
-- **Puerta F3 cerrada (`PASS`)** sobre Vercel Preview (rama `development`, deploy `ed1d3a0` posterior a los flags): 6/6 E2E focales de F3 contra el Preview real, QA visual 375/412/1440 (ES oscuro, EN claro) y a11y focal; residuo 0. Producción sin flags.
-- QA visual y a11y sobre el runtime real (Preview): hecho; el estado de conflicto de importación se valida en el runtime real por API y en el arnés visual.
-- F4 (no iniciada): Centro de Solicitudes de gestores y aprobación en bloque (el historial de cambios de turno ya está en la API unificada de F3).
-- Suite histórica amplia de `specs-qa-mirror`: deuda técnica no bloqueante de F1; no se ejecutó.
-
-### F3.4 Para Toni
-- Valida F3 en Preview/development; no se promociona ni se activa Producción sin tu orden expresa.
-- Decisión confirmada: el propietario siempre decide (salvo autoaprobación); la política estrecha al resto.
+## 6. Decisión de Toni
+- [ ] Todos los puntos bloqueantes pasan
+- [ ] Se promociona: escribir `PROMOTE=FULL` (staging → production → main)
+- [ ] No se promociona. Motivo: ______________________
