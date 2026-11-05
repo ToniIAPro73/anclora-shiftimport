@@ -43,7 +43,9 @@ test.describe('compact month (≤640px)', () => {
     // touch targets: day buttons ≥ 24px (WCAG 2.5.8); the panel actions are comfortable (≥ 40px)
     const dayBox = await target.boundingBox();
     expect(Math.min(dayBox!.width, dayBox!.height)).toBeGreaterThanOrEqual(24);
+    // F5: `month-day-agenda-detail` only exists when the selected day has something to open (MonthDayAgenda, e0a5233); `add` is always there.
     for (const id of ['month-day-agenda-add', 'month-day-agenda-detail']) {
+      if (id.endsWith('detail') && (await page.getByTestId(id).count()) === 0) continue;
       const box = await page.getByTestId(id).boundingBox();
       expect(Math.min(box!.width, box!.height)).toBeGreaterThanOrEqual(40);
     }
@@ -61,10 +63,11 @@ test.describe('compact month (≤640px)', () => {
     expect(await page.locator('.month-grid-shell').ariaSnapshot()).toContain('button');
   });
 
-  test('compact TopBar: only the organization on the main line; role and employee stay reachable from the account menu (focus managed)', async ({ page }) => {
+  test('compact TopBar: the whole context (organization, role, employee) lives in the account menu (focus managed)', async ({ page }) => {
     await openCalendar(page);
     const topbarItems = page.locator('.app-shell__topbar .app-shell__context-summary-item:visible');
-    await expect(topbarItems).toHaveCount(1);
+    // F5: implemented behaviour (1a84f21, validated on device in F4): at ≤640px NO context item stays on the TopBar; nothing is lost, it moves to the menu.
+    await expect(topbarItems).toHaveCount(0);
     const trigger = page.getByTestId('app-shell-user-menu');
     await expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -74,7 +77,7 @@ test.describe('compact month (≤640px)', () => {
     await expect(context).toBeVisible();
     await expect(context).toHaveAttribute('role', 'group');
     expect(await context.getAttribute('aria-label')).toBeTruthy();
-    await expect(context.locator('.app-shell__context-summary-item:visible')).toHaveCount(2); // role + employee (organization stays on the TopBar)
+    expect(await context.locator('.app-shell__context-summary-item:visible').count()).toBeGreaterThanOrEqual(3); // organization + role + employee (+ area when it applies)
     const menuAxe = await new AxeBuilder({ page }).include('#app-shell-user-menu').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(seriousOnly(menuAxe.violations)).toEqual([]);
     await page.keyboard.press('Escape');
@@ -83,7 +86,29 @@ test.describe('compact month (≤640px)', () => {
   });
 });
 
+test.describe('compact planner (≤640px): Agenda | Tabla | Gestionar', () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 1440) > 640, 'compact layout only');
+  test('mobile bar, view switch and Manage sheet are operable and have no serious axe violations', async ({ page }) => {
+    await page.goto('/app/schedule');
+    const planner = page.getByTestId('weekly-planner');
+    await expect(planner).toBeVisible({ timeout: 60_000 });
+    const createDraft = page.getByRole('button', { name: 'Crear borrador semanal' });
+    if (!(await page.getByTestId('planner-manage-open').isVisible().catch(() => false)) && await createDraft.isVisible().catch(() => false)) await createDraft.click(); // permitted QA write (QA mirror only)
+    const manage = page.getByTestId('planner-manage-open');
+    await expect(manage).toBeVisible({ timeout: 60_000 });
+    expect((await manage.boundingBox())!.height).toBeGreaterThanOrEqual(40);
+    const axe = await new AxeBuilder({ page }).include('[data-testid="weekly-planner"]').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(seriousOnly(axe.violations)).toEqual([]);
+    await manage.click();
+    await expect(page.locator('.planner-sheet')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.planner-sheet')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true); // no document-level horizontal overflow
+  });
+});
+
 test.describe('planner (day-focus and overflow hint)', () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 1440) <= 640, 'desktop/tablet grid only: the compact planner replaces the toolbar (see the compact planner test)');
   test('day-focus is a named, keyboard-operable group (never a ~10px strip) and the hint sits above the grid', async ({ page }) => {
     await page.goto('/app/schedule');
     const planner = page.getByTestId('weekly-planner');

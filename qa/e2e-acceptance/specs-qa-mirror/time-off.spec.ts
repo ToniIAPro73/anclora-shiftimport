@@ -201,7 +201,7 @@ test.describe('flag ON', () => {
     await Promise.all([owner.dispose(), colleague.dispose(), otherTenant.dispose()]);
   });
 
-  test('COMPATIBILITY: the existing approval inbox does not show time-off envelopes and its decision endpoints answer 404 for them', async () => {
+  test('COMPATIBILITY: the legacy approval inbox (no `kind`) does not list time-off envelopes; with the flag ON the F3 decision path approves them (F2 expected 404 here)', async () => {
     const employee = await login('employee', T.orgA);
     const start = addDays(todayIso(), 220);
     const request = (await (await employee.post('/api/me/time-off-requests', { data: { requestType: 'VACATION', startDate: start, endDate: start } })).json()).request;
@@ -209,8 +209,9 @@ test.describe('flag ON', () => {
     const owner = await login('owner', T.orgA);
     const inbox = await (await owner.get('/api/approval-requests?status=pending')).json();
     expect(JSON.stringify(inbox)).not.toContain(envelopeId);
-    expect((await owner.post(`/api/approval-requests/${envelopeId}/approve`)).status()).toBe(404); // approving time off is F3
-    expect((await withDb((q) => q(`SELECT status FROM time_off_requests WHERE id = $1`, [request.id])))[0].status).toBe('PENDING');
+    // F3 (flag ON) wires the decision path for time-off envelopes; the F2-era expectation of 404 is superseded (flag OFF ⇒ 404, covered above).
+    expect((await owner.post(`/api/approval-requests/${envelopeId}/approve`)).status()).toBe(200);
+    expect((await withDb((q) => q(`SELECT status FROM time_off_requests WHERE id = $1`, [request.id])))[0].status).toBe('APPROVED');
     await Promise.all([employee.dispose(), owner.dispose()]);
   });
 });
