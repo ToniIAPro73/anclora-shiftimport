@@ -585,9 +585,9 @@ export function WeeklyPlanner({ areaId = null, canEdit, onBack, embedded = false
     { id: 'history', icon: 'history', label: t('planner.versionHistory'), hint: t('planner.mobile.historyHint'), onSelect: closeManageThen(() => void handleOpenHistory()) },
     ...(isViewingHistoricalVersion ? [{ id: 'back', icon: 'back' as const, label: t('planner.backToCurrent'), hint: t('planner.mobile.backToCurrentHint'), onSelect: closeManageThen(() => void refresh()) }] : []),
     ...(snapshot.version.status === 'PUBLISHED' ? [{ id: 'version', icon: 'version' as const, label: isCreatingVersion ? t('planner.creatingNewVersion') : t('planner.createNewVersion'), hint: t('planner.mobile.createVersionHint'), disabled: isCreatingVersion, onSelect: closeManageThen(() => void handleCreateNewVersion()) }] : []),
-    ...(canEdit ? [{ id: 'pending', icon: 'pending' as const, label: t('planner.publishPending.open'), hint: t('planner.mobile.publishPendingHint'), onSelect: closeManageThen(() => setIsPublishPendingOpen(true)) }] : []),
+    ...(canEdit ? [{ id: 'pending', icon: 'pending' as const, label: t('planner.publishPending.open'), hint: t('planner.mobile.publishPendingHint'), testId: 'publish-pending-open', onSelect: closeManageThen(() => setIsPublishPendingOpen(true)) }] : []),
     ...(editable ? [
-      { id: 'copy', icon: 'copy' as const, label: t('planner.copyWeek.open'), hint: t('planner.mobile.copyWeekHint'), onSelect: closeManageThen(() => setIsCopyWeekOpen(true)) },
+      { id: 'copy', icon: 'copy' as const, label: t('planner.copyWeek.open'), hint: t('planner.mobile.copyWeekHint'), testId: 'copy-week-open', onSelect: closeManageThen(() => setIsCopyWeekOpen(true)) },
       { id: 'publish', icon: 'publish' as const, label: isPublishing ? t('planner.publishing') : t('planner.publish'), hint: t('planner.mobile.publishHint'), disabled: isPublishing || snapshot.assignments.length === 0, onSelect: closeManageThen(() => { setPublishError(null); setIsPublishOpen(true); }) },
     ] : []),
   ] : [];

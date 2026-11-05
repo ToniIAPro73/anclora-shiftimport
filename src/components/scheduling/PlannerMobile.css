@@ -59,6 +59,7 @@
 .planner-m-status__mode--draft { background: var(--color-gold); border-color: transparent; color: #070d1b; }
 :root[data-theme='light'] .planner-m-status__mode--draft { color: #fff; }
 
+.planner-m-status__counts { display: contents; }
 .planner-m-status__chip { display: inline-flex; align-items: center; gap: 6px; color: var(--text-primary); font-weight: 600; }
 .planner-m-status__chip svg { color: var(--color-accent); flex-shrink: 0; }
 

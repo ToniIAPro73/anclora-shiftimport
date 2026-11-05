@@ -1460,11 +1460,13 @@ Valores por defecto de fase (aplican salvo override en la microtarea): DO_NOT_BR
 
 | Microfase | Estado | Evidencia |
 |---|---|---|
-| F4-M01 Centro de Solicitudes | `PARTIAL → implementada, pendiente de validación humana` | `RequestCenterModal` extiende el modal «Solicitudes» (mismo `ModalShell` `workspace`, mismo tratamiento del viewport): gestores `Pendientes del equipo (N)`/`Historial del equipo`/`Mis solicitudes` (esta última solo con empleado vinculado); sin gestión, solo `Mis solicitudes`; EMPLOYEE conserva `RequestStatus` intacto. Badge del shell correcto **al cargar** (antes solo tras una acción). `data-testid` `sidebar-approvals`/`topbar-pending-requests` conservados. |
-| F4-M02 Bandeja y aprobación masiva | `implementada, pendiente de validación humana` | `ApprovalInbox` sobre `GET /api/approval-requests` (`kind`, `status`, área, búsqueda, cursor), `POST /api/approval-requests/bulk-approve` (§4.3.3), badge de solape, turnos afectados, advertencia OD-08, motivo con `canDecide=false`. Sin migración. |
-| F4-M03 Productividad | `IMPLEMENTED_PENDING_GATE` | OD-F4-01..04 aprobadas e implementadas (abajo); validación humana pendiente. |
-| F4-M04 QA avanzado | `PARTIAL` | QA focal + matriz visual 834×1112 y 844×390 ejecutada con `agent-browser` (evidencia en `qa/e2e-acceptance/artifacts/F4-MOBILE/`). **No cerrado**: la suite E2E móvil de Playwright **no se ha creado** (requiere 3 ficheros nuevos, pendientes de autorización) y falta la validación humana. |
-| F4-M05 Puerta F4 | `PENDING` | Requiere M03, M04 y la aprobación de Toni. `F4_GATE` **no** se declara. |
+| F4-M01 Centro de Solicitudes | `VERIFIED` (2026-11-05; antes: `PARTIAL → implementada, pendiente de validación humana`) | `RequestCenterModal` extiende el modal «Solicitudes» (mismo `ModalShell` `workspace`, mismo tratamiento del viewport): gestores `Pendientes del equipo (N)`/`Historial del equipo`/`Mis solicitudes` (esta última solo con empleado vinculado); sin gestión, solo `Mis solicitudes`; EMPLOYEE conserva `RequestStatus` intacto. Badge del shell correcto **al cargar** (antes solo tras una acción). `data-testid` `sidebar-approvals`/`topbar-pending-requests` conservados. |
+| F4-M02 Bandeja y aprobación masiva | `VERIFIED` (2026-11-05; antes: `implementada, pendiente de validación humana`) | `ApprovalInbox` sobre `GET /api/approval-requests` (`kind`, `status`, área, búsqueda, cursor), `POST /api/approval-requests/bulk-approve` (§4.3.3), badge de solape, turnos afectados, advertencia OD-08, motivo con `canDecide=false`. Sin migración. |
+| F4-M03 Productividad | `VERIFIED` (2026-11-05; antes: `IMPLEMENTED_PENDING_GATE`) | OD-F4-01..04 aprobadas e implementadas (abajo); validación humana pendiente. |
+| F4-M04 QA avanzado | `VERIFIED_WITH_GAPS` (2026-11-05; antes: `PARTIAL`; la suite E2E móvil ya existe: ver «Cierre formal F4») | QA focal + matriz visual 834×1112 y 844×390 ejecutada con `agent-browser` (evidencia en `qa/e2e-acceptance/artifacts/F4-MOBILE/`). **No cerrado**: la suite E2E móvil de Playwright **no se ha creado** (requiere 3 ficheros nuevos, pendientes de autorización) y falta la validación humana. |
+| F4-M05 Puerta F4 | `PASS_WITH_GAPS` (2026-11-05; antes: `PENDING`; ver «Cierre formal F4» y §20.1) | Requiere M03, M04 y la aprobación de Toni. `F4_GATE` **no** se declara. |
+
+> **Supersesión (2026-11-05, F4-M05):** la columna «Estado» refleja el cierre formal de la puerta F4; los textos de «Evidencia» y los bloques fechados siguientes son el histórico de cada campaña y no se reescriben (sus `NOT_VERIFIED`/`PENDING` eran ciertos en su fecha).
 
 **Inventario de diferencias frente al contrato (antes de implementar).** `IMPLEMENTED`: API unificada de lectura y decisión (F3), elegibilidad por elemento (`approval-eligibility.js`), `SegmentedTabs`, `TimeOffRequests`/`RequestStatus`. `PARTIAL`: entrada «Solicitudes» (existía como modal solo de cambios de turno, sin pestañas ni vacaciones); badge (solo se actualizaba tras una acción). `MISSING`: `bulk-approve`, historial del equipo, filtros, solape, turnos afectados, advertencia OD-08 en la UI de gestión, `data-testid` `time-off-overlap-badge` y `approval-bulk-approve`. `DEFERRED`: las cuatro funciones de M03.
 
@@ -1621,6 +1623,50 @@ Numeración unificada: las cuatro funciones se llaman por su `OD-F4-0x` en todo 
 - MIGRATION_IMPACT: Ninguno
 - ACCEPTANCE_CRITERIA: Gate F4
 - GATE: F4
+
+#### Cierre formal F4 — F4-M05 (2026-11-05)
+
+Ejecutada sobre `development` = `origin/development` = `61253af` (`61253afa332c5fdfb4edbc0ab89dde295c97107f`), sin commit, push, despliegue, promoción, migración ni cambio de flags. **No es** `UXR-F4-M05` del histórico UXR (otra tarea, no ejecutada).
+
+**Declaraciones separadas.**
+- `USER_ATTESTATION`: el Product Owner confirma (2026-11-05) que F4 y las correcciones de Calendario móvil y Planificación móvil (Agenda, Tabla, Gestionar) superaron su validación en un **Samsung Galaxy A16 y un iPhone reales**. `HUMAN_VALIDATION=PASS_CONFIRMED_BY_PRODUCT_OWNER`, `ANDROID_PHYSICAL=PASS_REPORTED_BY_PRODUCT_OWNER`, `IOS_PHYSICAL=PASS_REPORTED_BY_PRODUCT_OWNER`. El agente **no observó** esos dispositivos; no se registran modelo de iPhone, versión de SO, fechas por prueba ni capturas porque no se entregaron. Esto **supersede** los `ANDROID_PHYSICAL=NOT_VERIFIED`, `IOS_PHYSICAL=NOT_VERIFIED` y `HUMAN_VALIDATION=PENDING` de los bloques anteriores únicamente en el estado vigente; esos bloques se conservan como histórico.
+- `AUTOMATED_EVIDENCE`: lo accesible al agente (abajo).
+- `DEPLOYMENT_EVIDENCE`: `main`/`production`/`staging`/`development` en `origin` = `61253af`; promoción `promote.yml` (run `41911794870`) `success`; despliegue de producción `dpl_BbQ7XdFdJaNVpKxgsx2i4tnRogYu` `READY` para `main` = `61253af`, alias `shiftimport.anclora.com` (sin `aliasError`); el JS/CSS servido por ese dominio contiene el planificador compacto y los botones de scroll (`planner-agenda`, `planner-matrix-more`, `planner-m-day`, `scroll-hint`). Los Preview de `development`, `staging` y `production` para ese SHA están `READY`. Las ramas locales `staging`/`production`/`main` están desactualizadas (`c4d0433`); la fuente de verdad es `origin`. `TIME_OFF_ENABLED` y `VITE_TIME_OFF_ENABLED` existen en Production y en Preview `development` (metadatos del CLI; no se leyeron valores; el listado vía conector devolvió 403).
+
+**Matriz de cierre.**
+
+| Microtarea | Estado | Evidencia (SHA) |
+|---|---|---|
+| F4-M01 Centro de Solicitudes | `VERIFIED` | QA focal 28/28 y Preview QA Mirror 46/46 (`8ad2edb`); E2E móvil A (árbol 2026-11-05); `RequestStatus` de EMPLOYEE sin cambios |
+| F4-M02 Bandeja y aprobación masiva | `VERIFIED` | `bulk-approve` parcial por elemento, PLANNER `ORGANIZATION`/`AREAS`/`EMPLOYEES`, anti-autoaprobación (28/28 y 46/46, `8ad2edb`); E2E móvil A |
+| F4-M03 Productividad | `VERIFIED` | 62/62 + remediación 37/37 en Postgres real; E2E móvil B, C y D (árbol 2026-11-05); auditoría `ASSIGNMENT_CREATED` + `metadata.operation='WEEK_COPIED'` (sigue vigente en `api/_lib/scheduling.js`; el tipo dedicado `schedule.week_copied` **no** está implementado: exige migración no autorizada) |
+| F4-M04 QA avanzado | `VERIFIED_WITH_GAPS` | E2E móvil Playwright **6/6** (árbol 2026-11-05), axe 0 serious/critical en 12 escaneos de las superficies nuevas, Calendario móvil compacto y Planificación Agenda/Tabla/Gestionar con matriz visual y funcional propia; 0 diálogos nativos (guardia `page.on('dialog')`); gaps G1–G8 |
+| F4-M05 Puerta F4 | `PASS_WITH_GAPS` | este bloque y §20.1 |
+
+**Reutilización de evidencia y su validez.** `api/`, `db/` y `.anclora/` **no han cambiado** desde `8ad2edb` (`git diff --stat 8ad2edb..HEAD -- api db .anclora` vacío): la evidencia de autorización, tenant, seguridad y funcional sobre la API (28/28, 62/62, 46/46, Preview `8ad2edb`) sigue siendo aplicable al SHA actual. `src/` **sí** cambió (`components/scheduling`, `components/shift-dashboard`, `components/ui`, `components/app-shell`, `lib/i18n.ts`, `index.css`): la evidencia **visual y E2E móvil previa a esos cambios es `STALE_EVIDENCE` para el planificador y el calendario móviles** y se rehízo de forma focal (abajo). Siguen válidos sin repetir: recheck del selector en Preview `a66f7c2` (`pv-f4-sel-01.json`: 0/6 primera apertura fuera del viewport; el `PREVIEW_RECHECK_PENDING` anterior queda cerrado), WebKit focal 14 PASS y campaña lean 3/3 (295 s → 101 s), bfcache real en Chromium. WebKit automatizado **no** equivale a Safari.
+
+**Pruebas focales nuevas (2026-11-05, árbol de trabajo).**
+- `npm run lint` 0 avisos, `tsc` limpio, `npm run build` OK, `npm test` **242 ficheros / 2683 tests** (2 omitidos), de ellos 9 nuevos del planificador compacto.
+- E2E móvil `test:f4-mobile` (Chrome móvil 375×812, tenant sintético `E2E-SHIFT-<runId>`, residuo 0): **6/6**. Antes de la corrección de abajo, el escenario B **fallaba**.
+- QA Mirror (`a908c138-495a-4e1c-9449-867a1f4cd984`, validado por UUID completo; distinto de la organización operativa), con barrera que aborta toda petición mutante: 19/19 casos funcionales del planificador compacto en Chromium 390×844, 360×800 y con rol PLANNER; WebKit 430×932 17/19 (los dos restantes son la devolución de foco tras Escape, que WebKit no puede ofrecer porque no enfoca un botón al tocarlo; el diálogo sí se cierra). Botones de scroll ↑/↓ y ‹ › verificados en cuadrícula, tabla y matriz móvil (escritorio 1366×768, tablet 820 y móvil 390). Axe (Chromium 390×844, ES oscuro y EN claro): Agenda, detalle, Gestionar, Tabla (publicada y borrador) y calendario compacto, **0 serious/critical**.
+- Escrituras en QA Mirror: solo los fixtures sintéticos (`F4-PLAN-<runId>`) y teardown con `QA_TEMP_RESIDUE=0`. Una campaña previa dejó versiones 2 en dos semanas reutilizadas de Mirror (el teardown solo comparaba `schedules`); se borraron por ID (2) y las siguientes campañas usaron semanas que no existían. Escrituras en la organización operativa: ninguna (el navegador no emitió mutaciones; no se auditó con huella antes/después en esta tarea, solo se operó sobre Mirror por UUID).
+
+**Hallazgo del gate y corrección focal (F4-M05-FIND-01).** El planificador compacto publicado en `f38e1ab` retiró de la pantalla móvil `planner-count`, `copy-week-open` y `publish-pending-open`, de modo que el E2E móvil B/C de F4 dejó de pasar y se incumplía «`data-testid` previos como alias» (`DO_NOT_BREAK`). Corrección mínima, publicada en `development` el 2026-11-05 (commit `fix(f4): restore mobile planner test aliases and close F4 evidence`; **no desplegada** en `production`/`main` hasta una promoción autorizada): alias `planner-count` en los contadores compactos, `copy-week-open` y `publish-pending-open` en las acciones de la hoja «Gestionar», y un helper del spec que abre «Gestionar» antes de usarlas (`PlannerMobile.tsx`, `WeeklyPlanner.tsx`, `PlannerMobile.css`, `PlannerMobile.test.tsx`, `f4-mobile.spec.ts`). Con ella el E2E móvil pasa 6/6. El código desplegado en producción (`61253af`) no la incluye: no afecta al usuario (solo a identificadores de prueba).
+
+**Gaps nombrados (no bloqueantes).**
+
+| Id | Gap | Propietario | Fase de absorción |
+|---|---|---|---|
+| G1 | **Resuelta en `development`** (commit `fix(f4): restore mobile planner test aliases and close F4 evidence`, 2026-11-05); `test:f4-mobile` B/C seguirá fallando contra producción `61253af` hasta que una promoción autorizada la despliegue | Toni (autorizar la promoción) | antes de F5-M01 si F5-M01 se ejecuta contra producción; no bloquea si se ejecuta contra `development` |
+| G2 | Tipo de auditoría dedicado `schedule.week_copied` (requiere migración del CHECK; no autorizada) | Toni | posterior a F5 |
+| G3 | WebKit automatizado: bfcache no observable, diferencia de foco y Tab (P3, documentada); Safari/iOS real solo por atestación | Toni / F5-M01 (muestra) | F5-M01 |
+| G4 | Teclado virtual del SO, rotación y zoom de las superficies móviles nuevas no automatizados (cubiertos solo por la atestación) | Toni / F5-M01 | F5-M01 |
+| G5 | Matriz de §12 no repetida entera para las superficies nuevas (hechas 360/390/430, ES/EN, claro/oscuro en muestra; 375/412/834/844×390 no repetidos; sin captura de los botones de scroll a 834×1112 y 844×390) | agente | F5-M01 (muestra por riesgo) |
+| G6 | Axe `heading-order` (moderada) en el calendario compacto (título de mes oculto visualmente + `h3` del panel); contraste 4,49:1 del botón «Revisar» en claro (preexistente) | agente | backlog UX |
+| G7 | Regla de descanso entre semanas no se comprueba al crear ni al publicar (solo al copiar semana) | Toni (decisión de producto) | backlog |
+| G8 | Suite histórica amplia `specs-qa-mirror` (deuda de F1) sin ejecutar ni sanear | Toni | fuera de F4 |
+
+**Resultado: `F4_GATE=PASS_WITH_GAPS`.** `F5=NOT_STARTED`. F5-M01 (validación end-to-end) queda **desbloqueada** (G1 resuelta en `development`, pendiente de desplegar); no se ha ejecutado.
 
 ### F5 — Final end-to-end validation + docs closure
 
@@ -2095,6 +2141,8 @@ Criterios: `FUNCTIONAL, DATA_INTEGRITY, AUTHORIZATION, TENANT_ISOLATION, SECURIT
 - **UI (arnés con API simulada, 375/412/1440 × ES-oscuro / EN-claro)**: 144/144 comprobaciones: insignias protegidas con candado y palabras, chip discontinuo de pendiente, aviso de conflicto en el calendario, detalle del día con origen y bloque de conflicto con las cinco respuestas y las acciones «Mantener actual (Vacaciones)» / «Usar propuesta» (deshabilitada con su motivo para PLANNER), error 403 explicado, lista de diferencias, planificador con el día bloqueado; axe sin graves, objetivos táctiles ≥ 24 px, sin scroll horizontal del documento.
 - **Calidad**: `eslint` (0 warnings), `tsc`, `build` PASS.
 - **Gaps (nombrados)**: (G1) la puerta F3 exige validar con los flags activos en Development (acción de Toni); (G2) la QA visual con `agent-browser` del flujo F3 sobre el runtime real queda para esa activación (en F3 se validó con el arnés y los E2E de API); (G3) el Centro de Solicitudes de gestores y la aprobación en bloque son F4; (G4) la suite histórica amplia de `specs-qa-mirror` sigue siendo deuda técnica no bloqueante.
+
+**F4 — `PASS_WITH_GAPS` (2026-11-05).** Sobre `61253af` (`development` = `staging` = `production` = `main` en `origin`; producción `dpl_BbQ7XdFdJaNVpKxgsx2i4tnRogYu` `READY`, alias `shiftimport.anclora.com`). Sin migraciones; `api/`, `db/` y `.anclora/` sin cambios desde `8ad2edb`, por lo que la evidencia de API (28/28, 62/62, 46/46) se reutiliza; la visual y E2E móvil del planificador y del calendario eran obsoletas y se rehicieron de forma focal. Criterios F4 (§20): FUNCTIONAL, AUTHORIZATION, TENANT_ISOLATION, SECURITY, REGRESSION, ACCESSIBILITY (axe 0 serious/critical), RESPONSIVE, I18N, UNIT_TESTS (2683), E2E (móvil 6/6 sobre el árbol), VISUAL_QA (muestra), BUILD/LINT/TYPECHECK: `R` cumplidos con evidencia; DATA_INTEGRITY e INTEGRATION_TESTS `N/A³`; DOCUMENTATION y AOS_COMPLIANCE cumplidos; **WORKTREE_STATE con gap**: la corrección de alias de `data-testid` (F4-M05-FIND-01, G1) se publicó en `development` tras el cierre y sigue sin desplegar en `production`/`main`. Validación humana en Galaxy A16 e iPhone: **atestación del Product Owner** (no observada por el agente). Gaps G1–G8 y propietarios en «Cierre formal F4 — F4-M05». F5 `NOT_STARTED`; F5-M01 desbloqueada (G1 resuelta en `development`, pendiente de desplegar).
 
 ---
 

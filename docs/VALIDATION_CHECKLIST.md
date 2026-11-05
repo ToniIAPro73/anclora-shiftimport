@@ -8,7 +8,19 @@
 **Entorno de validación local:** runtime local con flags efímeros → Neon `main`; ninguna migración nueva; escrituras solo en tenants sintéticos `E2E-SHIFT-<runId>`.
 **Datos:** sintéticos; 0 escrituras en `ShiftImport` real ni Groundforce; residuo 0.
 
+> **Estado vigente (2026-11-05, F4-M05):** el bloque siguiente es el cierre de la puerta F4 y **supersede** los valores `PENDING`/`NOT_STARTED`/`NOT_VERIFIED` de este documento y de las secciones de abajo, que se conservan como histórico de cada entrega. Origen de la validación humana: atestación del Product Owner; el agente no observó los dispositivos.
+
 ```text
+F4_GATE=PASS_WITH_GAPS  (2026-11-05, SHA 61253af; gaps G1–G8 en la spec, «Cierre formal F4»)
+F4_M01=VERIFIED  F4_M02=VERIFIED  F4_M03=VERIFIED  F4_M04=VERIFIED_WITH_GAPS  F4_M05=PASS_WITH_GAPS
+HUMAN_VALIDATION=PASS_CONFIRMED_BY_PRODUCT_OWNER
+ANDROID_PHYSICAL=PASS_REPORTED_BY_PRODUCT_OWNER  IOS_PHYSICAL=PASS_REPORTED_BY_PRODUCT_OWNER
+PRODUCTION_DEPLOYMENT=61253af (dpl_BbQ7XdFdJaNVpKxgsx2i4tnRogYu, READY)  F5=NOT_STARTED  F5-M01=DESBLOQUEADA (G1 resuelta en development, pendiente de desplegar)
+G1=RESUELTA en development (commit fix(f4): restore mobile planner test aliases…); NO desplegada: test:f4-mobile B/C seguirá fallando contra production 61253af hasta una promoción autorizada
+```
+
+```text
+(histórico, 2026-11-02/03)
 AUTOMATED_QA=PASS
 HUMAN_VALIDATION=PENDING
 PREVIEW_INTEGRATED_QA=PENDING
@@ -24,6 +36,8 @@ F4_FIX01_PLANNER_COUNTER=IMPLEMENTED
 AUTOMATED_QA=PASS (focal)  HUMAN_VALIDATION=PENDING  PREVIEW_INTEGRATED_QA=PENDING
 PRODUCTION_DEPLOYMENT=PROMOTED_8ad2edb (PROMOTE=FULL, 2026-11-03)  F4_GATE=PENDING_PREVIEW_VALIDATION  F5=NOT_STARTED
 ```
+
+> Histórico: supersedido el 2026-11-05 por el cierre F4-M05 (`F4_GATE=PASS_WITH_GAPS`); ver el estado vigente arriba.
 
 - **Centro de Solicitudes**: «Solicitudes» abre un único modal con `Pendientes del equipo (N)`, `Historial del equipo` y `Mis solicitudes` (solo con empleado vinculado); roles sin gestión, solo `Mis solicitudes`; el portal de EMPLOYEE no cambia. El badge es correcto al cargar.
 - **Bandeja unificada**: cambios de turno y vacaciones, filtros (tipo, área, empleado), paginación, solape, turnos afectados, advertencia de vacaciones ya iniciadas (OD-08), motivo cuando no se puede decidir, rechazo con motivo obligatorio.

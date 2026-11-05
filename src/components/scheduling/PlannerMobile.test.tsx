@@ -101,6 +101,7 @@ describe('WeeklyPlanner compact (≤640px)', () => {
     expect(document.querySelector('.weekly-planner__toolbar')).toBeNull();
     expect(screen.getByRole('group', { name: 'Días de la semana' }).querySelectorAll('button')).toHaveLength(7);
     expect(screen.getByTestId('planner-agenda-count')).toHaveTextContent('3 asignaciones');
+    expect(screen.getByTestId('planner-count')).toHaveTextContent('4 planificadas');
   });
 
   it('lists the two assignments of the same employee separately and changes the panel with the day', async () => {
@@ -143,8 +144,8 @@ describe('WeeklyPlanner compact (≤640px)', () => {
     renderPlanner();
     await screen.findByTestId('planner-agenda');
     fireEvent.click(screen.getByTestId('planner-manage-open'));
-    const ids = (root: HTMLElement) => Array.from(root.querySelectorAll('[data-testid^="planner-manage-"]')).map((el) => el.getAttribute('data-testid')).filter((id) => id && !/close|actions/.test(id));
-    expect(ids(screen.getByTestId('planner-manage-actions'))).toEqual(['planner-manage-history', 'planner-manage-version', 'planner-manage-pending']);
+    const ids = (root: HTMLElement) => Array.from(root.querySelectorAll('button[data-testid]')).map((el) => el.getAttribute('data-testid')).filter((id) => id && !/close|actions/.test(id));
+    expect(ids(screen.getByTestId('planner-manage-actions'))).toEqual(['planner-manage-history', 'planner-manage-version', 'publish-pending-open']);
     cleanup();
 
     mockedList.mockResolvedValue([version()]);
@@ -152,7 +153,7 @@ describe('WeeklyPlanner compact (≤640px)', () => {
     renderPlanner();
     await screen.findByTestId('planner-agenda');
     fireEvent.click(screen.getByTestId('planner-manage-open'));
-    expect(ids(screen.getByTestId('planner-manage-actions'))).toEqual(['planner-manage-history', 'planner-manage-pending', 'planner-manage-copy', 'planner-manage-publish']);
+    expect(ids(screen.getByTestId('planner-manage-actions'))).toEqual(['planner-manage-history', 'publish-pending-open', 'copy-week-open', 'planner-manage-publish']);
   });
 
   it('Manage → history opens the existing history dialog and the sheet closes', async () => {

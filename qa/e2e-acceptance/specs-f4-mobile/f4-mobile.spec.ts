@@ -84,6 +84,15 @@ async function openRequestCenter(page: Page) {
   await expect(page.locator('[data-testid^="approve-btn-"]').first()).toBeVisible();
 }
 
+/** Planner actions live in the toolbar on wide screens and in the «Gestionar» sheet on phones (≤640px); the test ids are the same. */
+async function openPlannerAction(page: Page, testId: string) {
+  const manage = page.getByTestId('planner-manage-open');
+  // Wait for whichever surface this viewport renders (the planner may still be loading its snapshot).
+  await page.locator(`[data-testid="planner-manage-open"], [data-testid="${testId}"]`).first().waitFor();
+  if (await manage.isVisible()) await manage.click();
+  await page.getByTestId(testId).click();
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ page, context }) => {
@@ -130,7 +139,7 @@ test('B · Copy week: preview, cancel, confirm, repeat without duplicates', asyn
   await expect(page.getByTestId('weekly-planner')).toBeVisible();
   await expect(page.getByTestId('planner-count')).toContainText('0');
 
-  await page.getByTestId('copy-week-open').click();
+  await openPlannerAction(page, 'copy-week-open');
   await expect(page.getByTestId('copy-week-dialog')).toBeVisible();
   await expect(page.getByTestId('copy-week-candidates')).toBeVisible();
   await expectFits(page);
@@ -143,7 +152,7 @@ test('B · Copy week: preview, cancel, confirm, repeat without duplicates', asyn
   await expect(page.getByTestId('copy-week-dialog')).toHaveCount(0);
   await expect(page.getByTestId('planner-count')).toContainText('0');
 
-  await page.getByTestId('copy-week-open').click();
+  await openPlannerAction(page, 'copy-week-open');
   await page.getByTestId('copy-week-confirm').click();
   await expect(page.getByTestId('copy-week-done')).toContainText('3');
   await expect(page.getByTestId('copy-week-cancel')).toBeFocused(); // focus must not fall to <body> when the results arrive
@@ -152,7 +161,7 @@ test('B · Copy week: preview, cancel, confirm, repeat without duplicates', asyn
   await expect(page.getByTestId('planner-count')).toContainText('3');
 
   // Idempotent: nothing left to copy, still 3 assignments.
-  await page.getByTestId('copy-week-open').click();
+  await openPlannerAction(page, 'copy-week-open');
   await expect(page.getByTestId('copy-week-nothing')).toBeVisible();
   await page.getByTestId('copy-week-cancel').click();
   await expect(page.getByTestId('planner-count')).toContainText('3');
@@ -161,7 +170,7 @@ test('B · Copy week: preview, cancel, confirm, repeat without duplicates', asyn
 test('C · Publish pending weeks: per-week results and planner counter', async ({ page }) => {
   await page.goto(`/app/schedule?date=${fx.copyTargetWeek}`);
   await expect(page.getByTestId('weekly-planner')).toBeVisible();
-  await page.getByTestId('publish-pending-open').click();
+  await openPlannerAction(page, 'publish-pending-open');
   await expect(page.getByTestId('publish-pending-dialog')).toBeVisible();
   await expect(page.locator('[data-testid^="publish-pending-row-"]')).toHaveCount(3);
   await expectFits(page);

@@ -76,7 +76,10 @@ export function PlannerMobileBar({ versionStatus, statusChips, employeeFilter, w
           {readOnly ? <Lock size={13} aria-hidden="true" /> : <Pencil size={13} aria-hidden="true" />}
           {versionStatus === 'DRAFT' ? t('planner.statusDraft') : t('planner.statusReadOnly')}
         </span>
-        {statusChips.map((chip) => <span className="planner-m-status__chip" key={chip.id}>{chip.icon}{chip.label}</span>)}
+        {/* `planner-count` is the desktop counter's test id, kept as an alias for the compact counters. */}
+        <span className="planner-m-status__counts" data-testid="planner-count">
+          {statusChips.map((chip) => <span className="planner-m-status__chip" key={chip.id}>{chip.icon}{chip.label}</span>)}
+        </span>
       </div>
       <div className="planner-m-filters">
         <div className="planner-m-filter">{employeeFilter}</div>
@@ -367,6 +370,8 @@ export interface PlannerManageAction {
   hint: string;
   icon: 'history' | 'version' | 'pending' | 'copy' | 'publish' | 'back';
   disabled?: boolean;
+  /** Overrides `planner-manage-<id>` where the desktop toolbar button already had a test id (kept as an alias, DO_NOT_BREAK). */
+  testId?: string;
   onSelect: () => void;
 }
 
@@ -390,7 +395,7 @@ export function PlannerManageSheet({ isOpen, onClose, actions }: { isOpen: boole
           const Icon = MANAGE_ICONS[action.icon];
           return (
             <li key={action.id}>
-              <button type="button" className="planner-sheet__action" disabled={action.disabled} onClick={action.onSelect} data-testid={`planner-manage-${action.id}`}>
+              <button type="button" className="planner-sheet__action" disabled={action.disabled} onClick={action.onSelect} data-testid={action.testId ?? `planner-manage-${action.id}`}>
                 <Icon size={21} aria-hidden="true" />
                 <span><strong>{action.label}</strong><small>{action.hint}</small></span>
                 <ChevronRight size={17} aria-hidden="true" />
