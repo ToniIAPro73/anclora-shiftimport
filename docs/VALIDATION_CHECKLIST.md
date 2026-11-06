@@ -1,11 +1,26 @@
-# Checklist de validación — UX móvil: menú, calendario y Equipo (2026-11-06)
+# Checklist de validación — UX móvil y rebaseline G6 (2026-11-06)
 
 > Este fichero se sobrescribe en cada entrega. El historial queda en Git (el cierre de F5, `PASS_WITH_GAPS` en `5ead23f` y ya promocionado, consta en ese commit y en los anteriores).
 
 **Repositorio:** anclora-shiftimport
-**Rama y commit:** development @ `61adca0` (código: `73ff6be` mobile, `6b8815c` team, `61adca0` manual; este checklist va en el commit siguiente)
-**Entorno de validación:** Vista previa de Vercel de `development` tras el push (el CI debe estar en verde) · runtime local (`npm run qa:dev-runtime`) con Neon `main`
-**Datos:** ficticios (declaración de Toni). Cuenta: identidad QA del contrato o un propietario sintético; nunca la personal de Toni. Sin migraciones ni flags nuevos; solo interfaz.
+**Evidencia histórica de UX móvil:** development @ `61adca0`; las comprobaciones de las secciones 1–6 pertenecen a ese SHA.
+**Cambio G6 actual:** development @ `7a64899`; local y dos commits por delante del remoto confirmado `12fdae9`. QA visual local guest; sin sesión, sin mutaciones y sin conexión/escritura en Neon.
+
+## Rebaseline G6 — 2026-11-06
+
+Esta actualización prevalece para el cambio G6 que sigue. El HEAD inspeccionado es `7a64899616c54c6418e23348320c7c64cbeb1c06` (`development`); `git ls-remote origin refs/heads/development` confirmó `12fdae91a15ade0d300291c269bc239d57b14a1a`. Hay dos commits locales por publicar. La evidencia histórica de la tabla siguiente sigue ligada a `61adca0` y no se reutiliza como verificación del cambio G6.
+
+| Comprobación en el HEAD actual | Método | Resultado | Límite |
+| --- | --- | --- | --- |
+| MonthGrid y G6 | `npx vitest run src/components/shift-dashboard/MonthGrid.test.tsx` | PASS, 31/31 | Prueba focal local |
+| Contraste AA del aviso | Test G6 de MonthGrid: texto/fondo claro, texto/fondo blanco, tema oscuro; tokens, foco visible, nombre accesible y apertura del detalle | PASS, mínimo exigido 4.5:1 | Asserts del CSS y del componente en Vitest |
+| QA visual G6 | `anclora-visual-qa doctor`; Chromium con `agent-browser` a 390×844, tema oscuro y claro; aviso temporal en una celda del calendario guest para renderizar las clases/atributos reales sobre el CSS actual | PASS; capturas revisadas en `/tmp/shiftimport-g6-dark.png` y `/tmp/shiftimport-g6-light.png` | Fixture DOM local; sin sesión ni acceso/escritura en Neon. No es E2E autenticado contra QA Mirror |
+| Lint | `npm run lint` | PASS | HEAD `7a64899` |
+| Typecheck | `npx tsc --noEmit` | PASS | HEAD `7a64899` |
+| Build | `npm run build` | PASS_WITH_WARNING; Vite avisa de chunks >500 kB | HEAD `7a64899`; warning de tamaño sin fallo de build |
+| Suite completa | No ejecutada sobre este HEAD | NOT_RUN | La evidencia de `61adca0` no se presenta como evidencia del SHA actual |
+
+**G6_VISUAL=PASS_WITH_SCOPE.** El motor visual está disponible y el CSS se revisó en ambos temas. La integración con un registro `REQUIRES_REVIEW` real de QA Mirror no se ejecutó; no se usó cuenta ni se modificaron datos de Neon. El servidor Vite temporal y el navegador se cerraron al terminar.
 
 ## 1. Qué cambia
 - Menú lateral en móvil y tableta (hasta 980 px): siempre con textos, una única X de cierre abajo (donde en escritorio está contraer/expandir); la preferencia de escritorio no se toca. El botón hamburguesa ya no aparece en escritorio.
