@@ -200,6 +200,9 @@
   --shift-more-background: #27365b;
   --shift-more-foreground: #ffe38a;
   --shift-more-border: #d4af37;
+  --review-warning-bg: #4d3b12;
+  --review-warning-fg: #ffe8a3;
+  --review-warning-border: #f3c95c;
 
   --gradient-primary: linear-gradient(135deg, #18224d 0%, #101733 55%, #0b1126 100%);
   --gradient-accent: linear-gradient(135deg, #e6f6de 0%, #bae7a4 100%);
@@ -308,6 +311,9 @@
   --shift-more-background: #edf2ff;
   --shift-more-foreground: #3152a5;
   --shift-more-border: #3152a5;
+  --review-warning-bg: #fff4cc;
+  --review-warning-fg: #6b4c00;
+  --review-warning-border: #6b4c00;
 
   --gradient-primary: linear-gradient(145deg, rgba(255,255,255,0.96) 0%, rgba(238,244,255,0.96) 100%);
   --gradient-accent: linear-gradient(135deg, #3e7722 0%, #68c639 100%);
@@ -2827,12 +2833,13 @@ select:disabled {
 }
 
 .month-day-history-button[data-review] {
-  border-color: var(--color-gold);
-  color: var(--color-gold);
+  background: var(--review-warning-bg);
+  border-color: var(--review-warning-border);
+  color: var(--review-warning-fg);
 }
 
 .month-day-history-button:focus-visible {
-  outline: 2px solid var(--color-gold);
+  outline: 2px solid var(--review-warning-border);
   outline-offset: 2px;
 }
 

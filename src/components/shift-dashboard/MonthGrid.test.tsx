@@ -391,6 +391,53 @@ describe('MonthGrid cell capacity with a pending difference', () => {
     fireEvent.click(document.querySelector('[data-testid="day-history-btn-2026-09-17"]')!);
     expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
   });
+
+  it('G6 contrast: .month-day-history-button[data-review] meets WCAG AA (>= 4.5:1) in light and dark themes and preserves focus/a11y', async () => {
+    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const parseLum = (hex: string) => {
+      const n = parseInt(hex.replace('#', ''), 16);
+      const chans = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+        const s = v / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * chans[0] + 0.7152 * chans[1] + 0.0722 * chans[2];
+    };
+    const ratio = (a: string, b: string) => {
+      const l1 = parseLum(a);
+      const l2 = parseLum(b);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    };
+
+    const darkRoot = css.match(/:root\s*{[\s\S]*?\n}/)?.[0] ?? '';
+    const lightRoot = css.match(/:root\[data-theme='light'\]\s*{[\s\S]*?\n}/)?.[0] ?? '';
+    const darkBg = darkRoot.match(/--review-warning-bg:\s*(#[0-9a-fA-F]{6})/)?.[1] ?? '';
+    const darkFg = darkRoot.match(/--review-warning-fg:\s*(#[0-9a-fA-F]{6})/)?.[1] ?? '';
+    const lightBg = lightRoot.match(/--review-warning-bg:\s*(#[0-9a-fA-F]{6})/)?.[1] ?? '';
+    const lightFg = lightRoot.match(/--review-warning-fg:\s*(#[0-9a-fA-F]{6})/)?.[1] ?? '';
+
+    expect(darkBg).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(darkFg).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(lightBg).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(lightFg).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(ratio(lightFg, lightBg)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(lightFg, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(darkFg, darkBg)).toBeGreaterThanOrEqual(4.5);
+
+    const reviewRule = css.match(/\.month-day-history-button\[data-review\]\s*{[^}]*}/)?.[0] ?? '';
+    expect(reviewRule).toMatch(/background:\s*var\(--review-warning-bg\)/);
+    expect(reviewRule).toMatch(/border-color:\s*var\(--review-warning-border\)/);
+    expect(reviewRule).toMatch(/color:\s*var\(--review-warning-fg\)/);
+
+    const focusRule = css.match(/\.month-day-history-button:focus-visible\s*{[^}]*}/)?.[0] ?? '';
+    expect(focusRule).toMatch(/outline:\s*2px solid var\(--review-warning-border\)/);
+
+    renderReview(1);
+    const btn = screen.getByTestId('day-history-btn-2026-09-17');
+    expect(btn).toHaveAttribute('data-review', 'true');
+    expect(btn).toHaveAttribute('aria-label', 'Día con diferencia pendiente — abrir detalle');
+    fireEvent.click(btn);
+    expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
+  });
 });
 
 describe('MonthGrid current-only day detail for pending differences', () => {

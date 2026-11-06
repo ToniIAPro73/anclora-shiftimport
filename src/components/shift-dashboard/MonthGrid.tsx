@@ -402,9 +402,9 @@ export const MonthGrid = ({
                       aria-label={vacationConflict ? t('calendar.vacationConflictAria') : needsReview ? t('calendarTools.dayWarning') : `${t('dayHistory.changedBadge')} — ${t('dayHistory.open')}`}
                       title={needsReview ? t('calendarTools.dayWarning') : t('dayHistory.changedBadge')}
                       data-testid={`day-history-btn-${iso}`}
-                      data-review={needsReview || undefined}
+                      data-review={needsReview ? 'true' : undefined}
                     >
-                      {needsReview ? <AlertTriangle size={13} strokeWidth={2.2} /> : <History size={13} strokeWidth={2.2} />}
+                      {needsReview ? <AlertTriangle size={13} strokeWidth={2.2} aria-hidden="true" /> : <History size={13} strokeWidth={2.2} aria-hidden="true" />}
                     </button>
                   )}
                   <button
