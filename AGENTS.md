@@ -70,15 +70,15 @@
 
 ## Pistas para futuros agentes
 - Antes de tocar el parser, revisar `sdd/` y los perfiles de ingesta.
-- Validar siempre con `npm run lint && npm run build` (y tests cuando existan).
+- Verificar de forma proporcional al impacto del cambio según `AGENT_EXECUTION_POLICY.md` §13 (tests unitarios/regresión focales primero; no lanzar `lint`, `build` ni suites E2E completas para cambios localizados salvo que el impacto o una entrega lo exijan).
 - Si cambias `ImportModal`, verifica que siga permitiendo editar y borrar filas antes de confirmar.
-- **Obligaciones estrictas de base de datos**:
+- **Obligaciones estrictas de base de datos** (solo cuando la tarea toque esquema, migraciones o consultas de base de datos; ver `.anclora/PRODUCTION_RUNTIME.md` §3-§4):
   - Antes de realizar cualquier tarea sobre base de datos, ejecutar `npm run db:migrate:status`.
   - Identificar explícitamente el proyecto Neon (`holy-cake-85660318`) y la rama única de destino `main` (`br-shy-smoke-b1lyvv58`).
   - Comprobar que el comando de estado es de solo lectura y verificar el ledger de migraciones.
   - **NUNCA** ejecutar migraciones a mano ni ejecutar scripts DDL destructivos en la rama Neon `main` persistente.
   - Para pruebas, suites y validaciones de integración, usar exclusivamente organizaciones, usuarios y external IDs sintéticos con `runId` único dentro de Neon `main`; el teardown debe ejecutarse siempre y verificar cero residuos.
-  - Consultar siempre `docs/db-environments.md` y `docs/database/NEON_MAIN_MIGRATION_BASELINE.md` antes de diagnosticar o planificar cambios de esquema.
+  - Consultar `docs/db-environments.md` y `docs/database/NEON_MAIN_MIGRATION_BASELINE.md` antes de diagnosticar o planificar cambios de esquema.
 
 <!-- ANCLORA-AOS:START -->
 ## AOS bootstrap
