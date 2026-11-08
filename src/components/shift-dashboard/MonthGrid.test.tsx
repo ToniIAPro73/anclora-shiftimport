@@ -435,6 +435,7 @@ describe('MonthGrid cell capacity with a pending difference', () => {
     const btn = screen.getByTestId('day-history-btn-2026-09-17');
     expect(btn).toHaveAttribute('data-review', 'true');
     expect(btn).toHaveAttribute('aria-label', 'Día con diferencia pendiente — abrir detalle');
+    expect(btn).toHaveAttribute('aria-haspopup', 'dialog');
     fireEvent.click(btn);
     expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
   });

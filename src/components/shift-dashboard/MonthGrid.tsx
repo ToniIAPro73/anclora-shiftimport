@@ -403,6 +403,7 @@ export const MonthGrid = ({
                       title={needsReview ? t('calendarTools.dayWarning') : t('dayHistory.changedBadge')}
                       data-testid={`day-history-btn-${iso}`}
                       data-review={needsReview ? 'true' : undefined}
+                      aria-haspopup="dialog"
                     >
                       {needsReview ? <AlertTriangle size={13} strokeWidth={2.2} aria-hidden="true" /> : <History size={13} strokeWidth={2.2} aria-hidden="true" />}
                     </button>
