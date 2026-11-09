@@ -251,8 +251,9 @@ describe('compact month — hotfix: day markers and one-line agenda header', () 
     fireEvent.click(screen.getByTestId('month-day-select-2026-08-17'));
     const agenda = screen.getByTestId('month-day-agenda');
     const header = agenda.querySelector('.month-day-agenda__header') as HTMLElement;
-    expect(within(header).getByRole('heading', { level: 3 })).toHaveTextContent('Lun 17 ago.');
-    expect(within(header).getByRole('heading', { level: 3 })).toHaveAccessibleName(/lunes.*17.*agosto/i);
+    expect(within(header).getByRole('heading', { level: 2 })).toHaveTextContent('Lun 17 ago.');
+    expect(within(header).getByRole('heading', { level: 2 })).toHaveAccessibleName(/lunes.*17.*agosto/i);
+    expect(agenda.querySelector('h3')).toBeNull();
     const add = within(header).getByRole('button', { name: 'Añadir turno' });
     expect(add).toHaveTextContent('Añadir');
     expect(within(header).getByRole('button', { name: 'Ver detalle' })).toBeInTheDocument(); // no pills ⇒ not a duplicate
@@ -276,7 +277,7 @@ describe('compact month — hotfix: day markers and one-line agenda header', () 
     render(<I18nProvider><MonthGrid year={2026} month={7} shifts={render4().slice(0, 1)} annotations={[]} onEditShift={vi.fn()} onCreateShift={vi.fn()} role="OWNER" /></I18nProvider>);
     fireEvent.click(screen.getByTestId('month-day-select-2026-08-17'));
     const agenda = screen.getByTestId('month-day-agenda');
-    expect(within(agenda).getByRole('heading', { level: 3 })).toHaveTextContent('Mon 17 Aug');
+    expect(within(agenda).getByRole('heading', { level: 2 })).toHaveTextContent('Mon 17 Aug');
     expect(within(agenda).getByRole('button', { name: 'Add shift' })).toHaveTextContent('Add');
   });
 });

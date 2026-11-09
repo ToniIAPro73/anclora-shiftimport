@@ -1,65 +1,58 @@
-# Checklist de validación — Accesibilidad del botón de detalle de día en MonthGrid (2026-11-08)
+# Checklist de validación — Cierre de G6 (`heading-order` en calendario compacto y foco/teclado en MonthGrid) (2026-11-09)
 
-> Este fichero se sobrescribe en cada entrega. El historial queda en Git (la entrega anterior, rebaseline G6, consta en `fc94880` y anteriores).
+> Este fichero se sobrescribe en cada entrega. El historial queda en Git (las entregas anteriores de la serie G6/MonthGrid constan en `fc94880` y `991deb3`).
 
 **Repositorio:** anclora-shiftimport
 **Rama:** development
-**Cambio actual:** `bdb921d` (`feat(a11y): mark the day-history button as opening a dialog`), un commit local por delante de `origin/development` según el seguimiento local (sin `ls-remote` en esta redacción). Entrega acotada: sin sesión, sin mutaciones y sin conexión ni escritura en Neon.
+**Estado del árbol:** cambios locales sin commit sobre `fe6b925` (`origin/development`), listos para validación local.
 
 ## 1. Qué cambia
-- `src/components/shift-dashboard/MonthGrid.tsx`: el botón de detalle de día (`day-history-btn-<fecha>`) declara `aria-haspopup="dialog"`, porque abre el diálogo de detalle del día. Una línea.
-- `src/components/shift-dashboard/MonthGrid.test.tsx`: una aserción nueva (`aria-haspopup` = `dialog`) en el test G6, junto a las de `data-review` y `aria-label`. Una línea.
-- Sin cambios de comportamiento, de estilos, de i18n ni de datos.
-- Origen: auditoría de solo lectura de MonthGrid hecha con Codex el 2026-11-08, que valoró `aria-haspopup="dialog"` como apropiado.
-- **Fuera de alcance, no incluido:** incluir la fecha en el nombre accesible del aviso y añadir tests de teclado y restauración de foco (propuestas de esa auditoría).
-- **No forman parte de esta entrega** siete ficheros de reglas y contratos de agentes que siguen modificados sin commit (`AGENTS.md`, `.agent/rules/*`, `.antigravity/*`). Quedan fuera del commit.
+- `src/components/shift-dashboard/MonthDayAgenda.tsx`: el encabezado del panel diario en el calendario compacto (`≤640px`, `.month-day-agenda__title`) pasa de `<h3>` a `<h2>`, manteniendo la jerarquía secuencial `<h1 class="calendar-toolbar__title">` → `<h2 class="month-day-agenda__title">` y cerrando la violación moderada `heading-order` de Axe reportada en G6 (`SPEC-SHIFTIMPORT-PLANNING-SIMPLIFICATION-MOBILE-AND-VACATIONS.md` §1665 / §20.2). Sin cambio visual (los estilos aplican por clase `.month-day-agenda__title`).
+- `src/components/shift-dashboard/MonthDayAgenda.test.tsx`: actualiza las aserciones de nivel de encabezado (`level: 2`) en ES y EN y verifica la ausencia de `<h3>` huérfanos en el panel.
+- `src/components/shift-dashboard/MonthGrid.test.tsx`:
+  - Resuelve `src/index.css` mediante `join(__dirname, '../../index.css')` en los tests G5 y G6, eliminando el fallo `ENOENT` cuando Vitest se invoca fuera de la raíz del repositorio.
+  - Añade verificación de cierre por teclado (`Escape`) y restauración de foco al botón `day-history-btn-<fecha>` tras cerrar `DayDetailModal`.
 
 ## 2. Evidencia
 | Comprobación | Método | Resultado | Límite |
 | --- | --- | --- | --- |
-| Test focal de MonthGrid, ejecutado por el agente | `npm --prefix … exec -- vitest run … MonthGrid.test.tsx` | **29 de 31 PASS; 2 FAIL (G5 y G6) por `ENOENT … /anclora/src/index.css`** | Esos tests leen `process.cwd()/src/index.css` y el agente no pudo fijar el directorio de trabajo en el repo. Es un artefacto de ejecución, no un fallo del cambio. **G6 contiene la aserción nueva y falló antes de llegar a ella: la aserción NO se ejecutó en esta comprobación** |
-| Test focal de MonthGrid, ejecutado desde el repo | `npx vitest run src/components/shift-dashboard/MonthGrid.test.tsx` | **NOT_VERIFIED** | Se le pidió a Toni ejecutarlo desde el repo antes del commit (esperado 31/31). El agente no tiene registrado su resultado |
-| Lint | `npm run lint` | **NOT_RUN** | No ejecutado sobre este HEAD |
-| Typecheck | `npx tsc --noEmit` | **NOT_RUN** | No ejecutado sobre este HEAD |
-| Build | `npm run build` | **NOT_RUN** | No ejecutado sobre este HEAD |
-| Suite completa | `npx vitest run` | **NOT_RUN** | Cambio de un atributo y una aserción; no se ejecuta suite completa por proporcionalidad |
-| QA visual / navegador real | `anclora-visual-qa` | **NOT_RUN** | El atributo no tiene efecto visual. No se comprobó con lector de pantalla |
-| `git diff --check` | — | **NOT_RUN** por el agente sobre este commit | — |
+| Tests focales de MonthDayAgenda y MonthGrid | `npm --prefix /Users/toni/Developer/anclora/anclora-shiftimport exec -- vitest run src/components/shift-dashboard/MonthDayAgenda.test.tsx src/components/shift-dashboard/MonthGrid.test.tsx` | **PASS (2 ficheros, 51/51 tests: 20 en `MonthDayAgenda.test.tsx`, 31 en `MonthGrid.test.tsx`)** | Entorno `jsdom` |
+| Typecheck | `npm --prefix /Users/toni/Developer/anclora/anclora-shiftimport exec -- tsc --noEmit -p /Users/toni/Developer/anclora/anclora-shiftimport/tsconfig.json` | **PASS (0 errores)** | — |
+| Lint | `npm --prefix /Users/toni/Developer/anclora/anclora-shiftimport run lint -- src/components/shift-dashboard/MonthDayAgenda.tsx src/components/shift-dashboard/MonthDayAgenda.test.tsx src/components/shift-dashboard/MonthGrid.test.tsx` | **PASS (0 warnings, 0 errores)** | — |
+| Build | `npm run build` | **NOT_RUN** | No requerido antes de validación local de microtarea UI/a11y |
+| Suite completa | `npx vitest run` | **NOT_RUN** | QA proporcional (`AGENT_EXECUTION_POLICY.md` §13) |
+| QA visual / navegador real | `anclora-visual-qa` | **NOT_RUN** | `MonthDayAgenda` mantiene `.month-day-agenda__title` sin cambios visuales |
 
 ## 3. Pruebas no ejecutadas (NOT_RUN)
 | Prueba | Motivo |
 | --- | --- |
-| Lector de pantalla (VoiceOver, TalkBack) | Requiere dispositivo o sesión interactiva; es tuya |
-| E2E autenticado contra QA Mirror | Fuera del alcance de esta entrega; no se usó cuenta ni datos |
-| Navegación por teclado y restauración de foco al cerrar el diálogo | Propuesta de la auditoría, no implementada; sin tests específicos |
+| Lector de pantalla en dispositivo real (VoiceOver / TalkBack) | Requiere dispositivo físico o validación manual |
+| E2E autenticado contra QA Mirror | Fuera del alcance de esta microtarea; sin cambios de API, sesión ni datos |
 
 ## 4. Checklist para validar en la aplicación
-Marca cada punto. Un fallo en un punto marcado **[BLOQUEANTE]** impide promocionar.
+Marca cada punto. Un fallo en un punto marcado **[BLOQUEANTE]** impide entregar.
 
 | # | Dónde | Pasos | Resultado esperado | Cuenta o configuración | Bloqueante |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Calendario, día con diferencia pendiente | Inspecciona el botón del aviso (⚠) del día en las herramientas de desarrollo. | El botón tiene `aria-haspopup="dialog"` y conserva `aria-label` «Día con diferencia pendiente — abrir detalle» | Propietario o empleado con un día con aviso | Sí |
-| 2 | Calendario, mismo botón | Haz clic en el botón. | Se abre el detalle del día, igual que antes | Ídem | Sí |
-| 3 | Calendario, día con historial sin aviso | Inspecciona el botón del icono de historial de un día con cambios. | El botón tiene `aria-haspopup="dialog"` y abre el detalle | Ídem | No |
-| 4 | Apariencia | Compara el botón con la versión anterior. | Sin diferencias visuales | Ídem | No |
+| 1 | Calendario compacto (`≤640px`), panel inferior del día seleccionado | Inspecciona el título de fecha del panel (`.month-day-agenda__title`). | El elemento es un `<h2>` con `aria-label` de la fecha completa, continuando el `<h1>` del mes sin salto a `<h3>` | Cualquier rol o invitado en viewport móvil (`≤640px`) | Sí |
+| 2 | Calendario escritorio (`>640px`), día con diferencia pendiente o historial | Abre el detalle del día desde el botón de aviso/historial (`day-history-btn-<fecha>`) y pulsa `Escape`. | El modal `DayDetailModal` se cierra y el foco vuelve al botón que lo abrió | Usuario con sesión y día con aviso o historial | Sí |
+| 3 | Apariencia del panel compacto (`≤640px`) | Compara la cabecera del día seleccionado en móvil claro/oscuro. | Sin cambios visuales en tipografía, tamaño ni alineación | Cualquier rol | No |
 
 ### Casos negativos y de borde
 | # | Caso | Resultado esperado |
 | --- | --- | --- |
-| 1 | Día sin aviso ni historial | No hay botón de detalle; no cambia nada |
-| 2 | Móvil (hasta 640 px) | El botón se comporta como antes |
+| 1 | Escritorio (`>640px`) | No se renderiza `MonthDayAgenda`; la cuadrícula mensual no cambia |
+| 2 | Ejecución de `MonthGrid.test.tsx` desde fuera de la raíz del repo | Los tests G5 y G6 resuelven `src/index.css` sin `ENOENT` y pasan (31/31) |
 
 ### Estados de interfaz afectados
-- [ ] Vacío · [ ] Cargando · [ ] Error · [ ] Éxito · [ ] Móvil · [ ] Escritorio · [ ] Modo oscuro
+- [x] Vacío · [ ] Cargando · [ ] Error · [x] Éxito · [x] Móvil · [x] Escritorio · [x] Modo oscuro
 
 ## 5. Riesgos y limitaciones
-- Riesgo funcional muy bajo: un atributo ARIA y su aserción.
-- La aserción nueva no consta ejecutada por el agente; depende del resultado que registres desde el repo.
-- El nombre accesible del aviso sigue sin incluir la fecha (mejora propuesta, no aplicada).
-- Esta entrega solo publica en `development`. Cualquier promoción es independiente y requiere `PROMOTE=FULL` con el SHA exacto.
+- Riesgo funcional muy bajo: ajuste semántico de etiqueta (`<h3>` → `<h2>`) con clase CSS invariante y refuerzo de tests focales.
+- El gap **G2** (`schedule.week_copied` como evento dedicado en `organization_audit_events`) permanece bloqueado en el roadmap hasta contar con aprobación de Producto y autorización de migración del `CHECK` de base de datos.
 
 ## 6. Decisión de Toni
 - [ ] Los puntos bloqueantes pasan
-- [ ] El test focal de MonthGrid dio 31/31 desde el repo
+- [ ] Autorizar commit y push a `origin/development`
 - [ ] Se promociona: escribir `PROMOTE=FULL` (staging → production → main)
 - [ ] No se promociona. Motivo: ______________________

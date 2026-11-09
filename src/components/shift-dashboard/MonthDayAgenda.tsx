@@ -75,7 +75,7 @@ export const MonthDayAgenda = ({ date, shifts, extras, addDisabled, addBlockedRe
   return (
     <section className="month-day-agenda" data-testid="month-day-agenda" data-date={date} data-empty={shifts.length === 0 || undefined} aria-labelledby={headingId}>
       <header className="month-day-agenda__header">
-        <h3 id={headingId} className="month-day-agenda__title" aria-label={fullDate}>{title}</h3>
+        <h2 id={headingId} className="month-day-agenda__title" aria-label={fullDate}>{title}</h2>
         <div className="month-day-agenda__header-actions">
           {hasDetail && pills.length === 0 && (
             <button type="button" className="month-day-agenda__detail" onClick={onOpenDetail} aria-label={t('calendar.agendaDetail')} title={t('calendar.agendaDetail')} data-testid="month-day-agenda-detail">

@@ -377,7 +377,7 @@ describe('MonthGrid cell capacity with a pending difference', () => {
 
   it('G5: warning and add buttons are laid out from the same size token (same footprint)', () => {
     renderReview(3);
-    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const css = readFileSync(join(__dirname, '../../index.css'), 'utf8');
     const shared = css.match(/\.month-day-add-button,\s*\.month-day-history-button\s*{[^}]*}/)?.[0] ?? '';
     expect(shared).toMatch(/width:\s*var\(--day-action-size\)/);
     expect(shared).toMatch(/height:\s*var\(--day-action-size\)/);
@@ -393,7 +393,7 @@ describe('MonthGrid cell capacity with a pending difference', () => {
   });
 
   it('G6 contrast: .month-day-history-button[data-review] meets WCAG AA (>= 4.5:1) in light and dark themes and preserves focus/a11y', async () => {
-    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const css = readFileSync(join(__dirname, '../../index.css'), 'utf8');
     const parseLum = (hex: string) => {
       const n = parseInt(hex.replace('#', ''), 16);
       const chans = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
@@ -436,8 +436,13 @@ describe('MonthGrid cell capacity with a pending difference', () => {
     expect(btn).toHaveAttribute('data-review', 'true');
     expect(btn).toHaveAttribute('aria-label', 'Día con diferencia pendiente — abrir detalle');
     expect(btn).toHaveAttribute('aria-haspopup', 'dialog');
+    btn.focus();
+    expect(document.activeElement).toBe(btn);
     fireEvent.click(btn);
     expect(await screen.findByTestId('day-detail-dialog')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('day-detail-dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(btn));
   });
 });
 
